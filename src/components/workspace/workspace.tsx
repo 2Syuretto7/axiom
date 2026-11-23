@@ -220,7 +220,7 @@ export function Workspace({
     <WorkspaceContext value={api}>
     <div className="ws" data-pane={pane}>
       <header className="ws-top">
-        <Link href="/" className="font-mono text-[13px] tracking-[0.32em] text-ink" aria-label="Axiom home">
+        <Link href="/" className="bar-item font-mono text-[13px] tracking-[0.32em] text-ink" aria-label="Axiom home">
           AXIOM
         </Link>
         <ol className="ws-crumbs label" aria-label="Where you are">
@@ -229,7 +229,7 @@ export function Workspace({
           ))}
         </ol>
         <div className="ml-auto flex items-center gap-6">
-          <span className="label hidden sm:inline" role="status">
+          <span className="label bar-item hidden sm:inline-flex" role="status">
             {saved ? "Saved" : "Saving"}
           </span>
           <ThemeToggle />

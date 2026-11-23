@@ -22,7 +22,7 @@ export function ThemeToggle() {
   return (
     <button
       type="button"
-      className="label"
+      className="label bar-item"
       aria-pressed={!dark}
       onClick={() => {
         const next = !dark;

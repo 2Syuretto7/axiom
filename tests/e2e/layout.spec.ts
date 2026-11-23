@@ -73,3 +73,40 @@ test("every screen can be reached and used with the keyboard", async ({ page }) 
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/learn$/);
 });
+
+test("the wordmark, theme switch and sign out sit on one line", async ({ page }) => {
+  await page.goto("/");
+  const centres = [];
+  for (const item of [
+    page.getByRole("link", { name: "Axiom home" }),
+    page.getByRole("button", { name: /theme$/ }),
+    page.getByRole("button", { name: "Sign out" }),
+  ]) {
+    // Measure the text itself, not the element around it.
+    centres.push(
+      await item.evaluate((el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const box = range.getBoundingClientRect();
+        return box.top + box.height / 2;
+      }),
+    );
+  }
+  expect(Math.max(...centres) - Math.min(...centres)).toBeLessThanOrEqual(0.5);
+});
+
+test("the workspace top bar sits on one line", async ({ page }) => {
+  await page.goto("/learn");
+  const centres = [];
+  for (const item of [page.getByRole("link", { name: "Axiom home" }), page.getByRole("button", { name: /theme$/ })]) {
+    centres.push(
+      await item.evaluate((el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const box = range.getBoundingClientRect();
+        return box.top + box.height / 2;
+      }),
+    );
+  }
+  expect(Math.max(...centres) - Math.min(...centres)).toBeLessThanOrEqual(0.5);
+});
