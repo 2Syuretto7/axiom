@@ -5,6 +5,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { Client } from "pg";
+import { databaseUrl } from "../src/lib/db/url";
 
 export async function migrate(databaseUrl: string, log: (m: string) => void = console.log) {
   const client = new Client({ connectionString: databaseUrl });
@@ -40,7 +41,7 @@ export async function migrate(databaseUrl: string, log: (m: string) => void = co
 }
 
 if (process.argv[1] && process.argv[1].endsWith("migrate.ts")) {
-  const url = process.env.DATABASE_URL;
+  const url = databaseUrl();
   if (!url) {
     // Local builds without a database still need to succeed.
     console.log("DATABASE_URL is not set; skipping migrations.");
