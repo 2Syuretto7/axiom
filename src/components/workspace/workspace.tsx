@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { signOutAction } from "@/lib/auth/actions";
 import { codeTests, reportCode, saveCode, type AnswerResult } from "@/lib/learning/actions";
 import { checkProgram, explainFailure } from "@/lib/lessons/harness";
 import { PythonRunner, type RunResult } from "@/lib/python/runner";
@@ -228,11 +229,16 @@ export function Workspace({
             <li key={i}>{part}</li>
           ))}
         </ol>
-        <div className="ml-auto flex items-center gap-6">
-          <span className="label hidden h-10 items-center leading-4 sm:inline-flex" role="status">
+        <div className="ws-controls">
+          <span className="label bar-item ws-status" role="status">
             {saved ? "Saved" : "Saving"}
           </span>
           <ThemeToggle />
+          <form action={signOutAction}>
+            <button type="submit" className="label bar-item">
+              Sign out
+            </button>
+          </form>
         </div>
       </header>
 

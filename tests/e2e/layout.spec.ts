@@ -107,7 +107,15 @@ test("the workspace top bar sits on one line", async ({ page }, info) => {
   expect(textHeight).toBeLessThanOrEqual(20); // one line of 16 px text
   if (info.project.name === "phone") await expect(page.getByRole("status").filter({ hasText: /^Sav/ })).toBeHidden();
   const centres = [];
-  for (const item of [page.getByRole("link", { name: "Axiom home" }), page.getByRole("button", { name: /theme$/ })]) {
+  const items = [
+    page.getByRole("link", { name: "Axiom home" }),
+    page.getByRole("button", { name: /theme$/ }),
+    page.getByRole("button", { name: "Sign out" }),
+  ];
+  if (info.project.name !== "phone") items.push(page.getByRole("status").filter({ hasText: /^Sav/ }));
+  for (const item of items) {
+    await expect(item).toBeVisible();
+    await expect(item).toBeInViewport({ ratio: 1 });
     centres.push(
       await item.evaluate((el) => {
         const range = document.createRange();
