@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { loadGraph } from "@/lib/graph/load";
 import { nextConcept, teachingPath } from "@/lib/learning/next";
 import { checkProgram, explainFailure } from "@/lib/lessons/harness";
+import { FIGURE_NAMES } from "@/lib/lessons/figures";
 import { loadLessons, loadPythonFeatures, readLessonFiles, type LessonFile } from "@/lib/lessons/load";
 import { runPython } from "@/lib/lessons/node-python";
 import { renderBlock } from "@/lib/lessons/render";
@@ -15,7 +16,7 @@ const files = () => readLessonFiles(path.join(root, "content", "lessons"));
 
 type Raw = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 const check = (changed: LessonFile[] = files(), g = graph) =>
-  validateLessons({ graph: g, files: changed, features, figures: new Set(), run: runPython, minWords: 0 });
+  validateLessons({ graph: g, files: changed, features, figures: new Set<string>(FIGURE_NAMES), run: runPython, minWords: 0 });
 
 /** The fixture lessons with one of them edited. */
 async function messages(concept: string, edit: (lesson: Raw) => void) {
@@ -106,7 +107,7 @@ describe("lesson validation", () => {
 
   it("requires both fast and slow questions and a minimum depth", async () => {
     expect(await messages("m0.adding", (l) => (question(l, "sum-slow").system = "s1"))).toContain("No slow (s2) question");
-    const short = await validateLessons({ graph, files: files(), features, figures: new Set(), run: runPython, minWords: 500 });
+    const short = await validateLessons({ graph, files: files(), features, figures: new Set<string>(FIGURE_NAMES), run: runPython, minWords: 500 });
     expect(short.some((i) => i.message.includes("the minimum is 500"))).toBe(true);
   });
 });

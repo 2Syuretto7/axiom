@@ -95,8 +95,17 @@ test("the wordmark, theme switch and sign out sit on one line", async ({ page })
   expect(Math.max(...centres) - Math.min(...centres)).toBeLessThanOrEqual(0.5);
 });
 
-test("the workspace top bar sits on one line", async ({ page }) => {
+test("the workspace top bar sits on one line", async ({ page }, info) => {
   await page.goto("/learn");
+  // Nothing in the bar wraps, and the save status only appears where there is room for it.
+  const theme = page.getByRole("button", { name: /theme$/ });
+  const textHeight = await theme.evaluate((el) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    return range.getBoundingClientRect().height;
+  });
+  expect(textHeight).toBeLessThanOrEqual(20); // one line of 16 px text
+  if (info.project.name === "phone") await expect(page.getByRole("status").filter({ hasText: /^Sav/ })).toBeHidden();
   const centres = [];
   for (const item of [page.getByRole("link", { name: "Axiom home" }), page.getByRole("button", { name: /theme$/ })]) {
     centres.push(
