@@ -19,7 +19,7 @@ npm run dev
 | `npm run typecheck` | TypeScript |
 | `npm test` | Unit and database tests (Vitest) |
 | `npm run e2e` | Builds the app and runs browser tests at laptop, tablet and phone sizes |
-| `PREVIEW_URL=... npm run e2e` | Read-only smoke test of a deployed preview |
+| `LIVE_URL=... npm run e2e` | Read-only smoke test of the deployed site |
 
 ## Layout
 

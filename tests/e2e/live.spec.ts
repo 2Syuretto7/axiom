@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Runs against a deployed Vercel preview. Read-only: it never signs up or
- * signs in, so it is safe whatever data the preview database holds.
+ * Runs against the deployed production site. Read-only: it never signs up or
+ * signs in, so it cannot touch the learner's data.
  */
-test("the preview is healthy and connected to its database", async ({ request }) => {
+test("the site is healthy and connected to its database", async ({ request }) => {
   const response = await request.get("/api/health");
   expect(response.status()).toBe(200);
   expect(await response.json()).toEqual({ ok: true });

@@ -4,13 +4,12 @@ import { defineConfig } from "@playwright/test";
  * Two modes.
  * Local and CI: builds the app, runs it against a throwaway Postgres database
  * and exercises the full flows at laptop, tablet and phone sizes.
- * Preview (PREVIEW_URL set): smoke-checks a deployed Vercel preview without
- * touching its data. See tests/e2e/preview.spec.ts.
+ * Live (LIVE_URL set): read-only smoke check of the deployed production site.
+ * See tests/e2e/live.spec.ts. No secrets are involved in either mode.
  */
-const previewUrl = process.env.PREVIEW_URL;
+const previewUrl = process.env.LIVE_URL;
 const port = 3100;
 const e2eDatabase = process.env.E2E_DATABASE_URL ?? "postgres://axiom:axiom@localhost:5432/axiom_e2e";
-const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
 
 const sizes = {
   laptop: { width: 1440, height: 900 },
@@ -28,12 +27,11 @@ export default defineConfig({
   use: {
     baseURL: previewUrl ?? `http://localhost:${port}`,
     trace: "off",
-    extraHTTPHeaders: previewUrl && bypass ? { "x-vercel-protection-bypass": bypass } : undefined,
   },
   projects: previewUrl
     ? Object.entries(sizes).map(([name, viewport]) => ({
-        name: `preview-${name}`,
-        testMatch: /preview\.spec\.ts/,
+        name: `live-${name}`,
+        testMatch: /live\.spec\.ts/,
         use: { viewport, hasTouch: name !== "laptop" },
       }))
     : [
