@@ -1,3 +1,4 @@
+import path from "node:path";
 import { defineConfig } from "@playwright/test";
 
 /**
@@ -42,6 +43,13 @@ export default defineConfig({
           dependencies: ["flow"],
           use: { viewport, hasTouch: name !== "laptop", storageState: "test-results/.auth/learner.json" },
         })),
+        // Works through the fixture lessons once, changing screen size as it goes.
+        {
+          name: "lessons",
+          testMatch: /lessons\.spec\.ts/,
+          dependencies: ["laptop", "tablet", "phone"],
+          use: { viewport: sizes.laptop, storageState: "test-results/.auth/learner.json" },
+        },
       ],
   webServer: previewUrl
     ? undefined
@@ -50,7 +58,8 @@ export default defineConfig({
         url: `http://localhost:${port}/api/health`,
         timeout: 240_000,
         reuseExistingServer: false,
-        env: { DATABASE_URL: e2eDatabase },
+        // A three-lesson curriculum, so tests do not depend on what has been written so far.
+        env: { DATABASE_URL: e2eDatabase, AXIOM_CONTENT_DIR: path.resolve("tests", "fixtures") },
       },
   globalSetup: previewUrl ? undefined : "./tests/e2e/global-setup.ts",
 });

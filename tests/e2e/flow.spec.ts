@@ -48,7 +48,7 @@ test("Learn opens, sign-out ends the session, and a wrong passphrase is refused"
 
   await page.getByRole("link", { name: /Learn/ }).click();
   await expect(page).toHaveURL(/\/learn$/);
-  await expect(page.getByRole("heading", { level: 1, name: "Your workspace is ready." })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Counting" })).toBeVisible();
   await page.getByRole("link", { name: "Axiom home" }).click();
   await expect(page).toHaveURL(/\/$/);
 

@@ -1,4 +1,4 @@
-import { bigint, boolean, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 
@@ -26,3 +26,50 @@ export const loginAttempts = pgTable("login_attempts", {
   succeeded: boolean("succeeded").notNull(),
   attemptedAt: timestamp("attempted_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const attempts = pgTable("attempts", {
+  id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+  userId: uuid("user_id").notNull(),
+  conceptId: text("concept_id").notNull(),
+  questionId: text("question_id").notNull(),
+  system: text("system").notNull(),
+  correct: boolean("correct").notNull(),
+  answer: jsonb("answer"),
+  hintsUsed: integer("hints_used").notNull().default(0),
+  ms: integer("ms"),
+  createdAt: createdAt(),
+});
+
+export const hintViews = pgTable(
+  "hint_views",
+  {
+    userId: uuid("user_id").notNull(),
+    conceptId: text("concept_id").notNull(),
+    questionId: text("question_id").notNull(),
+    level: integer("level").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.conceptId, t.questionId] })],
+);
+
+export const lessonProgress = pgTable(
+  "lesson_progress",
+  {
+    userId: uuid("user_id").notNull(),
+    conceptId: text("concept_id").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.conceptId] })],
+);
+
+export const codeSnapshots = pgTable(
+  "code_snapshots",
+  {
+    userId: uuid("user_id").notNull(),
+    key: text("key").notNull(),
+    code: text("code").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.key] })],
+);

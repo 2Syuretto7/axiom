@@ -1,0 +1,75 @@
+import type { ComponentType } from "react";
+import type { Concept, Graph } from "@/lib/graph/load";
+import { blockHtml, questionView } from "@/lib/lessons/content";
+import { questionsOf } from "@/lib/lessons/load";
+import { PARTS, type Lesson } from "@/lib/lessons/schema";
+import { FIGURES } from "./figures";
+import { LessonEnd, QuestionCard } from "./question-card";
+
+const PART_LABELS: Record<(typeof PARTS)[number], string> = {
+  recall: "Recall",
+  puzzle: "A puzzle",
+  intuition: "Intuition",
+  derivation: "Derivation",
+  formal: "Formally",
+  drill: "Drill",
+  work: "Work",
+  connections: "Connections",
+};
+
+const names = (graph: Graph, ids: string[]) => ids.map((id) => graph.concepts.get(id)?.title ?? id).join(" · ");
+
+export function LessonView({
+  lesson,
+  concept,
+  graph,
+  solved,
+  hintLevels,
+}: {
+  lesson: Lesson;
+  concept: Concept;
+  graph: Graph;
+  solved: Set<string>;
+  hintLevels: Map<string, number>;
+}) {
+  const numbers = new Map(questionsOf(lesson).map((q, i) => [q.id, i + 1]));
+  return (
+    <article className="prose-lesson">
+      <p className="label">
+        {concept.cluster} · {graph.clusters.get(concept.cluster)!.title} · {lesson.minutes} min
+      </p>
+      <h1>{concept.title}</h1>
+      <p className="lesson-claim">{lesson.claim}</p>
+      {lesson.recalls.length > 0 ? (
+        <p className="lesson-links">
+          <span className="label">Builds on</span> {names(graph, lesson.recalls)}
+        </p>
+      ) : null}
+
+      {PARTS.map((part) => (
+        <section key={part} className="lesson-part" aria-label={PART_LABELS[part]}>
+          <h2 className="label lesson-part-label">{PART_LABELS[part]}</h2>
+          {lesson.parts[part].map((block, i) => {
+            if ("text" in block) {
+              // Lesson text is written and reviewed in this repository.
+              return <div key={i} className="lesson-text" dangerouslySetInnerHTML={{ __html: blockHtml(block.text) }} />;
+            }
+            if ("figure" in block) {
+              const Figure = (FIGURES as Record<string, ComponentType<Record<string, unknown>>>)[block.figure];
+              return Figure ? <Figure key={i} {...(block.props ?? {})} /> : null;
+            }
+            const q = block.question;
+            return <QuestionCard key={q.id} view={questionView(lesson.concept, q, numbers.get(q.id)!, solved.has(q.id), hintLevels.get(q.id) ?? 0)} />;
+          })}
+        </section>
+      ))}
+
+      {lesson.leads.length > 0 ? (
+        <p className="lesson-links">
+          <span className="label">Leads to</span> {names(graph, lesson.leads)}
+        </p>
+      ) : null}
+      <LessonEnd />
+    </article>
+  );
+}

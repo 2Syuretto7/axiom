@@ -8,7 +8,7 @@ async function openCode(page: Page, project: string) {
 }
 
 async function withCode(page: Page, code: string) {
-  await page.addInitScript((value) => localStorage.setItem("axiom-code:warm-up", value), code);
+  await page.addInitScript((value) => localStorage.setItem("axiom-code:m0.counting", value), code);
   await page.goto("/learn");
 }
 
@@ -49,7 +49,7 @@ test("tablet in landscape puts the panes side by side", async ({ page }, info) =
 });
 
 test("Python runs in the browser and prints its output", async ({ page }, info) => {
-  await page.goto("/learn");
+  await withCode(page, "total = 0\nfor n in range(1, 11):\n    total = total + n\nprint('1 + 2 + ... + 10 =', total)\n");
   await openCode(page, info.project.name);
   await page.getByRole("button", { name: /^Run/ }).click();
   await expect(page.getByTestId("output")).toContainText("1 + 2 + ... + 10 = 55", { timeout: FIRST_RUN });
@@ -86,7 +86,7 @@ test("code is saved as it is typed and survives a reload", async ({ page }, info
   await page.locator(".cm-content").click();
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.type("print('kept')");
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("axiom-code:warm-up"))).toBe("print('kept')");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("axiom-code:m0.counting"))).toBe("print('kept')");
   await page.reload();
   await openCode(page, info.project.name);
   await expect(page.locator(".cm-content")).toContainText("print('kept')");
