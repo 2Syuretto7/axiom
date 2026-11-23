@@ -36,6 +36,30 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   await expect(grid).toContainText("3 × 12 = 3 × 10 + 3 × 2 = 30 + 6 = 36");
   await grid.getByRole("button", { name: "Increase rows" }).click();
   await expect(grid).toContainText("4 × 12 = 4 × 10 + 4 × 2 = 40 + 8 = 48");
+  // The coordinate plane: a point, a line, two lines meeting, and a parabola.
+  const point = page.getByRole("figure").filter({ hasText: "Coordinates" });
+  await expect(point).toContainText("The point (3, 2): 3 right, 2 up. It is in quadrant I. Distance from the origin: √13 ≈ 3.61.");
+  for (let i = 0; i < 4; i++) await point.getByRole("button", { name: "Decrease x" }).click();
+  await point.getByRole("button", { name: "Decrease y" }).click();
+  await point.getByRole("button", { name: "Decrease y" }).click();
+  await expect(point).toContainText("The point (−1, 0): 1 left, neither up nor down. It lies on the x-axis. Distance from the origin: 1.");
+  const straight = page.getByRole("figure").filter({ hasText: "Straight line" });
+  await expect(straight).toContainText("y = 2x + 1. It crosses the y-axis at 1. For each 1 step to the right it goes up 2.");
+  await straight.getByRole("slider", { name: "slope" }).fill("-0.5");
+  await straight.getByRole("slider", { name: "intercept" }).fill("0");
+  await expect(straight).toContainText("y = −0.5x. It crosses the y-axis at 0. For each 1 step to the right it goes down 0.5.");
+  const pair = page.getByRole("figure").filter({ hasText: "Two lines" });
+  await expect(pair).toContainText("y = x + 1 and y = −x + 5. They cross at (2, 3), the only pair that satisfies both equations.");
+  await pair.getByRole("slider", { name: "slope" }).fill("-1");
+  await expect(pair).toContainText("They are parallel and never meet");
+  await pair.getByRole("slider", { name: "intercept" }).fill("5");
+  await expect(pair).toContainText("They are the same line");
+  const curve = page.getByRole("figure").filter({ hasText: "Parabola" });
+  await expect(curve).toContainText("y = x² − 2x − 3. It opens upwards, with its turning point at (1, −4). It crosses the x-axis at −1 and 3. b² − 4ac = 16.");
+  await curve.getByRole("slider", { name: "c" }).fill("1");
+  await expect(curve).toContainText("It touches the x-axis at 1.");
+  await curve.getByRole("slider", { name: "c" }).fill("4");
+  await expect(curve).toContainText("It never meets the x-axis. b² − 4ac = −12.");
   await expect(page.locator(".prose-lesson img")).toHaveCount(0);
 
   // Wrong, then a hint, then right. Fractions and words are handled by the grader.

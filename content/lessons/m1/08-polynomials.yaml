@@ -1,0 +1,555 @@
+concept: m1.polynomials
+minutes: 105
+claim: You can name the degree and coefficients of a polynomial, add, multiply and divide polynomials, evaluate one efficiently, and use the factor theorem to connect its roots with its factors.
+recalls: [m1.quadratics]
+uses: [m1.variables-and-expressions, m1.linear-equations, m1.coordinates-and-the-plane, m0.whole-numbers-and-place-value, m0.the-four-operations-and-order-of-operations, m0.powers-and-roots, m0.negative-numbers, e0.expressions, e0.booleans-and-conditionals, e0.loops, e0.functions, e0.lists-and-tuples, e0.reading-errors-and-debugging]
+leads: [m1.exponent-laws]
+starter: |
+  # Scratch space. A polynomial as a list of coefficients, constant term first.
+  # [2, 7, 3] stands for 2 + 7x + 3x^2.
+  coeffs = [2, 7, 3]
+  x = 10
+  total = 0
+  for i in range(len(coeffs)):
+      total += coeffs[i] * x ** i
+  print(total)
+parts:
+  recall:
+    - text: |
+        In [[m1.quadratics]] you multiplied brackets term by term, and solved equations by turning a sum into a product and setting each factor to zero. Today both ideas are freed from the power 2. Three quick pulls first.
+    - question:
+        id: recall-expand
+        type: choice
+        system: s1
+        concepts: [m1.quadratics]
+        prompt: "Expand $(x + 3)(x - 5)$."
+        options: ["$x^2 - 2x - 15$", "$x^2 + 2x - 15$", "$x^2 - 8x - 15$", "$x^2 - 15$"]
+        answer: 0
+        explanation: "The sum of 3 and $-5$ is $-2$ and their product is $-15$."
+        hints:
+          - Every term of the first bracket multiplies every term of the second.
+          - Add the two numbers, and multiply them.
+    - question:
+        id: recall-zero-product
+        type: choice
+        system: s1
+        concepts: [m1.quadratics]
+        prompt: "Solve $(x + 4)(x - 1) = 0$."
+        options: ["$x = 4$ or $x = -1$", "$x = -4$ or $x = 1$", "$x = 4$ or $x = 1$", "$x = -4$ or $x = -1$"]
+        answer: 1
+        explanation: One of the brackets must be zero.
+        hints:
+          - A product is zero only when a factor is zero.
+          - Solve each bracket separately.
+    - question:
+        id: recall-roots-count
+        type: choice
+        system: s1
+        concepts: [m1.quadratics]
+        prompt: "How many real solutions can a quadratic equation have?"
+        options: ["Always two", "One or two", "None, one or two", "Any number"]
+        answer: 2
+        explanation: It depends on the sign of the discriminant. A parabola crosses the axis twice, touches it once, or misses it.
+        hints:
+          - Think of the three positions of a parabola relative to the x-axis.
+          - What does a negative discriminant mean?
+  puzzle:
+    - text: |
+        Here is a long multiplication, the way it is done at school, and a product of two brackets.
+
+        $$23 \times 12 = 276 \qquad\qquad (2x + 3)(x + 2) = 2x^2 + 7x + 6$$
+
+        Look at the digits of the first answer and the coefficients of the second: 2, 7, 6 in both.
+
+        Try another pair. $21 \times 13 = 273$, and $(2x + 1)(x + 3) = 2x^2 + 7x + 3$. Again the digits and the coefficients agree: 2, 7, 3.
+
+        And one more. $31 \times 31 = 961$, and $(3x + 1)^2 = 9x^2 + 6x + 1$.
+
+        This cannot be chance. **Why does multiplying whole numbers give the same digits as multiplying brackets? And does it always?** Try $25 \times 13 = 325$ against $(2x + 5)(x + 3) = 2x^2 + 11x + 15$ before you answer.
+  intuition:
+    - text: |
+        Go back to the first idea of arithmetic you learnt: place value. The numeral 276 means
+
+        $$2 \times 100 + 7 \times 10 + 6 = 2 \times 10^2 + 7 \times 10 + 6.$$
+
+        Now look at $2x^2 + 7x + 6$ and put $x = 10$. It is the same thing. **A whole number written in digits is an expression in powers of ten, with the digits as coefficients.** The numeral is shorthand that leaves out the powers and keeps only the coefficients, in order.
+
+        So 23 is $2x + 3$ at $x = 10$, and 12 is $x + 2$ at $x = 10$. Multiplying the brackets and then setting $x = 10$ must give the same as multiplying the numbers, because an identity holds for every $x$ and 10 is one of them. Long multiplication **is** the multiplication of brackets, carried out on the coefficients alone.
+
+        The last example shows the one difference. $(2x + 5)(x + 3) = 2x^2 + 11x + 15$, and at $x = 10$ that is $200 + 110 + 15 = 325$. The value is right, but 11 and 15 are not digits. In arithmetic, a coefficient above 9 must be **carried** into the next column, because ten units make one ten. In algebra there is no carrying, because $x$ is not known to be 10, and eleven $x$'s cannot be traded for anything.
+
+        An expression of this kind, a sum of whole-number powers of $x$ with number coefficients, is called a **polynomial**. Polynomials are arithmetic with the carrying taken out. That makes them simpler than numbers, not harder. They can be added, subtracted, multiplied and, as you will see, divided with a remainder, just as whole numbers can. And the starter program in the workspace has already shown the other half of the idea: a polynomial can be stored as nothing more than a **list of its coefficients**.
+  derivation:
+    - text: |
+        **The vocabulary.** A **polynomial** in $x$ is a sum of terms, each a number times a whole-number power of $x$:
+
+        $$4x^3 - 2x^2 + 7x - 5.$$
+
+        The numbers 4, $-2$, 7 and $-5$ are its **coefficients**. The highest power that actually appears is its **degree**, here 3. The coefficient of that power is the **leading coefficient**, here 4, and the term without $x$ is the **constant term**. A missing power has the coefficient 0: $x^3 + 1$ is $1x^3 + 0x^2 + 0x + 1$.
+
+        You know the small degrees by other names. Degree 0 is a constant, degree 1 is linear, degree 2 is quadratic. Degree 3 is called **cubic**.
+
+        Powers must be whole numbers 0, 1, 2 and so on. So $\frac{1}{x}$ and $\sqrt{x}$ are not polynomials.
+
+        **Polynomials as lists.** Store the coefficients in a list, **constant term first**, so that the item at position $i$ is the coefficient of $x^i$. Then $4x^3 - 2x^2 + 7x - 5$ is
+
+        ```python
+        p = [-5, 7, -2, 4]
+        ```
+
+        The position is the power. The degree is `len(p) - 1`, provided the last item is not zero.
+
+        **Evaluating.** To find the value at a given $x$, add up coefficient times power.
+
+        ```python
+        def evaluate(p, x):
+            total = 0
+            for i in range(len(p)):
+                total += p[i] * x ** i
+            return total
+
+        print(evaluate([-5, 7, -2, 4], 2))
+        ```
+
+        This shows 33, since $-5 + 14 - 8 + 32 = 33$.
+
+        **A cleverer way to evaluate.** The loop above computes each power from scratch. There is a neater arrangement. Take $4x^3 - 2x^2 + 7x - 5$ and factor $x$ out of everything that has one, repeatedly:
+
+        $$4x^3 - 2x^2 + 7x - 5 = \big((4x - 2)x + 7\big)x - 5.$$
+
+        Read from the inside out, this says: start with the leading coefficient. Multiply by $x$ and add the next coefficient. Multiply by $x$ and add the next. And so on to the constant. For $x = 2$: start with 4. Then $4 \times 2 - 2 = 6$. Then $6 \times 2 + 7 = 19$. Then $19 \times 2 - 5 = 33$. Three multiplications and three additions, and no powers at all. This is **Horner's method**. It is how polynomials are evaluated in practice, and, read with $x = 10$, it is how you turn a string of digits into a number: "take what you have, times ten, plus the next digit".
+
+        **Adding.** Collect like terms. In list form that means adding the coefficients position by position.
+
+        $$(3x^2 + 2x - 1) + (x^2 - 5x + 4) = 4x^2 - 3x + 3.$$
+
+        Subtraction is the same with the signs of the second polynomial reversed. The degree of a sum is at most the larger of the two degrees. It can be less, when leading terms cancel.
+
+        **Multiplying.** Every term of the first multiplies every term of the second, and when powers of $x$ multiply, their exponents add: $x^2 \times x^3 = x^5$, because two $x$'s followed by three more make five.
+
+        $$\begin{aligned} (x^2 + 2x - 1)(x + 3) &= x^3 + 3x^2 + 2x^2 + 6x - x - 3 \\ &= x^3 + 5x^2 + 5x - 3. \end{aligned}$$
+
+        In list form: the term at position $i$ of one, times the term at position $j$ of the other, contributes to position $i + j$ of the product. The leading terms multiply to give the leading term, so **the degree of a product is the sum of the degrees.**
+    - question:
+        id: predict-horner
+        type: predict
+        system: s2
+        prompt: |
+          This is Horner's method for $2x^3 - 3x^2 + 0x + 5$ at $x = 3$, with a trace print. Note that the coefficients are listed here with the **leading** one first. Predict every line it shows.
+        code: |
+          value = 0
+          for c in [2, -3, 0, 5]:
+              value = value * 3 + c
+              print(value)
+        output: "2\n3\n9\n32"
+        explanation: |
+          Start at 0. Then $0 \times 3 + 2 = 2$, then $2 \times 3 - 3 = 3$, then $3 \times 3 + 0 = 9$, then $9 \times 3 + 5 = 32$. Directly: $2 \times 27 - 3 \times 9 + 5 = 54 - 27 + 5 = 32$.
+        hints:
+          - Each time round, the value so far is multiplied by 3 and the next coefficient is added.
+          - The missing power of x has the coefficient 0, and still takes its turn.
+          - Check the last line by evaluating the polynomial directly.
+    - text: |
+        **Dividing, with a remainder.** Whole numbers cannot always be divided exactly, but they can always be divided with a remainder: $17 = 5 \times 3 + 2$, where the remainder 2 is smaller than the divisor 5. Polynomials behave in the same way, with "smaller" meaning "of lower degree".
+
+        Divide $x^2 + 5x + 7$ by $x + 2$. Work from the leading term, as in long division.
+
+        - How many times does $x$ go into $x^2$? $x$ times. And $x(x + 2) = x^2 + 2x$. Subtract: $3x + 7$ is left.
+        - How many times does $x$ go into $3x$? 3 times. And $3(x + 2) = 3x + 6$. Subtract: 1 is left.
+        - The remainder 1 has lower degree than $x + 2$. Stop.
+
+        $$x^2 + 5x + 7 = (x + 2)(x + 3) + 1.$$
+
+        Quotient $x + 3$, remainder 1. Check by expanding the right side.
+
+        **The remainder theorem.** When the divisor is $x - a$, of degree 1, the remainder has degree 0: it is just a number $r$.
+
+        $$p(x) = (x - a)\,q(x) + r.$$
+
+        Here $p(x)$ names the polynomial, read "$p$ of $x$", and $p(a)$ will mean its value when $x$ is replaced by $a$, just as in a Python call. This statement is an identity, true for every $x$. So put $x = a$. The bracket becomes zero and wipes out the whole first term, whatever $q$ is:
+
+        $$p(a) = 0 \times q(a) + r = r.$$
+
+        **The remainder on dividing by $x - a$ is the value $p(a)$.** No division is needed to find it. In the example, dividing by $x + 2$ means $a = -2$, and $p(-2) = 4 - 10 + 7 = 1$. It agrees.
+
+        **The factor theorem.** A divisor is a **factor** when the remainder is zero. By the remainder theorem that happens exactly when $p(a) = 0$. A value at which a polynomial is zero is called a **root**. So:
+
+        $$a \text{ is a root of } p \quad\Longleftrightarrow\quad (x - a) \text{ is a factor of } p.$$
+
+        Roots and factors are the same information. You used one direction with quadratics, when a factor gave a root by the zero-product property. The other direction is new, and it is a tool: **find a root, by any means, and you can divide it out**, leaving a polynomial of lower degree.
+
+        Take $p(x) = x^3 - 6x^2 + 11x - 6$. Try small whole numbers. $p(1) = 1 - 6 + 11 - 6 = 0$. So $x - 1$ is a factor. Dividing gives $x^2 - 5x + 6$, which factorises as $(x - 2)(x - 3)$. So
+
+        $$x^3 - 6x^2 + 11x - 6 = (x - 1)(x - 2)(x - 3),$$
+
+        and the roots are 1, 2 and 3.
+
+        **How many roots?** Each root accounts for a factor of degree 1, and the degrees of factors add up to the degree of the product. So a polynomial of degree $n$ can have **at most $n$ roots**. A line crosses the axis at most once, a parabola at most twice, a cubic at most three times. It follows that two different polynomials of degree at most $n$ cannot agree at more than $n$ points, since their difference would have too many roots. Two points fix a line. Three fix a parabola.
+
+        **The shape of the graph.** For large $x$, positive or negative, the leading term dwarfs the rest, as you would expect from thinking in orders of magnitude. So far from the origin a polynomial behaves like $a_n x^n$ alone. With an even degree both ends go the same way, like a parabola. With an odd degree they go opposite ways, so the graph must cross the axis somewhere: **every polynomial of odd degree has at least one real root.** In between, a graph of degree $n$ turns round at most $n - 1$ times.
+    - question:
+        id: fix-evaluate
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `evaluate(p, x)` should return the value of a polynomial given as a list of coefficients, constant term first, using Horner's method. For `[-5, 7, -2, 4]`, which is $4x^3 - 2x^2 + 7x - 5$, at $x = 2$ it should return 33, but it returns $-21$. Horner's method must start from a particular end of the list. Trace the loop by hand for a short list, and fix the function.
+        starter: |
+          def evaluate(p, x):
+              value = 0
+              for c in p:
+                  value = value * x + c
+              return value
+
+          print(evaluate([-5, 7, -2, 4], 2))
+        solution: |
+          def evaluate(p, x):
+              value = 0
+              for i in range(len(p) - 1, -1, -1):
+                  value = value * x + p[i]
+              return value
+
+          print(evaluate([-5, 7, -2, 4], 2))
+        tests: |
+          assert evaluate([-5, 7, -2, 4], 2) == 33, "4x^3 - 2x^2 + 7x - 5 at x = 2 is 32 - 8 + 14 - 5 = 33"
+          assert evaluate([1, 2], 10) == 21, "[1, 2] is 1 + 2x, which at x = 10 is 21. Which coefficient must Horner's method meet first?"
+          assert evaluate([6, 7, 2], 10) == 276, "[6, 7, 2] is 6 + 7x + 2x^2, which at x = 10 is 276"
+          assert evaluate([5], 3) == 5, "A constant polynomial has the same value everywhere"
+          assert evaluate([0, 0, 1], -3) == 9, "[0, 0, 1] is x^2, which at x = -3 is 9"
+          assert evaluate([], 4) == 0, "The empty list stands for the zero polynomial"
+          _p = [1, 2, 3]
+          evaluate(_p, 2)
+          assert _p == [1, 2, 3], "The list passed in should not be changed"
+        wrong:
+          - "def evaluate(p, x):\n    value = 0\n    for i in range(len(p) - 1, 0, -1):\n        value = value * x + p[i]\n    return value\n\nprint(evaluate([-5, 7, -2, 4], 2))\n"
+          - "def evaluate(p, x):\n    value = 0\n    for i in range(len(p)):\n        value += p[i] * x\n    return value\n\nprint(evaluate([-5, 7, -2, 4], 2))\n"
+          - "def evaluate(p, x):\n    value = 0\n    for i in range(len(p) - 1, -1, -1):\n        value = (value + p[i]) * x\n    return value\n\nprint(evaluate([-5, 7, -2, 4], 2))\n"
+        explanation: Horner's method starts with the **leading** coefficient and works down to the constant. The list stores the constant first, so the loop must walk it backwards. `range(len(p) - 1, -1, -1)` produces the positions from the last down to 0.
+        hints:
+          - In Horner's method, which coefficient is multiplied by x the most times?
+          - The list has the constant term first. In which direction must the loop walk?
+          - A range with a step of -1 counts down. Where must it stop so that position 0 is included?
+  formal:
+    - text: |
+        A **polynomial** in $x$ is an expression
+
+        $$p(x) = a_n x^n + a_{n-1} x^{n-1} + \dots + a_1 x + a_0$$
+
+        where $n$ is a whole number and the **coefficients** $a_0, \dots, a_n$ are numbers. If $a_n \neq 0$, the **degree** of $p$ is $n$ and $a_n$ is its **leading coefficient**. Two polynomials are equal when all their coefficients agree.
+
+        | Operation | Rule | Degree |
+        | --- | --- | --- |
+        | Sum | add coefficients of like powers | at most the larger degree |
+        | Product | the coefficient of $x^k$ is the sum of all $a_i b_j$ with $i + j = k$ | the sum of the degrees |
+
+        **Division with remainder.** For polynomials $p$ and $d$ with $d$ not zero, there are unique polynomials $q$ and $r$, the **quotient** and **remainder**, with
+
+        $$p(x) = d(x)\,q(x) + r(x)$$
+
+        and $r$ either zero or of lower degree than $d$.
+
+        **Remainder theorem.** The remainder on dividing $p(x)$ by $x - a$ is $p(a)$.
+
+        **Factor theorem.** $x - a$ is a factor of $p(x)$ if and only if $p(a) = 0$. Such an $a$ is a **root** of $p$.
+
+        **Consequences.** A polynomial of degree $n \geq 1$ has at most $n$ roots. Two polynomials of degree at most $n$ that agree at $n + 1$ different values of $x$ are equal.
+
+        **Horner's method.** $p(x) = \big(\cdots\big((a_n x + a_{n-1})x + a_{n-2}\big)x + \cdots + a_1\big)x + a_0$, which evaluates a polynomial of degree $n$ with $n$ multiplications and $n$ additions.
+  drill:
+    - text: Seconds each. Find the highest power first.
+    - question:
+        id: drill-degree
+        type: numeric
+        system: s1
+        prompt: "What is the degree of $5x^2 - x^4 + 3x - 7$?"
+        answer: "4"
+        explanation: The highest power present is $x^4$, wherever it is written.
+        hints:
+          - Look for the highest power, not the first term.
+          - The terms need not be written in order.
+    - question:
+        id: drill-leading
+        type: numeric
+        system: s1
+        prompt: "What is the leading coefficient of $5x^2 - x^4 + 3x - 7$?"
+        answer: "-1"
+        explanation: "The term of highest degree is $-x^4$, and its coefficient is $-1$."
+        hints:
+          - Which term has the highest power?
+          - What number multiplies it?
+    - question:
+        id: drill-is-polynomial
+        type: choice
+        system: s1
+        prompt: "Which of these is **not** a polynomial?"
+        options: ["$x^3 - 2x$", "$7$", "$x^2 + \\dfrac{1}{x}$", "$\\dfrac{1}{2}x^5$"]
+        answer: 2
+        explanation: "$\\frac{1}{x}$ is not a whole-number power of $x$. A fraction as a coefficient is allowed. A variable in a denominator is not."
+        hints:
+          - Powers must be whole numbers, 0 or more.
+          - Coefficients may be any numbers.
+    - question:
+        id: drill-add
+        type: choice
+        system: s1
+        prompt: "Add $(2x^2 + 3x - 4) + (x^2 - 3x + 1)$."
+        options: ["$3x^2 - 3$", "$3x^2 + 6x - 3$", "$2x^4 - 3$", "$3x^2 - 5$"]
+        answer: 0
+        explanation: "The squares give $3x^2$, the $x$ terms cancel, and $-4 + 1 = -3$."
+        hints:
+          - Collect like powers.
+          - What happens to 3x and -3x?
+    - question:
+        id: drill-product-degree
+        type: numeric
+        system: s1
+        prompt: "A polynomial of degree 3 is multiplied by a polynomial of degree 4. What is the degree of the product?"
+        answer: "7"
+        explanation: "The leading terms multiply, and $x^3 \\times x^4 = x^7$."
+        hints:
+          - The leading terms multiply to give the leading term.
+          - When powers of x multiply, the exponents add.
+    - question:
+        id: drill-remainder
+        type: numeric
+        system: s1
+        prompt: "What is the remainder when $x^2 + 3x + 5$ is divided by $x - 1$?"
+        answer: "9"
+        explanation: "By the remainder theorem it is the value at $x = 1$: $1 + 3 + 5$."
+        hints:
+          - No division is needed.
+          - Evaluate the polynomial at x = 1.
+    - question:
+        id: drill-factor
+        type: choice
+        system: s1
+        prompt: "Which of these is a factor of $x^3 - 8$?"
+        options: ["$x - 1$", "$x + 2$", "$x - 2$", "$x - 8$"]
+        answer: 2
+        explanation: "$2^3 - 8 = 0$, so 2 is a root and $x - 2$ is a factor."
+        hints:
+          - A factor x - a goes with a root a.
+          - Which number cubed gives 8?
+    - question:
+        id: drill-max-roots
+        type: numeric
+        system: s1
+        prompt: "At most how many roots can a polynomial of degree 5 have?"
+        answer: "5"
+        explanation: Each root accounts for a factor of degree 1, and the degrees of the factors cannot add up to more than 5.
+        hints:
+          - Each root gives a factor of degree 1.
+          - Degrees of factors add.
+    - question:
+        id: predict-list-degree
+        type: predict
+        system: s1
+        prompt: "The list `p` stores a polynomial with the constant term first. What does this show?"
+        code: |
+          p = [4, 0, -1, 2]
+          print(len(p) - 1, p[0], p[-1])
+        output: "3 4 2"
+        explanation: "The list stands for $2x^3 - x^2 + 4$. Its degree is 3, its constant term is 4 and its leading coefficient is 2."
+        hints:
+          - The position of an item is the power it multiplies.
+          - Which item is the constant term, and which the leading coefficient?
+  work:
+    - text: Slower now. In every program, a polynomial is a list of coefficients with the constant term first. Write the polynomial out on paper beside the list.
+    - question:
+        id: work-multiply
+        type: choice
+        system: s2
+        prompt: "Expand $(x^2 - 3x + 2)(x + 4)$."
+        options:
+          - "$x^3 + x^2 - 10x + 8$"
+          - "$x^3 + 7x^2 + 14x + 8$"
+          - "$x^3 - 3x^2 + 2x + 8$"
+          - "$x^3 + x^2 + 14x + 8$"
+        answer: 0
+        explanation: "$x^3 + 4x^2 - 3x^2 - 12x + 2x + 8 = x^3 + x^2 - 10x + 8$. A quick check at $x = 1$: the left side is $0 \\times 5 = 0$ and the right side is $1 + 1 - 10 + 8 = 0$."
+        hints:
+          - Six products, then collect like powers.
+          - Keep each sign with its term.
+          - Check your answer by evaluating both forms at x = 1.
+    - question:
+        id: work-factor-cubic
+        type: numeric
+        system: s2
+        prompt: |
+          The polynomial $x^3 - 4x^2 + x + 6$ has the root $x = 2$. Divide out the factor $x - 2$ and factorise what is left. What is the **smallest** root of the polynomial?
+        answer: "-1"
+        explanation: "Dividing by $x - 2$ gives $x^2 - 2x - 3$, which is $(x + 1)(x - 3)$. So the polynomial is $(x - 2)(x + 1)(x - 3)$, with roots $-1$, 2 and 3. Check: $(-1)^3 - 4 - 1 + 6 = 0$."
+        hints:
+          - First confirm that 2 is a root by substituting.
+          - Divide by x - 2 starting from the leading term. The quotient is a quadratic.
+          - Factorise the quadratic as in the last lesson.
+    - question:
+        id: write-poly-add
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write a function `add(p, q)` that returns the sum of two polynomials as a new list of coefficients. The two lists may have different lengths: a polynomial that runs out of terms has zeros from there on. So `add([1, 2, 3], [4, 5])`, which is $(1 + 2x + 3x^2) + (4 + 5x)$, is `[5, 7, 3]`. Neither list passed in may be changed.
+        starter: |
+          def add(p, q):
+              # Replace the next line with your own.
+              return []
+
+          print(add([1, 2, 3], [4, 5]))
+        solution: |
+          def add(p, q):
+              out = []
+              for i in range(max(len(p), len(q))):
+                  total = 0
+                  if i < len(p):
+                      total += p[i]
+                  if i < len(q):
+                      total += q[i]
+                  out.append(total)
+              return out
+
+          print(add([1, 2, 3], [4, 5]))
+        tests: |
+          assert add([1, 2, 3], [4, 5]) is not None, "The function returns None. It should return the new list."
+          assert add([1, 2, 3], [4, 5]) == [5, 7, 3], "(1 + 2x + 3x^2) + (4 + 5x) is 5 + 7x + 3x^2. The longer list's extra terms must be kept."
+          assert add([4, 5], [1, 2, 3]) == [5, 7, 3], "It should work whichever list is the longer"
+          assert add([1, 1], [2, 2]) == [3, 3], "(1 + x) + (2 + 2x) is 3 + 3x"
+          assert add([], [7, 8]) == [7, 8], "Adding the zero polynomial changes nothing"
+          _p = [1, 2]
+          _q = [3]
+          add(_p, _q)
+          assert _p == [1, 2] and _q == [3], "The lists passed in should not be changed"
+        wrong:
+          - "def add(p, q):\n    out = []\n    for i in range(min(len(p), len(q))):\n        out.append(p[i] + q[i])\n    return out\n\nprint(add([1, 2, 3], [4, 5]))\n"
+          - "def add(p, q):\n    return p + q\n\nprint(add([1, 2, 3], [4, 5]))\n"
+          - "def add(p, q):\n    for i in range(len(q)):\n        p[i] += q[i]\n    return p\n\nprint(add([1, 2, 3], [4, 5]))\n"
+        explanation: Coefficients of the same power are added. The result is as long as the longer list, and a position beyond the end of the shorter one contributes nothing. Note that `p + q` on lists joins them end to end, which is a different operation altogether.
+        hints:
+          - How long is the result?
+          - For each position, a list contributes its item if it has one there.
+          - Build a new list with append instead of altering p or q.
+    - question:
+        id: write-poly-multiply
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write a function `multiply(p, q)` that returns the product of two polynomials, given as non-empty lists of coefficients, as a new list. The term at position `i` of `p` times the term at position `j` of `q` contributes to position `i + j`. So `multiply([3, 2], [2, 1])`, which is $(3 + 2x)(2 + x)$, is `[6, 7, 2]`. Start with a list of zeros of the right length, and use a loop inside a loop.
+        starter: |
+          def multiply(p, q):
+              # Replace the next line with your own.
+              return []
+
+          print(multiply([3, 2], [2, 1]))
+        solution: |
+          def multiply(p, q):
+              out = []
+              for k in range(len(p) + len(q) - 1):
+                  out.append(0)
+              for i in range(len(p)):
+                  for j in range(len(q)):
+                      out[i + j] += p[i] * q[j]
+              return out
+
+          print(multiply([3, 2], [2, 1]))
+        tests: |
+          assert multiply([3, 2], [2, 1]) is not None, "The function returns None. It should return the new list."
+          assert multiply([3, 2], [2, 1]) == [6, 7, 2], "(3 + 2x)(2 + x) is 6 + 7x + 2x^2, just as 23 times 12 is 276"
+          assert multiply([5, 2], [3, 1]) == [15, 11, 2], "(5 + 2x)(3 + x) is 15 + 11x + 2x^2. Polynomials do not carry."
+          assert multiply([1, 1], [-1, 1]) == [-1, 0, 1], "(1 + x)(-1 + x) is x^2 - 1, whose middle coefficient is 0"
+          assert multiply([2], [4, 0, 1]) == [8, 0, 2], "Multiplying by the constant 2 doubles every coefficient"
+          assert multiply([-1, 2, 1], [3, 1]) == [-3, 5, 5, 1], "(x^2 + 2x - 1)(x + 3) is x^3 + 5x^2 + 5x - 3"
+          assert len(multiply([1, 2, 3], [1, 2, 3, 4])) == 6, "The product of degree 2 and degree 3 has degree 5, so six coefficients"
+        wrong:
+          - "def multiply(p, q):\n    out = []\n    for i in range(min(len(p), len(q))):\n        out.append(p[i] * q[i])\n    return out\n\nprint(multiply([3, 2], [2, 1]))\n"
+          - "def multiply(p, q):\n    out = []\n    for k in range(len(p) + len(q) - 1):\n        out.append(0)\n    for i in range(len(p)):\n        for j in range(len(q)):\n            out[i + j] = p[i] * q[j]\n    return out\n\nprint(multiply([3, 2], [2, 1]))\n"
+          - "def multiply(p, q):\n    out = []\n    for k in range(len(p) + len(q)):\n        out.append(0)\n    for i in range(len(p)):\n        for j in range(len(q)):\n            out[i + j] += p[i] * q[j]\n    return out\n\nprint(multiply([3, 2], [2, 1]))\n"
+        explanation: Every term meets every term, which is a loop inside a loop. Exponents add, so the product of positions $i$ and $j$ lands at position $i + j$, and several products may land on the same position and must be accumulated. The degrees add, so the result has `len(p) + len(q) - 1` coefficients. This operation is long multiplication without the carrying.
+        hints:
+          - What is the degree of the product, and so how many coefficients has it?
+          - Which position does the product of p[i] and q[j] belong to?
+          - More than one pair of terms can contribute to the same power. Add, do not overwrite.
+    - question:
+        id: fix-divide-linear
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `remainder(p, a)` should return the remainder when the polynomial `p` is divided by $x - a$, and `is_factor(p, a)` should say whether $x - a$ is a factor. For $x^2 + 5x + 7$ divided by $x + 2$ the remainder is 1. The function returns 21, because its author confused the divisor $x + 2$ with the value at which to evaluate. Use the remainder theorem to decide what `a` is for the divisor $x + 2$, and fix the **call** so that the program shows 1 and then True. The two functions themselves are correct.
+        starter: |
+          def remainder(p, a):
+              value = 0
+              for i in range(len(p) - 1, -1, -1):
+                  value = value * a + p[i]
+              return value
+
+          def is_factor(p, a):
+              return remainder(p, a) == 0
+
+          print(remainder([7, 5, 1], 2))
+          print(is_factor([6, 5, 1], 2))
+        solution: |
+          def remainder(p, a):
+              value = 0
+              for i in range(len(p) - 1, -1, -1):
+                  value = value * a + p[i]
+              return value
+
+          def is_factor(p, a):
+              return remainder(p, a) == 0
+
+          print(remainder([7, 5, 1], -2))
+          print(is_factor([6, 5, 1], -2))
+        tests: |
+          assert remainder([7, 5, 1], -2) == 1 and remainder([7, 5, 1], 2) == 21, "Leave the function remainder as it was"
+          assert is_factor([-6, 11, -6, 1], 1) == True and is_factor([-6, 11, -6, 1], 4) == False, "Leave the function is_factor as it was"
+          assert output.split() == ["1", "True"], "The program should show 1 and then True. Dividing by x + 2 is dividing by x - a for which a?"
+        wrong:
+          - "def remainder(p, a):\n    value = 0\n    for i in range(len(p) - 1, -1, -1):\n        value = value * a + p[i]\n    return value\n\ndef is_factor(p, a):\n    return remainder(p, a) == 0\n\nprint(remainder([7, 5, 1], -2))\nprint(is_factor([6, 5, 1], 2))\n"
+          - "def remainder(p, a):\n    return 1\n\ndef is_factor(p, a):\n    return True\n\nprint(remainder([7, 5, 1], 2))\nprint(is_factor([6, 5, 1], 2))\n"
+        explanation: "The divisor $x + 2$ is $x - (-2)$, so $a = -2$. The remainder is the value at $-2$, which is $4 - 10 + 7 = 1$. Likewise $x^2 + 5x + 6 = (x + 2)(x + 3)$ has the root $-2$, so $x + 2$ is a factor of it."
+        hints:
+          - The remainder theorem is stated for a divisor of the form x - a.
+          - Write x + 2 in that form. What is a?
+          - For which value of x is x + 2 equal to zero?
+    - question:
+        id: why-digits-match
+        type: choice
+        system: s2
+        prompt: "Why do the digits of $23 \\times 12 = 276$ match the coefficients of $(2x + 3)(x + 2) = 2x^2 + 7x + 6$?"
+        options:
+          - "It is a coincidence that happens for small numbers."
+          - "A numeral is a polynomial evaluated at x = 10 with the digits as coefficients, and an identity between polynomials holds for every x, including 10. The match is exact whenever no coefficient of the product exceeds 9."
+          - "Because 23 and 12 are both less than 100."
+          - "Because multiplication is commutative."
+        answer: 1
+        explanation: "$23 = 2 \\times 10 + 3$ and $12 = 10 + 2$. Setting $x = 10$ in the identity gives $23 \\times 12 = 2 \\times 100 + 7 \\times 10 + 6$. When a coefficient exceeds 9 the values still agree, but the numeral must carry."
+        hints:
+          - What does the numeral 276 mean in terms of powers of ten?
+          - For which values of x does the identity between the two sides hold?
+    - question:
+        id: roots-and-fit
+        type: choice
+        system: s2
+        prompt: |
+          Two polynomials, each of degree at most 2, are found to have the same value at $x = 0$, $x = 1$ and $x = 5$. What can you conclude?
+        options:
+          - "Nothing. They might differ everywhere else."
+          - "They are the same polynomial, because their difference has degree at most 2 and three roots, and a non-zero polynomial of degree at most 2 has at most two."
+          - "They agree for whole numbers only."
+          - "They both have roots at 0, 1 and 5."
+        answer: 1
+        explanation: The difference of the two is a polynomial of degree at most 2 that is zero at three places. That is one root too many unless the difference is the zero polynomial. So three points determine a quadratic, as two determine a line.
+        hints:
+          - Consider the difference of the two polynomials. Where is it zero?
+          - How many roots can a polynomial of degree 2 have?
+  connections:
+    - text: |
+        Polynomials are the simplest expressions there are, built from nothing but addition and multiplication, and you can now compute with them as freely as with whole numbers. You have also seen that whole numbers were polynomials in ten all along.
+
+        The representation you used today, a list of coefficients with the position as the power, is the first real example of an idea that runs through machine learning: **a mathematical object stored as a list of numbers**. A polynomial of degree $n$ is $n + 1$ numbers. Later a point will be a list of coordinates, an image a list of brightnesses, and a model a list of weights, and operations on the objects will become loops over the lists. The multiplication you wrote, where position $i$ meets position $j$ and lands at $i + j$, is called a **convolution**. The same operation, sliding one list along another, is the working part of the networks that recognise images.
+
+        Polynomials are also the standard tool for approximating complicated things by simple ones. Near any point, a smooth curve looks like a line. Look more closely and it looks like a parabola, then a cubic. Calculus makes this exact, and gives a recipe for the coefficients.
+
+        The fact that enough points determine a polynomial has a warning attached. Given ten data points, there is a polynomial of degree nine through all of them exactly, and it is usually a wild, wiggling curve that predicts nothing. Fitting the data perfectly and understanding it are different things. That tension, called overfitting, is central to machine learning.
+
+        In multiplying polynomials you used one small rule without comment: $x^2 \times x^3 = x^5$, the exponents add. That rule has siblings, for dividing powers and for powers of powers, and together they force meanings on exponents that are zero, negative, and fractional, including the mysterious `** 0.5`. They are the next lesson: [[m1.exponent-laws]].

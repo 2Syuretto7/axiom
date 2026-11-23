@@ -117,6 +117,16 @@ export async function validateLessons(options: ValidateOptions): Promise<Issue[]
         if (!mentionable.has(id)) add(where, `Mentions [[${id}]], which is not this concept, a listed prerequisite or a listed next concept`);
       }
       if (/in your own words/i.test(text)) add(where, "Explain-it-back prompts are not allowed");
+      // A bar inside mathematics would be read as the edge of a table cell.
+      const barInMaths = (row: string) =>
+        /^\s*\|/.test(row) &&
+        row
+          .replace(/\\\|/g, "")
+          .split("$")
+          .some((piece, i) => i % 2 === 1 && piece.includes("|"));
+      if (text.split("\n").some(barInMaths)) {
+        add(where, "A table row has a | inside mathematics; write \\lvert and \\rvert there instead");
+      }
       try {
         (inline ? renderInline : renderBlock)(text);
       } catch (error) {

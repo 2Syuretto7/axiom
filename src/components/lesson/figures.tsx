@@ -290,6 +290,215 @@ function RatioTable(props: Props) {
   );
 }
 
+const fmt = (n: number) => {
+  const text = Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+  return text.replace("-", "−");
+};
+/** Writes c1·name1 + c2·name2 + … as people write it: no "1x", no "+ −", no zero terms. */
+const sumOf = (terms: [number, string][]) => {
+  const kept = terms.filter(([k]) => k !== 0);
+  if (kept.length === 0) return "0";
+  return kept
+    .map(([k, name], i) => {
+      const size = Math.abs(k);
+      const body = name === "" ? fmt(size) : `${size === 1 ? "" : fmt(size)}${name}`;
+      return i === 0 ? `${k < 0 ? "−" : ""}${body}` : `${k < 0 ? "−" : "+"} ${body}`;
+    })
+    .join(" ");
+};
+
+const REACH = 8; // the plane runs from −8 to 8 both ways
+const UNIT = 20;
+const px = (x: number) => 170 + x * UNIT;
+const py = (y: number) => 170 - y * UNIT;
+
+function PlaneGrid({ label, children }: { label: string; children: ReactNode }) {
+  const marks = Array.from({ length: 2 * REACH + 1 }, (_, i) => i - REACH);
+  return (
+    <svg viewBox="0 0 340 340" role="img" aria-label={label}>
+      <defs>
+        <clipPath id="plane-clip">
+          <rect x={px(-REACH)} y={py(REACH)} width={2 * REACH * UNIT} height={2 * REACH * UNIT} />
+        </clipPath>
+      </defs>
+      {marks.map((k) => (
+        <g key={k}>
+          <line x1={px(k)} x2={px(k)} y1={py(-REACH)} y2={py(REACH)} className="fig-grid" />
+          <line y1={py(k)} y2={py(k)} x1={px(-REACH)} x2={px(REACH)} className="fig-grid" />
+          {k !== 0 && k % 2 === 0 ? (
+            <>
+              <text x={px(k)} y={py(0) + 13} textAnchor="middle" className="fig-small">
+                {fmt(k)}
+              </text>
+              <text x={px(0) - 5} y={py(k) + 4} textAnchor="end" className="fig-small">
+                {fmt(k)}
+              </text>
+            </>
+          ) : null}
+        </g>
+      ))}
+      <line x1={px(-REACH)} x2={px(REACH)} y1={py(0)} y2={py(0)} className="fig-axis" />
+      <line y1={py(-REACH)} y2={py(REACH)} x1={px(0)} x2={px(0)} className="fig-axis" />
+      <text x={px(REACH) - 2} y={py(0) - 6} textAnchor="end" className="fig-small">
+        x
+      </text>
+      <text x={px(0) + 6} y={py(REACH) + 10} className="fig-small">
+        y
+      </text>
+      <g clipPath="url(#plane-clip)">{children}</g>
+    </svg>
+  );
+}
+
+/** A point named by two numbers: how far across, then how far up. */
+function PlanePoint(props: Props) {
+  const [x, setX] = useState(clamp(Math.round(num(props.x, 3)), -REACH, REACH));
+  const [y, setY] = useState(clamp(Math.round(num(props.y, 2)), -REACH, REACH));
+  const across = x === 0 ? "neither left nor right" : `${Math.abs(x)} ${x > 0 ? "right" : "left"}`;
+  const up = y === 0 ? "neither up nor down" : `${Math.abs(y)} ${y > 0 ? "up" : "down"}`;
+  const where =
+    x === 0 && y === 0
+      ? "It is the origin."
+      : x === 0
+        ? "It lies on the y-axis."
+        : y === 0
+          ? "It lies on the x-axis."
+          : `It is in quadrant ${x > 0 ? (y > 0 ? "I" : "IV") : y > 0 ? "II" : "III"}.`;
+  const square = x * x + y * y;
+  const root = Math.sqrt(square);
+  return (
+    <Frame
+      title="Coordinates"
+      summary={`The point (${fmt(x)}, ${fmt(y)}): ${across}, ${up}. ${where} Distance from the origin: ${Number.isInteger(root) ? fmt(root) : `√${square} ≈ ${fmt(root)}`}.`}
+      controls={
+        <>
+          <Stepper label="x" value={x} onChange={setX} min={-REACH} max={REACH} />
+          <Stepper label="y" value={y} onChange={setY} min={-REACH} max={REACH} />
+        </>
+      }
+    >
+      <PlaneGrid label={`The coordinate plane with a point at (${x}, ${y})`}>
+        <line x1={px(x)} x2={px(x)} y1={py(0)} y2={py(y)} className="fig-guide" />
+        <line x1={px(0)} x2={px(x)} y1={py(y)} y2={py(y)} className="fig-guide" />
+        <circle cx={px(x)} cy={py(y)} r="6" className="fig-accent" />
+      </PlaneGrid>
+    </Frame>
+  );
+}
+
+const lineName = (m: number, b: number) => `y = ${sumOf([[m, "x"], [b, ""]])}`;
+const drawLine = (m: number, b: number, className: string) => (
+  <line x1={px(-REACH - 1)} y1={py(m * (-REACH - 1) + b)} x2={px(REACH + 1)} y2={py(m * (REACH + 1) + b)} className={className} />
+);
+
+/** A straight line steered by its slope and its intercept, with the slope drawn as a step. */
+function PlaneLine(props: Props) {
+  const [m, setM] = useState(clamp(num(props.slope, 2), -4, 4));
+  const [b, setB] = useState(clamp(num(props.intercept, 1), -6, 6));
+  const rise = m === 0 ? "stays level" : `goes ${m > 0 ? "up" : "down"} ${fmt(Math.abs(m))}`;
+  return (
+    <Frame
+      title="Straight line"
+      summary={`${lineName(m, b)}. It crosses the y-axis at ${fmt(b)}. For each 1 step to the right it ${rise}.`}
+      controls={
+        <>
+          <Slider label="slope" value={m} onChange={setM} min={-4} max={4} step={0.5} />
+          <Slider label="intercept" value={b} onChange={setB} min={-6} max={6} />
+        </>
+      }
+    >
+      <PlaneGrid label={`The line ${lineName(m, b)}`}>
+        {drawLine(m, b, "fig-accent-line")}
+        <line x1={px(0)} x2={px(1)} y1={py(b)} y2={py(b)} className="fig-line" />
+        <line x1={px(1)} x2={px(1)} y1={py(b)} y2={py(b + m)} className="fig-line" />
+        <circle cx={px(0)} cy={py(b)} r="5" className="fig-accent" />
+      </PlaneGrid>
+    </Frame>
+  );
+}
+
+/** Two lines. Where they cross is the one pair of numbers that satisfies both equations. */
+function PlaneLines(props: Props) {
+  const [m, setM] = useState(clamp(num(props.slope, 1), -4, 4));
+  const [b, setB] = useState(clamp(num(props.intercept, 1), -6, 6));
+  const m2 = clamp(num(props.otherSlope, -1), -4, 4);
+  const b2 = clamp(num(props.otherIntercept, 5), -6, 6);
+  const x = m === m2 ? null : (b2 - b) / (m - m2);
+  const meeting =
+    x === null
+      ? b === b2
+        ? "They are the same line, so every point on it satisfies both equations."
+        : "They are parallel and never meet, so no pair satisfies both equations."
+      : `They cross at (${fmt(x)}, ${fmt(m * x + b)}), the only pair that satisfies both equations.`;
+  return (
+    <Frame
+      title="Two lines"
+      summary={`${lineName(m, b)} and ${lineName(m2, b2)}. ${meeting}`}
+      controls={
+        <>
+          <Slider label="slope" value={m} onChange={setM} min={-4} max={4} step={0.5} />
+          <Slider label="intercept" value={b} onChange={setB} min={-6} max={6} />
+        </>
+      }
+    >
+      <PlaneGrid label={`The lines ${lineName(m, b)} and ${lineName(m2, b2)}`}>
+        {drawLine(m2, b2, "fig-line")}
+        {drawLine(m, b, "fig-accent-line")}
+        {x === null ? null : <circle cx={px(x)} cy={py(m * x + b)} r="6" className="fig-accent" />}
+      </PlaneGrid>
+    </Frame>
+  );
+}
+
+/** The curve y = ax² + bx + c, with its turning point and the places it meets the x-axis. */
+function Parabola(props: Props) {
+  const [a, setA] = useState(clamp(num(props.a, 1), -2, 2));
+  const [b, setB] = useState(clamp(num(props.b, -2), -6, 6));
+  const [c, setC] = useState(clamp(num(props.c, -3), -8, 8));
+  const name = `y = ${sumOf([[a, "x²"], [b, "x"], [c, ""]])}`;
+  const f = (x: number) => a * x * x + b * x + c;
+  const points = Array.from({ length: 161 }, (_, i) => -REACH + i / 10)
+    .map((x) => `${px(x).toFixed(1)},${py(clamp(f(x), -3 * REACH, 3 * REACH)).toFixed(1)}`)
+    .join(" ");
+  const disc = b * b - 4 * a * c;
+  let detail: string;
+  let roots: number[] = [];
+  if (a === 0) {
+    detail = "With no x² term this is a straight line, not a parabola.";
+  } else {
+    const h = -b / (2 * a);
+    if (disc > 0) roots = [(-b - Math.sqrt(disc)) / (2 * a), (-b + Math.sqrt(disc)) / (2 * a)].sort((p, q) => p - q);
+    else if (disc === 0) roots = [h];
+    const crossing =
+      roots.length === 2
+        ? `It crosses the x-axis at ${fmt(roots[0])} and ${fmt(roots[1])}.`
+        : roots.length === 1
+          ? `It touches the x-axis at ${fmt(roots[0])}.`
+          : "It never meets the x-axis.";
+    detail = `It opens ${a > 0 ? "upwards" : "downwards"}, with its turning point at (${fmt(h)}, ${fmt(f(h))}). ${crossing} b² − 4ac = ${fmt(disc)}.`;
+  }
+  return (
+    <Frame
+      title="Parabola"
+      summary={`${name}. ${detail}`}
+      controls={
+        <>
+          <Slider label="a" value={a} onChange={setA} min={-2} max={2} step={0.5} />
+          <Slider label="b" value={b} onChange={setB} min={-6} max={6} />
+          <Slider label="c" value={c} onChange={setC} min={-8} max={8} />
+        </>
+      }
+    >
+      <PlaneGrid label={`The curve ${name}`}>
+        <polyline points={points} fill="none" className="fig-accent-line" />
+        {roots.map((r) => (
+          <circle key={r} cx={px(r)} cy={py(0)} r="5" className="fig-accent" />
+        ))}
+      </PlaneGrid>
+    </Frame>
+  );
+}
+
 const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "place-value": PlaceValue,
   "number-line": NumberLine,
@@ -297,6 +506,10 @@ const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "fraction-bar": FractionBar,
   "powers-of-ten": PowersOfTen,
   "ratio-table": RatioTable,
+  "plane-point": PlanePoint,
+  "plane-line": PlaneLine,
+  "plane-lines": PlaneLines,
+  parabola: Parabola,
 };
 
 export function Figure({ name, props }: { name: string; props?: Props }) {

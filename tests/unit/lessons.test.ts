@@ -49,6 +49,13 @@ describe("lesson validation", () => {
     expect(await messages("e0.printing", (l) => (question(l, "predict-fast").output = "11"))).toContain('really prints: "2"');
   });
 
+  it("rejects a bar inside mathematics in a table row, which would split the cell", async () => {
+    const withTable = (row: string) => (l: Raw) => (question(l, "sum-slow").explanation = `| a | b |\n| --- | --- |\n${row}`);
+    expect(await messages("m0.adding", withTable("| size | $|x|$ |"))).toContain("inside mathematics");
+    expect(await messages("m0.adding", withTable("| size | $\\lvert x \\rvert$ |"))).not.toContain("inside mathematics");
+    expect(await messages("m0.adding", withTable("| $a$ | $b$ |"))).not.toContain("inside mathematics");
+  });
+
   it("rejects answers that are not numbers and hints that give the answer away", async () => {
     expect(await messages("m0.adding", (l) => (question(l, "sum-slow").answer = "twelve"))).toContain("is not a number");
     expect(await messages("m0.adding", (l) => question(l, "sum-slow").hints.push("It is 12."))).toContain("hint contains the answer");
