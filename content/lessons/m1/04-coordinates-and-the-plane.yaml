@@ -1,0 +1,540 @@
+concept: m1.coordinates-and-the-plane
+minutes: 95
+claim: You can name any point of the plane by an ordered pair, plot points and the graph of an equation, and compute midpoints and distances, deriving the distance formula from the theorem of Pythagoras.
+recalls: [m1.inequalities-and-absolute-value]
+uses: [m1.variables-and-expressions, m1.linear-equations, m0.negative-numbers, m0.powers-and-roots, m0.fractions, e0.expressions, e0.booleans-and-conditionals, e0.loops, e0.functions, e0.lists-and-tuples, e0.reading-errors-and-debugging]
+leads: [m1.straight-lines-and-slope]
+starter: |
+  # Scratch space. A table of values for y = 2x - 1.
+  for x in range(-2, 4):
+      print((x, 2 * x - 1))
+parts:
+  recall:
+    - text: |
+        In [[m1.inequalities-and-absolute-value]] the distance between two numbers on a line was $|a - b|$. Today there are two lines at once, and that distance is the first tool you will need. Two quick pulls.
+    - question:
+        id: recall-distance
+        type: numeric
+        system: s1
+        concepts: [m1.inequalities-and-absolute-value]
+        prompt: "What is the distance between $-3$ and $5$ on the number line?"
+        answer: "8"
+        explanation: "$|-3 - 5| = |-8| = 8$."
+        hints:
+          - Subtract and take the absolute value.
+          - Or count up from -3 to 5.
+    - question:
+        id: recall-within
+        type: choice
+        system: s1
+        concepts: [m1.inequalities-and-absolute-value]
+        prompt: "$|x - 2| < 3$ means the same as which of these?"
+        options: ["$x < 5$", "$-1 < x < 5$", "$-5 < x < 5$", "$x < -1$ or $x > 5$"]
+        answer: 1
+        explanation: "The numbers within 3 of 2 lie between $2 - 3$ and $2 + 3$."
+        hints:
+          - Read it as a distance from 2.
+          - Go three steps each way.
+  puzzle:
+    - text: |
+        The equation $3x + 5 = 17$ has one unknown and one solution, a point on the number line. Now take an equation with **two** unknowns:
+
+        $$y = 2x - 1.$$
+
+        Is $x = 3$ a solution? The question makes no sense until you say what $y$ is. A solution must be a **pair** of numbers, one for each letter. The pair $x = 3$, $y = 5$ works, since $5 = 2 \times 3 - 1$. So does $x = 0$, $y = -1$. So does $x = 1.5$, $y = 2$. Choose any $x$ whatever, compute $y$ from it, and you have another. There are infinitely many solutions, and they are pairs.
+
+        A number line can show one number at a time. It has nowhere to put a pair.
+
+        **Where do pairs of numbers live? And if you could see all the solutions of $y = 2x - 1$ at once, what would they look like?**
+  intuition:
+    - text: |
+        To say where a seat is in a hall, you give two numbers: the row and the seat within the row. To say where a square is on a chessboard, a letter and a number. One number is not enough to pin down a position on a flat surface, and two always are.
+
+        So take **two** number lines. Lay one flat, as usual. Stand the other upright, crossing the first at right angles, so that the two zeros coincide. The flat one is the **$x$-axis**, the upright one the **$y$-axis**, and the point where they cross is the **origin**.
+
+        Any point on the flat surface can now be reached from the origin by two moves: first along, then up. The point reached by going 3 along and 2 up is named $(3, 2)$. The numbers are the point's **coordinates**. Negative numbers mean the opposite direction: left instead of right, down instead of up.
+
+        Move the point below with the steppers, and watch its name change.
+    - figure: plane-point
+      props: { x: 3, y: 2 }
+    - text: |
+        Two things happened when you did that. Every position you could reach got a name made of two numbers. And every pair of numbers you could dial named exactly one position. Points and pairs match up perfectly, one to one.
+
+        That matching is one of the great ideas of mathematics, due to René Descartes. It is a two-way dictionary. Anything said about numbers can be turned into a picture, and anything drawn can be turned into numbers. An equation becomes a shape. A shape becomes an equation. From here on, algebra and geometry are one subject.
+  derivation:
+    - text: |
+        **Ordered pairs.** A point is written $(x, y)$, always with the $x$-coordinate first. The order matters: $(3, 2)$ and $(2, 3)$ are different points. For this reason the pair is called an **ordered pair**. In Python it is a tuple, `(3, 2)`, and unpacking takes it apart: `x, y = point`.
+
+        Points on the $x$-axis have the form $(x, 0)$. Points on the $y$-axis have the form $(0, y)$. The origin is $(0, 0)$.
+
+        The axes cut the plane into four **quadrants**, numbered anticlockwise from the top right.
+
+        | Quadrant | Sign of $x$ | Sign of $y$ | Example |
+        | --- | --- | --- | --- |
+        | I | positive | positive | $(3, 2)$ |
+        | II | negative | positive | $(-3, 2)$ |
+        | III | negative | negative | $(-3, -2)$ |
+        | IV | positive | negative | $(3, -2)$ |
+
+        **The graph of an equation.** Return to $y = 2x - 1$. Its solutions are pairs, and pairs are points. So mark them. A **table of values** gives a few.
+
+        | $x$ | $-2$ | $-1$ | $0$ | $1$ | $2$ | $3$ |
+        | --- | --- | --- | --- | --- | --- | --- |
+        | $y = 2x - 1$ | $-5$ | $-3$ | $-1$ | $1$ | $3$ | $5$ |
+
+        A loop makes the table for you, as a list of tuples:
+
+        ```python
+        points = []
+        for x in range(-2, 4):
+            points.append((x, 2 * x - 1))
+        print(points)
+        ```
+
+        Plot those six points and something striking appears: they lie in a perfectly straight row. Put in the points for $x = 0.5$, $x = 1.5$ and every value between, and the gaps fill in to make an unbroken straight line.
+
+        The **graph** of an equation is the set of **all** points whose coordinates satisfy it. This sentence cuts both ways, and both are used constantly.
+
+        - If a point is on the graph, its coordinates satisfy the equation.
+        - If a pair satisfies the equation, the point is on the graph.
+
+        So to test whether $(4, 7)$ lies on the graph of $y = 2x - 1$, you do not need to draw anything. Substitute: is $7 = 2 \times 4 - 1$? Yes. The point is on the line. And $(4, 8)$? Is $8 = 7$? No. It lies off the line, one unit above.
+
+        **Midpoints.** What point is exactly halfway between $(1, 2)$ and $(5, 8)$? Halfway along, the $x$-coordinate is halfway between 1 and 5, which is their mean, 3. Likewise the $y$-coordinate is the mean of 2 and 8, which is 5. The midpoint is $(3, 5)$. In general, the midpoint of $(x_1, y_1)$ and $(x_2, y_2)$ is
+
+        $$\left( \frac{x_1 + x_2}{2}, \; \frac{y_1 + y_2}{2} \right).$$
+
+        The small numbers written low are **subscripts**. They are labels, a way of having two different $x$'s, and no arithmetic is implied by them. In Python you would write `x1` and `x2`.
+
+        **Distance along an axis.** Two points with the same $y$-coordinate lie on a horizontal line, and the distance between them is the distance between their $x$-coordinates. From $(1, 2)$ to $(5, 2)$ is $|5 - 1| = 4$. The same holds vertically: from $(5, 2)$ to $(5, 8)$ is $|8 - 2| = 6$.
+    - question:
+        id: on-the-graph
+        type: choice
+        system: s2
+        prompt: "Which of these points lies on the graph of $y = x^2 - 3$?"
+        options: ["$(2, 7)$", "$(-2, 1)$", "$(1, 2)$", "$(0, 3)$"]
+        answer: 1
+        explanation: "Substitute each pair. For $(-2, 1)$: $(-2)^2 - 3 = 4 - 3 = 1$, which equals the $y$-coordinate. For $(2, 7)$ the right side is 1, for $(1, 2)$ it is $-2$, and for $(0, 3)$ it is $-3$."
+        hints:
+          - A point is on the graph exactly when its coordinates satisfy the equation.
+          - Substitute the first number for x and compare the result with the second number.
+          - Take care squaring the negative number.
+    - text: |
+        **Distance on the slant.** How far is it from $(1, 2)$ straight to $(5, 5)$? The two points differ in both coordinates, so neither axis measures the distance directly. But go from the first point 4 units across to $(5, 2)$, and then 3 units up to $(5, 5)$. The two legs and the direct path make a triangle with a **right angle** at the corner. The distance wanted is the long side of a right-angled triangle whose two short sides are known.
+
+        The relation between those three sides is the most famous theorem in mathematics.
+
+        **The theorem of Pythagoras.** In a right-angled triangle with short sides $a$ and $b$ and long side $c$, called the **hypotenuse**,
+
+        $$a^2 + b^2 = c^2.$$
+
+        Here is why it is true. Take four copies of the triangle and a square frame whose side is $a + b$. The four triangles can be laid inside the frame in two different ways.
+
+        In the first arrangement, put one triangle in each corner, each turned a quarter-turn from the last, so that every side of the frame is made of one short side $a$ and one short side $b$. The four hypotenuses then enclose a tilted square in the middle, with side $c$. The uncovered area is $c^2$.
+
+        In the second arrangement, pair the triangles up into two rectangles, each $a$ by $b$, and push one into the top right corner and the other into the bottom left. What remains uncovered is two squares: one of side $a$ and one of side $b$. The uncovered area is $a^2 + b^2$.
+
+        The frame is the same in both arrangements, and the four triangles are the same. So the area left uncovered is the same. Therefore $c^2 = a^2 + b^2$.
+
+        **The distance formula.** For the triangle above, $a = 4$ and $b = 3$, so $c^2 = 16 + 9 = 25$, and $c = 5$. In general, between the points $(x_1, y_1)$ and $(x_2, y_2)$ the horizontal leg is $|x_2 - x_1|$ and the vertical leg is $|y_2 - y_1|$. Squaring removes any minus sign, so the absolute values can be dropped:
+
+        $$d = \sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2}.$$
+
+        Look at what this formula does when the two points lie on a horizontal line. The second square is zero, and $d = \sqrt{(x_2 - x_1)^2} = |x_2 - x_1|$. The distance on the number line was this formula all along, with one coordinate missing.
+
+        In Python, a square root can be written as the power one half, `** 0.5`. Why a half should mean a root is a question for the lesson on the laws of exponents. For now, test it: `25 ** 0.5` is 5.0.
+
+        ```python
+        def distance(p, q):
+            x1, y1 = p
+            x2, y2 = q
+            return ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+
+        print(distance((1, 2), (5, 5)))
+        ```
+
+        This shows 5.0. Most distances are not whole numbers. From $(0, 0)$ to $(1, 1)$ the distance is $\sqrt{2}$, about 1.414, the diagonal of a unit square. Estimate before you compute: the direct path is always longer than either leg and shorter than the two legs together.
+    - question:
+        id: fix-distance
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `distance(p, q)` should return the distance between two points given as tuples. From $(1, 2)$ to $(5, 5)$ the answer is 5.0, but the function returns something else. Compare each part of the function with the formula, test it on two points that lie on a horizontal line, where you know the answer, and fix it.
+        starter: |
+          def distance(p, q):
+              x1, y1 = p
+              x2, y2 = q
+              return ((x2 - y2) ** 2 + (x1 - y1) ** 2) ** 0.5
+
+          print(distance((1, 2), (5, 5)))
+          print(distance((0, 0), (4, 0)))
+        solution: |
+          def distance(p, q):
+              x1, y1 = p
+              x2, y2 = q
+              return ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+
+          print(distance((1, 2), (5, 5)))
+          print(distance((0, 0), (4, 0)))
+        tests: |
+          assert abs(distance((0, 0), (4, 0)) - 4) < 1e-9, "From (0, 0) to (4, 0) is 4. Which coordinates should be subtracted from which?"
+          assert abs(distance((1, 2), (5, 5)) - 5) < 1e-9, "From (1, 2) to (5, 5) is 5"
+          assert abs(distance((5, 5), (1, 2)) - 5) < 1e-9, "The order of the two points should not matter"
+          assert abs(distance((0, 0), (0, -3)) - 3) < 1e-9, "From (0, 0) to (0, -3) is 3"
+          assert abs(distance((2, 2), (2, 2))) < 1e-9, "The distance from a point to itself is 0"
+          assert abs(distance((0, 0), (1, 1)) - 2 ** 0.5) < 1e-9, "From (0, 0) to (1, 1) is the square root of 2"
+        wrong:
+          - "def distance(p, q):\n    x1, y1 = p\n    x2, y2 = q\n    return (x2 - x1) + (y2 - y1)\n\nprint(distance((1, 2), (5, 5)))\n"
+          - "def distance(p, q):\n    x1, y1 = p\n    x2, y2 = q\n    return (x2 - x1) ** 2 + (y2 - y1) ** 2\n\nprint(distance((1, 2), (5, 5)))\n"
+          - "def distance(p, q):\n    x1, y1 = p\n    x2, y2 = q\n    return ((x2 - x1) ** 2 + (y2 - y1) ** 2) / 2\n\nprint(distance((1, 2), (5, 5)))\n"
+        explanation: The legs of the triangle are the difference of the two $x$-coordinates and the difference of the two $y$-coordinates. The starter subtracted a point's own $y$ from its own $x$, which measures nothing. A horizontal test case, where the answer is obvious, exposes it at once.
+        hints:
+          - The horizontal leg compares the x of one point with the x of the other.
+          - Try two points on the x-axis. What does the function give, and what should it?
+          - Each bracket should hold two coordinates of the same kind.
+  formal:
+    - text: |
+        The **coordinate plane** is a plane with two perpendicular number lines, the **$x$-axis** (horizontal) and the **$y$-axis** (vertical), meeting at their zeros, the **origin**. Each point of the plane corresponds to exactly one **ordered pair** $(x, y)$ of numbers, its **coordinates**: $x$ is its signed horizontal distance from the $y$-axis and $y$ its signed vertical distance from the $x$-axis.
+
+        The **graph** of an equation in $x$ and $y$ is the set of all points $(x, y)$ whose coordinates make the equation true.
+
+        For points $P = (x_1, y_1)$ and $Q = (x_2, y_2)$:
+
+        | Quantity | Formula |
+        | --- | --- |
+        | Midpoint of $P$ and $Q$ | $\left( \dfrac{x_1 + x_2}{2}, \dfrac{y_1 + y_2}{2} \right)$ |
+        | Distance from $P$ to $Q$ | $\sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2}$ |
+
+        **Theorem (Pythagoras).** If a triangle has a right angle, and the sides forming the right angle have lengths $a$ and $b$, then the third side, of length $c$, satisfies $a^2 + b^2 = c^2$.
+
+        The distance formula is the theorem applied to the right-angled triangle whose legs are parallel to the axes. The distance is never negative, is zero only when $P = Q$, is the same from $P$ to $Q$ as from $Q$ to $P$, and satisfies the triangle inequality: the distance from $P$ to $R$ is at most the distance from $P$ to $Q$ plus the distance from $Q$ to $R$.
+  drill:
+    - text: Seconds each. Across first, then up.
+    - question:
+        id: drill-quadrant
+        type: choice
+        system: s1
+        prompt: "In which quadrant is the point $(-4, 3)$?"
+        options: ["I", "II", "III", "IV"]
+        answer: 1
+        explanation: Left and up is the top left quadrant, the second.
+        hints:
+          - Negative x means left. Positive y means up.
+          - The quadrants are numbered anticlockwise from the top right.
+    - question:
+        id: drill-axis
+        type: choice
+        system: s1
+        prompt: "Where is the point $(0, -5)$?"
+        options: ["On the x-axis", "On the y-axis", "In quadrant III", "In quadrant IV"]
+        answer: 1
+        explanation: Its $x$-coordinate is 0, so it is neither left nor right of the $y$-axis. It is on it, 5 below the origin.
+        hints:
+          - How far across is it?
+          - Which axis are you on when you have not moved across?
+    - question:
+        id: drill-horizontal-distance
+        type: numeric
+        system: s1
+        prompt: "What is the distance between $(-2, 4)$ and $(5, 4)$?"
+        answer: "7"
+        explanation: "The $y$-coordinates agree, so the distance is $|5 - (-2)| = 7$."
+        hints:
+          - The two points are on a horizontal line.
+          - How far apart are -2 and 5?
+    - question:
+        id: drill-midpoint
+        type: choice
+        system: s1
+        prompt: "What is the midpoint of $(2, 1)$ and $(8, 5)$?"
+        options: ["$(6, 4)$", "$(5, 3)$", "$(10, 6)$", "$(3, 2)$"]
+        answer: 1
+        explanation: "The means of the coordinates: $\\frac{2 + 8}{2} = 5$ and $\\frac{1 + 5}{2} = 3$."
+        hints:
+          - Take the mean of the x-coordinates.
+          - Then the mean of the y-coordinates.
+    - question:
+        id: drill-pythagoras
+        type: numeric
+        system: s1
+        prompt: "A right-angled triangle has short sides 6 and 8. How long is its hypotenuse?"
+        answer: "10"
+        explanation: "$6^2 + 8^2 = 36 + 64 = 100$, and $\\sqrt{100} = 10$."
+        hints:
+          - Square each short side and add.
+          - Then take the square root.
+    - question:
+        id: drill-origin-distance
+        type: numeric
+        system: s1
+        prompt: "How far is the point $(-5, 12)$ from the origin?"
+        answer: "13"
+        explanation: "$(-5)^2 + 12^2 = 25 + 144 = 169 = 13^2$."
+        hints:
+          - The legs are 5 and 12. The sign vanishes on squaring.
+          - Which number squared gives 169?
+    - question:
+        id: drill-table-value
+        type: numeric
+        system: s1
+        prompt: "The point $(-2, y)$ lies on the graph of $y = 3x + 4$. What is $y$?"
+        answer: "-2"
+        explanation: "$3 \\times (-2) + 4 = -6 + 4$."
+        hints:
+          - Substitute -2 for x.
+          - Minus six plus four.
+    - question:
+        id: predict-unpack-point
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          p = (4, -1)
+          x, y = p
+          print(y, x, x > 0 and y < 0)
+        output: "-1 4 True"
+        explanation: Unpacking binds `x` to 4 and `y` to $-1$. The point is right and down, in quadrant IV.
+        hints:
+          - Which name gets the first coordinate?
+          - Look at the order in the print.
+    - question:
+        id: predict-table
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          points = []
+          for x in range(-1, 2):
+              points.append((x, x * x))
+          print(points)
+        output: "[(-1, 1), (0, 0), (1, 1)]"
+        explanation: "The values of `x` are $-1$, 0 and 1, and each is paired with its square."
+        hints:
+          - Which values does the range produce?
+          - Each tuple is x and then x squared.
+  work:
+    - text: Slower now. Sketch each situation on paper before computing, and estimate the answer from the sketch.
+    - question:
+        id: write-midpoint
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write a function `midpoint(p, q)` that takes two points as tuples and returns their midpoint as a tuple. So `midpoint((1, 2), (5, 8))` is `(3.0, 5.0)`.
+        starter: |
+          def midpoint(p, q):
+              # Replace the next line with your own.
+              return (0, 0)
+
+          print(midpoint((1, 2), (5, 8)))
+        solution: |
+          def midpoint(p, q):
+              x1, y1 = p
+              x2, y2 = q
+              return ((x1 + x2) / 2, (y1 + y2) / 2)
+
+          print(midpoint((1, 2), (5, 8)))
+        tests: |
+          _m = midpoint((1, 2), (5, 8))
+          assert _m is not None, "The function returns None. It should return a tuple."
+          assert len(_m) == 2, "Return a pair of numbers"
+          assert _m == (3, 5), "The midpoint of (1, 2) and (5, 8) is (3, 5)"
+          assert midpoint((0, 0), (1, 1)) == (0.5, 0.5), "The midpoint of (0, 0) and (1, 1) is (0.5, 0.5). Which division keeps the fraction?"
+          assert midpoint((-4, 6), (4, -6)) == (0, 0), "The midpoint of (-4, 6) and (4, -6) is the origin"
+          assert midpoint((2, 7), (2, 7)) == (2, 7), "The midpoint of a point and itself is that point"
+        wrong:
+          - "def midpoint(p, q):\n    x1, y1 = p\n    x2, y2 = q\n    return ((x2 - x1) / 2, (y2 - y1) / 2)\n\nprint(midpoint((1, 2), (5, 8)))\n"
+          - "def midpoint(p, q):\n    x1, y1 = p\n    x2, y2 = q\n    return ((x1 + x2) // 2, (y1 + y2) // 2)\n\nprint(midpoint((1, 2), (5, 8)))\n"
+          - "def midpoint(p, q):\n    x1, y1 = p\n    x2, y2 = q\n    return ((x1 + y1) / 2, (x2 + y2) / 2)\n\nprint(midpoint((1, 2), (5, 8)))\n"
+        explanation: Each coordinate of the midpoint is the mean of the matching coordinates of the two points. Half the difference would give half the journey, not the place you arrive at.
+        hints:
+          - Unpack each point into its two coordinates.
+          - Halfway between two numbers is their mean.
+          - Return the two means together as a tuple.
+    - question:
+        id: write-on-graph
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write a function `on_line(point, m, b)` that returns True exactly when the point, a tuple, lies on the graph of $y = mx + b$. Because coordinates may be floats, count the point as on the line when the two sides differ by less than 0.000001.
+        starter: |
+          def on_line(point, m, b):
+              # Replace the next line with your own.
+              return False
+
+          print(on_line((4, 7), 2, -1))
+          print(on_line((4, 8), 2, -1))
+        solution: |
+          def on_line(point, m, b):
+              x, y = point
+              return abs(y - (m * x + b)) < 0.000001
+
+          print(on_line((4, 7), 2, -1))
+          print(on_line((4, 8), 2, -1))
+        tests: |
+          assert on_line((4, 7), 2, -1) == True, "(4, 7) is on y = 2x - 1, since 2 times 4 minus 1 is 7"
+          assert on_line((4, 8), 2, -1) == False, "(4, 8) is not on y = 2x - 1"
+          assert on_line((4, 6), 2, -1) == False, "(4, 6) is below the line, so it is not on it. A difference can be negative."
+          assert on_line((0, 3), 5, 3) == True, "(0, 3) is on y = 5x + 3"
+          assert on_line((0.1, 0.3), 3, 0) == True, "(0.1, 0.3) is on y = 3x, although 3 * 0.1 is not exactly 0.3 as a float"
+          assert on_line((7, 4), 2, -1) == False, "(7, 4) is not on y = 2x - 1. The x-coordinate comes first in the pair."
+        wrong:
+          - "def on_line(point, m, b):\n    x, y = point\n    return y == m * x + b\n\nprint(on_line((4, 7), 2, -1))\n"
+          - "def on_line(point, m, b):\n    x, y = point\n    return y - (m * x + b) < 0.000001\n\nprint(on_line((4, 7), 2, -1))\n"
+          - "def on_line(point, m, b):\n    y, x = point\n    return abs(y - (m * x + b)) < 0.000001\n\nprint(on_line((4, 7), 2, -1))\n"
+        explanation: A point is on a graph exactly when its coordinates satisfy the equation. With floats, "satisfy" means that the two sides are within a tolerance, and the distance between them needs its absolute value, or every point below the line would pass.
+        hints:
+          - Unpack the point, x first.
+          - Compute the right-hand side for that x and compare it with y.
+          - Closeness is a statement about an absolute value.
+    - question:
+        id: write-nearest
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A simple way to classify a new example is to find the known example nearest to it. The function `distance(p, q)` is given. Write a function `nearest(target, points)` that takes a point and a non-empty list of points and returns the point of the list that is closest to the target. It is the "best so far" loop, with distance as the thing compared.
+        starter: |
+          def distance(p, q):
+              x1, y1 = p
+              x2, y2 = q
+              return ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+
+          def nearest(target, points):
+              # Replace the next line with your own.
+              return points[0]
+
+          print(nearest((0, 0), [(3, 4), (1, 1), (-2, 0)]))
+        solution: |
+          def distance(p, q):
+              x1, y1 = p
+              x2, y2 = q
+              return ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+
+          def nearest(target, points):
+              best = points[0]
+              for p in points:
+                  if distance(target, p) < distance(target, best):
+                      best = p
+              return best
+
+          print(nearest((0, 0), [(3, 4), (1, 1), (-2, 0)]))
+        tests: |
+          assert nearest((0, 0), [(3, 4), (1, 1), (-2, 0)]) == (1, 1), "The point nearest the origin among (3, 4), (1, 1) and (-2, 0) is (1, 1)"
+          assert nearest((5, 5), [(3, 4), (1, 1), (-2, 0)]) == (3, 4), "The point nearest (5, 5) is (3, 4)"
+          assert nearest((-3, 0), [(3, 4), (1, 1), (-2, 0)]) == (-2, 0), "The point nearest (-3, 0) is (-2, 0), the last in the list"
+          assert nearest((9, 9), [(2, 2)]) == (2, 2), "With one point in the list, that point is the nearest"
+          assert nearest((0, 0), [(0, 5), (4, 0), (-3, 0)]) == (-3, 0), "Compare distances, not coordinates"
+          _pts = [(1, 0), (0, 2)]
+          nearest((0, 0), _pts)
+          assert _pts == [(1, 0), (0, 2)], "The list passed in should not be changed"
+        wrong:
+          - "def distance(p, q):\n    x1, y1 = p\n    x2, y2 = q\n    return ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5\n\ndef nearest(target, points):\n    best = points[0]\n    for p in points:\n        if distance(target, p) > distance(target, best):\n            best = p\n    return best\n"
+          - "def distance(p, q):\n    x1, y1 = p\n    x2, y2 = q\n    return ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5\n\ndef nearest(target, points):\n    return min(points)\n"
+          - "def distance(p, q):\n    x1, y1 = p\n    x2, y2 = q\n    return ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5\n\ndef nearest(target, points):\n    best = points[0]\n    for p in points:\n        if distance(target, p) < distance(target, best):\n            best = p\n    return distance(target, best)\n"
+        explanation: The accumulator holds the nearest point seen so far, starting with the first. Each point that is strictly closer to the target takes its place. This is the core of the nearest-neighbour method, one of the oldest ways of making predictions from examples.
+        hints:
+          - Keep the best point seen so far, starting with the first of the list.
+          - What makes one point better than another here?
+          - Return the point itself, not its distance.
+    - question:
+        id: fix-quadrant
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `quadrant(point)` should return 1, 2, 3 or 4 for a point in that quadrant, and 0 for a point on either axis. It is right for $(3, 2)$ and wrong for some other points. Test one point in each quadrant and one on each axis, find every case that fails, and fix the function.
+        starter: |
+          def quadrant(point):
+              x, y = point
+              if x == 0 and y == 0:
+                  return 0
+              if x > 0 and y > 0:
+                  return 1
+              if x < 0 and y > 0:
+                  return 2
+              if x > 0 and y < 0:
+                  return 3
+              return 4
+
+          print(quadrant((3, 2)))
+        solution: |
+          def quadrant(point):
+              x, y = point
+              if x == 0 or y == 0:
+                  return 0
+              if x > 0 and y > 0:
+                  return 1
+              if x < 0 and y > 0:
+                  return 2
+              if x < 0 and y < 0:
+                  return 3
+              return 4
+
+          print(quadrant((3, 2)))
+        tests: |
+          assert quadrant((3, 2)) == 1, "(3, 2) is in quadrant 1"
+          assert quadrant((-3, 2)) == 2, "(-3, 2) is in quadrant 2"
+          assert quadrant((-3, -2)) == 3, "(-3, -2) is in quadrant 3, the bottom left"
+          assert quadrant((3, -2)) == 4, "(3, -2) is in quadrant 4, the bottom right"
+          assert quadrant((0, 0)) == 0, "The origin is on both axes, so the answer is 0"
+          assert quadrant((5, 0)) == 0, "(5, 0) is on the x-axis, so the answer is 0. Does the first test catch a point with only one coordinate equal to zero?"
+          assert quadrant((0, -5)) == 0, "(0, -5) is on the y-axis, so the answer is 0"
+        wrong:
+          - "def quadrant(point):\n    x, y = point\n    if x == 0 and y == 0:\n        return 0\n    if x > 0 and y > 0:\n        return 1\n    if x < 0 and y > 0:\n        return 2\n    if x < 0 and y < 0:\n        return 3\n    return 4\n"
+          - "def quadrant(point):\n    x, y = point\n    if x == 0 or y == 0:\n        return 0\n    if x > 0 and y > 0:\n        return 1\n    if x < 0 and y > 0:\n        return 2\n    if x > 0 and y < 0:\n        return 3\n    return 4\n"
+        explanation: There were two bugs. A point is on an axis when **either** coordinate is zero, which needs `or`. And quadrants 3 and 4 were swapped, since quadrant 3 is the bottom left, where both coordinates are negative. One test per case found both.
+        hints:
+          - Try a point on the x-axis that is not the origin.
+          - Which quadrant is the bottom left one, counting anticlockwise from the top right?
+          - A point is on an axis when at least one coordinate is zero. Which operator says "at least one"?
+    - question:
+        id: distance-slant
+        type: numeric
+        system: s2
+        prompt: "What is the distance between $(-1, -2)$ and $(7, 13)$? Sketch the right-angled triangle first, and estimate."
+        answer: "17"
+        explanation: "The legs are $7 - (-1) = 8$ and $13 - (-2) = 15$. Then $8^2 + 15^2 = 64 + 225 = 289 = 17^2$. The estimate: longer than 15, shorter than 23."
+        hints:
+          - How far apart are the x-coordinates? And the y-coordinates?
+          - Square each leg, add, and take the square root.
+          - The answer must be longer than the longer leg.
+    - question:
+        id: endpoint-from-midpoint
+        type: numeric
+        system: s2
+        prompt: |
+          The midpoint of $A = (2, 5)$ and $B$ is $(6, 1)$. What is the $y$-coordinate of $B$? Write the midpoint formula for the $y$-coordinates as an equation and solve it.
+        answer: "-3"
+        explanation: "$\\dfrac{5 + y}{2} = 1$ gives $5 + y = 2$, so $y = -3$. Likewise the $x$-coordinate of $B$ is 10. As a check, from $A$ to the midpoint is 4 down, so $B$ is another 4 down from the midpoint."
+        hints:
+          - The mean of 5 and the unknown is 1.
+          - Multiply both sides by 2 first.
+          - Check by stepping the same amount again past the midpoint.
+    - question:
+        id: why-pythagoras
+        type: order
+        system: s2
+        prompt: Put the steps of the argument for the theorem of Pythagoras in order.
+        steps:
+          - "Take four copies of a right-angled triangle with short sides $a$ and $b$ and hypotenuse $c$, and a square frame of side $a + b$."
+          - "Place one triangle in each corner of the frame. The space left over is a tilted square of side $c$, with area $c^2$."
+          - "Rearrange the same four triangles into two $a$ by $b$ rectangles in opposite corners. The space left over is a square of side $a$ and a square of side $b$."
+          - "The frame and the triangles have not changed, so the space left over has the same area both times."
+          - "Therefore $c^2 = a^2 + b^2$."
+        explanation: The argument compares one area computed in two ways. The frame minus four triangles is $c^2$ in one arrangement and $a^2 + b^2$ in the other.
+        hints:
+          - The argument starts by setting out its materials.
+          - Two arrangements are described before they are compared.
+          - The conclusion comes last.
+  connections:
+    - text: |
+        Pairs of numbers now have a home, and equations have shapes. From this lesson on, you can always ask of an equation "what does it look like?" and of a picture "what is its equation?", and each answer will teach you something the other hides.
+
+        In machine learning everything is a point. An example described by two measurements is a point in the plane. With three it is a point in space, and with a thousand it is a point in a space that cannot be drawn but obeys the same formulas. The distance you derived today extends to any number of coordinates by adding more squared differences under the root, and "these two examples are similar" will mean "these two points are close". The `nearest` function you wrote is the heart of a real method, classification by nearest neighbour.
+
+        The theorem of Pythagoras will return in trigonometry, in the length of a vector, and in the way errors are measured: the most common measure of a model's error squares each miss and adds them up, which is a distance in disguise.
+
+        You also saw six points fall in a straight row. That was not luck. Something in the equation $y = 2x - 1$ forces its graph to be straight, and the two numbers in it, the 2 and the $-1$, each control one visible feature of the line. Finding out which, and why, is the next lesson: [[m1.straight-lines-and-slope]].
