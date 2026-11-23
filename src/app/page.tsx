@@ -20,7 +20,7 @@ export default function Home() {
       </Suspense>
       <TopBar>
         <form action={signOutAction}>
-          <button type="submit" className="label">
+          <button type="submit" className="label bar-item">
             Sign out
           </button>
         </form>
