@@ -39,6 +39,56 @@ test("panes are arranged for this screen size", async ({ page }, info) => {
   await page.screenshot({ path: `test-results/screens/workspace-${info.project.name}.png` });
 });
 
+test("the workspace fills exactly one screen and only the panes scroll", async ({ page }) => {
+  await page.goto("/learn");
+  const scroller = page.locator(".ws-scroll");
+  await expect(scroller.getByRole("heading", { level: 1 })).toBeVisible();
+
+  // The page itself has nothing to scroll, however long the lesson is.
+  const pageSize = await page.evaluate(() => {
+    window.scrollTo(0, 5000);
+    const root = document.documentElement;
+    return {
+      extra: root.scrollHeight - window.innerHeight,
+      scrolled: window.scrollY,
+      bottom: document.querySelector(".ws")!.getBoundingClientRect().bottom - window.innerHeight,
+    };
+  });
+  expect(pageSize).toEqual({ extra: 0, scrolled: 0, bottom: 0 });
+
+  // Nothing inside the lesson escapes its pane (screen-reader text once did, and stretched the page).
+  const escaped = await scroller.evaluate((el) =>
+    [...el.querySelectorAll("*")].filter((child) => !el.contains((child as HTMLElement).offsetParent ?? el)).length,
+  );
+  expect(escaped).toBe(0);
+
+  // The whole lesson is there, and the pane scrolls down to its last part.
+  const parts = scroller.locator("section.lesson-part");
+  expect(await parts.count()).toBe(8);
+  await expect(parts.last()).not.toBeInViewport();
+  await parts.last().scrollIntoViewIfNeeded();
+  await expect(parts.last()).toBeInViewport();
+  expect(await scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  await expect(page.getByRole("link", { name: "Axiom home" })).toBeInViewport({ ratio: 1 });
+});
+
+test("pane scrollbars are thin, square and without arrows", async ({ page }) => {
+  await page.goto("/learn");
+  for (const pane of [".ws-scroll", ".ws-output"]) {
+    const bar = await page.locator(pane).evaluate((el) => ({
+      width: getComputedStyle(el, "::-webkit-scrollbar").width,
+      arrows: getComputedStyle(el, "::-webkit-scrollbar-button").display,
+      thumb: getComputedStyle(el, "::-webkit-scrollbar-thumb").backgroundColor,
+      radius: getComputedStyle(el, "::-webkit-scrollbar-thumb").borderTopLeftRadius,
+    }));
+    expect(bar.width).toBe("10px");
+    expect(bar.arrows).toBe("none");
+    expect(bar.thumb).toBe("rgb(77, 77, 77)"); // the dark theme's input border grey
+    expect(bar.radius).toBe("0px");
+  }
+});
+
 test("tablet in landscape puts the panes side by side", async ({ page }, info) => {
   test.skip(info.project.name !== "tablet");
   await page.setViewportSize({ width: 1180, height: 820 });

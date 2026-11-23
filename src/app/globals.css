@@ -360,14 +360,31 @@ button.label:hover {
   height: 100dvh;
   overflow: hidden;
 }
+/* The workspace is exactly one screen: the page itself never scrolls, only the panes do. */
+html:has(.ws),
+html:has(.ws) body {
+  height: 100dvh;
+  overflow: hidden;
+}
 .ws-top {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 16px;
   height: 56px;
   flex: none;
   padding: 0 16px;
   border-bottom: 1px solid var(--border);
+}
+.ws-controls {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 16px;
+  margin-left: auto;
+}
+/* The save status only appears where there is room for it. */
+.ws-top .ws-status {
+  display: none;
 }
 .ws-crumbs {
   display: flex;
@@ -378,6 +395,11 @@ button.label:hover {
 }
 .ws-crumbs li:not(:last-child) {
   display: none;
+}
+.ws-crumbs li:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Phone: one pane at a time, switched by the tab bar. */
@@ -408,9 +430,14 @@ button.label:hover {
 .ws-divider:focus-visible {
   background: var(--focus);
 }
+/* Positioned, so anything placed absolutely inside a pane (screen-reader text, for one)
+   scrolls with the pane instead of stretching the page. */
 .ws-scroll {
+  position: relative;
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 24px 16px 48px;
 }
 .ws-toolbar {
@@ -432,6 +459,7 @@ button.label:hover {
   min-height: 0;
 }
 .ws-output {
+  position: relative;
   flex: 2;
   min-height: 0;
   overflow: auto;
@@ -507,7 +535,14 @@ button.label:hover {
 /* Tablet portrait: lesson above, code below. */
 @media (min-width: 640px) {
   .ws-top {
+    gap: 24px;
     padding: 0 32px;
+  }
+  .ws-controls {
+    gap: 24px;
+  }
+  .ws-top .ws-status {
+    display: inline-flex;
   }
   .ws-crumbs li:not(:last-child) {
     display: block;
@@ -898,6 +933,34 @@ button.label:hover {
   fill: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: 18px;
+}
+
+/* Scrollbars: thin, square, no arrows, in the theme's own greys. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-input);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-faint);
+}
+::-webkit-scrollbar-button {
+  display: none;
+}
+/* Browsers without the rules above take the standard ones. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-input) transparent;
+  }
 }
 
 /* Everything in a top bar shares one box, so text sits on one line whatever element it is. */
