@@ -15,9 +15,11 @@ describe("knowledge graph", () => {
     expect(topologicalOrder(graph)).toHaveLength(577);
   });
 
-  it("starts from exactly two roots: arithmetic and first programming", () => {
+  it("starts from a single root, so there is one chain to walk: arithmetic, then programming, then algebra", () => {
     const roots = [...graph.concepts.values()].filter((c) => c.requires.length === 0).map((c) => c.id);
-    expect(roots.sort()).toEqual(["e0.what-a-program-is", "m0.whole-numbers-and-place-value"]);
+    expect(roots).toEqual(["m0.whole-numbers-and-place-value"]);
+    expect(graph.concepts.get("e0.what-a-program-is")!.requires).toEqual(["m0.estimation-and-orders-of-magnitude"]);
+    expect(graph.concepts.get("m1.variables-and-expressions")!.requires).toContain("e0.reading-errors-and-debugging");
   });
 
   it("makes every concept reachable from the roots", () => {
