@@ -131,6 +131,13 @@ describe("checking code", () => {
     const ok = await runPython(checkProgram("x = 2\nprint(x * 3)\n", 'assert x == 2\nassert output == "6\\n"'));
     expect(ok.error).toBeNull();
   });
+  it("lets tests rerun the learner's code with different starting values", async () => {
+    const code = 'n = 7\nkind = "odd"\nif n % 2 == 0:\n    kind = "even"\nprint(kind)\n';
+    const tests = 'assert kind == "odd"\nagain = rerun(n=10)\nassert again["kind"] == "even"\nassert again["output"] == "even\\n"\nassert rerun(n=-3)["kind"] == "odd"';
+    expect((await runPython(checkProgram(code, tests))).error).toBeNull();
+    const moved = await runPython(checkProgram('kind = "odd"\n', "rerun(n=10)"));
+    expect(explainFailure(moved.error!).note).toBe("Keep the line that sets n at the top of your program");
+  });
   it("turns a failed test into its message, and a crash into the learner's own traceback", async () => {
     const failed = await runPython(checkProgram("x = 1\n", 'assert x == 2, "x should be 2"'));
     expect(explainFailure(failed.error!)).toEqual({ note: "x should be 2", detail: null });

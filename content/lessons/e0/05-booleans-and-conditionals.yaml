@@ -1,0 +1,547 @@
+concept: e0.booleans-and-conditionals
+minutes: 85
+claim: You can write conditions that are true or false, combine them with and, or and not, and make a program choose between paths with if, elif and else.
+recalls: [e0.strings]
+uses: [e0.what-a-program-is, e0.values-types-and-variables, e0.expressions, m0.negative-numbers, m0.the-four-operations-and-order-of-operations, m0.decimals-and-percentages]
+leads: [e0.loops, m1.inequalities-and-absolute-value]
+starter: |
+  # Scratch space. Change the score and run again.
+  score = 85
+  if score >= 90:
+      print("A")
+  elif score >= 80:
+      print("B")
+  else:
+      print("C or below")
+parts:
+  recall:
+    - text: |
+        In [[e0.strings]] text became something you could index, slice and build. Two quick pulls.
+    - question:
+        id: recall-slice
+        type: predict
+        system: s1
+        concepts: [e0.strings]
+        prompt: What does this show?
+        code: |
+          print("tensor"[1:3])
+        output: "en"
+        explanation: Positions 1 and 2. The slice stops just before position 3.
+        hints:
+          - Number the characters from 0.
+          - The second number is not included.
+    - question:
+        id: recall-len
+        type: predict
+        system: s1
+        concepts: [e0.strings]
+        prompt: What does this show?
+        code: |
+          print(len("ab" + "cde"))
+        output: "5"
+        explanation: The strings are joined into five characters, and then measured.
+        hints:
+          - What does plus do for two strings?
+          - Then count the characters.
+  puzzle:
+    - text: |
+        Every program so far has been a straight road. It runs line 1, then line 2, then line 3, and does exactly the same thing every time. Change the input and the same lines still run.
+
+        Now consider a small job. A program has measured its accuracy. If it is at least 90, show `pass`. Otherwise show `fail`.
+
+        Nothing you know can do this. You can compute the accuracy. You can show either word. But you cannot make the program show one word in some circumstances and the other word in others, because every line you write always runs.
+
+        A program that cannot choose can only ever be a calculator. **How does a program ask a question about its own data, and take a different road depending on the answer?**
+  intuition:
+    - text: |
+        Two new ideas are needed, and they fit together like a question and a signpost.
+
+        **The question.** Python can evaluate a claim and tell you whether it holds. Try this in the scratch space:
+
+        ```python
+        accuracy = 94.0
+        print(accuracy >= 90)
+        ```
+
+        It shows `True`. The expression `accuracy >= 90` is not arithmetic that produces a number. It is a **comparison**, and it produces one of exactly two values: `True` or `False`. These are a new type of value, called **Boolean** after the mathematician George Boole, and written `bool` in Python. A Boolean is the answer to a yes-or-no question.
+
+        **The signpost.** The `if` statement takes a Boolean and uses it to decide whether a group of lines runs.
+
+        ```python
+        accuracy = 94.0
+        if accuracy >= 90:
+            print("pass")
+        else:
+            print("fail")
+        ```
+
+        Read it aloud: *if* accuracy is at least 90, show pass; *otherwise*, show fail. Exactly one of the two indented lines runs, never both and never neither. The road has forked.
+
+        Notice how Python knows which lines belong to which fork. It is the **indentation**: the spaces at the start of the line. The lines pushed in under `if` run only when the condition is true. The lines pushed in under `else` run only when it is false. A line that returns to the left margin is back on the main road and always runs. In Python, indentation is not decoration. It is part of the grammar.
+  derivation:
+    - text: |
+        **Comparisons.** There are six, and each gives a Boolean.
+
+        | Python | Meaning |
+        | --- | --- |
+        | `a == b` | `a` equals `b` |
+        | `a != b` | `a` does not equal `b` |
+        | `a < b`, `a > b` | less than, greater than |
+        | `a <= b`, `a >= b` | at most, at least |
+
+        The first row hides the most famous trap in programming. One equals sign, `=`, is the **instruction** to bind a name. Two, `==`, is the **question** "are these equal?". `x = 5` changes `x`. `x == 5` changes nothing and gives `True` or `False`. Writing `if x = 5:` is a syntax error, and Python will tell you so.
+
+        Comparisons work on strings as well: `"cat" == "cat"` is `True`, and `"cat" == "Cat"` is `False`, because a capital letter is a different character. An int and a float with the same value are equal: `3 == 3.0` is `True`.
+
+        Comparisons can be chained exactly as in mathematics. In arithmetic you wrote $0 \le r < b$ for a remainder. In Python that is `0 <= r < b`, and it means what you expect: both parts hold.
+
+        **Combining conditions.** Three words build larger questions out of smaller ones.
+
+        - `p and q` is `True` only when **both** are true.
+        - `p or q` is `True` when **at least one** is true. It is also true when both are, which is not always how the word is used in everyday speech.
+        - `not p` is the opposite of `p`.
+
+        | `p` | `q` | `p and q` | `p or q` | `not p` |
+        | --- | --- | --- | --- | --- |
+        | True | True | True | True | False |
+        | True | False | False | True | False |
+        | False | True | False | True | True |
+        | False | False | False | False | True |
+
+        These have ranks too, below all the arithmetic and comparison operators: `not` first, then `and`, then `or`. So `x > 0 and x < 10 or x == 100` is read as `(x > 0 and x < 10) or x == 100`. As with arithmetic, brackets make your meaning plain.
+    - question:
+        id: predict-booleans
+        type: predict
+        system: s2
+        prompt: Evaluate each expression in order of rank, then give what the program shows.
+        code: |
+          x = 7
+          print(x > 5)
+          print(x == 7 and x % 2 == 0)
+          print(not x < 3 or x == 0)
+          print(0 <= x < 7)
+        output: |
+          True
+          False
+          True
+          False
+        explanation: |
+          Line 2: 7 is greater than 5. Line 3: the first part is true but 7 is odd, so `and` gives False. Line 4: `x < 3` is False, `not` makes it True, and `True or` anything is True. Line 5: 7 is not less than 7, so the chain fails.
+        hints:
+          - Work out each comparison to True or False first.
+          - Then apply not, then and, then or.
+          - In the last line, both parts of the chain must hold.
+    - text: |
+        **The `if` statement in full.** The general shape is:
+
+        ```python
+        score = 85
+        if score >= 90:
+            grade = "A"
+        elif score >= 80:
+            grade = "B"
+        elif score >= 70:
+            grade = "C"
+        else:
+            grade = "D"
+        print(grade)
+        ```
+
+        `elif` is short for "else if". Python works down the conditions **in order** and runs the block under the **first** one that is true. Then it skips everything else in the chain and continues after it. If no condition is true, the `else` block runs. If there is no `else`, nothing runs.
+
+        Trace it with 85. Is $85 \ge 90$? No. Is $85 \ge 80$? Yes: `grade` becomes `"B"`, and the rest of the chain is skipped. The third condition, $85 \ge 70$, is also true, but Python never looks at it.
+
+        That is why **order matters**. Each condition is only reached when all those above it were false. So `elif score >= 80` really means "less than 90 *and* at least 80". Put the conditions in the wrong order, with `score >= 70` first, and every score from 70 upward would be graded C, because the first true condition wins.
+
+        The rules of the form: each `if`, `elif` and `else` line ends with a colon, and the block beneath it is indented, by custom four spaces. All lines of a block must be indented by the same amount.
+
+        **Booleans are values.** A comparison is an expression like any other, so its result can be stored and used later:
+
+        ```python
+        pixel = 300
+        valid = 0 <= pixel <= 255
+        print(valid)
+        ```
+
+        This shows `False`. There is no need to write `if ...: valid = True else: valid = False`. The comparison already is the Boolean you want.
+
+        **Never test floats for exact equality.** The lesson on expressions showed that `0.1 + 0.2` is stored as `0.30000000000000004`. So:
+
+        ```python
+        print(0.1 + 0.2 == 0.3)
+        ```
+
+        shows `False`. The numbers differ in the seventeenth significant figure, and `==` is exact. The remedy is to ask a different question: not "are they equal?" but "are they **close enough**?" Their difference, ignoring its sign, should be tiny:
+
+        ```python
+        print(abs((0.1 + 0.2) - 0.3) < 0.000001)
+        ```
+
+        This shows `True`. The small number is called a **tolerance**. You will write this pattern for the rest of your life with numerical programs.
+    - question:
+        id: predict-chain
+        type: predict
+        system: s2
+        prompt: Trace this for the given value, checking the conditions in order.
+        code: |
+          steps = 300
+          if steps % 1000 == 0:
+              print("save")
+          elif steps % 100 == 0:
+              print("report")
+          elif steps % 10 == 0:
+              print("tick")
+          else:
+              print("quiet")
+          print("next")
+        output: |
+          report
+          next
+        explanation: |
+          300 is not a multiple of 1000, so the first condition is False. It is a multiple of 100, so `report` is shown and the rest of the chain is skipped, even though 300 is also a multiple of 10. The last line is at the left margin, outside the chain, and always runs.
+        hints:
+          - Check the conditions from the top and stop at the first true one.
+          - Only one block of a chain ever runs.
+          - Is the last line inside the chain or outside it?
+  formal:
+    - text: |
+        The type `bool` has exactly two values, `True` and `False`.
+
+        A **comparison** `a == b`, `a != b`, `a < b`, `a <= b`, `a > b` or `a >= b` evaluates to a `bool`. A chain such as `a < b <= c` is true exactly when every link is true.
+
+        The **Boolean operators** `not`, `and`, `or` combine `bool` values according to the truth table above. In order of rank, highest first: arithmetic operators; comparisons; `not`; `and`; `or`.
+
+        `p and q` does not evaluate `q` if `p` is false, and `p or q` does not evaluate `q` if `p` is true, because the result is already settled. This is called **short-circuiting**, and it makes `x != 0 and 10 / x > 2` safe: the division is never attempted when `x` is zero.
+
+        A **conditional statement** has the form
+
+        ```
+        if condition:
+            block
+        elif condition:
+            block
+        else:
+            block
+        ```
+
+        with any number of `elif` parts, including none, and an optional `else`. The conditions are evaluated in order. The block under the first true condition is executed and the rest of the statement is skipped. If none is true, the `else` block is executed if there is one.
+
+        A **block** is one or more statements indented by the same amount beneath a line ending in a colon. Blocks may contain further `if` statements, indented further.
+
+        Two floats `a` and `b` should be compared with `abs(a - b) < tolerance`, never with `==`.
+  drill:
+    - text: Seconds each.
+    - question:
+        id: predict-equal-types
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          print(3 == 3.0)
+        output: "True"
+        explanation: An int and a float with the same value are equal.
+        hints:
+          - Two equals signs ask a question.
+          - Do the two have the same value?
+    - question:
+        id: predict-case
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          print("a" == "A")
+        output: "False"
+        explanation: A capital letter is a different character.
+        hints:
+          - Are these the same character?
+          - Case matters.
+    - question:
+        id: predict-and
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          print(5 > 3 and 2 > 4)
+        output: "False"
+        explanation: The second comparison is false, and `and` needs both.
+        hints:
+          - Evaluate each comparison first.
+          - When is "and" true?
+    - question:
+        id: predict-or-not
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          print(not 1 > 2 or 3 > 4)
+        output: "True"
+        explanation: "`1 > 2` is False, `not` makes it True, and True `or` anything is True."
+        hints:
+          - Comparisons first, then not, then or.
+          - What is not False?
+    - question:
+        id: predict-float-equal
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          print(0.1 + 0.2 == 0.3)
+        output: "False"
+        explanation: The sum is stored as a value very slightly above 0.3, and `==` is exact.
+        hints:
+          - Recall what 0.1 + 0.2 shows in Python.
+          - Exact equality is asked for.
+    - question:
+        id: predict-even
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          n = 10
+          if n % 2 == 0:
+              print("even")
+          else:
+              print("odd")
+        output: "even"
+        explanation: The remainder on dividing 10 by 2 is 0.
+        hints:
+          - What is the remainder?
+          - Which block runs when the condition is true?
+    - question:
+        id: assign-or-compare
+        type: choice
+        system: s1
+        prompt: "What is the difference between `x = 5` and `x == 5`?"
+        options:
+          - "There is none. They are two ways to write the same thing."
+          - "`x = 5` binds the name x to 5. `x == 5` asks whether x equals 5 and gives True or False."
+          - "`x = 5` asks a question and `x == 5` binds a name."
+          - "`x == 5` binds x to 5 twice."
+        answer: 1
+        explanation: One sign is an instruction. Two signs are a question.
+        hints:
+          - One of them changes x.
+          - One of them produces a Boolean.
+  work:
+    - text: Slower now. For each program, decide which values would send it down each road, and try them.
+    - question:
+        id: write-pass
+        type: code
+        mode: write
+        system: s1
+        prompt: |
+          The starter binds `accuracy`. Add an `if` statement that binds `result` to `"pass"` when the accuracy is at least 90, and to `"fail"` otherwise. It must work for any accuracy.
+        starter: |
+          accuracy = 94.0
+        solution: |
+          accuracy = 94.0
+          if accuracy >= 90:
+              result = "pass"
+          else:
+              result = "fail"
+        tests: |
+          assert "result" in dir(), "Create a variable called result"
+          assert result == "pass", "An accuracy of 94.0 should pass"
+          assert rerun(accuracy=50.0)["result"] == "fail", "A low accuracy should fail. Does your program choose, or always do the same thing?"
+          assert rerun(accuracy=90)["result"] == "pass", "An accuracy of exactly 90 is at least 90"
+          assert rerun(accuracy=89.9)["result"] == "fail", "Just below 90 should fail"
+        wrong:
+          - "accuracy = 94.0\nresult = \"pass\"\n"
+          - "accuracy = 94.0\nif accuracy > 90:\n    result = \"pass\"\nelse:\n    result = \"fail\"\n"
+          - "accuracy = 94.0\nif accuracy >= 90:\n    result = \"fail\"\nelse:\n    result = \"pass\"\n"
+        explanation: "\"At least 90\" is `>=`, which includes 90 itself. One block runs for each possible answer to the question."
+        hints:
+          - Which comparison means "at least"?
+          - You need two blocks, one for each answer.
+          - Check the boundary. What should happen at exactly 90?
+    - question:
+        id: write-sign
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          The starter binds `change`, the change in an error rate (new minus old). Bind `verdict` to `"worse"` if the change is positive, `"better"` if it is negative, and `"same"` if it is zero. It must work for any number.
+        starter: |
+          change = -0.06
+        solution: |
+          change = -0.06
+          if change > 0:
+              verdict = "worse"
+          elif change < 0:
+              verdict = "better"
+          else:
+              verdict = "same"
+        tests: |
+          assert "verdict" in dir(), "Create a variable called verdict"
+          assert verdict == "better", "A negative change means the error fell"
+          assert rerun(change=0.03)["verdict"] == "worse", "A positive change means the error rose"
+          assert rerun(change=0)["verdict"] == "same", "A change of zero should give same"
+          assert rerun(change=-5)["verdict"] == "better", "Any negative change is better"
+        wrong:
+          - "change = -0.06\nif change > 0:\n    verdict = \"worse\"\nelse:\n    verdict = \"better\"\n"
+          - "change = -0.06\nif change >= 0:\n    verdict = \"worse\"\nelif change < 0:\n    verdict = \"better\"\nelse:\n    verdict = \"same\"\n"
+        explanation: Three outcomes need three blocks. Zero is neither positive nor negative, so it gets the `else`.
+        hints:
+          - How many different outcomes are there?
+          - Which statement lets you test a second condition when the first fails?
+          - What is left over when a number is neither positive nor negative?
+    - question:
+        id: write-valid
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A pixel's brightness must be a whole number from 0 to 255, both included. The starter binds `pixel`. Bind `valid` to a Boolean that is `True` exactly when `pixel` is in that range. Do not use `if`: a comparison already produces a Boolean.
+        starter: |
+          pixel = 128
+        solution: |
+          pixel = 128
+          valid = 0 <= pixel <= 255
+        tests: |
+          assert "valid" in dir(), "Create a variable called valid"
+          assert type(valid) == bool, "valid should be a Boolean, True or False"
+          assert valid == True, "128 is in range"
+          assert rerun(pixel=0)["valid"] == True, "0 is allowed"
+          assert rerun(pixel=255)["valid"] == True, "255 is allowed"
+          assert rerun(pixel=256)["valid"] == False, "256 is too large"
+          assert rerun(pixel=-1)["valid"] == False, "Negative values are not allowed"
+        wrong:
+          - "pixel = 128\nvalid = True\n"
+          - "pixel = 128\nvalid = 0 < pixel < 255\n"
+          - "pixel = 128\nvalid = pixel >= 0 or pixel <= 255\n"
+        explanation: "A chained comparison says both limits at once. `pixel >= 0 and pixel <= 255` is the same thing. With `or` every number would count as valid, since every number is either at least 0 or at most 255."
+        hints:
+          - Two conditions must both hold.
+          - Python lets you chain comparisons as in mathematics.
+          - Check both ends. Are 0 and 255 themselves allowed?
+    - question:
+        id: write-close
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          The starter binds two floats that should be equal but differ by a rounding error. Bind `close` to a Boolean that is `True` when `a` and `b` differ by less than `0.000001`, whichever is larger.
+        starter: |
+          a = 0.1 + 0.2
+          b = 0.3
+        solution: |
+          a = 0.1 + 0.2
+          b = 0.3
+          close = abs(a - b) < 0.000001
+        tests: |
+          assert "close" in dir(), "Create a variable called close"
+          assert type(close) == bool, "close should be a Boolean"
+          assert close == True, "These two values differ only in the seventeenth significant figure, so they are close"
+          assert rerun(b=0.31)["close"] == False, "0.3 and 0.31 are not close"
+          assert rerun(a=0.5, b=0.3)["close"] == False, "0.5 and 0.3 are not close"
+          assert rerun(a=0.3, b=0.5)["close"] == False, "The order of a and b should not matter. A difference can be negative."
+        wrong:
+          - "a = 0.1 + 0.2\nb = 0.3\nclose = a == b\n"
+          - "a = 0.1 + 0.2\nb = 0.3\nclose = a - b < 0.000001\n"
+        explanation: The difference may come out positive or negative, so its absolute value is compared with the tolerance.
+        hints:
+          - Exact equality will not work here.
+          - How far apart are two numbers?
+          - A difference can be negative. Which function removes the sign?
+    - question:
+        id: fix-order
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          Scores of 90 or more should be graded `"distinction"`, scores from 50 to 89 `"pass"`, and anything lower `"fail"`. With a score of 95 this program gives `"pass"`. Fix it so that every score gets the right grade.
+        starter: |
+          score = 95
+          if score >= 50:
+              grade = "pass"
+          elif score >= 90:
+              grade = "distinction"
+          else:
+              grade = "fail"
+          print(grade)
+        solution: |
+          score = 95
+          if score >= 90:
+              grade = "distinction"
+          elif score >= 50:
+              grade = "pass"
+          else:
+              grade = "fail"
+          print(grade)
+        tests: |
+          assert grade == "distinction", "A score of 95 should be a distinction. Which condition does Python reach first?"
+          assert rerun(score=60)["grade"] == "pass", "A score of 60 should pass"
+          assert rerun(score=90)["grade"] == "distinction", "A score of exactly 90 is a distinction"
+          assert rerun(score=30)["grade"] == "fail", "A score of 30 should fail"
+        wrong:
+          - "score = 95\ngrade = \"distinction\"\nprint(grade)\n"
+          - "score = 95\nif score >= 50:\n    grade = \"pass\"\nif score > 90:\n    grade = \"distinction\"\nelse:\n    grade = \"fail\"\nprint(grade)\n"
+        explanation: Python runs the block under the first true condition. With `score >= 50` first, every score of 50 or more stopped there. The most demanding condition has to be tested first.
+        hints:
+          - Trace the program for 95. Which condition is the first to be true?
+          - Once a block has run, what happens to the rest of the chain?
+          - Reorder the conditions from most demanding to least.
+    - question:
+        id: fix-equals
+        type: code
+        mode: find-bug
+        system: s1
+        prompt: |
+          This program will not run at all: Python reports a SyntaxError on the `if` line. Fix the one mistake so that it shows `match`.
+        starter: |
+          label = "cat"
+          if label = "cat":
+              print("match")
+          else:
+              print("no match")
+        solution: |
+          label = "cat"
+          if label == "cat":
+              print("match")
+          else:
+              print("no match")
+        tests: |
+          assert output.strip() == "match", "With the label cat it should show match"
+          assert rerun(label="dog")["output"].strip() == "no match", "With a different label it should show no match"
+        wrong:
+          - "label = \"cat\"\nprint(\"match\")\n"
+          - "label = \"cat\"\nif label != \"cat\":\n    print(\"match\")\nelse:\n    print(\"no match\")\n"
+        explanation: A single equals sign is the instruction to bind a name and cannot appear where a question is needed. The question is written with two.
+        hints:
+          - Is the if line asking a question or giving an instruction?
+          - How is the question "are these equal" written?
+    - question:
+        id: which-run
+        type: choice
+        system: s2
+        prompt: |
+          For which values of `t` does this program show `B`?
+
+          ```python
+          t = 15
+          if t > 20:
+              print("A")
+          elif t > 10:
+              print("B")
+          elif t > 5:
+              print("C")
+          ```
+        options:
+          - "Every t greater than 10."
+          - "Every t greater than 10 and at most 20."
+          - "Every t greater than 5."
+          - "Only t equal to 15."
+        answer: 1
+        explanation: The second block is only reached when the first condition was false, that is, when `t` is at most 20. So it runs when `t > 10` and `t <= 20`.
+        hints:
+          - When does Python even look at the second condition?
+          - Combine "the first condition was false" with "the second is true".
+  connections:
+    - text: |
+        The straight road now has forks. A program can ask a yes-or-no question about its data and act on the answer, and conditions can be built up from comparisons with `and`, `or` and `not`.
+
+        The inequalities you wrote in Python today, such as `0 <= pixel <= 255`, are the same objects that algebra studies in [[m1.inequalities-and-absolute-value]], where the question becomes "for which numbers is this condition true?" The last question above was already a small example of that.
+
+        The close-enough test for floats will follow you everywhere. Every test you ever write for numerical code will use a tolerance.
+
+        There is still something a program cannot do. To add the numbers from 1 to 10 you would have to write ten lines. To add the numbers from 1 to a million, a million lines. A fork lets a program skip lines. What is missing is a way to go **back** and run lines again. That is the next lesson, [[e0.loops]].

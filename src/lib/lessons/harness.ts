@@ -5,17 +5,34 @@
  *
  * The learner's code runs first with its printing captured; the tests then run
  * in the same namespace and can read every name the code defined, plus
- * `output`, the text it printed.
+ * `output`, the text it printed, and `source`, the code itself.
+ *
+ * Tests can also call `rerun(name=value, ...)`. It runs the learner's code
+ * again with the top-level line that sets each named variable replaced, and
+ * returns the resulting namespace (including `output`). That lets a test try
+ * several inputs before the learner has been taught how to write functions.
  */
 const py = (text: string) => JSON.stringify(text);
 
 export function checkProgram(code: string, tests: string): string {
-  return `import io as _io, contextlib as _ctx
-_ns = {"__name__": "__main__"}
-_buf = _io.StringIO()
-with _ctx.redirect_stdout(_buf):
-    exec(compile(${py(code)}, "<exec>", "exec"), _ns)
-_ns["output"] = _buf.getvalue()
+  return `import io as _io, contextlib as _ctx, re as _re
+_src = ${py(code)}
+def _run(_source):
+    _space = {"__name__": "__main__"}
+    _buf = _io.StringIO()
+    with _ctx.redirect_stdout(_buf):
+        exec(compile(_source, "<exec>", "exec"), _space)
+    _space["output"] = _buf.getvalue()
+    _space["source"] = _source
+    return _space
+def rerun(**_values):
+    _source = _src
+    for _name, _value in _values.items():
+        _source, _count = _re.subn(r"(?m)^" + _name + r"[ \\t]*=.*$", lambda _m: _name + " = " + repr(_value), _source, count=1)
+        assert _count == 1, "Keep the line that sets " + _name + " at the top of your program"
+    return _run(_source)
+_ns = _run(_src)
+_ns["rerun"] = rerun
 exec(compile(${py(tests)}, "<tests>", "exec"), _ns)
 `;
 }
