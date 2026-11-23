@@ -1,9 +1,8 @@
-import type { ComponentType } from "react";
 import type { Concept, Graph } from "@/lib/graph/load";
 import { blockHtml, questionView } from "@/lib/lessons/content";
 import { questionsOf } from "@/lib/lessons/load";
 import { PARTS, type Lesson } from "@/lib/lessons/schema";
-import { FIGURES } from "./figures";
+import { Figure } from "./figures";
 import { LessonEnd, QuestionCard } from "./question-card";
 
 const PART_LABELS: Record<(typeof PARTS)[number], string> = {
@@ -55,8 +54,7 @@ export function LessonView({
               return <div key={i} className="lesson-text" dangerouslySetInnerHTML={{ __html: blockHtml(block.text) }} />;
             }
             if ("figure" in block) {
-              const Figure = (FIGURES as Record<string, ComponentType<Record<string, unknown>>>)[block.figure];
-              return Figure ? <Figure key={i} {...(block.props ?? {})} /> : null;
+              return <Figure key={i} name={block.figure} props={block.props} />;
             }
             const q = block.question;
             return <QuestionCard key={q.id} view={questionView(lesson.concept, q, numbers.get(q.id)!, solved.has(q.id), hintLevels.get(q.id) ?? 0)} />;

@@ -229,7 +229,7 @@ export function Workspace({
           ))}
         </ol>
         <div className="ml-auto flex items-center gap-6">
-          <span className="label bar-item hidden sm:inline-flex" role="status">
+          <span className="label hidden h-10 items-center leading-4 sm:inline-flex" role="status">
             {saved ? "Saved" : "Saving"}
           </span>
           <ThemeToggle />

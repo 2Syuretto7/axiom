@@ -20,7 +20,7 @@ function parseDecimal(text: string): Rational | null {
 
 /** Accepts integers, decimals, fractions (3/4), mixed numbers (1 1/2), percentages and thousands commas. */
 export function parseRational(input: string): Rational | null {
-  let text = input.trim().replace(/−/g, "-").replace(/(\d),(?=\d{3}\b)/g, "$1");
+  let text = input.trim().replace(/−/g, "-").replace(/(\d),(?=\d)/g, "$1");
   if (text.length === 0 || text.length > 60) return null;
   let scale = 1n;
   if (text.endsWith("%")) {

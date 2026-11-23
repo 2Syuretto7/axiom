@@ -53,4 +53,10 @@ describe("grading", () => {
     for (const seed of ["a", "b", "c", "d", "e", "f"]) expect(shuffled(3, seed)).not.toEqual([0, 1, 2]);
     expect([...shuffled(6, "x")].sort()).toEqual([0, 1, 2, 3, 4, 5]);
   });
+  it("accepts both international and Indian digit grouping", () => {
+    const big: Question = { ...common, type: "numeric", answer: "1000000" };
+    expect(grade(big, "1,000,000").correct).toBe(true);
+    expect(grade(big, "10,00,000").correct).toBe(true);
+    expect(grade(big, "100,000").correct).toBe(false);
+  });
 });

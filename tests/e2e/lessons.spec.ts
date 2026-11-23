@@ -27,6 +27,17 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   // A concept named in the text shows its title, never its id.
   await expect(page.getByRole("region", { name: "Intuition" })).toContainText("Next comes Adding");
 
+  // Figures are live drawings with real controls and a text reading of their state.
+  const line = page.getByRole("figure").filter({ hasText: "Number line" });
+  await line.getByRole("button", { name: "Step right" }).click();
+  await line.getByRole("button", { name: "Step right" }).click();
+  await expect(line).toContainText("Started at 1, moved 2 steps right, now at 2.");
+  const grid = page.getByRole("figure").filter({ hasText: "Multiplication as area" });
+  await expect(grid).toContainText("3 × 12 = 3 × 10 + 3 × 2 = 30 + 6 = 36");
+  await grid.getByRole("button", { name: "Increase rows" }).click();
+  await expect(grid).toContainText("4 × 12 = 4 × 10 + 4 × 2 = 40 + 8 = 48");
+  await expect(page.locator(".prose-lesson img")).toHaveCount(0);
+
   // Wrong, then a hint, then right. Fractions and words are handled by the grader.
   await answerNumber(page, 1, "8");
   await expect(question(page, 1)).toContainText("Not yet");

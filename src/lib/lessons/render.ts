@@ -1,7 +1,7 @@
 import { Marked } from "marked";
 import markedKatex from "marked-katex-extension";
 
-const marked = new Marked({ gfm: true }, markedKatex({ throwOnError: true, output: "htmlAndMathml" }));
+const marked = new Marked({ gfm: true }, markedKatex({ throwOnError: true, output: "htmlAndMathml", nonStandard: true }));
 
 const REF = /\[\[([a-z0-9.-]+)\]\]/g;
 
