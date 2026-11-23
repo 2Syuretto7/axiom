@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import Link from "next/link";
-import { TopBar } from "@/components/chrome";
+import { Workspace } from "@/components/workspace/workspace";
 import { requireUser } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Learn" };
@@ -11,26 +10,36 @@ async function SessionGate() {
   return null;
 }
 
-/** Placeholder until the learning workspace ships in Phase 1. */
+const STARTER = `# Python runs here, in your browser. Press Run.
+total = 0
+for n in range(1, 11):
+    total = total + n
+
+print("1 + 2 + ... + 10 =", total)
+`;
+
+/** The workspace, with a warm-up until the first lesson batch is merged. */
 export default function Learn() {
   return (
-    <div className="flex min-h-dvh flex-col">
+    <>
       <Suspense fallback={null}>
         <SessionGate />
       </Suspense>
-      <TopBar />
-      <main className="flex flex-1 flex-col justify-center px-4 pb-24 sm:px-8 lg:px-[12.5vw]">
-        <p className="label">Status</p>
-        <h1 className="mt-4 text-[28px] font-medium leading-8 tracking-[-0.01em]">Your first lessons are being written.</h1>
-        <p className="lead mt-4">
-          Arithmetic and first steps in Python arrive with the learning workspace. Each lesson is checked before you see it.
-        </p>
-        <div className="mt-8">
-          <Link href="/" className="btn btn-secondary">
-            Back
-          </Link>
-        </div>
-      </main>
-    </div>
+      <Workspace id="warm-up" breadcrumb={["Engineering", "First steps", "Warm-up"]} starterCode={STARTER}>
+        <article className="prose-lesson">
+          <p className="label">Warm-up</p>
+          <h1>Your workspace is ready.</h1>
+          <p>
+            Lessons will appear on this side. On the other side is a Python editor that runs entirely in your browser, so
+            results come back at once and keep working without a connection.
+          </p>
+          <p>
+            Press <code>Run</code>, or <code>Ctrl</code> + <code>Enter</code>. Then change <code>11</code> to <code>101</code>{" "}
+            and run it again. Your code is saved as you type.
+          </p>
+          <p>The first lessons, on arithmetic and on first steps in Python, are being written and checked now.</p>
+        </article>
+      </Workspace>
+    </>
   );
 }
