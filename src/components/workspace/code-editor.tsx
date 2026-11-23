@@ -14,6 +14,8 @@ export type EditorHandle = {
   redo: () => void;
   move: (by: -1 | 1) => void;
   focus: () => void;
+  /** Swap the whole document, for example when a code question is opened. */
+  replace: (text: string) => void;
 };
 
 const theme = EditorView.theme({
@@ -107,6 +109,11 @@ export function CodeEditor({
       editor.focus();
     },
     focus: () => view.current?.focus(),
+    replace(text) {
+      const editor = view.current;
+      if (!editor) return;
+      editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: text }, selection: { anchor: 0 } });
+    },
   }));
 
   return <div ref={host} className="h-full min-h-0 overflow-hidden" />;

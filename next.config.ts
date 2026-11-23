@@ -13,6 +13,8 @@ const nextConfig: NextConfig = {
   partialPrefetching: true,
   // Native module: must be loaded from node_modules at run time, not bundled.
   serverExternalPackages: ["@node-rs/argon2"],
+  // Lessons and the concept graph are read from files at run time.
+  outputFileTracingIncludes: { "/learn": ["./content/**/*", "./graph/**/*"] },
   turbopack: {
     rules: {
       "*.css": {

@@ -32,7 +32,7 @@ export function loadGraph(dir: string = path.join(process.cwd(), "graph")): Grap
   const explicit = new Set<string>();
 
   for (const file of FILES) {
-    const data = parse(readFileSync(path.join(dir, file), "utf8")) as TrackFile;
+    const data = parse(readFileSync(path.join(/* turbopackIgnore: true */ dir, file), "utf8")) as TrackFile;
     for (const c of data.clusters) {
       if (clusters.has(c.id)) throw new Error(`Duplicate cluster ${c.id}`);
       const cluster: Cluster = { id: c.id, title: c.title, track: data.track, requires: c.requires, concepts: [] };
