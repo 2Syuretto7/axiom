@@ -22,15 +22,19 @@ export function LessonView({
   lesson,
   concept,
   graph,
+  next,
   solved,
   hintLevels,
 }: {
   lesson: Lesson;
   concept: Concept;
   graph: Graph;
+  /** The lesson Learn gives after this one, worked out by the same rule Learn uses. */
+  next: string | null;
   solved: Set<string>;
   hintLevels: Map<string, number>;
 }) {
+  const later = lesson.leads.filter((id) => id !== next);
   const numbers = new Map(questionsOf(lesson).map((q, i) => [q.id, i + 1]));
   return (
     <article className="prose-lesson">
@@ -62,9 +66,14 @@ export function LessonView({
         </section>
       ))}
 
-      {lesson.leads.length > 0 ? (
+      {next ? (
+        <p className="lesson-links lesson-next">
+          <span className="label">Next</span> {names(graph, [next])}
+        </p>
+      ) : null}
+      {later.length > 0 ? (
         <p className="lesson-links">
-          <span className="label">Leads to</span> {names(graph, lesson.leads)}
+          <span className="label">Later</span> {names(graph, later)}
         </p>
       ) : null}
       <LessonEnd />

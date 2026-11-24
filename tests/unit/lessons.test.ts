@@ -1,7 +1,8 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadGraph } from "@/lib/graph/load";
-import { nextConcept, teachingPath } from "@/lib/learning/next";
+import { buildMap } from "@/lib/learning/map";
+import { nextAfter, nextConcept, teachingPath } from "@/lib/learning/next";
 import { checkProgram, explainFailure, featureProgram } from "@/lib/lessons/harness";
 import { FIGURE_NAMES } from "@/lib/lessons/figures";
 import { loadLessons, loadPythonFeatures, readLessonFiles, type LessonFile } from "@/lib/lessons/load";
@@ -119,6 +120,27 @@ describe("lesson validation", () => {
   });
 });
 
+describe("what a lesson says comes next", () => {
+  it("must name the lesson Learn gives next, in its leads and in its connections", async () => {
+    expect(await messages("m0.adding", (l) => (l.leads = ["l1.later"]))).toContain("Learn gives e0.printing after this lesson, so leads must list it");
+    expect(
+      await messages("m0.adding", (l) => {
+        l.parts.connections = [{ text: "Nothing about what follows." }];
+      }),
+    ).toContain("the connections must point to [[e0.printing]]");
+  });
+  it("shows as Next exactly the lesson Learn then offers, at every step of the path", () => {
+    const written = new Set(["m0.counting", "m0.adding", "e0.printing"]);
+    const { path } = teachingPath(graph, written);
+    path.forEach((id, i) => {
+      const done = path.slice(0, i);
+      const shown = nextAfter(graph, written, done, id);
+      expect(shown).toBe(nextConcept(graph, written, [...done, id])?.id ?? null);
+      expect(shown).toBe(path[i + 1] ?? null);
+    });
+  });
+});
+
 describe("choosing the next lesson", () => {
   const written = new Set(["m0.counting", "m0.adding", "e0.printing"]);
   it("starts at the beginning and always moves to a lesson that builds on the last, across tracks", () => {
@@ -171,5 +193,38 @@ describe("rendering", () => {
     expect(html).toContain("katex");
     expect(html).toContain("Adding");
     expect(html).not.toContain("[[");
+  });
+});
+
+describe("the map", () => {
+  const written = new Set(["m0.counting", "m0.adding", "e0.printing"]);
+  it("lays clusters out below what they need and marks where the learner is", () => {
+    const map = buildMap(graph, written, ["m0.counting"]);
+    expect(map.now).toBe("m0.adding");
+    expect(map.counts).toEqual({ done: 1, written: 3, planned: 1 });
+    expect(map.clusters.map((c) => [c.id, c.row, c.state])).toEqual(
+      expect.arrayContaining([
+        ["M0", 0, "now"],
+        ["E0", 1, "written"],
+        ["L1", 2, "planned"],
+      ]),
+    );
+    const m0 = map.clusters.find((c) => c.id === "M0")!;
+    expect(m0.opens).toEqual(["E0"]);
+    expect(m0.lessons.map((l) => l.state)).toEqual(["done", "now"]);
+    for (const cluster of map.clusters) {
+      for (const need of cluster.requires) expect(map.clusters.find((c) => c.id === need)!.row).toBeLessThan(cluster.row);
+    }
+  });
+  it("lists lessons in the order Learn gives them", () => {
+    expect(buildMap(graph, written, []).path.map((s) => [s.id, s.state])).toEqual([
+      ["m0.counting", "now"],
+      ["m0.adding", "written"],
+      ["e0.printing", "written"],
+    ]);
+    const all = buildMap(graph, written, ["m0.counting", "m0.adding", "e0.printing"]);
+    expect(all.now).toBeNull();
+    expect(all.path.every((s) => s.state === "done")).toBe(true);
+    expect(all.clusters.find((c) => c.id === "E0")!.state).toBe("done");
   });
 });

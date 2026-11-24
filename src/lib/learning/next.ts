@@ -25,6 +25,15 @@ export function nextConcept(graph: Graph, written: Set<string>, completed: strin
 }
 
 /**
+ * The lesson Learn will offer once `current` is finished, or null if nothing
+ * written is open after it. The "Next" line of a lesson and the Map both read
+ * this, so what a lesson says comes next is what Learn then gives.
+ */
+export function nextAfter(graph: Graph, written: Set<string>, completed: string[], current: string): string | null {
+  return nextConcept(graph, written, [...completed.filter((id) => id !== current), current])?.id ?? null;
+}
+
+/**
  * Walks the written lessons exactly as Learn will, from the very first one.
  * Returns the order, and a description of the first place the chain breaks.
  */

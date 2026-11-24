@@ -26,6 +26,9 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   await expect(page.locator(".katex").first()).toBeVisible();
   // A concept named in the text shows its title, never its id.
   await expect(page.getByRole("region", { name: "Intuition" })).toContainText("Next comes Adding");
+  // The lesson names what Learn gives next. The same name is checked again after Continue.
+  const next = (await page.locator(".lesson-next").innerText()).replace(/^next\s*/i, "").trim();
+  expect(next).toBe("Adding");
 
   // Figures are live drawings with real controls and a text reading of their state.
   const line = page.getByRole("figure").filter({ hasText: "Number line" });
@@ -185,7 +188,7 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   await page.screenshot({ path: "test-results/screens/lesson-laptop.png" });
 
   await page.getByRole("link", { name: "Continue" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Adding" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: next, exact: true })).toBeVisible();
   await expect(page.getByText("Builds on Counting")).toBeVisible();
 });
 
@@ -193,13 +196,19 @@ test("tablet: the next lesson is in the same track and then crosses to another",
   await page.setViewportSize({ width: 820, height: 1180 });
   await page.goto("/learn");
   await expect(page.getByRole("heading", { level: 1, name: "Adding" })).toBeVisible();
+  // The next lesson is in another track, and the lesson says so before Learn goes there.
+  const next = (await page.locator(".lesson-next").innerText()).replace(/^next\s*/i, "").trim();
+  expect(next).toBe("Printing");
   await answerNumber(page, 1, "7");
   await answerNumber(page, 2, "12");
   await expect(page.getByText("Lesson complete.")).toBeVisible();
   await page.screenshot({ path: "test-results/screens/lesson-tablet.png" });
   await page.getByRole("link", { name: "Continue" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Printing" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: next, exact: true })).toBeVisible();
   await expect(page.getByText("Builds on Adding")).toBeVisible();
+  // Nothing written follows the last lesson, so it promises no next lesson, only what comes later.
+  await expect(page.locator(".lesson-next")).toHaveCount(0);
+  await expect(page.getByText("Later Later")).toBeVisible();
   await expect(page.getByRole("list", { name: "Where you are" })).toContainText("Engineering");
 });
 
@@ -259,4 +268,14 @@ test("phone: code is read, written, checked by hidden tests and fixed", async ({
 
   await page.getByRole("link", { name: "Continue" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "You have finished every lesson written so far." })).toBeVisible();
+
+  // The map records the path that was actually taken, in the order it was taken.
+  await page.getByRole("link", { name: "Map", exact: true }).click();
+  await expect(page.getByText("3 of 3 written lessons done.")).toBeVisible();
+  await expect(page.getByRole("region", { name: "The order Learn follows" }).getByRole("listitem")).toHaveText([
+    "M0CountingDone",
+    "M0AddingDone",
+    "E0PrintingDone",
+  ]);
+  await expect(page.getByRole("button", { name: "E0 First programs, finished" })).toHaveAttribute("aria-pressed", "true");
 });

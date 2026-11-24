@@ -18,7 +18,7 @@ export default function Home() {
       <Suspense fallback={null}>
         <SessionGate />
       </Suspense>
-      <TopBar>
+      <TopBar map>
         <form action={signOutAction}>
           <button type="submit" className="label bar-item">
             Sign out

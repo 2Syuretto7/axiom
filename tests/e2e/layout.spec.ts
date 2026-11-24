@@ -65,20 +65,21 @@ test("sign-in fits the screen and is accessible", async ({ browser }, info) => {
 test("every screen can be reached and used with the keyboard", async ({ page }) => {
   await page.goto("/");
   const order: string[] = [];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 5; i++) {
     await page.keyboard.press("Tab");
     order.push(await page.evaluate(() => document.activeElement?.textContent?.trim() ?? ""));
   }
-  expect(order).toEqual(["AXIOM", "Light theme", "Sign out", "Learn›"]);
+  expect(order).toEqual(["AXIOM", "Map", "Light theme", "Sign out", "Learn›"]);
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/learn$/);
 });
 
-test("the wordmark, theme switch and sign out sit on one line", async ({ page }) => {
+test("the wordmark, map link, theme switch and sign out sit on one line", async ({ page }) => {
   await page.goto("/");
   const centres = [];
   for (const item of [
     page.getByRole("link", { name: "Axiom home" }),
+    page.getByRole("link", { name: "Map", exact: true }),
     page.getByRole("button", { name: /theme$/ }),
     page.getByRole("button", { name: "Sign out" }),
   ]) {
@@ -109,6 +110,7 @@ test("the workspace top bar sits on one line", async ({ page }, info) => {
   const centres = [];
   const items = [
     page.getByRole("link", { name: "Axiom home" }),
+    page.getByRole("link", { name: "Map", exact: true }),
     page.getByRole("button", { name: /theme$/ }),
     page.getByRole("button", { name: "Sign out" }),
   ];
@@ -127,3 +129,39 @@ test("the workspace top bar sits on one line", async ({ page }, info) => {
   }
   expect(Math.max(...centres) - Math.min(...centres)).toBeLessThanOrEqual(0.5);
 });
+
+for (const theme of ["dark", "light"] as const) {
+  test(`the map shows every cluster, where the learner is, and the order Learn follows (${theme})`, async ({ page }, info) => {
+    await page.addInitScript((t) => localStorage.setItem("axiom-theme", t), theme);
+    await page.goto("/");
+    await page.getByRole("link", { name: "Map", exact: true }).click();
+    await expect(page).toHaveURL(/\/map$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Where you are, and what it leads to" })).toBeVisible();
+    await expect(page.getByText("0 of 3 written lessons done. 1 more is planned. Learn will give you Counting now.")).toBeVisible();
+
+    // The cluster the learner is in is selected to begin with.
+    const panel = page.getByRole("region", { name: "Selected cluster" });
+    await expect(page.getByRole("button", { name: "M0 Counting, you are here" })).toHaveAttribute("aria-pressed", "true");
+    await expect(panel).toContainText("Needs Nothing. This is where everything starts.");
+    await expect(panel).toContainText("Opens E0 First programs");
+    await expect(panel.getByRole("listitem")).toHaveText(["CountingNow", "AddingWritten"]);
+
+    // Any cluster can be looked at, written or not.
+    const planned = page.getByRole("button", { name: "L1 Not written yet, planned, not written yet" });
+    await planned.click();
+    await expect(planned).toHaveAttribute("aria-pressed", "true");
+    await expect(panel).toContainText("Needs E0 First programs");
+    await expect(panel.getByRole("listitem")).toHaveText(["LaterPlanned"]);
+    expect((await planned.boundingBox())!.height).toBeGreaterThanOrEqual(40);
+
+    // The path is the order Learn takes, which is what each lesson's Next line shows.
+    const path = page.getByRole("region", { name: "The order Learn follows" });
+    await expect(path.getByRole("listitem")).toHaveText(["M0CountingNow", "M0Adding", "E0Printing"]);
+
+    await expectNoHorizontalScroll(page);
+    await expectAccessible(page);
+    await page.screenshot({ path: `test-results/screens/map-${info.project.name}-${theme}.png`, fullPage: true });
+    await page.getByRole("link", { name: /Learn/ }).click();
+    await expect(page).toHaveURL(/\/learn$/);
+  });
+}

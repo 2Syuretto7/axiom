@@ -230,6 +230,9 @@ export function Workspace({
           ))}
         </ol>
         <div className="ws-controls">
+          <Link href="/map" className="label bar-item" prefetch={false}>
+            Map
+          </Link>
           <span className="label bar-item ws-status" role="status">
             {saved ? "Saved" : "Saving"}
           </span>

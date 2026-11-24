@@ -5,7 +5,7 @@ import { LessonView } from "@/components/lesson/lesson-view";
 import { Workspace } from "@/components/workspace/workspace";
 import { requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
-import { nextConcept } from "@/lib/learning/next";
+import { nextAfter, nextConcept } from "@/lib/learning/next";
 import { completedConcepts, hintLevels, snapshotsFor, solvedQuestions } from "@/lib/learning/service";
 import { content } from "@/lib/lessons/content";
 import { questionsOf } from "@/lib/lessons/load";
@@ -30,7 +30,9 @@ async function Lesson() {
   const user = await requireUser();
   const db = getDb();
   const { graph, lessons } = content();
-  const next = nextConcept(graph, new Set(lessons.keys()), await completedConcepts(db, user.id));
+  const written = new Set(lessons.keys());
+  const completed = await completedConcepts(db, user.id);
+  const next = nextConcept(graph, written, completed);
 
   if (!next) {
     const snapshots = await snapshotsFor(db, user.id, "axiom-code:scratch");
@@ -70,7 +72,14 @@ async function Lesson() {
       snapshots={snapshots}
       lesson={{ total: ids.length, solved: ids.filter((id) => solved.has(id)), complete: false }}
     >
-      <LessonView lesson={lesson} concept={concept} graph={graph} solved={solved} hintLevels={hints} />
+      <LessonView
+        lesson={lesson}
+        concept={concept}
+        graph={graph}
+        next={nextAfter(graph, written, completed, concept.id)}
+        solved={solved}
+        hintLevels={hints}
+      />
     </Workspace>
   );
 }
