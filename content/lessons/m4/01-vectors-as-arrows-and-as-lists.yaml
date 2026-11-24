@@ -1,0 +1,571 @@
+concept: m4.vectors-as-arrows-and-as-lists
+minutes: 85
+claim: You can describe a vector both as an arrow with a length and a direction and as an ordered list of numbers, pass between the two descriptions, find the vector from one point to another, compute the length of a vector with any number of components, and say why a list of hundreds of numbers is treated as a single point in a space.
+recalls: [m10.integration-techniques]
+uses: [m1.coordinates-and-the-plane, m2.trigonometric-functions-on-the-unit-circle, m1.complex-numbers, m0.powers-and-roots, m10.maxima-and-minima, e0.lists-and-tuples, e0.functions, e1.comprehensions-and-iterators, e1.modules-and-imports, e1.special-methods-and-operator-overloading]
+leads: [m4.vector-addition-and-scaling, m4.norms-and-distance, m5.matrices-as-linear-maps, m12.functions-of-several-variables]
+starter: |
+  # Scratch space. A walk is a list of legs. Each leg is [east, north] in kilometres.
+  import math
+
+  legs = [[3, 0], [0, 4]]
+  east = sum([leg[0] for leg in legs])
+  north = sum([leg[1] for leg in legs])
+  print("walked", sum([abs(leg[0]) + abs(leg[1]) for leg in legs]), "km")
+  print("ended at", [east, north])
+  print("distance from start", math.sqrt(east ** 2 + north ** 2), "km")
+parts:
+  recall:
+    - text: |
+        [[m10.integration-techniques]] closed the calculus of one variable, and ended by pointing at what it could not yet handle: quantities made of **many** numbers at once. Before starting on those, three quick pulls, one from that lesson and two from much further back that are about to be needed.
+    - question:
+        id: recall-substitution
+        type: choice
+        system: s1
+        concepts: [m10.integration-techniques]
+        prompt: |
+          Which is an antiderivative of $\cos(3x)$?
+        options: ["$\\sin(3x)$", "$3\\sin(3x)$", "$\\dfrac{\\sin(3x)}{3}$", "$-\\dfrac{\\sin(3x)}{3}$"]
+        answer: 2
+        explanation: Differentiating sin(3x) brings out a factor 3, so a division by 3 is needed to cancel it.
+        hints:
+          - Differentiate sin(3x) and see what factor appears.
+          - Integration must divide by that factor.
+    - question:
+        id: recall-distance
+        type: numeric
+        system: s1
+        concepts: [m1.coordinates-and-the-plane]
+        prompt: |
+          What is the distance between the points $(1, 2)$ and $(4, 6)$?
+        answer: "5"
+        explanation: |
+          The points differ by 3 across and 4 up, and $\sqrt{3^2 + 4^2} = \sqrt{25}$.
+        hints:
+          - Find the difference across and the difference up.
+          - Use the theorem of Pythagoras on those two differences.
+    - question:
+        id: recall-unit-circle
+        type: choice
+        system: s1
+        concepts: [m2.trigonometric-functions-on-the-unit-circle]
+        prompt: |
+          The point on the unit circle at angle $\theta$ has which coordinates?
+        options: ["$(\\sin\\theta, \\cos\\theta)$", "$(\\cos\\theta, \\sin\\theta)$", "$(\\theta, 1)$", "$(\\tan\\theta, 1)$"]
+        answer: 1
+        explanation: The cosine is the distance across and the sine is the height. That was their definition.
+        hints:
+          - Across first, then up.
+          - Which function was defined as the height?
+  puzzle:
+    - text: |
+        You walk 3 kilometres, then another 4 kilometres. How far are you from where you started?
+
+        If your answer is 7, you have assumed something. Suppose the first leg was due east and the second due north. Run the starter: you have **walked** 7 kilometres and you are **5** kilometres from the start. Had the second leg been due west, back over your own tracks and beyond, you would be 1 kilometre from the start. Had it continued east, 7.
+
+        So "3 kilometres" does not describe a leg of a walk. Something is missing from it. A temperature, a price, a mass: each is fully described by one number. A leg of a walk is not, and neither is the wind, a force, or the push that gradient descent gives to a model with two weights.
+
+        **What is the least information that describes a movement completely? Is there more than one way to write it down? And how should two movements be combined, given that adding their lengths gives the wrong answer?**
+
+        The last of these is the business of the next lesson. The first two are today's.
+  intuition:
+    - text: |
+        A leg of a walk has a **size**, how far, and a **direction**, which way. Draw it as an arrow: the length of the arrow is the size, and it points in the direction. An arrow is the natural picture of anything that has both.
+
+        But a computer cannot store an arrow. It stores numbers. So how many numbers pin an arrow down? On a flat map, two. One way is the length and the angle: "5 kilometres, at 53 degrees north of east". Another is to say how far the arrow takes you in each of two fixed directions: "3 east, 4 north". The second way is the one that turns out to matter, and its numbers are called **components**.
+
+        Written with its components, the arrow is just a short list: $(3, 4)$. A quantity with a size and a direction, recorded as an ordered list of numbers, is a **vector**.
+
+        Notice what the list does **not** record: where the arrow starts. "3 east, 4 north" is the same instruction whether you set out from your house or from the station. An arrow may be slid anywhere without becoming a different vector, as long as it is not turned or stretched. In the figure, change the two components, and then move the arrow.
+    - figure: vector-arrow
+      props: { x: 3, y: 2 }
+    - text: |
+        Every placing of the arrow has the same two numbers, the same length and the same direction. When the arrow is drawn from the origin, its tip lands on the point whose coordinates are those same two numbers. So a point of the plane and a vector can be named by the same pair, and people pass between the two readings freely: the point $(3, 2)$, and the vector that carries the origin to it.
+
+        Here is the step that makes vectors the language of machine learning. A list of two numbers is an arrow on a plane. A list of three is an arrow in space. A list of **seven hundred** numbers cannot be drawn. But nothing in "an ordered list of numbers" depended on being able to draw it. The list is still a single object. It still has a length, by the same formula. Two such lists can still be near each other or far apart, pointing the same way or at right angles. All the geometry you can see in two dimensions continues to work, by the same arithmetic, in seven hundred, and your intuition from the plane remains a good guide there.
+  derivation:
+    - text: |
+        **Definitions.** A **scalar** is a single number. A **vector** with $n$ components is an ordered list of $n$ numbers,
+
+        $$\mathbf{v} = (v_1, v_2, \dots, v_n).$$
+
+        Vectors are written in bold, or by hand with an arrow or a line over the letter. The number $v_i$ is the $i$th **component**. The set of all vectors with $n$ real components is called $\mathbb{R}^n$, read "R n": the plane is $\mathbb{R}^2$ and ordinary space is $\mathbb{R}^3$. The number $n$ is the **dimension**. Order matters: $(3, 4)$ and $(4, 3)$ are different vectors.
+
+        Two vectors are **equal** when they have the same number of components and every pair of matching components is equal. The vector whose components are all 0 is the **zero vector**, $\mathbf{0}$. It is the only vector with no direction.
+
+        In Python a vector is a list of numbers, `[3, 4]`, and component $v_i$ is `v[i - 1]`, since lists count from 0. The `Vector` class you built when you met special methods was a list with better manners.
+
+        **From one point to another.** The vector that carries the point $P = (p_1, p_2)$ to the point $Q = (q_1, q_2)$ says how far to go in each direction, so it is found by subtracting, component by component, **end minus start**:
+
+        $$\overrightarrow{PQ} = (q_1 - p_1,\; q_2 - p_2).$$
+
+        From $(1, 2)$ to $(4, 6)$ the vector is $(3, 4)$. From $(-2, 0)$ to $(1, 4)$ it is also $(3, 4)$: the same vector, starting somewhere else.
+
+        **Length.** The arrow $(v_1, v_2)$ is the long side of a right-angled triangle whose other sides are $v_1$ across and $v_2$ up. By the theorem of Pythagoras its length is
+
+        $$\lVert \mathbf{v} \rVert = \sqrt{v_1^2 + v_2^2}.$$
+
+        The double bars are read "the length of", or "the norm of". This is the distance formula from your first lesson on coordinates, seen as a fact about one arrow in place of two points. For the walk, $\lVert (3, 4) \rVert = \sqrt{9 + 16} = 5$, the answer to the puzzle's first question.
+
+        Now three components. Think of $(v_1, v_2, v_3)$ as the diagonal of a box: $v_1$ along the floor one way, $v_2$ along the floor the other way, $v_3$ straight up. First find the diagonal of the floor, by Pythagoras: its length $d$ has $d^2 = v_1^2 + v_2^2$. That floor diagonal and the vertical edge are at right angles, and together with the diagonal of the box they make a second right-angled triangle. Pythagoras again:
+
+        $$\lVert \mathbf{v} \rVert^2 = d^2 + v_3^2 = v_1^2 + v_2^2 + v_3^2.$$
+
+        The pattern is plain, and each further component repeats the argument once more. So the length of a vector in $\mathbb{R}^n$ is **defined** to be
+
+        $$\lVert \mathbf{v} \rVert = \sqrt{v_1^2 + v_2^2 + \dots + v_n^2} = \sqrt{\sum_{i=1}^{n} v_i^2}.$$
+
+        In two and three dimensions this is a theorem about real arrows. Beyond three it is a definition, chosen so that everything continues to behave as it did.
+
+        ```python
+        import math
+
+        def length(v):
+            return math.sqrt(sum([x * x for x in v]))
+        ```
+
+        The same three lines serve a vector of 2 components or of 2 million. A length is never negative, and it is 0 only for the zero vector, since a sum of squares is 0 only when every square is.
+    - question:
+        id: derivation-box
+        type: order
+        system: s2
+        prompt: Put the steps in order to show that the vector $(2, 3, 6)$ has length 7.
+        steps:
+          - "Think of the vector as the diagonal of a box that is 2 by 3 on the floor and 6 high."
+          - "The floor diagonal $d$ is the long side of a right-angled triangle with sides 2 and 3, so $d^2 = 4 + 9 = 13$."
+          - "The floor diagonal and the vertical edge are at right angles, and the box's diagonal is the long side of the triangle they make."
+          - "So the square of the length is $d^2 + 6^2 = 13 + 36 = 49$."
+          - "The length is $\\sqrt{49} = 7$."
+        explanation: The box gives the picture. Pythagoras is used once on the floor to get the square of the floor diagonal, and then a second time in the upright triangle made by that diagonal and the vertical edge. The square root is taken once, at the end, which is why the formula has a single root over the whole sum.
+        hints:
+          - The floor diagonal has to be found before it can be used.
+          - Pythagoras is applied twice, first flat and then upright.
+          - The square root comes last.
+    - text: |
+        **Length and angle, or components.** The puzzle asked whether there is more than one way to write a movement down. In the plane there are two, and you already know how to pass between them. A vector of length $r$ at an angle $\theta$, measured anticlockwise from the positive horizontal axis, has its tip on the circle of radius $r$, at the point
+
+        $$\mathbf{v} = (r\cos\theta,\; r\sin\theta).$$
+
+        That is the unit circle, scaled by $r$. In the other direction, the length is $r = \sqrt{v_1^2 + v_2^2}$ and the angle satisfies $\cos\theta = \frac{v_1}{r}$ and $\sin\theta = \frac{v_2}{r}$.
+
+        "5 kilometres at 53.13 degrees" and "$(3, 4)$" are the same walk: $5\cos 53.13^\circ = 3$ and $5\sin 53.13^\circ = 4$. A complex number $3 + 4i$, with its real part across and its imaginary part up, was a vector in the plane all along, and its modulus was this length.
+
+        The components are the description to prefer, for two reasons. Combining vectors is simple arithmetic on components, as the next lesson shows, and it is awkward with angles. And components work in any number of dimensions, where a single angle no longer describes a direction.
+
+        **Why lists of numbers are everywhere.** Anything that can be described by a fixed number of measurements is a vector.
+
+        | Thing | Components | Dimension |
+        | --- | --- | --- |
+        | a position on a map | east, north | 2 |
+        | a colour on a screen | red, green, blue | 3 |
+        | a patient's record | age, weight, pulse, temperature | 4 |
+        | a grey picture, 28 pixels square | the brightness of each pixel | 784 |
+        | the meaning of a word, inside a language model | learned numbers | hundreds or thousands |
+        | a neural network | every one of its weights | millions to billions |
+
+        Take a small example that will stay with us through this cluster. Count how often two words appear in a news report: "match" and "election". A short sports report might give $\mathbf{a} = (4, 1)$. A longer sports report, $\mathbf{b} = (8, 2)$. A report on politics, $\mathbf{c} = (1, 4)$. Each report has become a point in a plane, and questions about reports have become questions about geometry. Which reports are alike? Is "alike" a matter of being close, or of pointing the same way? With a vocabulary of fifty thousand words the same picture holds in $\mathbb{R}^{50000}$.
+
+        The last row of the table is the reason the course has come here now. In the lesson on maxima and minima a model had one adjustable number, and gradient descent moved it left or right. A real model's weights form one vector in a space of enormous dimension, training moves that single point, and the slope that told you which way to move becomes a vector too.
+    - question:
+        id: derivation-same-vector
+        type: choice
+        system: s2
+        prompt: |
+          One arrow runs from $(1, 1)$ to $(4, 3)$. Another runs from $(-2, 0)$ to $(1, 2)$. A third runs from $(4, 3)$ to $(1, 1)$. Which statement is correct?
+        options:
+          - "All three are the same vector, since they have the same length."
+          - "The first two are the same vector, $(3, 2)$. The third is a different vector, $(-3, -2)$, with the same length and the opposite direction."
+          - "All three are different, since they start at different points."
+          - "The first and third are the same vector, since they join the same two points."
+        answer: 1
+        explanation: |
+          End minus start: the first is $(4 - 1, 3 - 1) = (3, 2)$ and the second is $(1 + 2, 2 - 0) = (3, 2)$. Their components agree, so they are equal as vectors, wherever they are drawn. The third is $(1 - 4, 1 - 3) = (-3, -2)$. It lies along the same segment as the first, but it points the other way, and a vector is its length **and** its direction. Having the same length is not enough, and starting from the same place is not required.
+        hints:
+          - Compute end minus start for each arrow.
+          - Two vectors are equal when all their components are equal.
+          - Reversing an arrow changes the sign of every component.
+  formal:
+    - text: |
+        **Vector.** An ordered list of $n$ real numbers, $\mathbf{v} = (v_1, \dots, v_n)$, an element of $\mathbb{R}^n$. The $v_i$ are its components and $n$ is its dimension. A single number is a scalar.
+
+        **Equality.** $\mathbf{u} = \mathbf{v}$ when they have the same dimension and $u_i = v_i$ for every $i$.
+
+        **Zero vector.** $\mathbf{0} = (0, \dots, 0)$.
+
+        **Vector between points.** From $P$ to $Q$: $\ \overrightarrow{PQ} = (q_1 - p_1, \dots, q_n - p_n)$.
+
+        **Length.** $\lVert \mathbf{v} \rVert = \sqrt{v_1^2 + \dots + v_n^2}$. It is never negative, and it is 0 exactly when $\mathbf{v} = \mathbf{0}$.
+
+        **Length and angle in the plane.** $\mathbf{v} = (r\cos\theta, r\sin\theta)$ where $r = \lVert \mathbf{v} \rVert$.
+
+        | Description | The walk of the puzzle |
+        | --- | --- |
+        | components | $(3, 4)$ |
+        | length and angle | $5$ at about $53.13^\circ$ |
+        | Python | `[3, 4]` |
+        | complex number | $3 + 4i$ |
+  drill:
+    - text: Seconds each. End minus start, and the square root of the sum of the squares.
+    - question:
+        id: drill-length-34
+        type: numeric
+        system: s1
+        prompt: |
+          What is the length of $(3, 4)$?
+        answer: "5"
+        explanation: |
+          $\sqrt{9 + 16} = \sqrt{25}$.
+        hints:
+          - Square each component and add.
+          - Take the square root.
+    - question:
+        id: drill-length-68
+        type: numeric
+        system: s1
+        prompt: |
+          What is the length of $(6, 8)$?
+        answer: "10"
+        explanation: |
+          $\sqrt{36 + 64} = \sqrt{100}$. It is twice $(3, 4)$, and twice as long.
+        hints:
+          - Square each component and add.
+          - The sum of the squares is 100.
+    - question:
+        id: drill-length-negative
+        type: numeric
+        system: s1
+        prompt: |
+          What is the length of $(-5, 12)$?
+        answer: "13"
+        explanation: |
+          $\sqrt{25 + 144} = \sqrt{169}$. The sign of a component disappears when it is squared.
+        hints:
+          - A negative component squares to a positive number.
+          - 25 plus 144.
+    - question:
+        id: drill-length-3d
+        type: numeric
+        system: s1
+        prompt: |
+          What is the length of $(1, 2, 2)$?
+        answer: "3"
+        explanation: |
+          $\sqrt{1 + 4 + 4} = \sqrt{9}$.
+        hints:
+          - There are three squares to add.
+          - 1 plus 4 plus 4.
+    - question:
+        id: drill-between
+        type: choice
+        system: s1
+        prompt: |
+          Which vector carries the point $(2, 5)$ to the point $(7, 1)$?
+        options: ["$(5, -4)$", "$(-5, 4)$", "$(9, 6)$", "$(5, 4)$"]
+        answer: 0
+        explanation: End minus start. 7 − 2 across, and 1 − 5 up, which is 4 down.
+        hints:
+          - Subtract the start from the end, one component at a time.
+          - The second component is 1 minus 5.
+    - question:
+        id: drill-dimension-image
+        type: numeric
+        system: s1
+        prompt: |
+          A grey picture is 10 pixels wide and 10 pixels high, with one brightness per pixel. As a vector, how many components does it have?
+        answer: "100"
+        explanation: One component for each pixel, and there are 10 times 10 of them.
+        hints:
+          - Each pixel contributes one number.
+          - Count the pixels.
+    - question:
+        id: drill-equal
+        type: choice
+        system: s1
+        prompt: |
+          Are $(3, 4)$ and $(4, 3)$ the same vector?
+        options:
+          - "Yes, they contain the same numbers."
+          - "Yes, they have the same length."
+          - "No. The order of the components matters."
+          - "Only if they start at the same point."
+        answer: 2
+        explanation: A vector is an ordered list. The first goes 3 across and 4 up, and the second 4 across and 3 up. They have the same length and different directions.
+        hints:
+          - Draw both from the origin.
+          - Do the tips land on the same point?
+    - question:
+        id: drill-polar
+        type: choice
+        system: s1
+        prompt: |
+          A vector has length 2 and points at $90^\circ$, straight up. What are its components?
+        options: ["$(2, 0)$", "$(0, 2)$", "$(2, 2)$", "$(1, 1)$"]
+        answer: 1
+        explanation: The cosine of 90 degrees is 0 and the sine is 1, so the components are 2 × 0 and 2 × 1.
+        hints:
+          - The components are the length times the cosine, and the length times the sine.
+          - Straight up means nothing across.
+    - question:
+        id: drill-zero
+        type: numeric
+        system: s1
+        prompt: |
+          What is the length of the zero vector $(0, 0, 0, 0)$?
+        answer: "0"
+        explanation: Every square is 0, so the sum is 0. It is the only vector with length 0.
+        hints:
+          - Add four squares of 0.
+          - Take the square root.
+    - question:
+        id: drill-colour
+        type: numeric
+        system: s1
+        prompt: |
+          A colour on a screen is stored as its amounts of red, green and blue. What is the dimension of the space of colours?
+        answer: "3"
+        explanation: Three measurements, so three components.
+        hints:
+          - Count the measurements.
+          - One component for each.
+    - question:
+        id: drill-component
+        type: numeric
+        system: s1
+        prompt: |
+          $\mathbf{v} = (7, -2, 9)$. What is $v_2$?
+        answer: "-2"
+        explanation: Components are counted from 1 in mathematics. In Python the same number is v[1].
+        hints:
+          - The subscript counts positions from 1.
+          - The second entry of the list.
+    - question:
+        id: predict-list
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          v = [3, 4, 12]
+          print(len(v), v[0], sum([x * x for x in v]))
+        output: "3 3 169"
+        explanation: The vector has 3 components, the first is 3, and the squares 9, 16 and 144 add to 169. Its length is the square root of that, 13.
+        hints:
+          - The first two values printed are the number of components and the first component.
+          - Add 9, 16 and 144.
+    - question:
+        id: predict-between
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          p = [1, 2]
+          q = [4, 6]
+          print([b - a for a, b in zip(p, q)])
+        output: "[3, 4]"
+        explanation: The zip pairs the matching components, 1 with 4 and 2 with 6. Each pair gives end minus start. This is the vector from p to q.
+        hints:
+          - In each pair, a comes from p and b comes from q.
+          - 4 − 1, then 6 − 2.
+  work:
+    - text: Slower now. Decide in each case whether you are being asked about a point, an arrow, or a list, and notice that it does not matter.
+    - question:
+        id: work-length-4d
+        type: numeric
+        system: s2
+        prompt: |
+          A patient's record, after rescaling, is the vector $(1, 1, 1, 1)$. What is its length?
+        answer: "2"
+        explanation: |
+          $\sqrt{1 + 1 + 1 + 1} = \sqrt{4} = 2$. No picture is available in four dimensions, and none is needed: the formula is the definition. Notice that the length is not 4 and not 1. The vector of $n$ ones has length $\sqrt{n}$, which grows with the dimension, and that is a first hint that distances in high dimensions behave in unfamiliar ways.
+        hints:
+          - Add the four squares.
+          - Take the square root of the sum.
+    - question:
+        id: work-angle
+        type: numeric
+        system: s2
+        unit: degrees
+        prompt: |
+          At what angle to the positive horizontal axis does the vector $(2, 2)$ point? Give the angle in degrees, between 0 and 90.
+        answer: "45"
+        explanation: |
+          Its length is $r = \sqrt{8}$, and $\cos\theta = \frac{2}{\sqrt{8}}$ and $\sin\theta = \frac{2}{\sqrt{8}}$ are equal. The sine and cosine agree at $45^\circ$. More simply: the vector goes as far up as across, so it lies along the diagonal of a square.
+        hints:
+          - The two components are equal.
+          - At which angle are the sine and the cosine equal?
+    - question:
+        id: write-length
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `length(v)`. `v` is a list of numbers, of any size. Return its length as a vector, the square root of the sum of the squares of its components.
+        starter: |
+          import math
+
+          def length(v):
+              # Replace the next line with your own.
+              return 0
+
+          print(length([3, 4]))
+        solution: |
+          import math
+
+          def length(v):
+              return math.sqrt(sum([x * x for x in v]))
+
+          print(length([3, 4]))
+        tests: |
+          def _close(got, want, name):
+              assert abs(got - want) < 1e-9, "The length of " + name + " is " + str(want) + " and you returned " + repr(got)
+          _close(length([3, 4]), 5, "[3, 4]")
+          _close(length([-6, 8]), 10, "[-6, 8]")
+          _close(length([1, 2, 2]), 3, "[1, 2, 2]")
+          _close(length([2, 3, 6]), 7, "[2, 3, 6]")
+          _close(length([1, 1, 1, 1]), 2, "[1, 1, 1, 1]")
+          _close(length([-7]), 7, "[-7]")
+          _close(length([0, 0, 0]), 0, "the zero vector")
+          _close(length([1] * 100), 10, "a hundred ones")
+          assert output.strip() == "5.0", "The program should print 5.0"
+        wrong:
+          - "import math\n\ndef length(v):\n    return sum([x * x for x in v])\n\nprint(5.0)\n"
+          - "import math\n\ndef length(v):\n    return sum([abs(x) for x in v])\n\nprint(5.0)\n"
+          - "import math\n\ndef length(v):\n    return math.sqrt(v[0] ** 2 + v[1] ** 2)\n\nprint(5.0)\n"
+          - "import math\n\ndef length(v):\n    return math.sqrt(abs(sum(v)))\n\nprint(5.0)\n"
+          - "import math\n\ndef length(v):\n    return sum([math.sqrt(abs(x)) for x in v]) ** 2\n\nprint(5.0)\n"
+        explanation: |
+          The comprehension squares every component, `sum` adds the squares, and one square root finishes the job. Nothing in the function mentions how many components there are, so it works unchanged in any dimension. The root must be taken once, of the whole sum: the root of a sum is not the sum of the roots. Adding absolute values, as in the starter's 7 kilometres walked, measures the path along the legs, a different and also useful quantity that returns four lessons from now.
+        hints:
+          - Build the list of squares with a comprehension.
+          - Add them with sum.
+          - Take math.sqrt of the total.
+    - question:
+        id: fix-displacement
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `between(p, q)` should return the vector that carries the point `p` to the point `q`. From `[1, 2]` to `[4, 6]` it should print `[3, 4]`. It prints `[-3, -4]`. Fix it.
+        starter: |
+          def between(p, q):
+              return [a - b for a, b in zip(p, q)]
+
+          print(between([1, 2], [4, 6]))
+        solution: |
+          def between(p, q):
+              return [b - a for a, b in zip(p, q)]
+
+          print(between([1, 2], [4, 6]))
+        tests: |
+          assert between([1, 2], [4, 6]) == [3, 4], "From [1, 2] to [4, 6] is 3 across and 4 up. You returned " + repr(between([1, 2], [4, 6]))
+          assert between([4, 6], [1, 2]) == [-3, -4], "From [4, 6] back to [1, 2] is the reverse, [-3, -4]. You returned " + repr(between([4, 6], [1, 2]))
+          assert between([0, 0, 0], [2, -5, 9]) == [2, -5, 9], "From the origin to a point, the vector has the point's coordinates. You returned " + repr(between([0, 0, 0], [2, -5, 9]))
+          assert between([7, 7], [7, 7]) == [0, 0], "From a point to itself is the zero vector"
+          assert between([-2, 0], [1, 4]) == [3, 4], "From [-2, 0] to [1, 4] is also [3, 4]. You returned " + repr(between([-2, 0], [1, 4]))
+          assert output.strip() == "[3, 4]", "The program should print [3, 4]"
+        wrong:
+          - "def between(p, q):\n    return [a - b for a, b in zip(p, q)]\n\nprint([3, 4])\n"
+          - "def between(p, q):\n    return [a + b for a, b in zip(p, q)]\n\nprint([3, 4])\n"
+          - "def between(p, q):\n    return [abs(b - a) for a, b in zip(p, q)]\n\nprint([3, 4])\n"
+          - "def between(p, q):\n    return [q[0] - p[0], q[1] - p[0]]\n\nprint([3, 4])\n"
+        explanation: |
+          The vector from a start to an end is **end minus start**. In the comprehension `a` comes from `p`, the start, and `b` from `q`, the end, so each component must be `b - a`. The starter had them the other way round and produced the vector from `q` back to `p`: the same length, the opposite direction. Taking absolute values would hide the mistake for this one example and lose the direction altogether. The check that never fails: add the result to the start, component by component, and you should land on the end.
+        hints:
+          - Which of a and b comes from the start, and which from the end?
+          - The rule is end minus start.
+          - Swap the order of the subtraction.
+    - question:
+        id: write-from-polar
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `from_polar(r, degrees)`. It returns the components `[across, up]` of the vector in the plane with length `r`, pointing at the given angle in degrees, measured anticlockwise from the positive horizontal axis.
+
+          `math.cos` and `math.sin` expect radians, and `math.radians` converts.
+        starter: |
+          import math
+
+          def from_polar(r, degrees):
+              # Replace the next line with your own.
+              return [r, 0]
+
+          print([round(c, 6) for c in from_polar(2, 60)])
+        solution: |
+          import math
+
+          def from_polar(r, degrees):
+              angle = math.radians(degrees)
+              return [r * math.cos(angle), r * math.sin(angle)]
+
+          print([round(c, 6) for c in from_polar(2, 60)])
+        tests: |
+          import math as _m
+          def _close(got, want, name):
+              assert len(got) == 2, "Return a list of two components"
+              assert abs(got[0] - want[0]) < 1e-9 and abs(got[1] - want[1]) < 1e-9, name + " should give about " + str(want) + " and you returned " + repr(got)
+          _close(from_polar(5, 0), [5, 0], "Length 5 at 0 degrees")
+          _close(from_polar(2, 90), [0, 2], "Length 2 at 90 degrees")
+          _close(from_polar(3, 180), [-3, 0], "Length 3 at 180 degrees")
+          _close(from_polar(2, 60), [1, _m.sqrt(3)], "Length 2 at 60 degrees")
+          _close(from_polar(1, 270), [0, -1], "Length 1 at 270 degrees")
+          _close(from_polar(0, 33), [0, 0], "Length 0 at any angle")
+          _v = from_polar(5, 53.13010235415598)
+          _close(_v, [3, 4], "Length 5 at about 53.13 degrees")
+          assert output.strip() == "[1.0, 1.732051]", "The program should print [1.0, 1.732051]"
+        wrong:
+          - "import math\n\ndef from_polar(r, degrees):\n    return [r * math.cos(degrees), r * math.sin(degrees)]\n\nprint([1.0, 1.732051])\n"
+          - "import math\n\ndef from_polar(r, degrees):\n    angle = math.radians(degrees)\n    return [r * math.sin(angle), r * math.cos(angle)]\n\nprint([1.0, 1.732051])\n"
+          - "import math\n\ndef from_polar(r, degrees):\n    angle = math.radians(degrees)\n    return [math.cos(angle), math.sin(angle)]\n\nprint([1.0, 1.732051])\n"
+          - "import math\n\ndef from_polar(r, degrees):\n    angle = math.radians(degrees)\n    return [r * math.cos(angle), r * math.cos(angle)]\n\nprint([1.0, 1.732051])\n"
+          - "import math\n\ndef from_polar(r, degrees):\n    angle = math.degrees(degrees)\n    return [r * math.cos(angle), r * math.sin(angle)]\n\nprint([1.0, 1.732051])\n"
+        explanation: |
+          The tip of a vector of length $r$ at angle $\theta$ is the point of the unit circle at that angle, moved $r$ times as far from the origin: $(r\cos\theta, r\sin\theta)$. The cosine gives the part across and the sine the part up. The one trap is the unit of angle: the library works in radians, for the reason you met when differentiating the sine, so the degrees must be converted first. At $60^\circ$ a vector of length 2 goes 1 across and $\sqrt{3} \approx 1.732$ up, and you can check that $1 + 3 = 4 = 2^2$.
+        hints:
+          - Convert the angle with math.radians first.
+          - The part across is r times the cosine of the angle.
+          - The part up is r times the sine of the angle.
+    - question:
+        id: work-reports
+        type: choice
+        system: s2
+        prompt: |
+          Three news reports are turned into vectors by counting the words "match" and "election": $\mathbf{a} = (4, 1)$, $\mathbf{b} = (8, 2)$ and $\mathbf{c} = (1, 4)$. Which statement about them is correct?
+        options:
+          - "$\\mathbf{a}$ and $\\mathbf{c}$ are the same vector, since they contain the same numbers."
+          - "$\\mathbf{b}$ points in the same direction as $\\mathbf{a}$ and is twice as long. $\\mathbf{c}$ has the same length as $\\mathbf{a}$ and a different direction."
+          - "$\\mathbf{b}$ is longer than $\\mathbf{a}$, so it is about a different subject."
+          - "All three have the same length."
+        answer: 1
+        explanation: |
+          $\lVert \mathbf{a} \rVert = \sqrt{17}$ and $\lVert \mathbf{c} \rVert = \sqrt{17}$: equal lengths, but $\mathbf{a}$ leans along the "match" axis and $\mathbf{c}$ along the "election" axis. $\mathbf{b} = (8, 2)$ has length $\sqrt{68} = 2\sqrt{17}$ and each of its components is twice the matching component of $\mathbf{a}$, so it lies along the same line from the origin. The length of such a vector mostly reflects how long the report is. Its direction reflects what the report is about. Separating those two things, size and direction, is what the rest of this cluster builds the tools to do.
+        hints:
+          - Compute the three lengths.
+          - Compare each component of b with the matching component of a.
+          - Which property changes when a report is simply made longer?
+    - question:
+        id: work-descent-vector
+        type: choice
+        system: s2
+        prompt: |
+          A model has two weights, currently $(w_1, w_2) = (2, 5)$. One step of training changes them to $(1.7, 5.4)$. Which vector describes the step, and how large was it?
+        options:
+          - "$(1.7, 5.4)$, of length about 5.66"
+          - "$(-0.3, 0.4)$, of length $0.5$"
+          - "$(0.3, -0.4)$, of length $0.5$"
+          - "$(-0.3, 0.4)$, of length $0.1$"
+        answer: 1
+        explanation: |
+          End minus start: $(1.7 - 2, 5.4 - 5) = (-0.3, 0.4)$. Its length is $\sqrt{0.09 + 0.16} = \sqrt{0.25} = 0.5$. The first weight went down and the second went up, and the single number 0.5 says how far the model moved in its two-dimensional space of weights. With one weight, a training step was a number, moving left or right. With two it is an arrow in a plane, and with a million it is an arrow in a space of a million dimensions, found and measured by the same two rules.
+        hints:
+          - The step is the new position minus the old.
+          - Find the length of that vector.
+          - 0.09 plus 0.16 is 0.25.
+  connections:
+    - text: |
+        The puzzle asked what completely describes a movement. A single number does not: "3 kilometres" leaves out the direction. A movement is a vector, something with a size and a direction, and it can be written in two ways. As an arrow it has a length and an angle. As a list it has components, how far it goes along each fixed axis. The two are tied together by the theorem of Pythagoras, which gives the length from the components, and by the unit circle, which gives the components from the length and angle. After 3 kilometres east and 4 north you are $\sqrt{9 + 16} = 5$ kilometres from the start.
+
+        The list is the form that travels. A list of numbers of any size is one vector, a single point in a space with one dimension for each number, and its length is still the root of the sum of the squares. That is how a picture, the meaning of a word, or every weight of a network becomes one geometric object.
+
+        One of the puzzle's questions is still open. The two legs of the walk, $(3, 0)$ and $(0, 4)$, combined into $(3, 4)$, and the lengths 3 and 4 did not add to give 5. How vectors combine, and what it means to stretch one, is the next lesson, [[m4.vector-addition-and-scaling]]. With those two operations nearly everything else can be built.
+
+        Measuring how far apart two vectors are, in more ways than one, comes in [[m4.norms-and-distance]]. Vectors are what the machines of [[m5.matrices-as-linear-maps]] take in and give out. And a function whose input is a vector, such as the error of a model as a function of all its weights, is the subject of [[m12.functions-of-several-variables]].

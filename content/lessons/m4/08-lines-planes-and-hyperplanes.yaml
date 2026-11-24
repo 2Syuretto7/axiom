@@ -1,0 +1,592 @@
+concept: m4.lines-planes-and-hyperplanes
+minutes: 95
+claim: You can describe a line by a point and a direction and by a normal vector and a number, extend the second description to planes and hyperplanes in any dimension, tell which side of a hyperplane a point lies on and how far from it, and explain why a single neuron separates its inputs with a hyperplane and so cannot compute exclusive-or.
+recalls: [m4.projection-onto-a-vector]
+uses: [m4.angle-and-cosine-similarity, m4.norms-and-distance, m4.dot-product, m4.linear-combinations-and-span, m4.vector-addition-and-scaling, m4.vectors-as-arrows-and-as-lists, m1.straight-lines-and-slope, m1.simultaneous-equations, m1.coordinates-and-the-plane, m3.contrapositive-and-contradiction, m3.direct-proof, e0.functions, e0.loops, e0.lists-and-tuples, e0.booleans-and-conditionals, e1.comprehensions-and-iterators, e1.modules-and-imports]
+leads: [m4.linear-independence, m5.elimination-and-linear-systems, l2.the-perceptron-and-its-convergence-theorem, l5.the-neuron]
+starter: |
+  # Scratch space. A neuron with weights w and bias c fires when w . x + c is positive.
+  # Try other inputs, between and beyond 0 and 1. Where does the answer change?
+  w = [1, 1]
+  c = -1.5
+
+  for x in [[0, 0], [0, 1], [1, 0], [1, 1], [2, 0], [0.5, 0.5], [0.75, 0.75]]:
+      value = sum([a * b for a, b in zip(w, x)]) + c
+      print(x, value, value > 0)
+parts:
+  recall:
+    - text: |
+        [[m4.projection-onto-a-vector]] found the closest point of a line through the origin to a given vector, and called the signed length of the shadow on a unit vector the **component** along it. Much earlier you wrote straight lines as $y = mx + c$. Today both meet. Three quick pulls first.
+    - question:
+        id: recall-component
+        type: numeric
+        system: s1
+        concepts: [m4.projection-onto-a-vector]
+        prompt: |
+          What is the component of $\mathbf{b} = (6, 3)$ along the unit vector $(0.6, 0.8)$?
+        answer: "6"
+        explanation: The dot product, 3.6 + 2.4.
+        hints:
+          - The component along a unit vector is the dot product with it.
+          - Add 3.6 and 2.4.
+    - question:
+        id: recall-perpendicular
+        type: choice
+        system: s1
+        concepts: [m4.dot-product]
+        prompt: |
+          Which vector is perpendicular to $(2, 1)$?
+        options: ["$(1, 2)$", "$(-1, 2)$", "$(2, 1)$", "$(4, 2)$"]
+        answer: 1
+        explanation: The dot product is −2 + 2 = 0. Swapping the components and changing one sign always gives a perpendicular vector.
+        hints:
+          - Perpendicular vectors have dot product 0.
+          - Try each option.
+    - question:
+        id: recall-line
+        type: choice
+        system: s1
+        concepts: [m1.straight-lines-and-slope]
+        prompt: |
+          Which point lies on the line $2x + y = 4$?
+        options: ["$(1, 1)$", "$(2, 2)$", "$(1, 2)$", "$(0, 2)$"]
+        answer: 2
+        explanation: 2 × 1 + 2 = 4.
+        hints:
+          - Put the coordinates into the equation.
+          - The left side must come to 4.
+  puzzle:
+    - text: |
+        The lesson on the dot product ended with a **neuron**: a rule that takes an input vector $\mathbf{x}$, forms $\mathbf{w} \cdot \mathbf{x} + c$ from its weights $\mathbf{w}$ and a number $c$ called the bias, and "fires" when the result is positive. With $\mathbf{w} = (1, 1)$ and $c = -1.5$ it fired for the input $(1, 1)$ and for none of $(0, 0)$, $(0, 1)$, $(1, 0)$. It computed the logical "and".
+
+        Those were four inputs. But the neuron will accept any pair of numbers. Run the starter: it fires at $(2, 0)$, does not fire at $(0.5, 0.5)$, and at $(0.75, 0.75)$ the value is exactly 0, on the edge.
+
+        **Mark every point of the plane where the neuron fires. What shape is the region? What shape is its edge?**
+
+        And a second question, which was once a famous one. "Exclusive-or" is the rule that answers yes when exactly one of two inputs is 1: yes for $(0, 1)$ and $(1, 0)$, no for $(0, 0)$ and $(1, 1)$. **Is there any choice of two weights and a bias that makes one neuron compute it?** You could try values for a long time without finding one. To be sure that none exists, you have to know the shape of what a neuron can do.
+  intuition:
+    - text: |
+        Take the edge first: the points where $\mathbf{w} \cdot \mathbf{x} + c = 0$, which is to say $\mathbf{w} \cdot \mathbf{x} = 1.5$.
+
+        You know what $\mathbf{w} \cdot \mathbf{x}$ measures. It is the length of $\mathbf{w}$ times the shadow of $\mathbf{x}$ on the line of $\mathbf{w}$. So the edge consists of all the points whose shadow on $\mathbf{w}$ is the **same**. Imagine the light shining at right angles to $\mathbf{w}$, as in the last lesson. Which points cast their shadow on one given spot? All the points along one ray of the light: a **straight line at right angles to $\mathbf{w}$**.
+
+        So the edge is a line, and $\mathbf{w}$ sticks out of it at a right angle. Points with a longer shadow, further along $\mathbf{w}$, give a larger dot product: they are on the side that $\mathbf{w}$ points towards, and there the neuron fires. Points with a shorter shadow are on the other side.
+
+        The roles are clear. **The weights set which way the line faces. The bias slides it, without turning it.** Change each in the figure.
+    - figure: hyperplane
+      props: { w1: 1, w2: 1, c: -1.5, px: 1, py: 1 }
+    - text: |
+        Changing the offset moves the line parallel to itself. Changing a weight turns it, and $\mathbf{w}$ stays perpendicular to it throughout. The marked point $(1, 1)$ is on the positive side until the line is pushed past it.
+
+        Nothing in the argument about shadows used the plane. With three inputs, the points that share a shadow on $\mathbf{w}$ form a flat sheet at right angles to $\mathbf{w}$, a plane. With a thousand inputs they form the thousand-dimensional version of the same thing.
+  derivation:
+    - text: |
+        **A line from a point and a direction.** The most direct way to describe a line is to say where it starts and which way it goes. Take a point $\mathbf{p}$ and a non-zero direction $\mathbf{d}$. The line is everything you can reach from $\mathbf{p}$ by travelling along $\mathbf{d}$, forwards or backwards:
+
+        $$\mathbf{x} = \mathbf{p} + t\,\mathbf{d}, \qquad t \in \mathbb{R}.$$
+
+        This is the **parametric form**. The number $t$ is the parameter: each value of $t$ produces one point. With $\mathbf{p} = (0, 4)$ and $\mathbf{d} = (1, -2)$, the values $t = 0, 1, 2$ give $(0, 4)$, $(1, 2)$, $(2, 0)$.
+
+        The line $y = mx + c$ from your first lessons is the case $\mathbf{p} = (0, c)$, $\mathbf{d} = (1, m)$: start at the intercept, and for each step of 1 across go $m$ up. The parametric form does more. It can describe a vertical line, with $\mathbf{d} = (0, 1)$, which $y = mx + c$ cannot. And it works unchanged in any dimension: $\mathbf{p} + t\,\mathbf{d}$ with three components is a line in space.
+
+        When $\mathbf{p} = \mathbf{0}$ the line is the span of $\mathbf{d}$. A general line is a span moved away from the origin.
+
+        **A line from a normal vector.** The parametric form **produces** points. It is clumsy for **testing** them: to decide whether $(3, -2)$ is on the line you must hunt for a $t$. The second description is a test.
+
+        Let $\mathbf{w}$ be a non-zero vector perpendicular to the line, called a **normal** vector, and let $\mathbf{p}$ be a point on the line. A point $\mathbf{x}$ is on the line exactly when the step from $\mathbf{p}$ to $\mathbf{x}$ runs along the line, that is, at right angles to $\mathbf{w}$:
+
+        $$\mathbf{w} \cdot (\mathbf{x} - \mathbf{p}) = 0 \quad\Longleftrightarrow\quad \mathbf{w} \cdot \mathbf{x} - \mathbf{w} \cdot \mathbf{p} = 0.$$
+
+        The number $\mathbf{w} \cdot \mathbf{p}$ is fixed. Write $c = -\,\mathbf{w} \cdot \mathbf{p}$, and the line is
+
+        $$\mathbf{w} \cdot \mathbf{x} + c = 0.$$
+
+        In components, $w_1 x + w_2 y + c = 0$. This is the equation of a line you solved in pairs when you met simultaneous equations. Now its coefficients have a meaning: **the coefficients of $x$ and $y$ form a vector perpendicular to the line.**
+
+        Take $2x + y - 4 = 0$. The normal is $\mathbf{w} = (2, 1)$. A direction along the line must be perpendicular to that, and $\mathbf{d} = (-1, 2)$ will do, or its reverse $(1, -2)$. A point on it is $(0, 4)$. So this is the line of the parametric example, described the other way.
+
+        Going from two points to an equation takes the same steps. The line through $(1, 0)$ and $(3, 1)$ has direction $(2, 1)$, so a normal is $(1, -2)$, and $c = -(1, -2) \cdot (1, 0) = -1$: the line is $x - 2y - 1 = 0$. Check the other point: $3 - 2 - 1 = 0$.
+
+        **Planes and hyperplanes.** Now read $\mathbf{w} \cdot \mathbf{x} + c = 0$ with three components. Nothing in the derivation changes: it is the set of points $\mathbf{x}$ for which $\mathbf{x} - \mathbf{p}$ is perpendicular to $\mathbf{w}$. In space, the directions perpendicular to one given vector fill a flat sheet. The set is a **plane**:
+
+        $$w_1 x + w_2 y + w_3 z + c = 0.$$
+
+        One equation in three unknowns leaves two of them free. A plane has two dimensions' worth of room in it. In $\mathbb{R}^n$ the set $\mathbf{w} \cdot \mathbf{x} + c = 0$ is called a **hyperplane**. One equation removes one freedom, leaving $n - 1$.
+
+        | Space | A hyperplane is | Its dimension |
+        | --- | --- | --- |
+        | $\mathbb{R}^1$, the number line | a point, such as $x = 3$ | 0 |
+        | $\mathbb{R}^2$, the plane | a line | 1 |
+        | $\mathbb{R}^3$, space | a plane | 2 |
+        | $\mathbb{R}^n$ | a flat set, one dimension short of the whole | $n - 1$ |
+
+        What all of these share is that they **cut the space in two**. A point cuts the number line into left and right. A line cuts the plane. A plane cuts space. A line in space does not: you can walk round it. That is why, in three dimensions, a line needs the parametric form, or two equations at once, and why it is the hyperplane, not the line, that carries the idea of a boundary into higher dimensions.
+
+        The normal vector and the number are not unique. Multiplying both by the same non-zero number gives the same set: $4x + 2y - 8 = 0$ is the line $2x + y - 4 = 0$.
+    - question:
+        id: derivation-normal
+        type: choice
+        system: s2
+        prompt: |
+          Why is the vector $\mathbf{w}$ perpendicular to the set of points satisfying $\mathbf{w} \cdot \mathbf{x} + c = 0$?
+        options:
+          - "Because $\\mathbf{w}$ lies in the set."
+          - "Because for any two points $\\mathbf{x}$ and $\\mathbf{x}'$ of the set, subtracting the two equations gives $\\mathbf{w} \\cdot (\\mathbf{x} - \\mathbf{x}') = 0$: every step that stays inside the set is at right angles to $\\mathbf{w}$."
+          - "Because $c$ is negative."
+          - "Because $\\mathbf{w}$ is a unit vector."
+        answer: 1
+        explanation: |
+          $\mathbf{w} \cdot \mathbf{x} + c = 0$ and $\mathbf{w} \cdot \mathbf{x}' + c = 0$. Subtract, and the $c$ cancels: $\mathbf{w} \cdot (\mathbf{x} - \mathbf{x}') = 0$. The vector $\mathbf{x} - \mathbf{x}'$ is a step from one point of the set to another, a direction that runs along the set. All such directions are perpendicular to $\mathbf{w}$, and that is what it means for $\mathbf{w}$ to be perpendicular to the set. The vector $\mathbf{w}$ itself is usually not a point of the set, and its length plays no part.
+        hints:
+          - Take two points of the set and write the equation for each.
+          - Subtract one equation from the other.
+          - What kind of vector is the difference of two points of the set?
+    - text: |
+        **Two sides.** The expression $\mathbf{w} \cdot \mathbf{x} + c$ is zero on the hyperplane. Off it, the expression has a sign. To see which side is which, start at a point $\mathbf{x}_0$ on the hyperplane and move a distance along the normal: $\mathbf{x} = \mathbf{x}_0 + s\,\mathbf{w}$. Then
+
+        $$\mathbf{w} \cdot \mathbf{x} + c = \underbrace{\mathbf{w} \cdot \mathbf{x}_0 + c}_{0} + s\,(\mathbf{w} \cdot \mathbf{w}) = s\,\lVert \mathbf{w} \rVert^2.$$
+
+        The sign is the sign of $s$. **The expression is positive on the side that $\mathbf{w}$ points towards, and negative on the other.**
+
+        **How far.** The size of the expression says how far away the point is, once the length of $\mathbf{w}$ is divided out. Let $\mathbf{p}$ be any point of the hyperplane, and $\hat{\mathbf{w}} = \mathbf{w} / \lVert \mathbf{w} \rVert$ the unit normal. The distance from $\mathbf{x}$ to the hyperplane is measured straight across, along the normal. It is the component of $\mathbf{x} - \mathbf{p}$ along $\hat{\mathbf{w}}$, the shadow of the last lesson:
+
+        $$\hat{\mathbf{w}} \cdot (\mathbf{x} - \mathbf{p}) = \frac{\mathbf{w} \cdot \mathbf{x} - \mathbf{w} \cdot \mathbf{p}}{\lVert \mathbf{w} \rVert} = \frac{\mathbf{w} \cdot \mathbf{x} + c}{\lVert \mathbf{w} \rVert}.$$
+
+        This is the **signed distance**: its size is the distance, and its sign names the side.
+
+        Try the line $3x + 4y - 10 = 0$, with $\mathbf{w} = (3, 4)$ of length 5. At $(6, 3)$ the expression is $18 + 12 - 10 = 20$, and the signed distance is $\frac{20}{5} = 4$: four units away, on the side $\mathbf{w}$ points to. At the origin the expression is $-10$ and the signed distance $-2$: two units away, on the other side. So $\lvert c \rvert / \lVert \mathbf{w} \rVert$ is always the distance of the hyperplane from the origin, and a hyperplane passes through the origin exactly when $c = 0$.
+
+        Doubling $\mathbf{w}$ and $c$ doubles the expression at every point and leaves the hyperplane, and every distance, where it was. Multiplying both by $-1$ also keeps the hyperplane and swaps the names of its two sides.
+
+        **What a neuron does.** A neuron with weights $\mathbf{w}$ and bias $c$ fires when $\mathbf{w} \cdot \mathbf{x} + c > 0$. So it fires on one side of a hyperplane and is silent on the other. That answers the first question of the puzzle. For $\mathbf{w} = (1, 1)$ and $c = -1.5$ the edge is the line $x + y = 1.5$, and the neuron fires on the half of the plane beyond it. Of the four corners of the unit square, only $(1, 1)$ is beyond it.
+
+        A rule of this kind is called a **linear classifier**, and the hyperplane its **decision boundary**. The value $\mathbf{w} \cdot \mathbf{x} + c$ does more than decide: divided by $\lVert \mathbf{w} \rVert$ it says how far the input is from the boundary, which is a measure of how confident the decision is. Training such a classifier means turning and sliding the hyperplane until the examples of one kind are on one side and those of the other kind on the other.
+
+        **Exclusive-or.** Now the second question. Suppose some $w_1$, $w_2$ and $c$ computed exclusive-or. Then four conditions would hold at once.
+
+        | Input | Required | Condition |
+        | --- | --- | --- |
+        | $(0, 0)$ | silent | $c \le 0$ |
+        | $(1, 0)$ | fires | $w_1 + c > 0$ |
+        | $(0, 1)$ | fires | $w_2 + c > 0$ |
+        | $(1, 1)$ | silent | $w_1 + w_2 + c \le 0$ |
+
+        Add the two middle conditions: $w_1 + w_2 + 2c > 0$. Add the first and the last: $w_1 + w_2 + 2c \le 0$. The same quantity cannot be both. The supposition is false, so **no single neuron computes exclusive-or**.
+
+        The picture says the same thing. The two "yes" corners and the two "no" corners of the square sit on opposite diagonals, and no straight line has one diagonal pair on each side. The limitation is one of shape: a single neuron can only cut with a flat boundary. The remedy, combining several neurons so that their boundaries together enclose a region, is what a neural network is.
+    - question:
+        id: order-distance
+        type: order
+        system: s2
+        prompt: Put the steps in order to derive the signed distance from a point $\mathbf{x}$ to the hyperplane $\mathbf{w} \cdot \mathbf{x} + c = 0$.
+        steps:
+          - "Choose any point $\\mathbf{p}$ on the hyperplane, so that $\\mathbf{w} \\cdot \\mathbf{p} = -c$."
+          - "The distance is measured along the normal, so it is the component of $\\mathbf{x} - \\mathbf{p}$ along the unit normal $\\mathbf{w} / \\lVert \\mathbf{w} \\rVert$."
+          - "That component is $\\dfrac{\\mathbf{w} \\cdot (\\mathbf{x} - \\mathbf{p})}{\\lVert \\mathbf{w} \\rVert}$."
+          - "Expand the top: $\\mathbf{w} \\cdot \\mathbf{x} - \\mathbf{w} \\cdot \\mathbf{p}$."
+          - "Replace $\\mathbf{w} \\cdot \\mathbf{p}$ by $-c$ to get $\\dfrac{\\mathbf{w} \\cdot \\mathbf{x} + c}{\\lVert \\mathbf{w} \\rVert}$."
+        explanation: A reference point on the hyperplane is chosen first, since a distance needs something to be measured from. The distance straight across is a component along the unit normal, which is a dot product. Expanding it and using the one fact known about the reference point removes the point from the answer, which shows that the choice of point did not matter.
+        hints:
+          - A point on the hyperplane is needed before any step from it can be measured.
+          - The component is written as a dot product before it is expanded.
+          - The fact that p lies on the hyperplane is used last.
+  formal:
+    - text: |
+        **Line, parametric form.** $\{\mathbf{p} + t\,\mathbf{d} : t \in \mathbb{R}\}$ with $\mathbf{d} \neq \mathbf{0}$, in any $\mathbb{R}^n$.
+
+        **Hyperplane.** For $\mathbf{w} \neq \mathbf{0}$ in $\mathbb{R}^n$ and a number $c$, the set $\{\mathbf{x} : \mathbf{w} \cdot \mathbf{x} + c = 0\}$. The vector $\mathbf{w}$ is a **normal**: $\mathbf{w} \cdot (\mathbf{x} - \mathbf{x}') = 0$ for all $\mathbf{x}, \mathbf{x}'$ in the set. In $\mathbb{R}^2$ it is a line and in $\mathbb{R}^3$ a plane. The pairs $(\mathbf{w}, c)$ and $(k\mathbf{w}, kc)$ with $k \neq 0$ give the same hyperplane.
+
+        **Through a point.** The hyperplane with normal $\mathbf{w}$ through $\mathbf{p}$ has $c = -\,\mathbf{w} \cdot \mathbf{p}$.
+
+        **Sides.** $\mathbf{w} \cdot \mathbf{x} + c > 0$ on the side $\mathbf{w}$ points towards, and $< 0$ on the other.
+
+        **Signed distance.** $\dfrac{\mathbf{w} \cdot \mathbf{x} + c}{\lVert \mathbf{w} \rVert}$. The distance from the origin is $\dfrac{\lvert c \rvert}{\lVert \mathbf{w} \rVert}$.
+
+        **Linear classifier.** The rule "yes exactly when $\mathbf{w} \cdot \mathbf{x} + c > 0$". No linear classifier on $\mathbb{R}^2$ answers yes at $(0, 1)$ and $(1, 0)$ and no at $(0, 0)$ and $(1, 1)$.
+  drill:
+    - text: Seconds each. Dot with the normal, add the number, and read the sign.
+    - question:
+        id: drill-on-line
+        type: numeric
+        system: s1
+        prompt: |
+          What is $3x + 4y - 11$ at the point $(1, 2)$?
+        answer: "0"
+        explanation: 3 + 8 − 11. The point is on the line.
+        hints:
+          - Put in x = 1 and y = 2.
+          - 3 plus 8 minus 11.
+    - question:
+        id: drill-normal
+        type: choice
+        system: s1
+        prompt: |
+          Which vector is a normal to the line $2x - 5y + 1 = 0$?
+        options: ["$(2, 5)$", "$(5, 2)$", "$(2, -5)$", "$(1, 0)$"]
+        answer: 2
+        explanation: The coefficients of x and y, with their signs.
+        hints:
+          - Read off the coefficients of x and y.
+          - Keep the minus sign.
+    - question:
+        id: drill-direction
+        type: choice
+        system: s1
+        prompt: |
+          A line has normal vector $(2, 1)$. Which vector points along the line?
+        options: ["$(2, 1)$", "$(1, 2)$", "$(-1, 2)$", "$(4, 2)$"]
+        answer: 2
+        explanation: Its dot product with the normal is −2 + 2 = 0.
+        hints:
+          - A direction along the line is perpendicular to the normal.
+          - Find the option whose dot product with (2, 1) is 0.
+    - question:
+        id: drill-parametric
+        type: choice
+        system: s1
+        prompt: |
+          A line is $\mathbf{p} + t\,\mathbf{d}$ with $\mathbf{p} = (1, 2)$ and $\mathbf{d} = (3, 1)$. Which point is at $t = 2$?
+        options: ["$(4, 3)$", "$(7, 4)$", "$(6, 2)$", "$(5, 5)$"]
+        answer: 1
+        explanation: (1, 2) + (6, 2).
+        hints:
+          - Scale d by 2.
+          - Add the result to p.
+    - question:
+        id: drill-offset
+        type: numeric
+        system: s1
+        prompt: |
+          A line has normal $\mathbf{w} = (2, 1)$ and passes through $(0, 4)$. Written as $\mathbf{w} \cdot \mathbf{x} + c = 0$, what is $c$?
+        answer: "-4"
+        explanation: c is minus the dot product of w with the point, −(0 + 4).
+        hints:
+          - The point must satisfy the equation.
+          - Compute w · p and change its sign.
+    - question:
+        id: drill-value
+        type: numeric
+        system: s1
+        prompt: |
+          For the line $3x + 4y - 10 = 0$, what is the value of $3x + 4y - 10$ at $(2, 6)$?
+        answer: "20"
+        explanation: 6 + 24 − 10.
+        hints:
+          - Put in x = 2 and y = 6.
+          - Add 6 and 24, then subtract 10.
+    - question:
+        id: drill-signed-distance
+        type: numeric
+        system: s1
+        prompt: |
+          For the line $3x + 4y - 10 = 0$, the expression has the value 20 at a certain point. What is the signed distance of that point from the line?
+        answer: "4"
+        explanation: Divide by the length of the normal (3, 4), which is 5.
+        hints:
+          - Find the length of the normal vector.
+          - Divide the value by it.
+    - question:
+        id: drill-origin
+        type: numeric
+        system: s1
+        prompt: |
+          How far is the line $3x + 4y - 10 = 0$ from the origin?
+        answer: "2"
+        explanation: The size of c over the length of the normal, 10 over 5.
+        hints:
+          - At the origin the expression equals c.
+          - Divide its size by the length of the normal.
+    - question:
+        id: drill-side
+        type: choice
+        system: s1
+        prompt: |
+          For the line $x + y - 1.5 = 0$ with normal $\mathbf{w} = (1, 1)$, on which side is the point $(1, 1)$?
+        options: ["On the line", "On the side w points towards", "On the side w points away from", "It cannot be told"]
+        answer: 1
+        explanation: The value is 1 + 1 − 1.5 = 0.5, which is positive.
+        hints:
+          - Evaluate the expression at the point.
+          - A positive value means the side the normal points to.
+    - question:
+        id: drill-dimension
+        type: numeric
+        system: s1
+        prompt: |
+          What is the dimension of a hyperplane in $\mathbb{R}^{10}$?
+        answer: "9"
+        explanation: One equation removes one freedom.
+        hints:
+          - A hyperplane in the plane is a line, of dimension 1.
+          - Subtract 1 from the dimension of the space.
+    - question:
+        id: drill-rescale
+        type: choice
+        system: s1
+        prompt: |
+          How is the line $6x + 8y - 20 = 0$ related to the line $3x + 4y - 10 = 0$?
+        options: ["It is parallel and twice as far from the origin", "It is the same line", "It is perpendicular", "It is the same line turned over"]
+        answer: 1
+        explanation: Both the normal and the number were doubled, so exactly the same points satisfy the equation.
+        hints:
+          - Divide the first equation by 2.
+          - Do the same points satisfy both?
+    - question:
+        id: drill-through-origin
+        type: choice
+        system: s1
+        prompt: |
+          The hyperplane $\mathbf{w} \cdot \mathbf{x} + c = 0$ passes through the origin exactly when
+        options: ["$\\mathbf{w} = \\mathbf{0}$", "$c = 0$", "$c > 0$", "$\\lVert \\mathbf{w} \\rVert = 1$"]
+        answer: 1
+        explanation: At the origin the dot product is 0, so the expression equals c.
+        hints:
+          - Put x = 0 into the equation.
+          - What is left?
+    - question:
+        id: predict-sides
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          w = [3, 4]
+          c = -10
+
+          for x in [[6, 3], [0, 0], [2, 1]]:
+              print(sum([a * b for a, b in zip(w, x)]) + c)
+        output: |
+          20
+          -10
+          0
+        explanation: 18 + 12 − 10, then 0 − 10, then 6 + 4 − 10. The first point is on the side the normal points to, the second on the other side, and the third on the line.
+        hints:
+          - For each point, dot with w and add c.
+          - There is one line of output for each point.
+    - question:
+        id: predict-parametric
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          p = [0, 4]
+          d = [1, -2]
+
+          print([[a + t * b for a, b in zip(p, d)] for t in range(3)])
+        output: "[[0, 4], [1, 2], [2, 0]]"
+        explanation: For t = 0, 1, 2 the point is p + t d. Each step adds 1 to the first component and takes 2 from the second.
+        hints:
+          - range(3) gives t = 0, 1, 2.
+          - Each point is p plus t times d.
+  work:
+    - text: Slower now. For each boundary, say what its normal is before computing anything.
+    - question:
+        id: work-two-points
+        type: choice
+        system: s2
+        prompt: |
+          Which equation describes the line through $(2, 1)$ and $(5, 3)$?
+        options:
+          - "$3x + 2y - 8 = 0$"
+          - "$2x - 3y - 1 = 0$"
+          - "$2x + 3y - 7 = 0$"
+          - "$3x - 2y - 4 = 0$"
+        answer: 1
+        explanation: |
+          The direction is $(5, 3) - (2, 1) = (3, 2)$. A normal is perpendicular to it: $(2, -3)$, since $6 - 6 = 0$. Then $c = -(2, -3) \cdot (2, 1) = -(4 - 3) = -1$, giving $2x - 3y - 1 = 0$. Check the second point: $10 - 9 - 1 = 0$. The first option uses the direction itself as the normal, which gives a line at right angles to the one wanted. The last option also passes through $(2, 1)$, and fails at $(5, 3)$.
+        hints:
+          - Subtract the points to get a direction along the line.
+          - Find a vector perpendicular to that direction.
+          - Choose c so that one of the points satisfies the equation, then check the other.
+    - question:
+        id: write-signed-distance
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `signed_distance(w, c, x)`, the signed distance from the point `x` to the hyperplane $\mathbf{w} \cdot \mathbf{x} + c = 0$. The normal `w` is not the zero vector.
+        starter: |
+          import math
+
+          def signed_distance(w, c, x):
+              # Replace the next line with your own.
+              return 0.0
+
+          print(signed_distance([3, 4], -10, [6, 3]), signed_distance([3, 4], -10, [0, 0]))
+        solution: |
+          import math
+
+          def signed_distance(w, c, x):
+              value = sum([a * b for a, b in zip(w, x)]) + c
+              return value / math.sqrt(sum([a * a for a in w]))
+
+          print(signed_distance([3, 4], -10, [6, 3]), signed_distance([3, 4], -10, [0, 0]))
+        tests: |
+          def _near(got, want, what):
+              assert isinstance(got, (int, float)), what + " should be a number and you returned " + repr(got)
+              assert abs(got - want) < 1e-9, what + " should be " + str(want) + " and you returned " + repr(got)
+          _near(signed_distance([3, 4], -10, [6, 3]), 4, "signed_distance([3, 4], -10, [6, 3])")
+          _near(signed_distance([3, 4], -10, [0, 0]), -2, "signed_distance([3, 4], -10, [0, 0])")
+          _near(signed_distance([3, 4], -10, [2, 1]), 0, "The distance of a point on the line")
+          _near(signed_distance([6, 8], -20, [6, 3]), 4, "Doubling w and c describes the same line, so signed_distance([6, 8], -20, [6, 3])")
+          _near(signed_distance([-3, -4], 10, [6, 3]), -4, "Reversing w and c swaps the sides, so signed_distance([-3, -4], 10, [6, 3])")
+          _near(signed_distance([1, 0], -3, [5, 9]), 2, "signed_distance([1, 0], -3, [5, 9])")
+          _near(signed_distance([1, 2, 2], -9, [0, 0, 0]), -3, "signed_distance([1, 2, 2], -9, [0, 0, 0])")
+          _near(signed_distance([1, 2, 2], -9, [3, 6, 6]), 6, "signed_distance([1, 2, 2], -9, [3, 6, 6])")
+          _near(signed_distance([1, 1], -1.5, [1, 1]), 0.5 / 2 ** 0.5, "signed_distance([1, 1], -1.5, [1, 1])")
+          assert output.strip() == "4.0 -2.0", "The program should print 4.0 -2.0"
+        wrong:
+          - "import math\n\ndef signed_distance(w, c, x):\n    return sum([a * b for a, b in zip(w, x)]) + c\n\nprint(4.0, -2.0)\n"
+          - "import math\n\ndef signed_distance(w, c, x):\n    value = sum([a * b for a, b in zip(w, x)]) + c\n    return abs(value) / math.sqrt(sum([a * a for a in w]))\n\nprint(4.0, -2.0)\n"
+          - "import math\n\ndef signed_distance(w, c, x):\n    value = sum([a * b for a, b in zip(w, x)])\n    return value / math.sqrt(sum([a * a for a in w])) + c\n\nprint(4.0, -2.0)\n"
+          - "import math\n\ndef signed_distance(w, c, x):\n    value = sum([a * b for a, b in zip(w, x)]) + c\n    return value / sum([a * a for a in w])\n\nprint(4.0, -2.0)\n"
+          - "import math\n\ndef signed_distance(w, c, x):\n    value = sum([a * b for a, b in zip(w, x)]) + c\n    return value / math.sqrt(sum([a * a for a in x]))\n\nprint(4.0, -2.0)\n"
+        explanation: |
+          Evaluate the expression $\mathbf{w} \cdot \mathbf{x} + c$ and divide the whole of it by the length of the normal. The bias belongs inside the division, because doubling $\mathbf{w}$ and $c$ together describes the same hyperplane and must give the same distance, which one of the tests checks. The sign is kept, since it tells the side. Without the division the function returns the raw value a neuron computes, which grows with the size of the weights and is not a distance. The division by the norm is what turns a neuron's output into a statement about geometry.
+        hints:
+          - Compute the dot product of w and x, and add c.
+          - Compute the Euclidean norm of w.
+          - Divide the first by the second, keeping the sign.
+    - question:
+        id: fix-classify
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `classify(w, c, points)` should return, for each point, whether a neuron with weights `w` and bias `c` fires: `True` exactly when $\mathbf{w} \cdot \mathbf{x} + c > 0$. With the weights below it should compute "and" and print `[False, False, False, True]`. It prints `[False, True, True, True]`. Fix it.
+        starter: |
+          def classify(w, c, points):
+              return [sum([a * b for a, b in zip(w, x)]) > 0 for x in points]
+
+          print(classify([1, 1], -1.5, [[0, 0], [0, 1], [1, 0], [1, 1]]))
+        solution: |
+          def classify(w, c, points):
+              return [sum([a * b for a, b in zip(w, x)]) + c > 0 for x in points]
+
+          print(classify([1, 1], -1.5, [[0, 0], [0, 1], [1, 0], [1, 1]]))
+        tests: |
+          _square = [[0, 0], [0, 1], [1, 0], [1, 1]]
+          assert classify([1, 1], -1.5, _square) == [False, False, False, True], "With w = [1, 1] and c = -1.5 only [1, 1] is beyond the line. You returned " + repr(classify([1, 1], -1.5, _square))
+          assert classify([1, 1], -0.5, _square) == [False, True, True, True], "With c = -0.5 the neuron computes or. You returned " + repr(classify([1, 1], -0.5, _square))
+          assert classify([1, 1], 0.5, _square) == [True, True, True, True], "With c = 0.5 every corner is on the positive side. You returned " + repr(classify([1, 1], 0.5, _square))
+          assert classify([-1, -1], 1.5, _square) == [True, True, True, False], "Reversing w and c swaps the sides. You returned " + repr(classify([-1, -1], 1.5, _square))
+          assert classify([3, 4], -10, [[6, 3], [0, 0], [2, 1]]) == [True, False, False], "A point exactly on the line does not fire. You returned " + repr(classify([3, 4], -10, [[6, 3], [0, 0], [2, 1]]))
+          assert classify([1, 2, 2], -9, [[3, 6, 6], [1, 1, 1]]) == [True, False], "In three dimensions the values are 18 and -4. You returned " + repr(classify([1, 2, 2], -9, [[3, 6, 6], [1, 1, 1]]))
+          assert classify([1, 1], 0, []) == [], "With no points the answer is an empty list"
+          assert output.strip() == "[False, False, False, True]", "The program should print [False, False, False, True]"
+        wrong:
+          - "def classify(w, c, points):\n    return [sum([a * b for a, b in zip(w, x)]) > 0 for x in points]\n\nprint([False, False, False, True])\n"
+          - "def classify(w, c, points):\n    return [sum([a * b for a, b in zip(w, x)]) - c > 0 for x in points]\n\nprint([False, False, False, True])\n"
+          - "def classify(w, c, points):\n    return [sum([a * b for a, b in zip(w, x)]) + c >= 0 for x in points]\n\nprint([False, False, False, True])\n"
+          - "def classify(w, c, points):\n    return [sum([a * b for a, b in zip(w, x)]) + c < 0 for x in points]\n\nprint([False, False, False, True])\n"
+          - "def classify(w, c, points):\n    return [sum([a * b + c for a, b in zip(w, x)]) > 0 for x in points]\n\nprint([False, False, False, True])\n"
+        explanation: |
+          The bias was left out. Without it the function tests $\mathbf{w} \cdot \mathbf{x} > 0$, and the boundary is the line $x + y = 0$ through the origin, which has three of the four corners on its positive side. That is "or", and nearly so by accident. A hyperplane with no bias term is pinned to the origin and can only turn. The bias is what lets it slide to where the data need it, here to $x + y = 1.5$. It must be added once, to the finished dot product, and not once for every component.
+        hints:
+          - Which of the three arguments does the function never use?
+          - Where is the boundary when c is left out?
+          - Add c to the dot product before comparing with 0.
+    - question:
+        id: work-xor
+        type: choice
+        system: s2
+        prompt: |
+          Suppose a neuron with weights $w_1, w_2$ and bias $c$ computed exclusive-or: silent at $(0, 0)$ and $(1, 1)$, firing at $(1, 0)$ and $(0, 1)$. What contradiction follows?
+        options:
+          - "The weights would have to be equal."
+          - "From the two firing inputs, $w_1 + w_2 + 2c > 0$. From the two silent inputs, $c + (w_1 + w_2 + c) \\le 0$, the same quantity. It cannot be both positive and at most zero."
+          - "The bias would have to be zero."
+          - "There is no contradiction, and suitable weights exist."
+        answer: 1
+        explanation: |
+          Firing at $(1, 0)$ means $w_1 + c > 0$, and at $(0, 1)$ means $w_2 + c > 0$. Adding, $w_1 + w_2 + 2c > 0$. Silence at $(0, 0)$ means $c \le 0$, and at $(1, 1)$ means $w_1 + w_2 + c \le 0$. Adding, $w_1 + w_2 + 2c \le 0$. This is a proof by contradiction: the supposition leads to an impossibility, so it is false, for every choice of the three numbers at once. No amount of training can find weights that do not exist. This small result held back research on neural networks for years, until networks with a hidden layer, which can bend the boundary, were shown to be trainable.
+        hints:
+          - Write the condition each of the four inputs imposes.
+          - Add the two conditions for the firing inputs.
+          - Add the two conditions for the silent inputs and compare.
+    - question:
+        id: write-margin
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `margin(w, c, points)`. `points` is a non-empty list. Return the distance from the hyperplane $\mathbf{w} \cdot \mathbf{x} + c = 0$ to the point of the list **nearest** to it. Distances are not negative, whichever side a point is on.
+        starter: |
+          import math
+
+          def margin(w, c, points):
+              # Replace the next line with your own.
+              return 0.0
+
+          print(margin([3, 4], -10, [[6, 3], [0, 0], [4, 2]]))
+        solution: |
+          import math
+
+          def margin(w, c, points):
+              size = math.sqrt(sum([a * a for a in w]))
+              return min([abs(sum([a * b for a, b in zip(w, x)]) + c) / size for x in points])
+
+          print(margin([3, 4], -10, [[6, 3], [0, 0], [4, 2]]))
+        tests: |
+          def _near(got, want, what):
+              assert isinstance(got, (int, float)), what + " should be a number and you returned " + repr(got)
+              assert abs(got - want) < 1e-9, what + " should be " + str(want) + " and you returned " + repr(got)
+          _near(margin([3, 4], -10, [[6, 3], [0, 0], [4, 2]]), 2, "The distances are 4, 2 and 2, so margin")
+          _near(margin([3, 4], -10, [[6, 3], [-5, 0], [4, 6]]), 4, "The distances are 4, 5 and 5.2, so margin")
+          _near(margin([3, 4], -10, [[6, 3], [0, 0.5]]), 1.6, "A point on the negative side at distance 1.6 is the nearest, so margin")
+          _near(margin([3, 4], -10, [[6, 3], [2, 1]]), 0, "A point on the line gives margin")
+          _near(margin([6, 8], -20, [[6, 3], [0, 0], [4, 2]]), 2, "Doubling w and c describes the same line, so margin")
+          _near(margin([1, 1], -1.5, [[0, 0], [0, 1], [1, 0], [1, 1]]), 0.5 / 2 ** 0.5, "For the and neuron on the four corners, margin")
+          _near(margin([1, 2, 2], -9, [[3, 6, 6]]), 6, "margin([1, 2, 2], -9, [[3, 6, 6]])")
+          assert output.strip() == "2.0", "The program should print 2.0"
+        wrong:
+          - "import math\n\ndef margin(w, c, points):\n    size = math.sqrt(sum([a * a for a in w]))\n    return min([(sum([a * b for a, b in zip(w, x)]) + c) / size for x in points])\n\nprint(2.0)\n"
+          - "import math\n\ndef margin(w, c, points):\n    size = math.sqrt(sum([a * a for a in w]))\n    return max([abs(sum([a * b for a, b in zip(w, x)]) + c) / size for x in points])\n\nprint(2.0)\n"
+          - "import math\n\ndef margin(w, c, points):\n    return min([abs(sum([a * b for a, b in zip(w, x)]) + c) for x in points])\n\nprint(2.0)\n"
+          - "import math\n\ndef margin(w, c, points):\n    size = math.sqrt(sum([a * a for a in w]))\n    return min([abs(sum([a * b for a, b in zip(w, x)])) / size for x in points])\n\nprint(2.0)\n"
+          - "import math\n\ndef margin(w, c, points):\n    size = math.sqrt(sum([a * a for a in w]))\n    return abs(min([sum([a * b for a, b in zip(w, x)]) + c for x in points])) / size\n\nprint(2.0)\n"
+        explanation: |
+          For each point take the size of its signed distance, and return the smallest. The absolute value must be taken **before** the minimum. Otherwise a point far away on the negative side, with a large negative signed distance, would be picked as the "smallest". This number is called the **margin** of a classifier on a set of examples: how close the nearest example comes to the decision boundary. Of two boundaries that separate the same examples, the one with the larger margin leaves more room for error, and choosing the boundary with the largest possible margin is the idea behind the support vector machine.
+        hints:
+          - Compute the norm of w once.
+          - For each point, compute the value w · x + c, take its absolute value, and divide by the norm.
+          - Return the smallest of these.
+    - question:
+        id: work-plane
+        type: numeric
+        system: s2
+        prompt: |
+          How far is the plane $x + 2y + 2z - 9 = 0$ from the origin?
+        answer: "3"
+        explanation: |
+          The normal is $\mathbf{w} = (1, 2, 2)$, of length $\sqrt{1 + 4 + 4} = 3$. At the origin the expression is $-9$, so the signed distance is $\frac{-9}{3} = -3$ and the distance is 3. The nearest point of the plane to the origin lies along the normal: it is $3\,\hat{\mathbf{w}} = (1, 2, 2)$, and indeed $1 + 4 + 4 - 9 = 0$. Three dimensions needed no new idea, only one more term in each sum.
+        hints:
+          - Read off the normal vector and find its length.
+          - Evaluate the expression at the origin.
+          - Divide the size of that value by the length of the normal.
+    - question:
+        id: work-meet
+        type: choice
+        system: s2
+        prompt: |
+          In the plane, the lines $x + y - 3 = 0$ and $x - y - 1 = 0$ have normals $(1, 1)$ and $(1, -1)$. What can be said about the points lying on both?
+        options:
+          - "There are none, because the normals are perpendicular."
+          - "There is exactly one, $(2, 1)$. Each equation is a hyperplane, and solving simultaneous equations is finding where hyperplanes meet."
+          - "There are infinitely many."
+          - "It depends on the lengths of the normals."
+        answer: 1
+        explanation: |
+          Adding the equations gives $2x - 4 = 0$, so $x = 2$, and then $y = 1$. Check: $2 + 1 - 3 = 0$ and $2 - 1 - 1 = 0$. The normals point in different directions, so the lines are not parallel and cross once. Had one normal been a multiple of the other, the lines would have been parallel, with no common point, or the same line, with infinitely many. Every system of linear equations is a list of hyperplanes, and its solutions are the points that lie on all of them. Whether the normals are multiples and combinations of one another decides how many solutions there are, and that question about the normals is the subject of the next lesson.
+        hints:
+          - Add the two equations to remove y.
+          - Find x, then y.
+          - When would two lines in the plane fail to meet in exactly one point?
+  connections:
+    - text: |
+        The puzzle asked where in the plane a neuron fires, and whether one neuron can compute exclusive-or. The neuron fires where $\mathbf{w} \cdot \mathbf{x} + c$ is positive. The points where that expression is zero share one shadow on $\mathbf{w}$, so they form a line at right angles to $\mathbf{w}$, and the neuron fires on the side $\mathbf{w}$ points towards. The weights turn the boundary and the bias slides it. Exclusive-or asks for two opposite corners of a square on one side and the other two on the other, and adding the four conditions in pairs showed that no weights can do it.
+
+        Two descriptions of a line came out of this. A point and a direction, $\mathbf{p} + t\,\mathbf{d}$, produces points. A normal and a number, $\mathbf{w} \cdot \mathbf{x} + c = 0$, tests them, and it is the second that grows with the dimension, into planes and hyperplanes that cut their space in two. The component from [[m4.projection-onto-a-vector]] turned the value of the expression into a signed distance, $\dfrac{\mathbf{w} \cdot \mathbf{x} + c}{\lVert \mathbf{w} \rVert}$.
+
+        You will stand on this ground often. A linear classifier is a hyperplane, and learning one is the subject of [[l2.the-perceptron-and-its-convergence-theorem]]. Each unit of a neural network is the neuron of today, as [[l5.the-neuron]] will take up, and a network escapes the exclusive-or limit by combining many flat cuts. A system of linear equations is a collection of hyperplanes, and [[m5.elimination-and-linear-systems]] finds where they meet.
+
+        The last question of the work section left something open. Two lines in the plane meet in exactly one point unless one normal is a multiple of the other. With three planes in space, or a hundred hyperplanes in a hundred dimensions, the right condition is subtler: no normal may be a **combination** of the others. A vector that is a combination of the others adds no new direction and no new information. Telling when that happens is the final lesson of this cluster, [[m4.linear-independence]].

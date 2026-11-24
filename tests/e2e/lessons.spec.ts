@@ -186,6 +186,41 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   await expect(total).toContainText("The area gathered from 0 to x = 2 is A(x) = 4. At this moment A is changing at the rate f(2) = 1. The rate is positive");
   await total.getByRole("slider", { name: "x in quarters" }).fill("12");
   await expect(total).toContainText("A(x) = 4.5. At this moment A is changing at the rate f(3) = 0. The rate is zero");
+  // Vectors: arrows and lists, sums, spans, dot products, norms, projections and lines from a normal vector.
+  const arrow = page.getByRole("figure").filter({ hasText: "An arrow and a list" });
+  await expect(arrow).toContainText("The vector (3, 2), drawn from (0, 0) to (3, 2): 3 right and 2 up. Its length is 3.6056.");
+  await arrow.getByRole("button", { name: "Move the arrow" }).click();
+  await expect(arrow).toContainText("drawn from (1, 1) to (4, 3): 3 right and 2 up. Its length is 3.6056. It has been moved, and it is still the same vector");
+  const tipToTail = page.getByRole("figure").filter({ hasText: "Adding tip to tail" });
+  await expect(tipToTail).toContainText("a = (2, 1) and b = (1, 1). Walk along a, then along b: you arrive at a + b = (2 + 1, 1 + 1) = (3, 2).");
+  await tipToTail.getByRole("slider", { name: "scale of b in halves" }).fill("-2");
+  await expect(tipToTail).toContainText("so −b = (−1, −1). Walk along a, then along −b: you arrive at a + (−b) = (2 − 1, 1 − 1) = (1, 0).");
+  await tipToTail.getByRole("button", { name: "Swap the order" }).click();
+  await expect(tipToTail).toContainText("Walk along −b, then along a: you arrive at a + (−b)");
+  const span = page.getByRole("figure").filter({ hasText: "What two vectors can reach" });
+  await expect(span).toContainText("The combination 1a + 1b is (2, 1.5). Because a and b point in different directions");
+  await span.getByRole("button", { name: "Put b along a" }).click();
+  await expect(span).toContainText("b = (−0.75, −0.25). The combination 1a + 1b is (0.75, 0.25). Here b is −0.5 times a");
+  const shadow = page.getByRole("figure").filter({ hasText: "The dot product and the shadow" });
+  await expect(shadow).toContainText("with 45° between them. a · b = 3 × 1.4142 + 0 × 1.4142 = 4.2426.");
+  await shadow.getByRole("slider", { name: "angle of b in degrees" }).fill("90");
+  await expect(shadow).toContainText("a · b = 3 × 0 + 0 × 2 = 0.");
+  await expect(shadow).toContainText("The dot product is zero: b is at a right angle to a");
+  await shadow.getByRole("slider", { name: "angle of b in degrees" }).fill("135");
+  await expect(shadow).toContainText("The dot product is negative: b points partly against a.");
+  const norms = page.getByRole("figure").filter({ hasText: "Three ways to measure length" });
+  await expect(norms).toContainText("Its Euclidean norm ‖x‖₂ is √(1.5² + 1²) = 1.8028.");
+  await expect(norms).toContainText("Euclidean 1.8028, taxicab 2.5, maximum 1.5.");
+  await norms.getByRole("button", { name: "Change norm" }).click();
+  await expect(norms).toContainText("Its taxicab norm ‖x‖₁ is 1.5 + 1 = 2.5. With this norm the points at distance 1 from the origin form a diamond.");
+  const projection = page.getByRole("figure").filter({ hasText: "Projection onto a line" });
+  await expect(projection).toContainText("a · b = 5 and a · a = 10, so the projection of b onto a is 0.5 times a, which is p = (1.5, 0.5). What is left over, b − p = (−0.5, 1.5)");
+  await expect(projection).toContainText("the distance is 1.5811.");
+  const boundary = page.getByRole("figure").filter({ hasText: "A line from a vector and a number" });
+  await expect(boundary).toContainText("The line 1x + 2y − 2 = 0. The vector w = (1, 2) is at right angles to it. At the point (2, 1) the expression is 1 × 2 + 2 × 1 − 2 = 2, which is positive");
+  await expect(boundary).toContainText("at a distance of 2 ÷ 2.2361 = 0.8944 from the line.");
+  await boundary.getByRole("slider", { name: "offset in halves" }).fill("-8");
+  await expect(boundary).toContainText("1 × 2 + 2 × 1 − 4 = 0, which is zero, so the point is on the line.");
   await expect(page.locator(".prose-lesson img")).toHaveCount(0);
 
   // Wrong, then a hint, then right. Fractions and words are handled by the grader.

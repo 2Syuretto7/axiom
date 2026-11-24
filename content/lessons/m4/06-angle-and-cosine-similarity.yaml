@@ -1,0 +1,624 @@
+concept: m4.angle-and-cosine-similarity
+minutes: 85
+claim: You can define the angle between two vectors in any number of dimensions and say why the definition is allowed, compute cosine similarity and explain why it ignores length, relate it to distance through the law of cosines, and use it to find which stored vector is most like a query.
+recalls: [m4.norms-and-distance]
+uses: [m4.dot-product, m4.vector-addition-and-scaling, m4.vectors-as-arrows-and-as-lists, m2.trigonometric-functions-on-the-unit-circle, m2.composition-and-inverses, m3.direct-proof, e0.functions, e0.loops, e0.lists-and-tuples, e0.booleans-and-conditionals, e0.dictionaries-and-sets, e1.comprehensions-and-iterators, e1.modules-and-imports]
+leads: [m4.projection-onto-a-vector, m4.lines-planes-and-hyperplanes, m4.linear-independence]
+starter: |
+  # Scratch space. Three news reports, as counts of the words "match" and "election".
+  # Which report is closest to a?
+  import math
+
+  reports = {"a": [4, 1], "b": [8, 2], "c": [1, 4]}
+
+  def distance(u, v):
+      return math.sqrt(sum([(p - q) ** 2 for p, q in zip(u, v)]))
+
+  print("a to b", distance(reports["a"], reports["b"]))
+  print("a to c", distance(reports["a"], reports["c"]))
+parts:
+  recall:
+    - text: |
+        [[m4.norms-and-distance]] proved the Cauchy-Schwarz inequality, $\lvert \mathbf{u} \cdot \mathbf{v} \rvert \le \lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert$, and ended with a doubt: distance can be a poor guide to how alike two vectors are. Today both threads are tied together. Three quick pulls first.
+    - question:
+        id: recall-bound
+        type: numeric
+        system: s1
+        concepts: [m4.norms-and-distance]
+        prompt: |
+          $\lVert \mathbf{u} \rVert = 2$ and $\lVert \mathbf{v} \rVert = 5$. What is the largest value $\mathbf{u} \cdot \mathbf{v}$ can take?
+        answer: "10"
+        explanation: By Cauchy-Schwarz the dot product is at most the product of the lengths.
+        hints:
+          - Use the Cauchy-Schwarz inequality.
+          - Multiply the two lengths.
+    - question:
+        id: recall-unit
+        type: choice
+        system: s1
+        concepts: [m4.vector-addition-and-scaling]
+        prompt: |
+          Which is the unit vector in the direction of $(3, 4)$?
+        options: ["$(3, 4)$", "$(0.6, 0.8)$", "$(1, 1)$", "$(0.75, 1)$"]
+        answer: 1
+        explanation: Divide by the length, which is 5.
+        hints:
+          - Find the length of (3, 4).
+          - Divide each component by it.
+    - question:
+        id: recall-cos-sixty
+        type: numeric
+        system: s1
+        concepts: [m2.trigonometric-functions-on-the-unit-circle]
+        prompt: |
+          What is $\cos 60^\circ$?
+        answer: "1/2"
+        explanation: On the unit circle, the point at 60° lies half a unit across.
+        hints:
+          - The cosine is the distance across on the unit circle.
+          - It is a simple fraction.
+  puzzle:
+    - text: |
+        Three news reports are turned into vectors by counting two words in each: how often "match" appears, and how often "election" appears.
+
+        | Report | "match" | "election" | Vector |
+        | --- | --- | --- | --- |
+        | a | 4 | 1 | $(4, 1)$ |
+        | b | 8 | 2 | $(8, 2)$ |
+        | c | 1 | 4 | $(1, 4)$ |
+
+        Report a is about sport. Report b is about sport too: it has exactly the same proportions of the two words and is simply twice as long. Report c is about politics.
+
+        **Which report is most like a?** Anyone would say b. Now run the starter and ask distance. From a to b is $\sqrt{17} \approx 4.12$. From a to c is $\sqrt{18} \approx 4.24$. Distance says that the politics report is very nearly as close to a as the sports report is. Make b three times as long as a, $(12, 3)$, and distance puts it at 8.25, far further away than c.
+
+        Distance is not wrong. It is answering the question "how far apart are the tips of the arrows", and a long arrow's tip is far from a short arrow's tip even when the two point exactly the same way. For the reports, length measures only how much was written. What they are about lives in the **proportions** of the words, which is to say in the **direction** of the arrow.
+
+        **How do you compare two vectors by direction alone? And what can "direction" even mean for a vector with a thousand components, which no one can draw?**
+  intuition:
+    - text: |
+        Two arrows from the same point differ in direction by the **angle** between them. An angle of 0° means they point the same way, 90° means they have nothing in common, and 180° means they are opposed. Angle is exactly the measure the puzzle wants: it does not care how long either arrow is.
+
+        You already hold a quantity that responds to angle. The dot product is one length times the other's shadow, $\mathbf{u} \cdot \mathbf{v} = \lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert\cos\theta$. Its trouble is that it responds to length as well. In the figure, keep the angle fixed and make $\mathbf{b}$ longer.
+    - figure: dot-product
+      props: { angle: 60, length: 2 }
+    - text: |
+        The dot product climbs from 3 to 4.5 to 6 as $\mathbf{b}$ grows, though the direction of $\mathbf{b}$ never changed. The angle stays at 60° throughout.
+
+        So remove the lengths. Divide the dot product by both of them, and what remains is the cosine of the angle and nothing else:
+
+        $$\frac{\mathbf{u} \cdot \mathbf{v}}{\lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert} = \cos\theta.$$
+
+        Another way to see the same thing: shrink or stretch each arrow until it has length 1, so that every tip lies on the unit circle. Nothing is left of an arrow then except its direction. The dot product of two such unit vectors is $1 \times 1 \times \cos\theta$, the cosine itself.
+
+        This number is 1 when the arrows agree, 0 when they are at right angles, and $-1$ when they are opposed. And every ingredient in it, the dot product and the two norms, is computed from components by formulas that work for any number of components. That is the way into spaces that cannot be drawn.
+  derivation:
+    - text: |
+        **The angle in the plane.** For two non-zero vectors in the plane, the lesson on the dot product showed that $\mathbf{u} \cdot \mathbf{v} = \lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert\cos\theta$. Solve for the cosine:
+
+        $$\cos\theta = \frac{\mathbf{u} \cdot \mathbf{v}}{\lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert}.$$
+
+        Here both sides already mean something, and the equation is a fact. Try it on $\mathbf{u} = (1, 0)$ and $\mathbf{v} = (1, 1)$, which are plainly 45° apart. The dot product is 1, the lengths are 1 and $\sqrt{2}$, and the ratio is $\frac{1}{\sqrt{2}} \approx 0.707$, which is $\cos 45^\circ$.
+
+        **From a cosine back to an angle.** To recover $\theta$ from its cosine you need to run the cosine backwards. The cosine as a whole has no inverse, since many angles share each value. But between 0° and 180° it falls steadily from 1 to $-1$ and takes each value in between exactly once. On that range it has an inverse, the **arccosine**:
+
+        $$\theta = \arccos c \quad\text{means}\quad \cos\theta = c \ \text{ and } \ 0^\circ \le \theta \le 180^\circ.$$
+
+        So $\arccos 1 = 0^\circ$, $\arccos \frac{1}{2} = 60^\circ$, $\arccos 0 = 90^\circ$ and $\arccos(-1) = 180^\circ$. In Python it is `math.acos`, which answers in radians, and `math.degrees` converts.
+
+        ```python
+        import math
+
+        print(math.degrees(math.acos(0)))
+        ```
+
+        This shows `90.0`. The arccosine accepts only numbers from $-1$ to 1, because no angle has a cosine outside that range.
+
+        **The angle in any dimension.** In $\mathbb{R}^{1000}$ there is no picture and no protractor, so "the angle between $\mathbf{u}$ and $\mathbf{v}$" has no meaning yet. Give it one, by turning the fact from the plane into a **definition**. For non-zero vectors in $\mathbb{R}^n$, the angle between them is
+
+        $$\theta = \arccos\!\left(\frac{\mathbf{u} \cdot \mathbf{v}}{\lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert}\right).$$
+
+        A definition must make sense for every input it claims to cover, and here there is something to check. The arccosine refuses any number outside $[-1, 1]$. What guarantees that the ratio never strays outside? The Cauchy-Schwarz inequality, exactly: $\lvert \mathbf{u} \cdot \mathbf{v} \rvert \le \lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert$, so dividing by the positive number $\lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert$ gives
+
+        $$-1 \le \frac{\mathbf{u} \cdot \mathbf{v}}{\lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert} \le 1.$$
+
+        That is why the inequality was proved without a picture. It is the licence for angles in every dimension. The definition agrees with the old meaning in the plane, and it keeps the property proved earlier: the angle is 90° exactly when the dot product is 0.
+
+        Only the zero vector is left out. It has no length to divide by, and no direction either.
+    - question:
+        id: derivation-licence
+        type: choice
+        system: s2
+        prompt: |
+          The angle between two non-zero vectors of $\mathbb{R}^n$ is defined as the arccosine of $\dfrac{\mathbf{u} \cdot \mathbf{v}}{\lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert}$. Why is this definition allowed for every such pair?
+        options:
+          - "Because any number has an arccosine."
+          - "Because the Cauchy-Schwarz inequality puts the ratio between $-1$ and 1, which is exactly the set of numbers that have an arccosine, and between 0° and 180° each of them is the cosine of exactly one angle."
+          - "Because the vectors can always be drawn and the angle measured."
+          - "Because the dot product is never negative."
+        answer: 1
+        explanation: |
+          A definition by formula is only as good as the formula's ability to produce an answer. The arccosine is defined on $[-1, 1]$ and nowhere else, so the definition needs a guarantee that the ratio lands there, for all vectors in all dimensions. Cauchy-Schwarz is that guarantee. The second half matters too: restricting to angles from 0° to 180° makes the answer unique, since the cosine falls steadily over that range and never repeats a value.
+        hints:
+          - Which numbers have an arccosine?
+          - Which inequality bounds the dot product by the product of the lengths?
+          - Why must the angle be restricted to one range?
+    - text: |
+        **Cosine similarity.** Often the angle itself is not needed, and its cosine is used directly as a score of likeness. The **cosine similarity** of two non-zero vectors is
+
+        $$\operatorname{sim}(\mathbf{u}, \mathbf{v}) = \frac{\mathbf{u} \cdot \mathbf{v}}{\lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert}.$$
+
+        | Value | Meaning |
+        | --- | --- |
+        | 1 | same direction: one is a positive multiple of the other |
+        | between 0 and 1 | partly aligned |
+        | 0 | perpendicular: nothing in common |
+        | between $-1$ and 0 | partly opposed |
+        | $-1$ | opposite directions |
+
+        The ends of the table are the equality case of Cauchy-Schwarz, which holds exactly when one vector is a multiple of the other.
+
+        *It ignores length.* Multiply $\mathbf{u}$ by a positive number $c$. The dot product is multiplied by $c$, and so is $\lVert \mathbf{u} \rVert$, and the two cancel:
+
+        $$\operatorname{sim}(c\,\mathbf{u}, \mathbf{v}) = \frac{c\,(\mathbf{u} \cdot \mathbf{v})}{c\,\lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert} = \operatorname{sim}(\mathbf{u}, \mathbf{v}).$$
+
+        For a negative $c$ the norm is multiplied by $\lvert c \rvert$ while the dot product is multiplied by $c$, so the similarity changes sign: reversing an arrow turns agreement into opposition.
+
+        *It is the dot product of the unit vectors.* Write $\hat{\mathbf{u}} = \mathbf{u} / \lVert \mathbf{u} \rVert$ and $\hat{\mathbf{v}} = \mathbf{v} / \lVert \mathbf{v} \rVert$. Then
+
+        $$\operatorname{sim}(\mathbf{u}, \mathbf{v}) = \hat{\mathbf{u}} \cdot \hat{\mathbf{v}}.$$
+
+        This is how it is used at scale. Scale every stored vector to length 1 once, and afterwards each comparison is a single dot product.
+
+        **The reports again.** $\mathbf{a} = (4, 1)$, $\mathbf{b} = (8, 2)$, $\mathbf{c} = (1, 4)$, with $\lVert \mathbf{a} \rVert = \lVert \mathbf{c} \rVert = \sqrt{17}$ and $\lVert \mathbf{b} \rVert = 2\sqrt{17}$.
+
+        $$\operatorname{sim}(\mathbf{a}, \mathbf{b}) = \frac{32 + 2}{\sqrt{17} \times 2\sqrt{17}} = \frac{34}{34} = 1, \qquad \operatorname{sim}(\mathbf{a}, \mathbf{c}) = \frac{4 + 4}{\sqrt{17} \times \sqrt{17}} = \frac{8}{17} \approx 0.47.$$
+
+        The two sports reports are identical in direction, 0° apart. The politics report is $\arccos\frac{8}{17} \approx 62^\circ$ away. Making b ten times longer would change nothing.
+
+        Word counts are never negative, so the dot product of two count vectors is never negative, and neither is their similarity. Such vectors are never more than 90° apart. Two reports with no words in common are perpendicular, with similarity 0.
+
+        **How distance and angle are related.** Expand the squared distance with the rules of the dot product:
+
+        $$\lVert \mathbf{u} - \mathbf{v} \rVert^2 = \lVert \mathbf{u} \rVert^2 - 2\,\mathbf{u} \cdot \mathbf{v} + \lVert \mathbf{v} \rVert^2 = \lVert \mathbf{u} \rVert^2 + \lVert \mathbf{v} \rVert^2 - 2\,\lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert\cos\theta.$$
+
+        This is the **law of cosines**: in a triangle with two sides of lengths $\lVert \mathbf{u} \rVert$ and $\lVert \mathbf{v} \rVert$ meeting at an angle $\theta$, it gives the third side. At $\theta = 90^\circ$ the last term vanishes and Pythagoras's theorem is left. Distance, then, mixes two things: the two lengths, and the angle.
+
+        Remove the lengths and only the angle is left. For **unit** vectors,
+
+        $$\lVert \hat{\mathbf{u}} - \hat{\mathbf{v}} \rVert^2 = 1 + 1 - 2\cos\theta = 2 - 2\cos\theta.$$
+
+        As the similarity rises, the distance falls, and the other way round. So once vectors are scaled to length 1, "nearest in distance" and "highest in cosine similarity" pick out the same vector. The quarrel in the puzzle was never between distance and angle. It was about whether length should count.
+
+        **Many dimensions.** In $\mathbb{R}^3$, take a corner of a cube at the origin. An edge runs along $(1, 0, 0)$, and the long diagonal through the cube along $(1, 1, 1)$. The angle between them has cosine $\frac{1}{1 \times \sqrt{3}} \approx 0.577$, about 55°. In $\mathbb{R}^n$ the same calculation gives $\frac{1}{\sqrt{n}}$, which shrinks towards 0 as $n$ grows: in a space of many dimensions the diagonal is almost perpendicular to every edge. There is a great deal of room there for vectors to be nearly perpendicular to one another, and a similarity far from 0 is correspondingly informative.
+
+        This is put to work constantly. Modern language models represent each word, sentence or document as a vector with hundreds or thousands of components, an **embedding**, arranged so that related meanings point in similar directions. To find the documents relevant to a question, turn the question into a vector and return the stored vectors with the highest cosine similarity to it.
+
+        **Two cautions.** First, the similarity is undefined when either vector is zero, and code must decide what to return then. Second, arithmetic with floats can produce a ratio a hair above 1, such as 1.0000000000000002, for two parallel vectors. `math.acos` rejects it. A careful angle function first pushes the ratio back into $[-1, 1]$ with `max(-1, min(1, ratio))`.
+    - question:
+        id: order-unit-distance
+        type: order
+        system: s2
+        prompt: Put the steps in order to show that for unit vectors $\lVert \hat{\mathbf{u}} - \hat{\mathbf{v}} \rVert^2 = 2 - 2\cos\theta$.
+        steps:
+          - "Write the squared length as a dot product: $\\lVert \\hat{\\mathbf{u}} - \\hat{\\mathbf{v}} \\rVert^2 = (\\hat{\\mathbf{u}} - \\hat{\\mathbf{v}}) \\cdot (\\hat{\\mathbf{u}} - \\hat{\\mathbf{v}})$."
+          - "Expand: $\\hat{\\mathbf{u}} \\cdot \\hat{\\mathbf{u}} - 2\\,\\hat{\\mathbf{u}} \\cdot \\hat{\\mathbf{v}} + \\hat{\\mathbf{v}} \\cdot \\hat{\\mathbf{v}}$."
+          - "Each vector has length 1, so $\\hat{\\mathbf{u}} \\cdot \\hat{\\mathbf{u}} = \\hat{\\mathbf{v}} \\cdot \\hat{\\mathbf{v}} = 1$."
+          - "For unit vectors $\\hat{\\mathbf{u}} \\cdot \\hat{\\mathbf{v}} = 1 \\times 1 \\times \\cos\\theta$."
+          - "So the squared distance is $1 - 2\\cos\\theta + 1 = 2 - 2\\cos\\theta$."
+        explanation: A squared length is a dot product of a vector with itself, and that is what lets it be expanded. The two outer terms are the squared lengths, both 1. The middle term is the dot product of two unit vectors, which is the cosine alone. Collecting the terms gives the result.
+        hints:
+          - A squared length must be written as a dot product before it can be expanded.
+          - Use the lengths before using the angle.
+          - The final line collects three terms.
+  formal:
+    - text: |
+        **Arccosine.** For $-1 \le c \le 1$, $\arccos c$ is the one angle $\theta$ with $0^\circ \le \theta \le 180^\circ$ and $\cos\theta = c$.
+
+        **Angle.** For non-zero $\mathbf{u}, \mathbf{v} \in \mathbb{R}^n$, $\ \theta = \arccos\dfrac{\mathbf{u} \cdot \mathbf{v}}{\lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert}$. The ratio lies in $[-1, 1]$ by the Cauchy-Schwarz inequality.
+
+        **Cosine similarity.** $\operatorname{sim}(\mathbf{u}, \mathbf{v}) = \dfrac{\mathbf{u} \cdot \mathbf{v}}{\lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert} = \hat{\mathbf{u}} \cdot \hat{\mathbf{v}}$. It is symmetric, lies in $[-1, 1]$, and satisfies $\operatorname{sim}(c\,\mathbf{u}, \mathbf{v}) = \operatorname{sim}(\mathbf{u}, \mathbf{v})$ for $c > 0$ and $-\operatorname{sim}(\mathbf{u}, \mathbf{v})$ for $c < 0$. It is 1 exactly when $\mathbf{v}$ is a positive multiple of $\mathbf{u}$, and $-1$ exactly when it is a negative multiple.
+
+        **Law of cosines.** $\lVert \mathbf{u} - \mathbf{v} \rVert^2 = \lVert \mathbf{u} \rVert^2 + \lVert \mathbf{v} \rVert^2 - 2\,\lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert\cos\theta$.
+
+        **Unit vectors.** $\lVert \hat{\mathbf{u}} - \hat{\mathbf{v}} \rVert^2 = 2 - 2\cos\theta$, so among unit vectors the nearest is the most similar.
+  drill:
+    - text: Seconds each. Dot product on top, the two lengths underneath.
+    - question:
+        id: drill-perpendicular
+        type: numeric
+        system: s1
+        prompt: |
+          What is the cosine similarity of $(1, 0)$ and $(0, 1)$?
+        answer: "0"
+        explanation: The dot product is 0. The vectors are at a right angle.
+        hints:
+          - Compute the dot product first.
+          - A fraction with 0 on top is 0.
+    - question:
+        id: drill-parallel
+        type: numeric
+        system: s1
+        prompt: |
+          What is the cosine similarity of $(3, 4)$ and $(6, 8)$?
+        answer: "1"
+        explanation: The second is twice the first, so they point the same way. Check, 50 divided by 5 × 10.
+        hints:
+          - How is the second vector related to the first?
+          - Vectors in the same direction have angle 0 between them.
+    - question:
+        id: drill-opposite
+        type: numeric
+        system: s1
+        prompt: |
+          What is the cosine similarity of $(1, 2)$ and $(-1, -2)$?
+        answer: "-1"
+        explanation: The second is the first reversed. The angle is 180°.
+        hints:
+          - How is the second vector related to the first?
+          - What is the cosine of 180°?
+    - question:
+        id: drill-from-parts
+        type: numeric
+        system: s1
+        prompt: |
+          $\mathbf{u} \cdot \mathbf{v} = 6$, $\lVert \mathbf{u} \rVert = 3$ and $\lVert \mathbf{v} \rVert = 4$. What is the cosine of the angle between them?
+        answer: "1/2"
+        explanation: 6 divided by 3 × 4.
+        hints:
+          - Divide the dot product by the product of the lengths.
+          - Simplify the fraction.
+    - question:
+        id: drill-angle-sixty
+        type: numeric
+        system: s1
+        unit: degrees
+        prompt: |
+          The cosine of the angle between two vectors is $\frac{1}{2}$. What is the angle?
+        answer: "60"
+        explanation: The arccosine of one half.
+        hints:
+          - Which angle between 0° and 180° has cosine one half?
+          - You met it in the recall questions.
+    - question:
+        id: drill-angle-zero-dot
+        type: numeric
+        system: s1
+        unit: degrees
+        prompt: |
+          Two non-zero vectors in $\mathbb{R}^{50}$ have dot product 0. What is the angle between them?
+        answer: "90"
+        explanation: The ratio is 0 and the arccosine of 0 is a right angle, in any dimension.
+        hints:
+          - The cosine of the angle is the dot product over the lengths.
+          - Which angle has cosine 0?
+    - question:
+        id: drill-reports
+        type: numeric
+        system: s1
+        prompt: |
+          What is the cosine similarity of $(4, 1)$ and $(1, 4)$, as a fraction?
+        answer: "8/17"
+        explanation: The dot product is 4 + 4, and each vector has squared length 16 + 1, so the product of the lengths is that same number.
+        hints:
+          - The dot product is 4 + 4.
+          - Both vectors have the same length, so the product of the lengths is the squared length of one of them.
+    - question:
+        id: drill-scale
+        type: numeric
+        system: s1
+        prompt: |
+          $\operatorname{sim}(\mathbf{u}, \mathbf{v}) = 0.3$. What is $\operatorname{sim}(5\mathbf{u}, \mathbf{v})$?
+        answer: "0.3"
+        explanation: A positive multiple changes the length and not the direction.
+        hints:
+          - Scaling multiplies the top and the bottom by the same number.
+          - The direction of 5u is the direction of u.
+    - question:
+        id: drill-reverse
+        type: numeric
+        system: s1
+        prompt: |
+          $\operatorname{sim}(\mathbf{u}, \mathbf{v}) = 0.3$. What is $\operatorname{sim}(-\mathbf{u}, \mathbf{v})$?
+        answer: "-0.3"
+        explanation: Reversing one vector changes the sign of the dot product and leaves the lengths alone.
+        hints:
+          - What happens to the dot product when u is reversed?
+          - The lengths do not change.
+    - question:
+        id: drill-unit-dot
+        type: numeric
+        system: s1
+        prompt: |
+          Two unit vectors are 60° apart. What is their dot product?
+        answer: "1/2"
+        explanation: For unit vectors the dot product is the cosine itself.
+        hints:
+          - Both lengths are 1.
+          - What is the cosine of 60°?
+    - question:
+        id: drill-unit-distance
+        type: numeric
+        system: s1
+        prompt: |
+          Two unit vectors are perpendicular. What is the **square** of the distance between them?
+        answer: "2"
+        explanation: 2 − 2 cos 90° = 2. It is Pythagoras with two sides of length 1.
+        hints:
+          - Use 2 − 2 cos θ.
+          - The cosine of a right angle is 0.
+    - question:
+        id: drill-counts
+        type: choice
+        system: s1
+        prompt: |
+          Two non-zero vectors of word counts have no negative components. What can be said about the angle between them?
+        options: ["It is exactly 90°", "It is at most 90°", "It is at least 90°", "It can be anything up to 180°"]
+        answer: 1
+        explanation: The dot product is a sum of products of non-negative numbers, so the cosine is not negative.
+        hints:
+          - Can the dot product be negative?
+          - For which angles is the cosine not negative?
+    - question:
+        id: predict-similarity
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          import math
+
+          u = [3, 4]
+          v = [4, 3]
+          top = sum([a * b for a, b in zip(u, v)])
+          print(top / (math.sqrt(sum([a * a for a in u])) * math.sqrt(sum([b * b for b in v]))))
+        output: "0.96"
+        explanation: The dot product is 12 + 12 = 24 and both lengths are 5.0, so the result is 24 / 25.0.
+        hints:
+          - The dot product is 12 + 12.
+          - Both vectors have length 5.
+    - question:
+        id: predict-angle
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          import math
+
+          print(round(math.degrees(math.acos(0.5))), round(math.degrees(math.acos(-1))))
+        output: "60 180"
+        explanation: The arccosine of one half is 60° and of minus one is 180°. `math.acos` answers in radians, `math.degrees` converts, and `round` with one argument gives a whole number.
+        hints:
+          - Which angle has cosine one half?
+          - Which angle has cosine minus one?
+  work:
+    - text: Slower now. For each, decide first whether length should count.
+    - question:
+        id: work-reports
+        type: choice
+        system: s2
+        prompt: |
+          Report a is $(4, 1)$, report c is $(1, 4)$, and report d is $(40, 10)$, a very long report with the proportions of a. Which statement is correct?
+        options:
+          - "By distance and by cosine similarity alike, d is the closer to a."
+          - "By distance c is far closer to a, about 4.24 against about 37.1. By cosine similarity d is a perfect match, 1 against about 0.47."
+          - "By distance and by cosine similarity alike, c is the closer to a."
+          - "Cosine similarity cannot compare vectors of different lengths."
+        answer: 1
+        explanation: |
+          $\mathbf{d} - \mathbf{a} = (36, 9)$, of length $9\sqrt{17} \approx 37.1$, while $\mathbf{c} - \mathbf{a} = (-3, 3)$ has length $\sqrt{18} \approx 4.24$. Distance sees the long report as remote. But $\mathbf{d} = 10\,\mathbf{a}$, so the similarity is 1, while for c it is $\frac{8}{17}$. If the vectors record what a report is about, length is a nuisance and the cosine is the right comparison. If length carries meaning, for example when the components are measurements of a physical object, discarding it would be the mistake.
+        hints:
+          - Compute d − a and c − a and their lengths.
+          - How is d related to a?
+          - A positive multiple has similarity 1.
+    - question:
+        id: write-cosine
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `cosine(u, v)`, the cosine similarity of two vectors of the same dimension. If either vector is the zero vector, return `0.0`.
+        starter: |
+          import math
+
+          def cosine(u, v):
+              # Replace the next line with your own.
+              return 0.0
+
+          print(cosine([3, 4], [4, 3]))
+        solution: |
+          import math
+
+          def cosine(u, v):
+              top = sum([a * b for a, b in zip(u, v)])
+              size_u = math.sqrt(sum([a * a for a in u]))
+              size_v = math.sqrt(sum([b * b for b in v]))
+              if size_u == 0 or size_v == 0:
+                  return 0.0
+              return top / (size_u * size_v)
+
+          print(cosine([3, 4], [4, 3]))
+        tests: |
+          def _near(got, want, what):
+              assert isinstance(got, (int, float)), what + " should be a number and you returned " + repr(got)
+              assert abs(got - want) < 1e-9, what + " should be " + str(want) + " and you returned " + repr(got)
+          _near(cosine([3, 4], [4, 3]), 0.96, "cosine([3, 4], [4, 3])")
+          _near(cosine([4, 1], [8, 2]), 1, "cosine([4, 1], [8, 2]), two vectors in the same direction,")
+          _near(cosine([4, 1], [1, 4]), 8 / 17, "cosine([4, 1], [1, 4])")
+          _near(cosine([1, 0], [0, 1]), 0, "cosine of perpendicular vectors")
+          _near(cosine([1, 2], [-1, -2]), -1, "cosine of opposite vectors")
+          _near(cosine([1, 0, 0], [1, 1, 1]), 1 / 3 ** 0.5, "cosine([1, 0, 0], [1, 1, 1])")
+          _near(cosine([2, 0], [5, 0]), 1, "cosine([2, 0], [5, 0])")
+          _near(cosine([0, 0], [3, 4]), 0, "cosine with a zero vector")
+          _near(cosine([3, 4], [0, 0]), 0, "cosine with a zero vector")
+          assert output.strip() == "0.96", "The program should print 0.96"
+        wrong:
+          - "import math\n\ndef cosine(u, v):\n    top = sum([a * b for a, b in zip(u, v)])\n    size_u = math.sqrt(sum([a * a for a in u]))\n    size_v = math.sqrt(sum([b * b for b in v]))\n    return top / (size_u * size_v)\n\nprint(0.96)\n"
+          - "import math\n\ndef cosine(u, v):\n    top = sum([a * b for a, b in zip(u, v)])\n    size_u = math.sqrt(sum([a * a for a in u]))\n    if size_u == 0:\n        return 0.0\n    return top / size_u\n\nprint(0.96)\n"
+          - "import math\n\ndef cosine(u, v):\n    top = sum([a * b for a, b in zip(u, v)])\n    size_u = sum([a * a for a in u])\n    size_v = sum([b * b for b in v])\n    if size_u == 0 or size_v == 0:\n        return 0.0\n    return top / (size_u * size_v)\n\nprint(0.96)\n"
+          - "import math\n\ndef cosine(u, v):\n    top = sum([a * b for a, b in zip(u, v)])\n    size_u = math.sqrt(sum([a * a for a in u]))\n    size_v = math.sqrt(sum([b * b for b in v]))\n    if size_u == 0 or size_v == 0:\n        return 0.0\n    return abs(top) / (size_u * size_v)\n\nprint(0.96)\n"
+          - "import math\n\ndef cosine(u, v):\n    return sum([a * b for a, b in zip(u, v)])\n\nprint(0.96)\n"
+        explanation: |
+          Three sums over the components give everything: the dot product and the two squared lengths. The zero vector is checked before dividing, since its length is 0 and it has no direction to compare. Dividing by only one length leaves the other vector's length in the answer, so a longer report would again score higher. Dividing by the squared lengths divides twice over. And the sign of the dot product must be kept, because it is what separates agreement from opposition.
+        hints:
+          - Compute the dot product and the two Euclidean norms.
+          - If either norm is 0, return 0.0 before dividing.
+          - Divide the dot product by the product of the two norms.
+    - question:
+        id: fix-angle
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `angle(u, v)` should return the angle between two non-zero vectors in **degrees**. For the perpendicular pair below it should print 90.0. It prints 1.5707963267948966. Fix it.
+        starter: |
+          import math
+
+          def angle(u, v):
+              top = sum([a * b for a, b in zip(u, v)])
+              size_u = math.sqrt(sum([a * a for a in u]))
+              size_v = math.sqrt(sum([b * b for b in v]))
+              ratio = max(-1, min(1, top / (size_u * size_v)))
+              return math.acos(ratio)
+
+          print(angle([1, 0], [0, 1]))
+        solution: |
+          import math
+
+          def angle(u, v):
+              top = sum([a * b for a, b in zip(u, v)])
+              size_u = math.sqrt(sum([a * a for a in u]))
+              size_v = math.sqrt(sum([b * b for b in v]))
+              ratio = max(-1, min(1, top / (size_u * size_v)))
+              return math.degrees(math.acos(ratio))
+
+          print(angle([1, 0], [0, 1]))
+        tests: |
+          def _near(got, want, what):
+              assert isinstance(got, (int, float)), what + " should be a number and you returned " + repr(got)
+              assert abs(got - want) < 1e-6, what + " should be " + str(want) + " degrees and you returned " + repr(got)
+          _near(angle([1, 0], [0, 1]), 90, "The angle between [1, 0] and [0, 1]")
+          _near(angle([1, 0], [1, 1]), 45, "The angle between [1, 0] and [1, 1]")
+          _near(angle([1, 0], [-1, 0]), 180, "The angle between opposite vectors")
+          _near(angle([3, 4], [6, 8]), 0, "The angle between vectors in the same direction")
+          _near(angle([1, 1, 0], [0, 1, 1]), 60, "The angle between [1, 1, 0] and [0, 1, 1]")
+          _near(angle([4, 1], [1, 4]), 61.927513, "The angle between [4, 1] and [1, 4]")
+          _near(angle([1, 1, 1], [3, 3, 3]), 0, "The angle between [1, 1, 1] and [3, 3, 3]")
+          assert output.strip() == "90.0", "The program should print 90.0"
+        wrong:
+          - "import math\n\ndef angle(u, v):\n    top = sum([a * b for a, b in zip(u, v)])\n    size_u = math.sqrt(sum([a * a for a in u]))\n    size_v = math.sqrt(sum([b * b for b in v]))\n    ratio = max(-1, min(1, top / (size_u * size_v)))\n    return math.acos(ratio)\n\nprint(90.0)\n"
+          - "import math\n\ndef angle(u, v):\n    top = sum([a * b for a, b in zip(u, v)])\n    size_u = math.sqrt(sum([a * a for a in u]))\n    size_v = math.sqrt(sum([b * b for b in v]))\n    ratio = max(-1, min(1, top / (size_u * size_v)))\n    return math.degrees(ratio)\n\nprint(90.0)\n"
+          - "import math\n\ndef angle(u, v):\n    top = sum([a * b for a, b in zip(u, v)])\n    size_u = math.sqrt(sum([a * a for a in u]))\n    size_v = math.sqrt(sum([b * b for b in v]))\n    ratio = max(-1, min(1, top / (size_u * size_v)))\n    return math.radians(math.acos(ratio))\n\nprint(90.0)\n"
+          - "import math\n\ndef angle(u, v):\n    top = sum([a * b for a, b in zip(u, v)])\n    size_u = math.sqrt(sum([a * a for a in u]))\n    size_v = math.sqrt(sum([b * b for b in v]))\n    ratio = max(-1, min(1, top / (size_u * size_v)))\n    return math.acos(ratio) * 180\n\nprint(90.0)\n"
+          - "import math\n\ndef angle(u, v):\n    top = sum([a * b for a, b in zip(u, v)])\n    size_u = math.sqrt(sum([a * a for a in u]))\n    size_v = math.sqrt(sum([b * b for b in v]))\n    ratio = max(-1, min(1, abs(top) / (size_u * size_v)))\n    return math.degrees(math.acos(ratio))\n\nprint(90.0)\n"
+        explanation: |
+          `math.acos` answers in radians, and 1.5707… is $\frac{\pi}{2}$, a right angle in that unit. The function promised degrees, so the result must pass through `math.degrees`. The conversion has to be applied to the angle, after the arccosine, and not to the ratio, which is a pure number and not an angle at all. The line that pushes the ratio into the range from $-1$ to 1 is not the bug. It is what keeps the arccosine from failing when rounding leaves the ratio a hair outside the range, as it does for `[1, 1, 1]` and `[3, 3, 3]`.
+        hints:
+          - What unit does math.acos answer in?
+          - 1.5707… is half of pi.
+          - Convert the result of math.acos with math.degrees.
+    - question:
+        id: work-law-of-cosines
+        type: numeric
+        system: s2
+        prompt: |
+          $\lVert \mathbf{u} \rVert = 3$, $\lVert \mathbf{v} \rVert = 4$, and the angle between them is $60^\circ$. What is $\lVert \mathbf{u} - \mathbf{v} \rVert^2$, the **square** of the distance between them?
+        answer: "13"
+        explanation: |
+          By the law of cosines, $\lVert \mathbf{u} - \mathbf{v} \rVert^2 = 9 + 16 - 2 \times 3 \times 4 \times \frac{1}{2} = 25 - 12 = 13$. At a right angle the answer would have been 25, Pythagoras's 3, 4, 5 triangle. Closing the angle to 60° brings the tips nearer. The middle term, $2\,\mathbf{u} \cdot \mathbf{v}$, is the correction that Pythagoras needs when the angle is not a right angle.
+        hints:
+          - Expand the squared length of u − v.
+          - The dot product is the product of the lengths and the cosine of the angle.
+          - Add the two squared lengths and subtract twice the dot product.
+    - question:
+        id: write-most-similar
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `most_similar(query, vectors)`. `vectors` is a non-empty list of non-zero vectors of the same dimension as the non-zero `query`. Return the **index** of the one with the highest cosine similarity to `query`. If two are equally similar, return the earlier one.
+        starter: |
+          import math
+
+          def most_similar(query, vectors):
+              # Replace the next line with your own.
+              return 0
+
+          print(most_similar([4, 1], [[1, 4], [40, 10], [3, 3]]))
+        solution: |
+          import math
+
+          def cosine(u, v):
+              top = sum([a * b for a, b in zip(u, v)])
+              return top / (math.sqrt(sum([a * a for a in u])) * math.sqrt(sum([b * b for b in v])))
+
+          def most_similar(query, vectors):
+              best = 0
+              best_score = cosine(query, vectors[0])
+              for i in range(1, len(vectors)):
+                  score = cosine(query, vectors[i])
+                  if score > best_score:
+                      best = i
+                      best_score = score
+              return best
+
+          print(most_similar([4, 1], [[1, 4], [40, 10], [3, 3]]))
+        tests: |
+          assert most_similar([4, 1], [[1, 4], [40, 10], [3, 3]]) == 1, "[40, 10] points the same way as [4, 1], so the answer is 1. You returned " + repr(most_similar([4, 1], [[1, 4], [40, 10], [3, 3]]))
+          assert most_similar([4, 1], [[5, 2], [1, 4], [100, 100]]) == 0, "[5, 2] is closest in direction to [4, 1]. A long vector such as [100, 100] has a large dot product and a lower similarity. You returned " + repr(most_similar([4, 1], [[5, 2], [1, 4], [100, 100]]))
+          assert most_similar([1, 0], [[0, 1], [-1, 0], [1, 5]]) == 2, "The similarities are 0, -1 and about 0.2, so the answer is 2. You returned " + repr(most_similar([1, 0], [[0, 1], [-1, 0], [1, 5]]))
+          assert most_similar([1, 1], [[10, 9], [1, 1.2], [1, 0]]) == 0, "[10, 9] is closest in direction to [1, 1], though [1, 1.2] is nearest in distance. You returned " + repr(most_similar([1, 1], [[10, 9], [1, 1.2], [1, 0]]))
+          assert most_similar([1, 0, 0], [[0, 1, 0], [1, 1, 1], [2, 1, 0]]) == 2, "In three dimensions the similarities are 0, about 0.58 and about 0.89. You returned " + repr(most_similar([1, 0, 0], [[0, 1, 0], [1, 1, 1], [2, 1, 0]]))
+          assert most_similar([0, 2], [[3, 4], [-3, 4], [0, -1]]) == 0, "The first two are equally similar, so return the earlier, index 0. You returned " + repr(most_similar([0, 2], [[3, 4], [-3, 4], [0, -1]]))
+          assert most_similar([2, 3], [[2, 3]]) == 0, "With a single vector the answer is 0"
+          assert output.strip() == "1", "The program should print 1"
+        wrong:
+          - "import math\n\ndef most_similar(query, vectors):\n    best = 0\n    best_score = sum([a * b for a, b in zip(query, vectors[0])])\n    for i in range(1, len(vectors)):\n        score = sum([a * b for a, b in zip(query, vectors[i])])\n        if score > best_score:\n            best = i\n            best_score = score\n    return best\n\nprint(1)\n"
+          - "import math\n\ndef most_similar(query, vectors):\n    best = 0\n    best_score = math.sqrt(sum([(a - b) ** 2 for a, b in zip(query, vectors[0])]))\n    for i in range(1, len(vectors)):\n        score = math.sqrt(sum([(a - b) ** 2 for a, b in zip(query, vectors[i])]))\n        if score < best_score:\n            best = i\n            best_score = score\n    return best\n\nprint(1)\n"
+          - "import math\n\ndef cosine(u, v):\n    top = sum([a * b for a, b in zip(u, v)])\n    return top / (math.sqrt(sum([a * a for a in u])) * math.sqrt(sum([b * b for b in v])))\n\ndef most_similar(query, vectors):\n    best = 0\n    best_score = cosine(query, vectors[0])\n    for i in range(1, len(vectors)):\n        score = cosine(query, vectors[i])\n        if score >= best_score:\n            best = i\n            best_score = score\n    return best\n\nprint(1)\n"
+          - "import math\n\ndef cosine(u, v):\n    top = sum([a * b for a, b in zip(u, v)])\n    return top / (math.sqrt(sum([a * a for a in u])) * math.sqrt(sum([b * b for b in v])))\n\ndef most_similar(query, vectors):\n    best = 0\n    best_score = cosine(query, vectors[0])\n    for i in range(1, len(vectors)):\n        score = cosine(query, vectors[i])\n        if score < best_score:\n            best = i\n            best_score = score\n    return best\n\nprint(1)\n"
+          - "import math\n\ndef cosine(u, v):\n    top = sum([a * b for a, b in zip(u, v)])\n    return top / (math.sqrt(sum([a * a for a in u])) * math.sqrt(sum([b * b for b in v])))\n\ndef most_similar(query, vectors):\n    best = 0\n    best_score = cosine(query, vectors[0])\n    for i in range(1, len(vectors)):\n        score = cosine(query, vectors[i])\n        if score > best_score:\n            best = i\n    return best\n\nprint(1)\n"
+        explanation: |
+          The shape is the one you wrote for the nearest neighbour: remember the best index and its score, and replace both when a strictly better score appears. Two things changed. The score is a similarity, so better means **larger**, and the comparison turns round. And the score is the cosine, so length is divided out. Ranking by the bare dot product rewards long vectors, and `[100, 100]` would beat `[5, 2]` for the query `[4, 1]`. Ranking by distance prefers `[1, 1.2]` to `[10, 9]` for the query `[1, 1]`, though the second lies closer in direction. This function, run over millions of stored embeddings, is the retrieval step of a search engine built on a language model.
+        hints:
+          - Write a helper that returns the cosine similarity of two vectors.
+          - Start with index 0 as the best, and keep its score.
+          - Replace the best index and the best score whenever a later score is strictly larger.
+    - question:
+        id: work-unit-distance
+        type: numeric
+        system: s2
+        prompt: |
+          Two **unit** vectors are at distance exactly 1 from each other. What is their cosine similarity?
+        answer: "1/2"
+        explanation: |
+          For unit vectors $\lVert \hat{\mathbf{u}} - \hat{\mathbf{v}} \rVert^2 = 2 - 2\cos\theta$. With the distance equal to 1, $1 = 2 - 2\cos\theta$, so $\cos\theta = \frac{1}{2}$ and the angle is 60°. That fits a picture: the origin and the two tips are the corners of a triangle whose three sides all have length 1, and every angle of such a triangle is 60°. Among unit vectors, each distance corresponds to exactly one similarity, which is why the two measures always agree there about which vector is closest.
+        hints:
+          - Use the relation between squared distance and cosine for unit vectors.
+          - Set 2 − 2 cos θ equal to the square of 1.
+          - Solve for the cosine.
+    - question:
+        id: work-high-dimension
+        type: choice
+        system: s2
+        prompt: |
+          In $\mathbb{R}^n$ let $\mathbf{d}$ be the vector of all ones and $\mathbf{e}$ the vector $(1, 0, 0, \dots, 0)$. What happens to the angle between them as $n$ grows?
+        options:
+          - "It stays at 45°."
+          - "It shrinks towards 0°."
+          - "The cosine is $\\frac{1}{\\sqrt{n}}$, which shrinks towards 0, so the angle grows towards 90°: 45° for $n = 2$, about 55° for $n = 3$, and about 84° for $n = 100$."
+          - "It grows beyond 90°."
+        answer: 2
+        explanation: |
+          $\mathbf{d} \cdot \mathbf{e} = 1$, $\lVert \mathbf{d} \rVert = \sqrt{n}$ and $\lVert \mathbf{e} \rVert = 1$, so the cosine is $\frac{1}{\sqrt{n}}$. For $n = 100$ that is 0.1, and $\arccos 0.1 \approx 84^\circ$. The cosine stays positive, so the angle never reaches 90°, but it comes as close as you like. The diagonal of a high-dimensional cube is nearly perpendicular to every one of its edges. In such spaces two vectors chosen without care are almost always close to perpendicular, so when two embeddings do have a similarity of 0.8, that is strong evidence of a real connection.
+        hints:
+          - Compute the dot product and the two lengths for a general n.
+          - What happens to 1 over the root of n as n grows?
+          - Which angle has a cosine near 0?
+  connections:
+    - text: |
+        The puzzle asked which report is most like a sports report: a longer sports report or a politics report of the same length. Distance could barely tell them apart, because it measures how far apart the tips of the arrows are, and that mixes direction with length. Dividing the dot product by both lengths removes the lengths and leaves the cosine of the angle. By that measure the two sports reports are identical and the politics report is about 62° away.
+
+        The cosine formula was a fact in the plane, and became the definition of angle everywhere else. What allowed the step was the Cauchy-Schwarz inequality from [[m4.norms-and-distance]]: it keeps the ratio between $-1$ and 1, where the arccosine can accept it. An inequality proved with a little calculus and no picture is what gives geometry to spaces of a thousand dimensions.
+
+        Distance and angle were then reconciled by the law of cosines. For vectors of length 1, the squared distance is $2 - 2\cos\theta$, so the nearest vector is the most similar one. Normalise first, and a single dot product does the comparing. That is how documents are retrieved by meaning.
+
+        The cosine tells you **how much** two vectors agree, as a pure number. It does not hand you the part of one vector that lies along the other, as a vector you can subtract and work with. The dot product's shadow was the length of that part. The next lesson, [[m4.projection-onto-a-vector]], builds the part itself, shows that what remains is perpendicular, and finds in it the best approximation of one vector by a multiple of another. From there the cluster goes on to flat sets cut out by a dot product, in [[m4.lines-planes-and-hyperplanes]], and to the question of when a vector adds a new direction at all, in [[m4.linear-independence]].

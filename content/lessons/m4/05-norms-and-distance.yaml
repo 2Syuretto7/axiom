@@ -1,0 +1,599 @@
+concept: m4.norms-and-distance
+minutes: 90
+claim: You can measure the distance between two vectors as the length of their difference, prove the Cauchy-Schwarz and triangle inequalities, compute the Euclidean, taxicab and maximum norms and say what each one counts, and use norms for squared error, nearest neighbours and limiting the size of a step.
+recalls: [m4.dot-product]
+uses: [m4.vector-addition-and-scaling, m4.vectors-as-arrows-and-as-lists, m1.inequalities-and-absolute-value, m1.quadratics, m1.coordinates-and-the-plane, m10.maxima-and-minima, m3.direct-proof, e0.functions, e0.loops, e0.lists-and-tuples, e1.comprehensions-and-iterators, e1.modules-and-imports]
+leads: [m4.angle-and-cosine-similarity, m4.projection-onto-a-vector, m12.gradient, m19.gradient-descent]
+starter: |
+  # Scratch space. Your flat is at [0, 0]. Two shops, measured in blocks.
+  # Which is nearer in a straight line? Which is nearer along the streets?
+  import math
+
+  shops = {"P": [3, 3], "Q": [0, 5]}
+  for name in shops:
+      x, y = shops[name]
+      print(name, "straight", math.sqrt(x * x + y * y), "streets", abs(x) + abs(y))
+parts:
+  recall:
+    - text: |
+        [[m4.dot-product]] produced length out of the dot product, $\lVert \mathbf{v} \rVert = \sqrt{\mathbf{v} \cdot \mathbf{v}}$, and claimed, from a picture, that $\mathbf{u} \cdot \mathbf{v}$ can never exceed the product of the two lengths. Today that claim is proved, and length itself is looked at more carefully. Three quick pulls first.
+    - question:
+        id: recall-dot
+        type: numeric
+        system: s1
+        concepts: [m4.dot-product]
+        prompt: |
+          What is $(2, 3) \cdot (4, -1)$?
+        answer: "5"
+        explanation: 8 − 3.
+        hints:
+          - Multiply matching components.
+          - Add 8 and minus 3.
+    - question:
+        id: recall-self
+        type: choice
+        system: s1
+        concepts: [m4.dot-product]
+        prompt: |
+          What is $\mathbf{v} \cdot \mathbf{v}$?
+        options: ["$\\lVert \\mathbf{v} \\rVert$", "$\\lVert \\mathbf{v} \\rVert^2$", "$2\\mathbf{v}$", "$0$"]
+        answer: 1
+        explanation: The sum of the squares of the components, which is the square of the length.
+        hints:
+          - Each component is multiplied by itself.
+          - Compare with the formula for the length.
+    - question:
+        id: recall-between
+        type: choice
+        system: s1
+        concepts: [m4.vector-addition-and-scaling]
+        prompt: |
+          Drawn from the same point, which arrow joins the tip of $\mathbf{v}$ to the tip of $\mathbf{u}$?
+        options: ["$\\mathbf{u} + \\mathbf{v}$", "$\\mathbf{u} - \\mathbf{v}$", "$\\mathbf{v} - \\mathbf{u}$", "$\\mathbf{u} \\cdot \\mathbf{v}$"]
+        answer: 1
+        explanation: End minus start. It is what must be added to v to reach u.
+        hints:
+          - End minus start.
+          - The arrow ends at the tip of u.
+  puzzle:
+    - text: |
+        You live in a city laid out as a grid of streets. From your flat, shop P is 3 blocks east and 3 blocks north. Shop Q is 5 blocks due north. **Which shop is nearer?**
+
+        Run the starter. In a straight line, P is about 4.24 blocks away and Q is 5: P is nearer. But you cannot walk through buildings. Along the streets, P is 6 blocks away and Q is 5: Q is nearer.
+
+        Both answers are correct. They answer different questions, because "how far" was never one question. A bird, a pedestrian and a delivery planner each have their own sensible meaning for it.
+
+        This matters more than it seems to. A great deal of machine learning comes down to one of two instructions. "Find the stored example **closest** to this new one." "Adjust the weights until the predictions are as **close** as possible to the truth." Each depends entirely on what "close" means, and different meanings give different answers.
+
+        **What may count as a measure of distance? What must every sensible one have in common? And what changes when you choose one over another?**
+  intuition:
+    - text: |
+        Start with what does not change. However you measure, the distance from $\mathbf{u}$ to $\mathbf{v}$ should depend only on the **journey** between them, and that journey is the vector $\mathbf{v} - \mathbf{u}$. So measuring distances between points comes down to measuring the **size of a single vector**. Decide how big a vector is, and distance follows: the distance between two vectors is the size of their difference.
+
+        A rule that assigns a size to every vector is called a **norm**. The bird's rule is the one you know, the root of the sum of the squares. The pedestrian's rule is to add up the blocks walked along each axis, east-west and north-south, ignoring direction: the sum of the absolute values of the components. A third rule looks only at the **largest** component: if two cranes move a load in both directions at once, the time taken is set by the longer of the two movements.
+
+        What should any such rule satisfy? Three things, each hard to argue with.
+
+        1. Sizes are never negative, and only the zero vector has size zero.
+        2. Doubling a vector doubles its size, and reversing it changes nothing.
+        3. A detour is never a shortcut. Going from A to B by way of C is at least as long as going direct.
+
+        All three rules above pass all three tests. They disagree about the numbers, and one picture shows how. Take all the vectors whose size is exactly 1, and draw their tips. For the bird this is a circle. Change the norm in the figure and see what the "circle" becomes.
+    - figure: norm-balls
+      props: { x: 1.5, y: 1 }
+    - text: |
+        For the pedestrian the points at distance 1 form a diamond, and for the largest-component rule a square. Along the axes all three agree. Along the diagonals they differ most: the pedestrian finds diagonal journeys expensive, and the square rule finds them cheap.
+  derivation:
+    - text: |
+        **The Euclidean norm and distance.** The norm you have been using is
+
+        $$\lVert \mathbf{v} \rVert_2 = \sqrt{v_1^2 + \dots + v_n^2} = \sqrt{\mathbf{v} \cdot \mathbf{v}},$$
+
+        named after Euclid and written with a small 2 when other norms are about. The **distance** between two vectors is the norm of their difference:
+
+        $$d(\mathbf{u}, \mathbf{v}) = \lVert \mathbf{u} - \mathbf{v} \rVert = \sqrt{(u_1 - v_1)^2 + \dots + (u_n - v_n)^2}.$$
+
+        In the plane this is the distance formula of your first lesson on coordinates. It is the same in either direction, since $\lVert \mathbf{u} - \mathbf{v} \rVert = \lVert -(\mathbf{v} - \mathbf{u}) \rVert = \lVert \mathbf{v} - \mathbf{u} \rVert$.
+
+        The first two requirements are immediate for this norm. A sum of squares is never negative and is zero only if every component is zero. And $\lVert c\,\mathbf{v} \rVert = \lvert c \rvert\,\lVert \mathbf{v} \rVert$ was shown when scaling was introduced. The third requirement is not obvious at all, and proving it takes an inequality that is among the most used in mathematics.
+
+        **The Cauchy-Schwarz inequality.** For all vectors $\mathbf{u}$ and $\mathbf{v}$ of the same dimension,
+
+        $$\lvert \mathbf{u} \cdot \mathbf{v} \rvert \le \lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert.$$
+
+        *Proof.* If $\mathbf{v} = \mathbf{0}$ both sides are 0. Otherwise, consider the vector $\mathbf{u} - t\,\mathbf{v}$ for a real number $t$. Whatever $t$ is, its squared length is not negative. Expand it by the rules of the dot product:
+
+        $$f(t) = \lVert \mathbf{u} - t\,\mathbf{v} \rVert^2 = \lVert \mathbf{u} \rVert^2 - 2t\,(\mathbf{u} \cdot \mathbf{v}) + t^2\,\lVert \mathbf{v} \rVert^2 \;\ge\; 0.$$
+
+        This is a quadratic in $t$, a bowl, since the coefficient of $t^2$ is positive. Find its lowest point as you learned to: $f'(t) = -2\,(\mathbf{u} \cdot \mathbf{v}) + 2t\,\lVert \mathbf{v} \rVert^2 = 0$ at
+
+        $$t = \frac{\mathbf{u} \cdot \mathbf{v}}{\lVert \mathbf{v} \rVert^2}.$$
+
+        Put that $t$ back. The least value of $f$ is
+
+        $$\lVert \mathbf{u} \rVert^2 - \frac{(\mathbf{u} \cdot \mathbf{v})^2}{\lVert \mathbf{v} \rVert^2}.$$
+
+        Even this least value is not negative, because $f$ never is. So $(\mathbf{u} \cdot \mathbf{v})^2 \le \lVert \mathbf{u} \rVert^2\,\lVert \mathbf{v} \rVert^2$, and taking square roots gives the inequality. $\blacksquare$
+
+        No picture and no angle appeared, so the proof holds in any number of dimensions. It has a consequence worth noticing. The ratio $\dfrac{\mathbf{u} \cdot \mathbf{v}}{\lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert}$ always lies between $-1$ and 1. That is exactly the range of a cosine, and it is what will allow an **angle** to be defined between vectors in a space no one can draw.
+
+        When does equality hold? When the least value of $f$ is 0, which means that $\mathbf{u} - t\,\mathbf{v} = \mathbf{0}$ for that $t$: $\mathbf{u}$ is a multiple of $\mathbf{v}$. The dot product reaches its limit exactly when the vectors are parallel.
+
+        **The triangle inequality.** For all $\mathbf{u}$ and $\mathbf{v}$,
+
+        $$\lVert \mathbf{u} + \mathbf{v} \rVert \le \lVert \mathbf{u} \rVert + \lVert \mathbf{v} \rVert.$$
+
+        *Proof.* Expand the square, and use Cauchy-Schwarz on the middle term:
+
+        $$\lVert \mathbf{u} + \mathbf{v} \rVert^2 = \lVert \mathbf{u} \rVert^2 + 2\,\mathbf{u} \cdot \mathbf{v} + \lVert \mathbf{v} \rVert^2 \;\le\; \lVert \mathbf{u} \rVert^2 + 2\,\lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert + \lVert \mathbf{v} \rVert^2 = \bigl(\lVert \mathbf{u} \rVert + \lVert \mathbf{v} \rVert\bigr)^2.$$
+
+        Both sides are squares of non-negative numbers, so the inequality passes to the square roots. $\blacksquare$
+
+        With arrows tip to tail, $\mathbf{u}$, $\mathbf{v}$ and $\mathbf{u} + \mathbf{v}$ are the three sides of a triangle, and the statement is that one side is never longer than the other two together. This is the promise made when vectors were first added: lengths 3 and 4 give a sum of length at most 7. For distances it reads $d(A, B) \le d(A, C) + d(C, B)$: the detour by way of $C$ is never shorter.
+    - question:
+        id: derivation-cs
+        type: choice
+        system: s2
+        prompt: |
+          The proof of the Cauchy-Schwarz inequality studied $f(t) = \lVert \mathbf{u} - t\,\mathbf{v} \rVert^2$. What single fact about $f$ was the source of the inequality?
+        options:
+          - "$f$ is a polynomial."
+          - "$f(t) \\ge 0$ for every $t$, since it is a squared length. So even its least value, $\\lVert \\mathbf{u} \\rVert^2 - \\frac{(\\mathbf{u} \\cdot \\mathbf{v})^2}{\\lVert \\mathbf{v} \\rVert^2}$, is not negative."
+          - "$f(0) = \\lVert \\mathbf{u} \\rVert^2$."
+          - "$f$ has no minimum."
+        answer: 1
+        explanation: |
+          A squared length cannot be negative, whatever $t$ is. The proof then asks where $f$ is smallest, because that is where the statement "$f \ge 0$" says the most. Setting the derivative to zero gives $t = \frac{\mathbf{u} \cdot \mathbf{v}}{\lVert \mathbf{v} \rVert^2}$, and writing out $f \ge 0$ at that point is the inequality. The value of $t$ found here is not a trick. It is the multiple of $\mathbf{v}$ that comes closest to $\mathbf{u}$, and it returns two lessons from now as the projection.
+        hints:
+          - What kind of quantity is f, for any t?
+          - Why look for the smallest value of f in particular?
+          - Write out the statement that the smallest value is not negative.
+    - text: |
+        **Other norms.** A **norm** is any function $\lVert \cdot \rVert$ from vectors to numbers that satisfies the three requirements:
+
+        | Requirement | Statement |
+        | --- | --- |
+        | positive | $\lVert \mathbf{v} \rVert \ge 0$, and $\lVert \mathbf{v} \rVert = 0$ only for $\mathbf{v} = \mathbf{0}$ |
+        | scales | $\lVert c\,\mathbf{v} \rVert = \lvert c \rvert\,\lVert \mathbf{v} \rVert$ |
+        | triangle inequality | $\lVert \mathbf{u} + \mathbf{v} \rVert \le \lVert \mathbf{u} \rVert + \lVert \mathbf{v} \rVert$ |
+
+        Three norms are in constant use.
+
+        | Name | Formula | Counts |
+        | --- | --- | --- |
+        | Euclidean, or 2-norm | $\lVert \mathbf{v} \rVert_2 = \sqrt{v_1^2 + \dots + v_n^2}$ | the straight-line length |
+        | taxicab, or 1-norm | $\lVert \mathbf{v} \rVert_1 = \lvert v_1 \rvert + \dots + \lvert v_n \rvert$ | the total change, component by component |
+        | maximum, or infinity-norm | $\lVert \mathbf{v} \rVert_\infty = \max_i \lvert v_i \rvert$ | the largest single change |
+
+        For the 1-norm and the maximum norm the triangle inequality follows directly from $\lvert a + b \rvert \le \lvert a \rvert + \lvert b \rvert$ for numbers, applied to each component.
+
+        For $\mathbf{v} = (3, -4)$ the three norms are 5, 7 and 4. They always come in that order,
+
+        $$\lVert \mathbf{v} \rVert_\infty \le \lVert \mathbf{v} \rVert_2 \le \lVert \mathbf{v} \rVert_1,$$
+
+        and they coincide when only one component is non-zero. The puzzle's two shops are a case where the order of two **points** depends on the norm: P is $(3, 3)$ with norms about 4.24 and 6, and Q is $(0, 5)$ with norms 5 and 5.
+
+        **Why the choice matters.** The norm decides how a total discrepancy is shared out among the components.
+
+        *Squared error.* If $\mathbf{y}$ holds the true values for $n$ examples and $\hat{\mathbf{y}}$ the predictions, the error vector is $\mathbf{y} - \hat{\mathbf{y}}$, and the most common measure of a model's failure is the square of its Euclidean norm, averaged:
+
+        $$\text{mean squared error} = \frac{1}{n}\,\lVert \mathbf{y} - \hat{\mathbf{y}} \rVert_2^2 = \frac{1}{n}\sum_{i=1}^{n} (y_i - \hat{y}_i)^2.$$
+
+        This is the quantity you minimised in the lesson on maxima and minima, where the best single prediction turned out to be the mean. Squaring punishes one large miss far more than several small ones: errors of $(1, 1, 1, 10)$ have a 1-norm of 13 and a squared 2-norm of 103, of which the last component supplies 100. A model trained on squared error will work hard to avoid large misses. One trained on the 1-norm, the **mean absolute error**, will tolerate an occasional large miss, and is less disturbed by a few wild measurements.
+
+        *Nearest neighbours.* The simplest way to classify a new example is to find the stored example nearest to it and copy its label. "Nearest" is a norm, and as the shops show, the answer can depend on which.
+
+        *Keeping weights small.* In the lesson on minima a penalty $\frac{1}{2}w^2$ pulled a weight towards zero. For a weight vector the penalty is $\lVert \mathbf{w} \rVert_2^2$, which shrinks all the weights a little. A penalty $\lVert \mathbf{w} \rVert_1$ behaves differently: it tends to push some weights to **exactly** zero, because of the sharp corners of its diamond on the axes.
+
+        *Limiting a step.* The size of a descent step is $\eta\,\lVert \mathbf{g} \rVert$. If the vector of slopes is occasionally enormous, one step can throw the weights far away. A common remedy is to **clip**: if $\lVert \mathbf{g} \rVert$ exceeds a limit $L$, replace $\mathbf{g}$ by $\dfrac{L}{\lVert \mathbf{g} \rVert}\,\mathbf{g}$, the vector in the same direction with length exactly $L$.
+    - question:
+        id: order-triangle
+        type: order
+        system: s2
+        prompt: Put the steps in order to prove the triangle inequality $\lVert \mathbf{u} + \mathbf{v} \rVert \le \lVert \mathbf{u} \rVert + \lVert \mathbf{v} \rVert$.
+        steps:
+          - "Expand the squared length: $\\lVert \\mathbf{u} + \\mathbf{v} \\rVert^2 = \\lVert \\mathbf{u} \\rVert^2 + 2\\,\\mathbf{u} \\cdot \\mathbf{v} + \\lVert \\mathbf{v} \\rVert^2$."
+          - "By Cauchy-Schwarz, $\\mathbf{u} \\cdot \\mathbf{v} \\le \\lVert \\mathbf{u} \\rVert\\,\\lVert \\mathbf{v} \\rVert$."
+          - "So $\\lVert \\mathbf{u} + \\mathbf{v} \\rVert^2 \\le \\lVert \\mathbf{u} \\rVert^2 + 2\\,\\lVert \\mathbf{u} \\rVert\\,\\lVert \\mathbf{v} \\rVert + \\lVert \\mathbf{v} \\rVert^2$."
+          - "The right-hand side is $\\bigl(\\lVert \\mathbf{u} \\rVert + \\lVert \\mathbf{v} \\rVert\\bigr)^2$."
+          - "Both sides are squares of non-negative numbers, so take square roots."
+        explanation: The squared length is expanded so that the dot product appears. Cauchy-Schwarz bounds that one term. The bound is then recognised as a perfect square, and only at the end are the squares removed, which is allowed because neither side is negative.
+        hints:
+          - The dot product has to appear before it can be bounded.
+          - The perfect square is recognised after the bound has been applied.
+          - Square roots are taken last.
+  formal:
+    - text: |
+        **Norm.** A function $\lVert \cdot \rVert$ on $\mathbb{R}^n$ with $\lVert \mathbf{v} \rVert \ge 0$ and $\lVert \mathbf{v} \rVert = 0$ only if $\mathbf{v} = \mathbf{0}$, $\ \lVert c\,\mathbf{v} \rVert = \lvert c \rvert\,\lVert \mathbf{v} \rVert$, and $\lVert \mathbf{u} + \mathbf{v} \rVert \le \lVert \mathbf{u} \rVert + \lVert \mathbf{v} \rVert$.
+
+        **Three norms.** $\lVert \mathbf{v} \rVert_1 = \sum \lvert v_i \rvert$, $\quad \lVert \mathbf{v} \rVert_2 = \sqrt{\sum v_i^2}$, $\quad \lVert \mathbf{v} \rVert_\infty = \max \lvert v_i \rvert$, with $\lVert \mathbf{v} \rVert_\infty \le \lVert \mathbf{v} \rVert_2 \le \lVert \mathbf{v} \rVert_1$.
+
+        **Distance.** $d(\mathbf{u}, \mathbf{v}) = \lVert \mathbf{u} - \mathbf{v} \rVert$. It is symmetric, zero only when $\mathbf{u} = \mathbf{v}$, and satisfies $d(\mathbf{u}, \mathbf{w}) \le d(\mathbf{u}, \mathbf{v}) + d(\mathbf{v}, \mathbf{w})$.
+
+        **Cauchy-Schwarz.** $\lvert \mathbf{u} \cdot \mathbf{v} \rvert \le \lVert \mathbf{u} \rVert_2\,\lVert \mathbf{v} \rVert_2$, with equality exactly when one vector is a multiple of the other.
+
+        **Mean squared error.** $\frac{1}{n}\,\lVert \mathbf{y} - \hat{\mathbf{y}} \rVert_2^2$. **Mean absolute error.** $\frac{1}{n}\,\lVert \mathbf{y} - \hat{\mathbf{y}} \rVert_1$.
+
+        **Clipping.** If $\lVert \mathbf{g} \rVert > L$, replace $\mathbf{g}$ by $\dfrac{L}{\lVert \mathbf{g} \rVert}\,\mathbf{g}$.
+  drill:
+    - text: Seconds each. Subtract first, then measure the difference.
+    - question:
+        id: drill-distance
+        type: numeric
+        system: s1
+        prompt: |
+          What is the Euclidean distance between $(1, 2)$ and $(4, 6)$?
+        answer: "5"
+        explanation: The difference is (3, 4), of length 5.
+        hints:
+          - Subtract the vectors.
+          - Find the length of the difference.
+    - question:
+        id: drill-l1
+        type: numeric
+        system: s1
+        prompt: |
+          What is the taxicab norm $\lVert (3, -4) \rVert_1$?
+        answer: "7"
+        explanation: 3 + 4. The sign of a component is ignored.
+        hints:
+          - Add the absolute values of the components.
+          - The absolute value of minus 4 is 4.
+    - question:
+        id: drill-linf
+        type: numeric
+        system: s1
+        prompt: |
+          What is the maximum norm $\lVert (3, -4) \rVert_\infty$?
+        answer: "4"
+        explanation: The largest absolute value among the components.
+        hints:
+          - Take the absolute value of each component.
+          - Pick the largest.
+    - question:
+        id: drill-l2
+        type: numeric
+        system: s1
+        prompt: |
+          What is the Euclidean norm $\lVert (3, -4) \rVert_2$?
+        answer: "5"
+        explanation: The square root of 9 + 16. It lies between the maximum norm 4 and the taxicab norm 7.
+        hints:
+          - Square, add, take the root.
+          - 9 plus 16.
+    - question:
+        id: drill-taxi-distance
+        type: numeric
+        system: s1
+        prompt: |
+          What is the taxicab distance between $(1, 1)$ and $(4, 5)$?
+        answer: "7"
+        explanation: The difference is (3, 4), and 3 + 4 = 7.
+        hints:
+          - Subtract the vectors first.
+          - Add the absolute values of the components of the difference.
+    - question:
+        id: drill-triangle-bound
+        type: numeric
+        system: s1
+        prompt: |
+          $\lVert \mathbf{u} \rVert = 3$ and $\lVert \mathbf{v} \rVert = 4$. What is the largest possible value of $\lVert \mathbf{u} + \mathbf{v} \rVert$?
+        answer: "7"
+        explanation: The triangle inequality gives at most 3 + 4, reached when the vectors point the same way.
+        hints:
+          - Use the triangle inequality.
+          - When is the bound reached?
+    - question:
+        id: drill-cs-bound
+        type: numeric
+        system: s1
+        prompt: |
+          $\lVert \mathbf{u} \rVert = 3$ and $\lVert \mathbf{v} \rVert = 4$. What is the largest possible value of $\mathbf{u} \cdot \mathbf{v}$?
+        answer: "12"
+        explanation: By Cauchy-Schwarz the dot product is at most the product of the lengths, reached when the vectors are parallel.
+        hints:
+          - Use the Cauchy-Schwarz inequality.
+          - Multiply the two lengths.
+    - question:
+        id: drill-squared-error
+        type: numeric
+        system: s1
+        prompt: |
+          The true values are $(1, 2)$ and the predictions $(3, 5)$. What is the squared Euclidean norm of the error?
+        answer: "13"
+        explanation: The error is (−2, −3), and 4 + 9 = 13.
+        hints:
+          - Subtract to get the error vector.
+          - Add the squares of its components. Do not take a root.
+    - question:
+        id: drill-shape
+        type: choice
+        system: s1
+        prompt: |
+          In the plane, what shape is formed by all the points whose taxicab norm is 1?
+        options: ["A circle", "A square with sides parallel to the axes", "A diamond with corners on the axes", "A cross"]
+        answer: 2
+        explanation: The points with |x| + |y| = 1 lie on four straight segments joining (1, 0), (0, 1), (−1, 0) and (0, −1).
+        hints:
+          - Which points on the axes have taxicab norm 1?
+          - Join them with straight segments.
+    - question:
+        id: drill-order
+        type: choice
+        system: s1
+        prompt: |
+          Which ordering holds for every vector?
+        options:
+          - "$\\lVert \\mathbf{v} \\rVert_1 \\le \\lVert \\mathbf{v} \\rVert_2 \\le \\lVert \\mathbf{v} \\rVert_\\infty$"
+          - "$\\lVert \\mathbf{v} \\rVert_\\infty \\le \\lVert \\mathbf{v} \\rVert_2 \\le \\lVert \\mathbf{v} \\rVert_1$"
+          - "$\\lVert \\mathbf{v} \\rVert_2 \\le \\lVert \\mathbf{v} \\rVert_\\infty \\le \\lVert \\mathbf{v} \\rVert_1$"
+          - "No ordering always holds."
+        answer: 1
+        explanation: For (3, −4) the three are 4, 5 and 7. The largest component is at most the straight-line length, which is at most the total walked along the axes.
+        hints:
+          - Try the vector (3, −4).
+          - A straight line is shorter than a route along the axes.
+    - question:
+        id: drill-zero
+        type: choice
+        system: s1
+        prompt: |
+          $d(\mathbf{u}, \mathbf{v}) = 0$. What follows?
+        options: ["$\\mathbf{u} \\perp \\mathbf{v}$", "$\\mathbf{u} = \\mathbf{v}$", "$\\mathbf{u} = -\\mathbf{v}$", "Nothing"]
+        answer: 1
+        explanation: The norm of u − v is zero only if u − v is the zero vector.
+        hints:
+          - Which vector has norm 0?
+          - What does that say about u − v?
+    - question:
+        id: predict-three-norms
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          import math
+
+          v = [3, -4]
+          print(sum([abs(x) for x in v]), math.sqrt(sum([x * x for x in v])), max([abs(x) for x in v]))
+        output: "7 5.0 4"
+        explanation: The taxicab norm is 3 + 4, the Euclidean norm is the root of 25, and the maximum norm is the larger of 3 and 4.
+        hints:
+          - The three are the sum of absolute values, the root of the sum of squares, and the largest absolute value.
+          - The square root returns a float.
+    - question:
+        id: predict-distance
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          import math
+
+          u = [1, 2]
+          v = [4, 6]
+          print(math.sqrt(sum([(a - b) ** 2 for a, b in zip(u, v)])))
+        output: "5.0"
+        explanation: The differences are −3 and −4, their squares 9 and 16, and the root of 25 is 5.0. The distance is the length of the difference.
+        hints:
+          - Subtract matching components and square.
+          - 9 plus 16.
+  work:
+    - text: Slower now. Say which norm each question is about, and why that norm suits it.
+    - question:
+        id: work-mse
+        type: numeric
+        system: s2
+        prompt: |
+          The true values are $\mathbf{y} = (1, 3, 5, 7)$ and a model predicts $\hat{\mathbf{y}} = (2, 2, 6, 6)$. What is the mean squared error?
+        answer: "1"
+        explanation: |
+          The error vector is $(-1, 1, -1, 1)$. Its squared norm is $1 + 1 + 1 + 1 = 4$, and the mean over the four examples is 1. Notice that the errors themselves add up to 0: the model is as often too high as too low. Adding the errors without squaring would report a perfect model. Squaring, or taking absolute values, stops positive and negative errors from cancelling.
+        hints:
+          - Subtract the predictions from the true values.
+          - Square each error and add.
+          - Divide by the number of examples.
+    - question:
+        id: work-shops
+        type: choice
+        system: s2
+        prompt: |
+          From your flat at the origin, shop P is at $(3, 3)$ and shop Q is at $(0, 5)$. Which statement is correct?
+        options:
+          - "P is nearer by every norm."
+          - "P is nearer in the Euclidean norm, about 4.24 against 5. Q is nearer in the taxicab norm, 5 against 6. In the maximum norm P is nearer, 3 against 5."
+          - "Q is nearer by every norm."
+          - "The two are equally far by every norm."
+        answer: 1
+        explanation: |
+          $\lVert (3, 3) \rVert_2 = \sqrt{18} \approx 4.24$, $\lVert (3, 3) \rVert_1 = 6$ and $\lVert (3, 3) \rVert_\infty = 3$. For $(0, 5)$ all three norms are 5, since only one component is non-zero. A vector along a diagonal is the one on which the three norms differ most, and a vector along an axis is the one on which they agree. Which shop is "nearest" depends on the norm, and a nearest-neighbour method inherits that dependence.
+        hints:
+          - Compute the three norms of (3, 3).
+          - Compute the three norms of (0, 5).
+          - Compare them one norm at a time.
+    - question:
+        id: write-nearest
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `nearest(point, points)`. `points` is a non-empty list of vectors of the same dimension as `point`. Return the **index** of the one closest to `point` in Euclidean distance. If two are equally close, return the earlier one.
+        starter: |
+          import math
+
+          def nearest(point, points):
+              # Replace the next line with your own.
+              return 0
+
+          print(nearest([0, 0], [[3, 3], [0, 5], [-4, 1]]))
+        solution: |
+          import math
+
+          def nearest(point, points):
+              best = 0
+              best_distance = math.sqrt(sum([(a - b) ** 2 for a, b in zip(point, points[0])]))
+              for i in range(1, len(points)):
+                  distance = math.sqrt(sum([(a - b) ** 2 for a, b in zip(point, points[i])]))
+                  if distance < best_distance:
+                      best = i
+                      best_distance = distance
+              return best
+
+          print(nearest([0, 0], [[3, 3], [0, 5], [-4, 1]]))
+        tests: |
+          assert nearest([0, 0], [[3, 3], [0, 5], [-4, 1]]) == 2, "From the origin the distances are about 4.24, 5 and 4.12, so the nearest has index 2. You returned " + repr(nearest([0, 0], [[3, 3], [0, 5], [-4, 1]]))
+          assert nearest([0, 0], [[3, 3], [0, 5]]) == 0, "In Euclidean distance [3, 3] is nearer the origin than [0, 5]. You returned " + repr(nearest([0, 0], [[3, 3], [0, 5]]))
+          assert nearest([4, 1], [[8, 2], [1, 4], [4, 2]]) == 2, "The nearest point to [4, 1] is [4, 2], at index 2. You returned " + repr(nearest([4, 1], [[8, 2], [1, 4], [4, 2]]))
+          assert nearest([10, 10], [[0, 0], [9, 12], [10, 13]]) == 1, "From [10, 10] the distances are about 14.1, 2.24 and 3, so the answer is 1. You returned " + repr(nearest([10, 10], [[0, 0], [9, 12], [10, 13]]))
+          assert nearest([5], [[1], [9], [6]]) == 2, "With one component, 6 is the nearest to 5. You returned " + repr(nearest([5], [[1], [9], [6]]))
+          assert nearest([0, 0, 0], [[1, 2, 2], [3, 0, 0], [2, 2, 1]]) == 0, "All three are at distance 3, so return the earliest, index 0. You returned " + repr(nearest([0, 0, 0], [[1, 2, 2], [3, 0, 0], [2, 2, 1]]))
+          assert nearest([1, 1], [[1, 1]]) == 0, "With a single point the answer is 0"
+          assert output.strip() == "2", "The program should print 2"
+        wrong:
+          - "import math\n\ndef nearest(point, points):\n    best = 0\n    best_distance = sum([abs(a - b) for a, b in zip(point, points[0])])\n    for i in range(1, len(points)):\n        distance = sum([abs(a - b) for a, b in zip(point, points[i])])\n        if distance < best_distance:\n            best = i\n            best_distance = distance\n    return best\n\nprint(2)\n"
+          - "import math\n\ndef nearest(point, points):\n    best = 0\n    best_distance = math.sqrt(sum([(a - b) ** 2 for a, b in zip(point, points[0])]))\n    for i in range(1, len(points)):\n        distance = math.sqrt(sum([(a - b) ** 2 for a, b in zip(point, points[i])]))\n        if distance > best_distance:\n            best = i\n            best_distance = distance\n    return best\n\nprint(2)\n"
+          - "import math\n\ndef nearest(point, points):\n    best = 0\n    best_distance = math.sqrt(sum([(a - b) ** 2 for a, b in zip(point, points[0])]))\n    for i in range(1, len(points)):\n        distance = math.sqrt(sum([(a - b) ** 2 for a, b in zip(point, points[i])]))\n        if distance < best_distance:\n            best = i\n    return best\n\nprint(2)\n"
+          - "import math\n\ndef nearest(point, points):\n    best = 0\n    best_distance = math.sqrt(sum([b ** 2 for b in points[0]]))\n    for i in range(1, len(points)):\n        distance = math.sqrt(sum([b ** 2 for b in points[i]]))\n        if distance < best_distance:\n            best = i\n            best_distance = distance\n    return best\n\nprint(2)\n"
+          - "import math\n\ndef nearest(point, points):\n    best = 0\n    best_distance = math.sqrt(sum([(a - b) ** 2 for a, b in zip(point, points[0])]))\n    for i in range(1, len(points)):\n        distance = math.sqrt(sum([(a - b) ** 2 for a, b in zip(point, points[i])]))\n        if distance <= best_distance:\n            best = i\n            best_distance = distance\n    return best\n\nprint(2)\n"
+        explanation: |
+          Keep the index of the best candidate so far and its distance. Measure each remaining point, and when one is strictly closer, remember both its index and its distance. Using a strict comparison is what makes ties go to the earlier point. This small function is a complete learning algorithm, the **nearest-neighbour classifier**: store labelled examples, and label a new one by copying the label of the stored example it returns. Swapping the Euclidean distance for the taxicab distance changes the answer for the two shops, which one of the tests uses to tell the two apart. Since the square root is increasing, comparing squared distances would give the same result and save the roots.
+        hints:
+          - Start with index 0 as the best and compute its distance.
+          - For each later index, compute the distance from point to points[i].
+          - If it is strictly smaller, update both the best index and the best distance.
+    - question:
+        id: fix-mse
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `mse(y, predicted)` should return the mean squared error between the true values and the predictions. For the values below it should print 1.0. It prints 0.0, as if the predictions were perfect. Fix it.
+        starter: |
+          def mse(y, predicted):
+              return sum([a - b for a, b in zip(y, predicted)]) / len(y)
+
+          print(mse([1, 3, 5, 7], [2, 2, 6, 6]))
+        solution: |
+          def mse(y, predicted):
+              return sum([(a - b) ** 2 for a, b in zip(y, predicted)]) / len(y)
+
+          print(mse([1, 3, 5, 7], [2, 2, 6, 6]))
+        tests: |
+          assert abs(mse([1, 3, 5, 7], [2, 2, 6, 6]) - 1) < 1e-12, "The errors are -1, 1, -1, 1. Their squares add to 4, and the mean is 1. You returned " + repr(mse([1, 3, 5, 7], [2, 2, 6, 6]))
+          assert abs(mse([1, 2], [3, 5]) - 6.5) < 1e-12, "The errors are -2 and -3. Their squares add to 13, and the mean is 6.5. You returned " + repr(mse([1, 2], [3, 5]))
+          assert mse([4, 4, 4], [4, 4, 4]) == 0, "Perfect predictions have error 0"
+          assert abs(mse([0, 0, 0, 0], [1, 1, 1, 10]) - 25.75) < 1e-12, "The squares are 1, 1, 1 and 100, with mean 25.75. You returned " + repr(mse([0, 0, 0, 0], [1, 1, 1, 10]))
+          assert abs(mse([5], [2]) - 9) < 1e-12, "With one example the error is 3 and its square is 9. You returned " + repr(mse([5], [2]))
+          assert abs(mse([2, 2], [3, 5]) - mse([3, 5], [2, 2])) < 1e-12, "The error is the same whichever list is called the truth"
+          assert output.strip() == "1.0", "The program should print 1.0"
+        wrong:
+          - "def mse(y, predicted):\n    return sum([a - b for a, b in zip(y, predicted)]) / len(y)\n\nprint(1.0)\n"
+          - "def mse(y, predicted):\n    return sum([abs(a - b) for a, b in zip(y, predicted)]) / len(y)\n\nprint(1.0)\n"
+          - "def mse(y, predicted):\n    return sum([(a - b) ** 2 for a, b in zip(y, predicted)])\n\nprint(1.0)\n"
+          - "def mse(y, predicted):\n    return sum([a - b for a, b in zip(y, predicted)]) ** 2 / len(y)\n\nprint(1.0)\n"
+          - "def mse(y, predicted):\n    return sum([a ** 2 - b ** 2 for a, b in zip(y, predicted)]) / len(y)\n\nprint(1.0)\n"
+        explanation: |
+          The starter averaged the errors themselves. These predictions are too high twice and too low twice by the same amount, so the errors cancel and the average is 0, although not one prediction is right. A measure of error must not let misses in opposite directions cancel, and squaring each one before adding sees to that. Squaring the **total** afterwards does not help, because the cancelling has already happened. Taking absolute values in place of squares gives a different, equally legitimate measure, the mean absolute error, which happens to agree here and differs as soon as the errors are not all of size 1.
+        hints:
+          - What do the four errors add up to?
+          - How can errors in opposite directions be stopped from cancelling?
+          - Square each difference before adding.
+    - question:
+        id: write-clip
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `clip(g, limit)`. If the Euclidean norm of `g` is at most `limit`, return `g` unchanged, as a new list. Otherwise return the vector in the same direction whose norm is exactly `limit`:
+
+          $$\frac{\text{limit}}{\lVert \mathbf{g} \rVert}\,\mathbf{g}.$$
+        starter: |
+          import math
+
+          def clip(g, limit):
+              # Replace the next line with your own.
+              return g
+
+          print(clip([3, 4], 2.5), clip([3, 4], 10))
+        solution: |
+          import math
+
+          def clip(g, limit):
+              size = math.sqrt(sum([x * x for x in g]))
+              if size <= limit:
+                  return [x for x in g]
+              return [x * limit / size for x in g]
+
+          print(clip([3, 4], 2.5), clip([3, 4], 10))
+        tests: |
+          import math as _m
+          def _close(got, want, name):
+              assert len(got) == len(want), name + " should have " + str(len(want)) + " components"
+              for _a, _b in zip(got, want):
+                  assert abs(_a - _b) < 1e-9, name + " should be " + str(want) + " and you returned " + repr(got)
+          _close(clip([3, 4], 2.5), [1.5, 2], "clip([3, 4], 2.5)")
+          _close(clip([3, 4], 1), [0.6, 0.8], "clip([3, 4], 1)")
+          _close(clip([3, 4], 10), [3, 4], "clip([3, 4], 10), which is already short enough,")
+          _close(clip([3, 4], 5), [3, 4], "clip([3, 4], 5), which is exactly at the limit,")
+          _close(clip([-6, 8], 5), [-3, 4], "clip([-6, 8], 5)")
+          _close(clip([0, 0, 0], 1), [0, 0, 0], "clip of the zero vector")
+          _close(clip([1, 2, 2], 1.5), [0.5, 1, 1], "clip([1, 2, 2], 1.5)")
+          for _g in [[30, -40], [1, 1, 1, 1], [0, 9]]:
+              _c = clip(_g, 2)
+              assert abs(_m.sqrt(sum([x * x for x in _c])) - 2) < 1e-9, "A vector longer than the limit should come back with norm exactly 2. For " + str(_g) + " you returned " + repr(_c)
+          assert output.strip() == "[1.5, 2.0] [3, 4]", "The program should print [1.5, 2.0] [3, 4]"
+        wrong:
+          - "import math\n\ndef clip(g, limit):\n    size = math.sqrt(sum([x * x for x in g]))\n    return [x * limit / size for x in g]\n\nprint([1.5, 2.0], [3, 4])\n"
+          - "import math\n\ndef clip(g, limit):\n    return [min(x, limit) for x in g]\n\nprint([1.5, 2.0], [3, 4])\n"
+          - "import math\n\ndef clip(g, limit):\n    size = sum([abs(x) for x in g])\n    if size <= limit:\n        return [x for x in g]\n    return [x * limit / size for x in g]\n\nprint([1.5, 2.0], [3, 4])\n"
+          - "import math\n\ndef clip(g, limit):\n    size = math.sqrt(sum([x * x for x in g]))\n    if size <= limit:\n        return [x for x in g]\n    return [x / size for x in g]\n\nprint([1.5, 2.0], [3, 4])\n"
+          - "import math\n\ndef clip(g, limit):\n    size = math.sqrt(sum([x * x for x in g]))\n    if size <= limit:\n        return [x for x in g]\n    return [x * size / limit for x in g]\n\nprint([1.5, 2.0], [3, 4])\n"
+        explanation: |
+          Dividing a vector by its norm gives the unit vector in its direction, and multiplying that by the limit gives a vector of exactly that length, pointing the same way. The scaling is applied only when the vector is too long. A short vector must be left alone, and the zero vector would cause a division by zero if it were not caught by the same check. Cutting each component off separately at the limit is a different operation: it changes the **direction** of the vector, which for a descent step means no longer heading straight downhill. Clipping by the norm keeps the direction and limits only how far one step can go, a standard safeguard when training networks.
+        hints:
+          - Compute the Euclidean norm of g first.
+          - If it is at most the limit, return a copy of g.
+          - Otherwise multiply every component by limit / size.
+    - question:
+        id: work-outlier
+        type: choice
+        system: s2
+        prompt: |
+          Two models are tested on four examples. Model A's errors are $(3, 3, 3, 3)$. Model B's errors are $(0, 0, 0, 10)$. Which statement is correct?
+        options:
+          - "B is better by both the mean absolute error and the mean squared error."
+          - "A is better by both."
+          - "By mean absolute error B is better, 2.5 against 3. By mean squared error A is better, 9 against 25. The squared error is dominated by B's one large miss."
+          - "The two measures always agree on which model is better."
+        answer: 2
+        explanation: |
+          Mean absolute error: A has $\frac{12}{4} = 3$ and B has $\frac{10}{4} = 2.5$. Mean squared error: A has $\frac{36}{4} = 9$ and B has $\frac{100}{4} = 25$. The two norms rank the models in opposite orders. The 1-norm cares about the total amount of error. The squared 2-norm cares much more about how the error is distributed, and treats one miss of 10 as worse than four misses of 3. Neither is right in general. If a large miss is a catastrophe, squared error expresses that. If the large miss is probably a faulty measurement that should not drive the model, absolute error is the safer guide.
+        hints:
+          - Compute the sum of absolute errors for each model and divide by 4.
+          - Compute the sum of squared errors for each and divide by 4.
+          - Which measure is affected most by a single large error?
+    - question:
+        id: work-high-dimension
+        type: choice
+        system: s2
+        prompt: |
+          In $\mathbb{R}^n$, let $\mathbf{u}$ be the vector of all zeros and $\mathbf{v}$ the vector of all ones: every component differs by exactly 1. How do their Euclidean and maximum distances behave as $n$ grows?
+        options:
+          - "Both stay equal to 1."
+          - "Both grow like $n$."
+          - "The maximum distance stays 1, while the Euclidean distance is $\\sqrt{n}$, growing without limit: 10 in a hundred dimensions and 1000 in a million."
+          - "The Euclidean distance stays 1 and the maximum distance grows."
+        answer: 2
+        explanation: |
+          The difference is the vector of $n$ ones. Its maximum norm is 1 for every $n$. Its Euclidean norm is $\sqrt{1 + 1 + \dots + 1} = \sqrt{n}$, and its taxicab norm is $n$. Many small differences, one in each of many components, add up to a large Euclidean distance. This is one reason distances behave strangely in high dimensions: points that are close in every single coordinate can still be far apart, and nearly all pairs of points in a large data set tend to be at similar, large distances from one another. A measure of likeness that is less sensitive to size is often preferred there, and that is the subject of the next lesson.
+        hints:
+          - What is the difference vector?
+          - Compute its maximum norm and its Euclidean norm for a general n.
+          - Try n = 100.
+  connections:
+    - text: |
+        The puzzle asked which of two shops is nearer, and found two right answers. Distance is the size of the difference between two vectors, and "size" can be measured by any rule that is positive, scales with the vector, and never makes a detour shorter than the direct route. Such a rule is a norm. The Euclidean norm measures the straight line, the taxicab norm adds up the change in each component, and the maximum norm reports the largest single change. By the first, shop P at $(3, 3)$ is nearer than Q at $(0, 5)$. By the second, Q is.
+
+        For the Euclidean norm the triangle inequality needed proof, and the proof ran through the Cauchy-Schwarz inequality, $\lvert \mathbf{u} \cdot \mathbf{v} \rvert \le \lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert$, which came from nothing more than the fact that a squared length is never negative, and from finding the minimum of a quadratic as you learned in calculus.
+
+        The choice of norm is a choice about what matters. Squared Euclidean error punishes large misses severely. Absolute error forgives them. Norms measure the size of a weight vector to keep it small and the size of a step to keep it safe, and you will meet them in those roles in [[m12.gradient]] and [[m19.gradient-descent]].
+
+        Two things were left pointing forwards. Cauchy-Schwarz says that $\dfrac{\mathbf{u} \cdot \mathbf{v}}{\lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert}$ always lies between $-1$ and 1, which is the range of a cosine. And the last question showed distance becoming a poor guide to likeness when there are many components, or when vectors differ greatly in length, like the short and the long report on the same subject. Put together, these suggest comparing vectors by their **direction** alone. That is the next lesson, [[m4.angle-and-cosine-similarity]]. The value of $t$ that appeared inside the proof, the multiple of one vector that comes closest to another, is taken up after that in [[m4.projection-onto-a-vector]].

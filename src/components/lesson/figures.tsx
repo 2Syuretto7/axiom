@@ -1699,6 +1699,337 @@ function Accumulation(props: Props) {
   );
 }
 
+/* Vectors are drawn on a square grid, 40 pixels to the unit in both directions, so that angles and lengths look true. */
+const gx = (x: number) => 230 + 40 * x;
+const gy = (y: number) => 140 - 40 * y;
+type Pair = [number, number];
+const pair = ([x, y]: Pair) => `(${dp(x)}, ${dp(y)})`;
+const dot = (a: Pair, b: Pair) => a[0] * b[0] + a[1] * b[1];
+const signed = (v: number) => (v < 0 ? `− ${dp(-v)}` : `+ ${dp(v)}`);
+
+function Grid() {
+  return (
+    <>
+      <defs>
+        <clipPath id="grid-clip">
+          <rect x={gx(-4.75)} y={gy(3)} width={380} height={240} />
+        </clipPath>
+      </defs>
+      {[-4, -3, -2, -1, 0, 1, 2, 3, 4].map((i) => (
+        <line key={`v${i}`} x1={gx(i)} x2={gx(i)} y1={gy(-3)} y2={gy(3)} className={i === 0 ? "fig-axis" : "fig-grid"} />
+      ))}
+      {[-3, -2, -1, 0, 1, 2, 3].map((i) => (
+        <line key={`h${i}`} x1={gx(-4.75)} x2={gx(4.75)} y1={gy(i)} y2={gy(i)} className={i === 0 ? "fig-axis" : "fig-grid"} />
+      ))}
+    </>
+  );
+}
+
+function Arrow({ from = [0, 0], to, accent = false, dashed = false, name }: { from?: Pair; to: Pair; accent?: boolean; dashed?: boolean; name?: string }) {
+  const [x0, y0, x1, y1] = [gx(from[0]), gy(from[1]), gx(to[0]), gy(to[1])];
+  const length = Math.hypot(x1 - x0, y1 - y0);
+  const stroke = dashed ? "fig-guide" : accent ? "fig-accent-line" : "fig-line";
+  if (length < 1) return <circle cx={x0} cy={y0} r="3" className={accent ? "fig-accent" : "fig-fill"} />;
+  const [ux, uy] = [(x1 - x0) / length, (y1 - y0) / length];
+  const head = `${(x1 - 9 * ux + 5 * uy).toFixed(1)},${(y1 - 9 * uy - 5 * ux).toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)} ${(x1 - 9 * ux - 5 * uy).toFixed(1)},${(y1 - 9 * uy + 5 * ux).toFixed(1)}`;
+  return (
+    <>
+      <line x1={x0} y1={y0} x2={x1} y2={y1} className={stroke} />
+      <polyline points={head} className={stroke} fill="none" />
+      {name ? (
+        <text x={x1 + 8 * ux - 4} y={y1 + 8 * uy + 4} className="fig-small">
+          {name}
+        </text>
+      ) : null}
+    </>
+  );
+}
+
+const TAILS: Pair[] = [
+  [0, 0],
+  [1, 1],
+  [-1, -1],
+  [1.5, -1],
+];
+
+/** A vector as an arrow and as a list of two numbers, and the fact that moving the arrow does not change the vector. */
+function VectorArrow(props: Props) {
+  const [x, setX] = useState(clamp(num(props.x, 3), -3, 3));
+  const [y, setY] = useState(clamp(num(props.y, 2), -2, 2));
+  const [tail, setTail] = useState(0);
+  const from = TAILS[tail];
+  const to: Pair = [from[0] + x, from[1] + y];
+  const across = x === 0 ? "0 across" : `${dp(Math.abs(x))} ${x > 0 ? "right" : "left"}`;
+  const up = y === 0 ? "0 up" : `${dp(Math.abs(y))} ${y > 0 ? "up" : "down"}`;
+  return (
+    <Frame
+      title="An arrow and a list"
+      summary={`The vector ${pair([x, y])}, drawn from ${pair(from)} to ${pair(to)}: ${across} and ${up}. Its length is ${dp(Math.hypot(x, y))}. ${tail === 0 ? "Drawn from the origin, its tip is at the point with the same two numbers." : "It has been moved, and it is still the same vector: the same two numbers, the same length, the same direction."}`}
+      controls={
+        <>
+          <Slider label="across" value={x} onChange={setX} min={-3} max={3} step={0.5} />
+          <Slider label="up" value={y} onChange={setY} min={-2} max={2} step={0.5} />
+          <button type="button" className="btn btn-secondary btn-small" onClick={() => setTail((tail + 1) % TAILS.length)}>
+            Move the arrow
+          </button>
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`An arrow from ${pair(from)} to ${pair(to)}`}>
+        <Grid />
+        <line x1={gx(from[0])} y1={gy(from[1])} x2={gx(to[0])} y2={gy(from[1])} className="fig-guide" />
+        <line x1={gx(to[0])} y1={gy(from[1])} x2={gx(to[0])} y2={gy(to[1])} className="fig-guide" />
+        <Arrow from={from} to={to} accent />
+      </svg>
+    </Frame>
+  );
+}
+
+/** Adding two vectors tip to tail, in either order, with one of them scaled. */
+function VectorSum(props: Props) {
+  const a: Pair = [clamp(num(props.ax, 2), -2, 2), clamp(num(props.ay, 1), -1, 1)];
+  const b: Pair = [clamp(num(props.bx, 1), -1, 1), clamp(num(props.by, 1), -1, 1)];
+  const [halves, setHalves] = useState(clamp(Math.round(num(props.scale, 1) * 2), -4, 4));
+  const [bFirst, setBFirst] = useState(false);
+  const c = halves / 2;
+  const cb: Pair = [c * b[0], c * b[1]];
+  const sum: Pair = [a[0] + cb[0], a[1] + cb[1]];
+  const scaled = c === 1 ? "b" : c === -1 ? "−b" : `${dp(c)}b`;
+  const term = c < 0 ? `(${scaled})` : scaled;
+  const effect = c === 0 ? "Scaling by 0 gives the zero vector, so the sum is a itself." : c < 0 ? `A negative scale turns b round to point the opposite way${c === -1 ? "" : ` and makes it ${dp(Math.abs(c))} times as long`}.` : c === 1 ? "" : `Scaling by ${dp(c)} keeps b's direction and makes it ${dp(c)} times as long.`;
+  return (
+    <Frame
+      title="Adding tip to tail"
+      summary={`a = ${pair(a)} and b = ${pair(b)}${c === 1 ? "" : `, so ${scaled} = ${pair(cb)}`}. ${bFirst ? `Walk along ${scaled}, then along a` : `Walk along a, then along ${scaled}`}: you arrive at a + ${term} = (${dp(a[0])} ${signed(cb[0])}, ${dp(a[1])} ${signed(cb[1])}) = ${pair(sum)}. Either order arrives at the same place. ${effect}`.trim()}
+      controls={
+        <>
+          <Slider label="scale of b in halves" value={halves} onChange={setHalves} min={-4} max={4} />
+          <button type="button" className="btn btn-secondary btn-small" onClick={() => setBFirst(!bFirst)}>
+            Swap the order
+          </button>
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`The vectors a and ${scaled} added tip to tail, giving ${pair(sum)}`}>
+        <Grid />
+        <Arrow to={bFirst ? a : cb} dashed />
+        <Arrow from={bFirst ? a : cb} to={sum} dashed />
+        <Arrow to={bFirst ? cb : a} name={bFirst ? scaled : "a"} />
+        <Arrow from={bFirst ? cb : a} to={sum} name={bFirst ? "a" : scaled} />
+        <Arrow to={sum} accent />
+      </svg>
+    </Frame>
+  );
+}
+
+/** Every point two vectors can reach by scaling and adding: the whole plane, or only a line when they point the same way. */
+function Span(props: Props) {
+  const a: Pair = [1.5, 0.5];
+  const [parallel, setParallel] = useState(props.parallel === true);
+  const b: Pair = parallel ? [-0.75, -0.25] : [0.5, 1];
+  const [sq, setSq] = useState(clamp(Math.round(num(props.s, 1) * 4), -8, 8));
+  const [tq, setTq] = useState(clamp(Math.round(num(props.t, 1) * 4), -8, 8));
+  const [s, t] = [sq / 4, tq / 4];
+  const at: Pair = [s * a[0] + t * b[0], s * a[1] + t * b[1]];
+  const reach: Pair[] = [];
+  for (let i = -4; i <= 4; i++) for (let j = -4; j <= 4; j++) reach.push([(i / 2) * a[0] + (j / 2) * b[0], (i / 2) * a[1] + (j / 2) * b[1]]);
+  return (
+    <Frame
+      title="What two vectors can reach"
+      summary={`a = ${pair(a)} and b = ${pair(b)}. The combination ${dp(s)}a + ${dp(t)}b is ${pair(at)}. ${
+        parallel
+          ? "Here b is −0.5 times a, so every combination lies on the one line through a. The two vectors span only a line, and b reaches nothing that a could not reach alone."
+          : "Because a and b point in different directions, some choice of the two numbers reaches any point of the plane. The two vectors span the plane."
+      }`}
+      controls={
+        <>
+          <Slider label="multiple of a in quarters" value={sq} onChange={setSq} min={-8} max={8} />
+          <Slider label="multiple of b in quarters" value={tq} onChange={setTq} min={-8} max={8} />
+          <button type="button" className="btn btn-secondary btn-small" onClick={() => setParallel(!parallel)}>
+            {parallel ? "Turn b away from a" : "Put b along a"}
+          </button>
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`The points reachable from a and b, with ${dp(s)}a + ${dp(t)}b marked at ${pair(at)}`}>
+        <Grid />
+        {reach.map(([px, py], i) => (
+          <circle key={i} cx={gx(px)} cy={gy(py)} r="2" className="fig-fill" />
+        ))}
+        <Arrow to={[s * a[0], s * a[1]]} dashed />
+        <Arrow from={[s * a[0], s * a[1]]} to={at} dashed />
+        <Arrow to={a} name="a" />
+        <Arrow to={b} name="b" />
+        <circle cx={gx(at[0])} cy={gy(at[1])} r="5" className="fig-accent" />
+      </svg>
+    </Frame>
+  );
+}
+
+/** The dot product as one vector's length times the other's shadow on it, changing sign as the angle opens. */
+function DotProduct(props: Props) {
+  const a: Pair = [3, 0];
+  const [angle, setAngle] = useState(clamp(Math.round(num(props.angle, 45) / 15) * 15, 0, 345));
+  const [halves, setHalves] = useState(clamp(Math.round(num(props.length, 2) * 2), 1, 6));
+  const length = halves / 2;
+  const b: Pair = [length * Math.cos((angle * Math.PI) / 180), length * Math.sin((angle * Math.PI) / 180)];
+  const product = dot(a, b);
+  const shadow = b[0];
+  const between = angle > 180 ? 360 - angle : angle;
+  const tidy = (v: number) => (Math.abs(v) < 1e-9 ? 0 : v);
+  const verdict =
+    tidy(product) === 0
+      ? "The dot product is zero: b is at a right angle to a and has no part along it."
+      : product > 0
+        ? "The dot product is positive: b points partly along a."
+        : "The dot product is negative: b points partly against a.";
+  return (
+    <Frame
+      title="The dot product and the shadow"
+      summary={`a = ${pair(a)} and b = ${pair([tidy(b[0]), tidy(b[1])])}, of length ${dp(length)}, with ${between}° between them. a · b = 3 × ${dp(tidy(b[0]))} + 0 × ${dp(tidy(b[1]))} = ${dp(tidy(product))}. The shadow of b on a has length ${dp(tidy(shadow))}, and 3 × ${dp(tidy(shadow))} gives the same number. ${verdict}`}
+      controls={
+        <>
+          <Slider label="angle of b in degrees" value={angle} onChange={setAngle} min={0} max={345} step={15} />
+          <Slider label="length of b in halves" value={halves} onChange={setHalves} min={1} max={6} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`The vector b at ${between} degrees to a, with its shadow on a`}>
+        <Grid />
+        <line x1={gx(b[0])} y1={gy(b[1])} x2={gx(b[0])} y2={gy(0)} className="fig-guide" />
+        <Arrow to={a} name="a" />
+        <Arrow to={b} name="b" />
+        <line x1={gx(0)} y1={gy(0)} x2={gx(shadow)} y2={gy(0)} className="fig-accent-line" />
+        <circle cx={gx(shadow)} cy={gy(0)} r="4" className="fig-accent" />
+      </svg>
+    </Frame>
+  );
+}
+
+const NORMS = [
+  { name: "Euclidean", symbol: "‖x‖₂", shape: "a circle", f: (x: number, y: number) => Math.hypot(x, y), how: (x: number, y: number) => `√(${dp(x)}² + ${dp(y)}²)` },
+  { name: "taxicab", symbol: "‖x‖₁", shape: "a diamond", f: (x: number, y: number) => Math.abs(x) + Math.abs(y), how: (x: number, y: number) => `${dp(Math.abs(x))} + ${dp(Math.abs(y))}` },
+  { name: "maximum", symbol: "‖x‖∞", shape: "a square", f: (x: number, y: number) => Math.max(Math.abs(x), Math.abs(y)), how: (x: number, y: number) => `the larger of ${dp(Math.abs(x))} and ${dp(Math.abs(y))}` },
+];
+
+/** Three ways of measuring the length of the same vector, and the shape of "all points at distance 1" under each. */
+function NormBalls(props: Props) {
+  const [xq, setXq] = useState(clamp(Math.round(num(props.x, 1.5) * 4), -12, 12));
+  const [yq, setYq] = useState(clamp(Math.round(num(props.y, 1) * 4), -10, 10));
+  const [which, setWhich] = useState(clamp(Math.round(num(props.norm, 0)), 0, 2));
+  const [x, y] = [xq / 4, yq / 4];
+  const norm = NORMS[which];
+  const size = norm.f(x, y);
+  const ball = (r: number) =>
+    which === 0 ? (
+      <circle cx={gx(0)} cy={gy(0)} r={40 * r} className={r === 1 ? "fig-line" : "fig-ghost"} />
+    ) : which === 1 ? (
+      <polygon points={`${gx(r)},${gy(0)} ${gx(0)},${gy(r)} ${gx(-r)},${gy(0)} ${gx(0)},${gy(-r)}`} className={r === 1 ? "fig-line" : "fig-ghost"} />
+    ) : (
+      <rect x={gx(-r)} y={gy(r)} width={80 * r} height={80 * r} className={r === 1 ? "fig-line" : "fig-ghost"} />
+    );
+  return (
+    <Frame
+      title="Three ways to measure length"
+      summary={`The vector ${pair([x, y])}. Its ${norm.name} norm ${norm.symbol} is ${norm.how(x, y)} = ${dp(size)}. With this norm the points at distance 1 from the origin form ${norm.shape}. All three norms of this vector: Euclidean ${dp(NORMS[0].f(x, y))}, taxicab ${dp(NORMS[1].f(x, y))}, maximum ${dp(NORMS[2].f(x, y))}.`}
+      controls={
+        <>
+          <Slider label="across in quarters" value={xq} onChange={setXq} min={-12} max={12} />
+          <Slider label="up in quarters" value={yq} onChange={setYq} min={-10} max={10} />
+          <button type="button" className="btn btn-secondary btn-small" aria-label="Change norm" onClick={() => setWhich((which + 1) % 3)}>
+            {norm.name} norm
+          </button>
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`The vector ${pair([x, y])} with the set of points at ${norm.name} distance 1 and at distance ${dp(size)}`}>
+        <Grid />
+        {size > 0 ? ball(size) : null}
+        {ball(1)}
+        <Arrow to={[x, y]} accent />
+      </svg>
+    </Frame>
+  );
+}
+
+/** The nearest point to b on the line through a, and the leftover that is perpendicular to a. */
+function Projection(props: Props) {
+  const a: Pair = [3, 1];
+  const [bx, setBx] = useState(clamp(Math.round(num(props.bx, 1) * 2) / 2, -4, 4));
+  const [by, setBy] = useState(clamp(Math.round(num(props.by, 2) * 2) / 2, -2.5, 2.5));
+  const b: Pair = [bx, by];
+  const k = dot(a, b) / dot(a, a);
+  const p: Pair = [k * a[0], k * a[1]];
+  const e: Pair = [b[0] - p[0], b[1] - p[1]];
+  return (
+    <Frame
+      title="Projection onto a line"
+      summary={`a = ${pair(a)} and b = ${pair(b)}. a · b = ${dp(dot(a, b))} and a · a = 10, so the projection of b onto a is ${dp(k)} times a, which is p = ${pair(p)}. What is left over, b − p = ${pair(e)}, is at a right angle to a: its dot product with a is 0. No point on the line through a is nearer to b than p, and the distance is ${dp(Math.hypot(e[0], e[1]))}.`}
+      controls={
+        <>
+          <Slider label="b across" value={bx} onChange={setBx} min={-4} max={4} step={0.5} />
+          <Slider label="b up" value={by} onChange={setBy} min={-2.5} max={2.5} step={0.5} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`The vector b, its projection ${pair(p)} on the line through a, and the perpendicular from b to the line`}>
+        <Grid />
+        <line x1={gx(-6)} y1={gy(-2)} x2={gx(6)} y2={gy(2)} className="fig-ghost" clipPath="url(#grid-clip)" />
+        <line x1={gx(b[0])} y1={gy(b[1])} x2={gx(p[0])} y2={gy(p[1])} className="fig-guide" />
+        <Arrow to={a} name="a" />
+        <Arrow to={b} name="b" />
+        <Arrow to={p} accent />
+        <circle cx={gx(p[0])} cy={gy(p[1])} r="4" className="fig-accent" />
+      </svg>
+    </Frame>
+  );
+}
+
+/** A line as the set of points where w · x + c is zero, with w at right angles to it and a sign on each side. */
+function Hyperplane(props: Props) {
+  const [w1h, setW1] = useState(clamp(Math.round(num(props.w1, 1) * 2), -4, 4));
+  const [w2h, setW2] = useState(clamp(Math.round(num(props.w2, 2) * 2), -4, 4));
+  const [ch, setC] = useState(clamp(Math.round(num(props.c, -2) * 2), -8, 8));
+  const point: Pair = [clamp(num(props.px, 2), -4, 4), clamp(num(props.py, 1), -2.5, 2.5)];
+  const w: Pair = [w1h / 2, w2h / 2];
+  const c = ch / 2;
+  const size = Math.hypot(w[0], w[1]);
+  const value = dot(w, point) + c;
+  const foot: Pair = size === 0 ? [0, 0] : [(-c * w[0]) / (size * size), (-c * w[1]) / (size * size)];
+  const along: Pair = size === 0 ? [0, 0] : [-w[1] / size, w[0] / size];
+  const side = value === 0 ? "which is zero, so the point is on the line." : `which is ${value > 0 ? "positive" : "negative"}, so the point is on the side that w points ${value > 0 ? "towards" : "away from"}, at a distance of ${dp(Math.abs(value))} ÷ ${dp(size)} = ${dp(Math.abs(value) / size)} from the line.`;
+  return (
+    <Frame
+      title="A line from a vector and a number"
+      summary={
+        size === 0
+          ? `With w = (0, 0) the expression w · x ${signed(c)} is ${dp(c)} at every point, so it describes no line at all.`
+          : `The line ${dp(w[0])}x + ${dp(w[1])}y ${signed(c)} = 0. The vector w = ${pair(w)} is at right angles to it. At the point ${pair(point)} the expression is ${dp(w[0])} × ${dp(point[0])} + ${dp(w[1])} × ${dp(point[1])} ${signed(c)} = ${dp(value)}, ${side}`
+      }
+      controls={
+        <>
+          <Slider label="first weight in halves" value={w1h} onChange={setW1} min={-4} max={4} />
+          <Slider label="second weight in halves" value={w2h} onChange={setW2} min={-4} max={4} />
+          <Slider label="offset in halves" value={ch} onChange={setC} min={-8} max={8} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={size === 0 ? "No line" : `The line with normal vector ${pair(w)} and the point ${pair(point)}`}>
+        <Grid />
+        {size === 0 ? null : (
+          <>
+            <g clipPath="url(#grid-clip)">
+              <line x1={gx(foot[0] - 12 * along[0])} y1={gy(foot[1] - 12 * along[1])} x2={gx(foot[0] + 12 * along[0])} y2={gy(foot[1] + 12 * along[1])} className="fig-accent-line" />
+            </g>
+            <Arrow from={foot} to={[foot[0] + w[0], foot[1] + w[1]]} name="w" />
+          </>
+        )}
+        <circle cx={gx(point[0])} cy={gy(point[1])} r="5" className="fig-accent" />
+      </svg>
+    </Frame>
+  );
+}
+
 const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "place-value": PlaceValue,
   "number-line": NumberLine,
@@ -1733,6 +2064,13 @@ const FIGURES: Record<FigureName, ComponentType<Props>> = {
   descent: Descent,
   riemann: Riemann,
   accumulation: Accumulation,
+  "vector-arrow": VectorArrow,
+  "vector-sum": VectorSum,
+  span: Span,
+  "dot-product": DotProduct,
+  "norm-balls": NormBalls,
+  projection: Projection,
+  hyperplane: Hyperplane,
 };
 
 export function Figure({ name, props }: { name: string; props?: Props }) {
