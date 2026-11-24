@@ -98,6 +98,21 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   await expect(series).toContainText("r = 0.5. The sum of the first 6 terms is 1.97. The totals close in on 1 ÷ (1 − r) = 2: the series converges.");
   await series.getByRole("slider", { name: "ratio r" }).fill("1");
   await expect(series).toContainText("The sum of the first 6 terms is 6. The ratio is not smaller than 1 in size, so the totals never settle: the series diverges.");
+  const stack = page.getByRole("figure").filter({ hasText: "The call stack" });
+  await expect(stack).toContainText("Step 0: factorial(3) has been called. 3 is not 0, so it needs factorial(2) and must wait. 1 call is on the stack.");
+  for (let i = 0; i < 3; i++) await stack.getByRole("button", { name: "Increase step" }).click();
+  await expect(stack).toContainText("Step 3: factorial(0) has been called. It is the base case and returns 1 without calling anything. 4 calls are on the stack, the deepest it gets.");
+  for (let i = 0; i < 3; i++) await stack.getByRole("button", { name: "Increase step" }).click();
+  await expect(stack).toContainText("Step 6: factorial(2) returned 2. factorial(3) resumes with its own n = 3 and computes 3 × 2 = 6. 1 call is on the stack.");
+  await stack.getByRole("button", { name: "Increase step" }).click();
+  await expect(stack).toContainText("Step 7: factorial(3) returned 6. The stack is empty. 4 calls were made in all.");
+  await expect(stack.getByRole("button", { name: "Increase step" })).toBeDisabled();
+  await stack.getByRole("button", { name: "Increase n" }).click();
+  await expect(stack).toContainText("Step 0: factorial(4) has been called.");
+  const rates = page.getByRole("figure").filter({ hasText: "How running times grow" });
+  await expect(rates).toContainText("For an input of size n = 8: log₂ n = 3 steps, n = 8, n log₂ n = 24, n² = 64, 2ⁿ = 256.");
+  await rates.getByRole("slider", { name: "size n" }).fill("16");
+  await expect(rates).toContainText("For an input of size n = 16: log₂ n = 4 steps, n = 16, n log₂ n = 64, n² = 256, 2ⁿ = 65,536.");
   await expect(page.locator(".prose-lesson img")).toHaveCount(0);
 
   // Wrong, then a hint, then right. Fractions and words are handled by the grader.

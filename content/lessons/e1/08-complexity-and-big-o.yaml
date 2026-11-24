@@ -1,0 +1,914 @@
+concept: e1.complexity-and-big-o
+minutes: 105
+claim: You can count the steps a piece of code takes as a function of the size of its input, describe the growth of that count in big-O notation, recognise constant, logarithmic, linear, quadratic and exponential growth in code, name the hidden cost of common operations on lists, sets and dictionaries, and use all this to predict whether a program will finish and to replace a slow method by a fast one.
+recalls: [e1.recursion]
+uses: [e1.comprehensions-and-iterators, e1.modules-and-imports, e1.special-methods-and-operator-overloading, e0.loops, e0.functions, e0.lists-and-tuples, e0.dictionaries-and-sets, m0.estimation-and-orders-of-magnitude, m1.inequalities-and-absolute-value, m1.exponent-laws, m1.logarithms, m2.functions-as-machines, m2.the-exponential-and-e, m2.summation-and-product-notation, m2.sequences-and-series]
+leads: [e1.testing-with-pytest, e1.generators-and-context-managers]
+starter: |
+  # Scratch space. Count the comparisons, then double n and count again.
+  def count_pairs(n):
+      steps = 0
+      for i in range(n):
+          for j in range(i + 1, n):
+              steps += 1
+      return steps
+
+  for n in [10, 20, 40, 80]:
+      print(n, count_pairs(n))
+parts:
+  recall:
+    - text: |
+        In [[e1.recursion]] you began to count. Fast powering made about twenty calls where the plain method made a million, and remembering answers cut the Fibonacci function from millions of calls to dozens. Those were differences in how the work grows, and this lesson gives that idea a notation. Three quick pulls first.
+    - question:
+        id: recall-halving
+        type: numeric
+        system: s1
+        concepts: [e1.recursion]
+        prompt: |
+          A recursive function calls itself on half of its input each time. Starting from an input of size 64, how many halvings bring the size down to 1?
+        answer: "6"
+        explanation: 64 is two to the sixth power, so six halvings reach 1. It is the logarithm to base 2 of 64.
+        hints:
+          - 64, 32, 16 and so on.
+          - To what power must 2 be raised to give 64?
+    - question:
+        id: recall-base-case
+        type: choice
+        system: s1
+        concepts: [e1.recursion]
+        prompt: |
+          What are the two parts that every correct recursive function must have?
+        options:
+          - A loop and a counter.
+          - A base case answered directly, and a recursive case that calls the function on something smaller.
+          - A try block and an except block.
+          - A class and an instance.
+        answer: 1
+        explanation: The base case stops the descent, and the recursive case must move towards it.
+        hints:
+          - What stops the calls from going down for ever?
+          - What must be true of the input in each recursive call?
+    - question:
+        id: recall-fib-growth
+        type: choice
+        system: s1
+        concepts: [e1.recursion]
+        prompt: |
+          Why is the plain recursive Fibonacci function so slow?
+        options:
+          - Addition is a slow operation.
+          - Each call makes two further calls, so the same small questions are answered again and again, and the number of calls grows exponentially.
+          - Python limits the depth of recursion to a thousand.
+          - It uses too much memory for its dictionary.
+        answer: 1
+        explanation: The tree of calls roughly doubles in width at each level. Remembering answers removes the repetition.
+        hints:
+          - How many calls does each call make?
+          - How many different questions are there, compared with the number of calls?
+  puzzle:
+    - text: |
+        You have a list of items and need to know whether any item appears twice. It is a real job: before training a model, duplicated examples are removed from the data. Here are two ways to do it.
+
+        ```python
+        def has_duplicate_a(xs):
+            for i in range(len(xs)):
+                for j in range(i + 1, len(xs)):
+                    if xs[i] == xs[j]:
+                        return True
+            return False
+
+        def has_duplicate_b(xs):
+            return len(set(xs)) < len(xs)
+        ```
+
+        Method A compares every item with every later item. Method B builds a set, which keeps one copy of each value, and checks whether anything was lost. Both are correct. You try them on a list of a thousand items with no duplicates, and both answer before you can blink. So you choose A, since it is the one you understand best, and you start it on the real data: ten million items.
+
+        Method B, on those ten million items, takes about a second. How long does method A take? Not ten seconds, and not ten minutes. On the same computer it takes about **two months**.
+
+        Nothing in the thousand-item trial warned you. And a computer a hundred times faster would not rescue you: A would still take half a day, against a hundredth of a second for B. So here is the puzzle. What is the difference between A and B, such that it is invisible at a thousand items and ruinous at ten million? And how could you have known it in advance, **from the code alone**, without running anything?
+  intuition:
+    - text: |
+        Two things happen when people gather in a room. A register is taken: each name is called once. And everybody shakes hands with everybody else.
+
+        With 10 people, the register takes 10 calls and there are 45 handshakes. Not very different. Now let the room hold 1000 people. The register takes 1000 calls. The handshakes number 499,500. Add one more person: the register grows by one call, and the handshakes grow by a thousand, since the newcomer must greet everyone already present.
+
+        The register and the handshakes are not different in *size* so much as in **kind**. One grows in step with the number of people. The other grows with its square. And for a large enough room, that difference of kind overwhelms everything else. It would not matter if each call of the register took a full minute and each handshake a second: for a big enough crowd the handshakes still take longer.
+
+        Method B is the register. It handles each item once. Method A is the handshakes. It pairs each item with every other.
+
+        So the right question about a program is not "how many seconds does it take?" That depends on the machine, on the language, on what else is running. The right question is: **when the input becomes twice as large, what happens to the work?** For the register it doubles. For the handshakes it becomes four times as large. Asked that way, the answer belongs to the method itself and to nothing else, and you can read it off the code.
+
+        Move the slider and watch five kinds of growth pull apart. At small sizes they are bunched together. That is why a small trial tells you nothing.
+    - figure: growth-rates
+      props:
+        n: 8
+  derivation:
+    - text: |
+        **Counting steps.** To study a program without running it, count the **basic steps** it performs, where a basic step is something that takes a fixed, small amount of time: one addition, one comparison, one assignment, one look-up of `xs[i]`. The count will depend on the input, so write it as a function of the input's **size**, which is called $n$. For a list, $n$ is its length.
+
+        ```python
+        def total(xs):
+            result = 0
+            for x in xs:
+                result = result + x
+            return result
+        ```
+
+        The loop body runs once for each item, $n$ times. Count an addition and an assignment each time, with one assignment before the loop and one return after, and the total is $T(n) = 2n + 2$ steps. A different way of counting might give $3n + 1$. As you will see in a moment, the disagreement does not matter.
+
+        Now method A, in the worst case, where there is no duplicate and nothing stops it early. When `i` is 0 the inner loop runs $n - 1$ times. When `i` is 1 it runs $n - 2$ times, and so on down to 0. The total number of comparisons is
+
+        $$(n - 1) + (n - 2) + \dots + 1 + 0 = \sum_{k=1}^{n-1} k = \frac{(n - 1)\,n}{2} = \tfrac{1}{2}n^2 - \tfrac{1}{2}n,$$
+
+        by the formula for the sum of the first whole numbers from [[m2.summation-and-product-notation]]. It is the handshake count. For $n = 10$ it gives 45, and for $n = 1000$ it gives 499,500.
+    - question:
+        id: predict-count-pairs
+        type: predict
+        system: s1
+        concepts: [m2.summation-and-product-notation]
+        prompt: What does this print?
+        code: |
+          def count_pairs(n):
+              steps = 0
+              for i in range(n):
+                  for j in range(i + 1, n):
+                      steps += 1
+              return steps
+
+          print(count_pairs(4), count_pairs(8), count_pairs(16))
+        output: "6 28 120"
+        explanation: The inner loop runs n - 1 times, then n - 2, down to 0, which adds up to n(n - 1)/2. For 4 that is 6, for 8 it is 28 and for 16 it is 120. Each doubling of n multiplies the count by a little over four.
+        hints:
+          - For n = 4 the inner loop runs 3 times, then 2, then 1, then 0.
+          - The total is half of n times n - 1.
+    - text: |
+        **What matters when $n$ is large.** Look at the two terms of $\tfrac12 n^2 - \tfrac12 n$ as $n$ grows.
+
+        | $n$ | $\tfrac12 n^2$ | $\tfrac12 n$ | share of the total due to the $n^2$ term |
+        | --- | --- | --- | --- |
+        | 10 | 50 | 5 | about 110% of it, before the 5 is taken off |
+        | 1000 | 500,000 | 500 | 100.1% |
+        | 1,000,000 | 500,000,000,000 | 500,000 | 100.0001% |
+
+        The second term is still there, but it has stopped mattering. For large $n$ the count is, to any accuracy you could want, $\tfrac12 n^2$. **The term that grows fastest swallows the others.**
+
+        Now the factor $\tfrac12$. Ask the doubling question. Replace $n$ by $2n$ in $\tfrac12 n^2$ and you get $\tfrac12 (2n)^2 = 4 \times \tfrac12 n^2$. The work is multiplied by four, and the $\tfrac12$ played no part in that: it appears on both sides and cancels. The same would be true of any constant in front. A constant factor says how long one step takes, which is a fact about the computer. The power of $n$ says how the work grows, which is a fact about the method.
+
+        So two simplifications lose nothing that matters at scale:
+
+        1. keep only the fastest-growing term;
+        2. drop its constant factor.
+
+        Apply them to $\tfrac12 n^2 - \tfrac12 n$ and what is left is $n^2$. Apply them to $2n + 2$ and what is left is $n$. That residue is called the **order of growth**, and it is written with a capital O: method A takes $O(n^2)$ steps, read "order $n$ squared", and `total` takes $O(n)$. This is **big-O notation**.
+
+        This also settles the earlier worry. Whether you counted $2n + 2$ steps or $3n + 1$, the order is $O(n)$ either way. Big-O is designed to be blind to exactly the things that two careful people might count differently.
+    - text: |
+        **The precise meaning.** "Is $O(n^2)$" has an exact definition, and it is worth seeing once. To say that $f(n)$ is $O(g(n))$ means:
+
+        > there are a positive constant $c$ and a starting size $n_0$ such that $f(n) \le c \cdot g(n)$ for every $n \ge n_0$.
+
+        In words: from some point onwards, $f$ stays below a fixed multiple of $g$. The constant $c$ is what licenses dropping constant factors, and the starting size $n_0$ is what licenses ignoring small inputs.
+
+        Check it for $f(n) = 2n + 2$ and $g(n) = n$. Try $c = 3$. Is $2n + 2 \le 3n$? Subtracting $2n$ from both sides, as in [[m1.inequalities-and-absolute-value]], that says $2 \le n$. So the inequality holds for every $n \ge 2$. With $c = 3$ and $n_0 = 2$ the definition is satisfied, and $2n + 2$ is $O(n)$.
+
+        Is $n^2$ also $O(n)$? That would need $n^2 \le c \cdot n$, which is $n \le c$, for all large $n$. No constant $c$ is at least as large as every $n$. So $n^2$ is **not** $O(n)$: however generous the multiple, the square eventually escapes it.
+
+        One caution. Big-O gives an upper bound, so strictly $2n + 2$ is also $O(n^2)$, in the way that a person who is under two metres tall is also under three. That is true and useless. By custom you always state the smallest order you can justify.
+    - question:
+        id: choice-simplify
+        type: choice
+        system: s1
+        prompt: |
+          A function performs $5n^2 + 300n + 7000$ steps on an input of size $n$. What is its order of growth?
+        options:
+          - "$O(7000)$"
+          - "$O(n)$"
+          - "$O(n^2)$"
+          - "$O(5n^2 + 300n)$"
+        answer: 2
+        explanation: Keep the fastest-growing term and drop its constant. For small n the 7000 is the largest of the three, but once n passes about 60 the square term has overtaken the others, and it never looks back.
+        hints:
+          - Which of the three terms grows fastest as n increases?
+          - Constant factors are dropped.
+    - text: |
+        **The ladder of orders.** A handful of orders account for nearly every program you will meet. Here they are from slowest-growing to fastest, with the time each would take on an input of a million items, on a machine doing ten million basic steps a second, which is about what Python manages.
+
+        | Order | Name | Doubling $n$ | Steps for $n = 10^6$ | Time |
+        | --- | --- | --- | --- | --- |
+        | $O(1)$ | constant | no change | 1 | instant |
+        | $O(\log n)$ | logarithmic | adds one step | 20 | instant |
+        | $O(n)$ | linear | doubles | $10^6$ | a tenth of a second |
+        | $O(n \log n)$ | linearithmic | a little more than doubles | $2 \times 10^7$ | two seconds |
+        | $O(n^2)$ | quadratic | four times | $10^{12}$ | 28 hours |
+        | $O(n^3)$ | cubic | eight times | $10^{18}$ | 3000 years |
+        | $O(2^n)$ | exponential | squares | $2^{1\,000\,000}$ | never |
+
+        Read down the last column. Between one row and the next, a program goes from something you wait for to something you cannot have. And you can now do the sum of the puzzle. For $n = 10^7$, method A makes about $\tfrac12 \times 10^{14}$ comparisons. At $10^7$ a second that is $5 \times 10^6$ seconds, which is 58 days. Method B takes $10^7$ steps, one second.
+
+        The logarithm in the second row is the one you earned in the last lesson. Any method that halves its problem at each step takes $\log_2 n$ steps, and $\log_2$ of a million is only 20. The base of the logarithm is not written in big-O, because changing the base multiplies by a constant, by the change-of-base rule of [[m1.logarithms]], and constants are dropped.
+
+        The exponential in the last row is the tree of calls of the plain Fibonacci function. At $n = 60$, $2^n$ steps would already take 3600 years.
+    - question:
+        id: numeric-scale-up
+        type: numeric
+        system: s2
+        prompt: |
+          A quadratic method takes 3 seconds on an input of 10,000 items. About how many seconds will it take on 40,000 items?
+        answer: "48"
+        unit: seconds
+        explanation: The input is 4 times as large, and quadratic work grows with the square, so it is 16 times as much. 3 × 16 = 48.
+        hints:
+          - By what factor has the size of the input grown?
+          - For a quadratic method, the work is multiplied by the square of that factor.
+    - text: |
+        **Reading the order off the code.** You rarely need to count exactly. A few patterns give the order at sight.
+
+        **A loop over the input** is $O(n)$, if its body takes constant time.
+
+        **A loop inside a loop**, each over the input, is $O(n^2)$: the costs **multiply**. Three deep is $O(n^3)$.
+
+        **One block after another**: the costs **add**, and the larger wins. A linear pass followed by a quadratic one is $O(n + n^2)$, which is $O(n^2)$.
+
+        **A loop that halves** what remains is $O(\log n)$:
+
+        ```python
+        steps = 0
+        while n > 1:
+            n = n // 2
+            steps += 1
+        ```
+
+        **A halving inside a loop**, or a loop inside a halving recursion, is $O(n \log n)$. This is the order of every good method of sorting, including Python's own `sorted`.
+
+        **A recursion that makes two calls on inputs only slightly smaller** is exponential.
+
+        And one warning before the patterns are trusted. All of this assumes that the lines inside the loops are basic steps. Many innocent-looking lines are not.
+    - question:
+        id: predict-halving-loop
+        type: predict
+        system: s1
+        concepts: [m1.logarithms]
+        prompt: What does this print?
+        code: |
+          def halvings(n):
+              steps = 0
+              while n > 1:
+                  n = n // 2
+                  steps += 1
+              return steps
+
+          print(halvings(8), halvings(1024), halvings(1000000))
+        output: "3 10 19"
+        explanation: The count is the number of times n can be halved before it reaches 1, which is the logarithm to base 2, rounded down. Two to the tenth is 1024, and a million lies between two to the nineteenth and two to the twentieth.
+        hints:
+          - For 8, follow n by hand. 8, 4, 2, 1.
+          - Two to the tenth is 1024. Two to the twentieth is a little over a million.
+    - text: |
+        **Hidden loops.** A single line of Python may hide a whole loop. Consider `x in xs`. If `xs` is a list, Python has no way to find `x` except to look at the items one after another until it finds it or runs out. That is $O(n)$. Put it inside a loop over $n$ items and you have written a quadratic program with only one visible `for`:
+
+        ```python
+        def has_duplicate_c(xs):
+            seen = []
+            for x in xs:
+                if x in seen:          # a hidden loop over seen
+                    return True
+                seen.append(x)
+            return False
+        ```
+
+        Now make one change. Let `seen` be a **set**.
+
+        ```python
+        def has_duplicate_d(xs):
+            seen = set()
+            for x in xs:
+                if x in seen:          # one step
+                    return True
+                seen.add(x)
+            return False
+        ```
+
+        For a set or a dictionary, `x in seen` takes $O(1)$ time: a fixed number of steps, however many items the set holds. How can that be? A list is like a street where the houses are in no particular order, so to find a family you must knock on each door. A set is like a street where each family's house number is **computed from its name**. To find a family you compute the number from the name and go straight to that door. The computed number is called a **hash**, and it is why you were told, in the lesson on special methods, that membership of a set depends on a number computed from each object.
+
+        So the second function is $O(n)$, the first is $O(n^2)$, and they differ by one pair of brackets. The difference between methods A and B of the puzzle is the same one. You must know the cost of the operations you use.
+
+        | Operation | List | Set or dictionary |
+        | --- | --- | --- |
+        | `len(c)` | $O(1)$ | $O(1)$ |
+        | look up by position `xs[i]`, or by key `d[k]` | $O(1)$ | $O(1)$ |
+        | `x in c` | $O(n)$ | $O(1)$ |
+        | add at the end: `xs.append(x)`, `s.add(x)`, `d[k] = v` | $O(1)$ | $O(1)$ |
+        | insert or remove at the front: `xs.insert(0, x)`, `xs.pop(0)` | $O(n)$ | |
+        | a slice `xs[a:b]`, a copy, `xs + ys` | $O(n)$ | |
+        | `min`, `max`, `sum`, `xs.count(x)`, `xs.index(x)` | $O(n)$ | $O(n)$ for the first three |
+        | `sorted(c)` | $O(n \log n)$ | $O(n \log n)$ |
+
+        Two rows deserve a second look. Inserting at the front of a list is $O(n)$ because every other item must be moved along by one place. And a slice makes a **copy**, which is $O(n)$. That is why the recursive `total(xs[1:])` of the last lesson, pretty as it was, is quadratic: it copies nearly the whole list at every level.
+    - question:
+        id: choice-hidden-loop
+        type: choice
+        system: s2
+        prompt: |
+          `a` and `b` are lists of $n$ items each. What is the order of growth of this function?
+
+          ```python
+          def common(a, b):
+              return [x for x in a if x in b]
+          ```
+        options:
+          - "$O(1)$"
+          - "$O(n)$, because there is one for."
+          - "$O(n^2)$, because `x in b` scans the list b for each of the n items of a."
+          - "$O(2^n)$"
+        answer: 2
+        explanation: The comprehension loops over a, n times. Each test of membership in the list b is itself a scan of up to n items. The costs multiply. Turning b into a set first, once, would make each test a single step and the whole function linear.
+        hints:
+          - How much work is one test of membership in a list?
+          - How many times is that test carried out?
+    - text: |
+        **Time is not the only cost.** A program also uses memory, and the same notation describes it. In [[e1.comprehensions-and-iterators]] you summed a series two ways. A list comprehension inside `sum` builds all $n$ terms first: $O(n)$ memory. A generator expression produces one term at a time: $O(1)$ memory. Both take $O(n)$ time. Often time and memory can be traded for each other. Memoisation spends $O(n)$ memory on a dictionary to bring the Fibonacci function down from exponential time to linear.
+
+        **Best case and worst case.** The count can depend on which input of size $n$ is given. Searching a list for a value takes one step if it is the first item and $n$ if it is absent. Unless something else is said, big-O describes the **worst case**, because that is the promise you can rely on.
+
+        **Checking by experiment.** You can confirm an order by timing. The module `time` has a clock for the purpose:
+
+        ```python
+        import time
+
+        start = time.perf_counter()
+        has_duplicate_a(list(range(2000)))
+        print(time.perf_counter() - start)
+        ```
+
+        One timing tells you little. Two tell you a great deal: time the function at $n$ and at $2n$ and take the ratio. A ratio near 2 says linear, near 4 says quadratic, near 8 says cubic. This is the doubling question, put to the machine.
+
+        **When to care.** If $n$ is ten, none of this matters and the clearest code is the best code. Do not contort a program to save steps that nobody will ever wait for. But machine learning lives at large $n$: millions of examples, thousands of millions of words. There the order is everything. One example will follow you through this whole course. The central operation of the models you will build compares every word of its input with every other word, the handshakes again, so its cost is quadratic in the length of the input. That one fact is why such models have a limit on how much text they can read at once, and a good share of current research is an attempt to get round it.
+    - question:
+        id: order-ladder
+        type: order
+        system: s1
+        prompt: Put these orders of growth in order, from the one that grows most slowly to the one that grows fastest.
+        steps:
+          - "$O(1)$"
+          - "$O(\\log n)$"
+          - "$O(n)$"
+          - "$O(n \\log n)$"
+          - "$O(n^2)$"
+          - "$O(2^n)$"
+        explanation: Constant, logarithmic, linear, linearithmic, quadratic, exponential. Each eventually outgrows every one before it, whatever the constant factors.
+        hints:
+          - Think about what doubling n does to each.
+          - A logarithm grows more slowly than n itself, and an exponential faster than any power.
+  formal:
+    - text: |
+        Let $f$ and $g$ be functions from the positive whole numbers to the non-negative real numbers.
+
+        **Definition.** $f(n)$ is $O(g(n))$ if there exist a constant $c > 0$ and a whole number $n_0$ such that
+
+        $$f(n) \le c \cdot g(n) \quad \text{for all } n \ge n_0.$$
+
+        **Rules that follow from the definition.**
+
+        - Constant factors do not matter: if $f$ is $O(g)$ then $k \cdot f$ is $O(g)$ for any constant $k > 0$.
+        - In a sum, the fastest-growing term decides: $n^2 + n$ is $O(n^2)$.
+        - Costs of consecutive parts add; costs of nested parts multiply.
+        - $\log_a n$ and $\log_b n$ differ by a constant factor, so the base of a logarithm is omitted.
+
+        **The hierarchy.** For large $n$,
+
+        $$1 \;<\; \log n \;<\; n \;<\; n \log n \;<\; n^2 \;<\; n^3 \;<\; 2^n,$$
+
+        and each function in the chain is $O$ of every function to its right, and of none to its left.
+
+        **Time complexity** of a program is the order of growth of the number of basic steps it performs, as a function of the size $n$ of its input, in the worst case unless stated otherwise. **Space complexity** is the same for the memory it uses.
+
+        **Costs of built-in operations.** Indexing a list, `len`, `append`, and membership, insertion and look-up in a set or dictionary are $O(1)$. Membership in a list, `min`, `max`, `sum`, `count`, `index`, slicing, copying, and insertion or removal at the front of a list are $O(n)$. Sorting is $O(n \log n)$.
+
+        | Shape of the code | Order |
+        | --- | --- |
+        | a fixed number of basic steps | $O(1)$ |
+        | a loop that halves the remaining input | $O(\log n)$ |
+        | one loop over the input | $O(n)$ |
+        | a sort, or a halving recursion that does linear work at each level | $O(n \log n)$ |
+        | two nested loops over the input | $O(n^2)$ |
+        | a recursion making two calls on inputs of size $n - 1$ | $O(2^n)$ |
+  drill:
+    - question:
+        id: drill-single-loop
+        type: choice
+        system: s1
+        prompt: |
+          What is the order of growth of this function, for a list of $n$ numbers?
+
+          ```python
+          def largest(xs):
+              best = xs[0]
+              for x in xs:
+                  if x > best:
+                      best = x
+              return best
+          ```
+        options:
+          - "$O(1)$"
+          - "$O(\\log n)$"
+          - "$O(n)$"
+          - "$O(n^2)$"
+        answer: 2
+        explanation: One loop over the input, with a constant amount of work in its body.
+        hints:
+          - How many times does the body of the loop run?
+          - Is anything inside the loop more than a basic step?
+    - question:
+        id: drill-constant
+        type: choice
+        system: s1
+        prompt: |
+          What is the order of growth of `xs[0] + xs[-1] + len(xs)` for a list of $n$ numbers?
+        options:
+          - "$O(1)$"
+          - "$O(\\log n)$"
+          - "$O(n)$"
+          - "$O(n^2)$"
+        answer: 0
+        explanation: Indexing a list and taking its length each take a fixed time, whatever the length. A fixed number of such steps is constant.
+        hints:
+          - Does looking up xs[0] take longer when the list is longer?
+          - Does len have to count the items?
+    - question:
+        id: drill-handshakes
+        type: numeric
+        system: s1
+        concepts: [m2.summation-and-product-notation]
+        prompt: |
+          Twenty people each shake hands once with every other. How many handshakes is that?
+        answer: "190"
+        explanation: Half of 20 times 19. Each of the 20 people shakes 19 hands, and that counts every handshake twice.
+        hints:
+          - Each person shakes hands with 19 others.
+          - That counts each handshake twice, once for each of the two people.
+    - question:
+        id: drill-drop-terms
+        type: choice
+        system: s1
+        prompt: |
+          Which is the order of growth of $4n \log_2 n + 100n + 9$?
+        options:
+          - "$O(n)$"
+          - "$O(n \\log n)$"
+          - "$O(\\log n)$"
+          - "$O(n^2)$"
+        answer: 1
+        explanation: The term n log n grows faster than n, since log n itself grows without limit, so it is the one that is kept. Its constant factor 4 is dropped.
+        hints:
+          - Which of the three terms is largest when n is very large?
+          - Compare n log n with n by dividing one by the other.
+    - question:
+        id: drill-doubling-linear
+        type: numeric
+        system: s1
+        prompt: |
+          A linear method takes 5 seconds on a million items. About how many seconds does it take on eight million?
+        answer: "40"
+        unit: seconds
+        explanation: Linear work grows in step with the size. Eight times the input, eight times the work.
+        hints:
+          - By what factor has the size grown?
+          - For a linear method the work grows by the same factor.
+    - question:
+        id: drill-nested
+        type: choice
+        system: s1
+        prompt: |
+          What is the order of growth of this function in $n$?
+
+          ```python
+          def table(n):
+              rows = []
+              for i in range(n):
+                  rows.append([i * j for j in range(n)])
+              return rows
+          ```
+        options:
+          - "$O(n)$"
+          - "$O(n \\log n)$"
+          - "$O(n^2)$"
+          - "$O(n^3)$"
+        answer: 2
+        explanation: The comprehension is a loop of n steps, and it is run once for each of the n values of i. Nested loops multiply.
+        hints:
+          - A comprehension is a loop.
+          - How many products are computed in all?
+    - question:
+        id: drill-membership
+        type: choice
+        system: s1
+        prompt: |
+          `names` holds a million strings. For which type of `names` does `"asha" in names` take about the same time as it would for ten strings?
+        options:
+          - A list.
+          - A tuple.
+          - A set.
+          - It takes the same time for all three.
+        answer: 2
+        explanation: A set finds an item by computing where it must be, in constant time. A list or a tuple must be scanned item by item.
+        hints:
+          - Which of these collections computes where an item belongs from the item itself?
+          - Which must be searched from the beginning?
+    - question:
+        id: drill-binary-search
+        type: numeric
+        system: s1
+        concepts: [m1.logarithms]
+        prompt: |
+          Binary search on a sorted list of 4096 items halves the remaining part at each look. About how many looks does it need in the worst case, to the nearest power of two? Give $\log_2 4096$.
+        answer: "12"
+        explanation: 4096 is two to the twelfth power, so twelve halvings bring it down to one item.
+        hints:
+          - 1024 is two to the tenth.
+          - 4096 is four times 1024.
+  work:
+    - question:
+        id: write-has-duplicate
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `has_duplicate(xs)` that returns `True` if some value appears more than once in the list `xs`, and `False` otherwise. It must run in $O(n)$ time, and it must stop as soon as the first repeat is found.
+
+          The tests give your function a list that counts how much of it is read. Comparing every pair, or testing membership in a list, will exceed the allowance.
+        starter: |
+          def has_duplicate(xs):
+              # Replace the next line with your own.
+              return False
+
+          print(has_duplicate([3, 1, 4, 1, 5]), has_duplicate([2, 7, 1, 8]))
+        solution: |
+          def has_duplicate(xs):
+              seen = set()
+              for x in xs:
+                  if x in seen:
+                      return True
+                  seen.add(x)
+              return False
+
+          print(has_duplicate([3, 1, 4, 1, 5]), has_duplicate([2, 7, 1, 8]))
+        tests: |
+          class _Spy(list):
+              cost = 0
+              def __iter__(self):
+                  for _item in list.__iter__(self):
+                      _Spy.cost += 1
+                      yield _item
+              def __getitem__(self, _k):
+                  _got = list.__getitem__(self, _k)
+                  _Spy.cost += len(_got) if isinstance(_k, slice) else 1
+                  return _got
+              def __contains__(self, _x):
+                  _Spy.cost += len(self)
+                  return list.__contains__(self, _x)
+              def count(self, _x):
+                  _Spy.cost += len(self)
+                  return list.count(self, _x)
+              def index(self, _x):
+                  _Spy.cost += len(self)
+                  return list.index(self, _x)
+          assert has_duplicate([3, 1, 4, 1, 5]) is True, "1 appears twice"
+          assert has_duplicate([2, 7, 1, 8]) is False, "No value is repeated"
+          assert has_duplicate([]) is False, "An empty list has no repeats"
+          assert has_duplicate([5]) is False, "One item cannot be a repeat"
+          assert has_duplicate([5, 5]) is True, "Two equal items"
+          assert has_duplicate(["a", "b", "a"]) is True, "It should work for strings"
+          _big = _Spy(range(400))
+          _Spy.cost = 0
+          assert has_duplicate(_big) is False, "400 different numbers have no repeat"
+          assert _Spy.cost <= 2000, f"On 400 items your function read the list {_Spy.cost} times, counting each item scanned. A linear method needs about 400. Look for a loop inside a loop, or a membership test on a list."
+          _early = _Spy([9, 9] + list(range(1000)))
+          _Spy.cost = 0
+          assert has_duplicate(_early) is True, "The first two items are equal"
+          assert _Spy.cost <= 10, "The repeat is in the first two items, so the function should stop almost at once"
+        wrong:
+          - "def has_duplicate(xs):\n    for i in range(len(xs)):\n        for j in range(i + 1, len(xs)):\n            if xs[i] == xs[j]:\n                return True\n    return False\n"
+          - "def has_duplicate(xs):\n    seen = []\n    for x in xs:\n        if xs.count(x) > 1:\n            return True\n    return False\n"
+          - "def has_duplicate(xs):\n    return len(set(xs)) < len(xs)\n"
+          - "def has_duplicate(xs):\n    seen = set()\n    for x in xs:\n        seen.add(x)\n        if x in seen:\n            return True\n    return False\n"
+        explanation: |
+          One loop, and inside it two operations on a set, each of which takes constant time: a test of membership and an addition. That is $O(n)$ in time, and also $O(n)$ in memory, for the set. The loop returns at the first repeat, so on data where a repeat comes early it does almost no work. `len(set(xs)) < len(xs)` is also linear and is the neatest answer when you do not need to stop early, but it always reads the whole list, which is why the last test rejects it. Note the order of the two lines inside the loop. Test first, then add. The other way round, every item finds itself.
+        hints:
+          - Keep a collection of the values met so far. Which type makes the membership test a single step?
+          - For each item, first ask whether it has been seen, then record it.
+          - Return True from inside the loop as soon as a repeat is found.
+    - question:
+        id: fix-common
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `common(a, b)` returns the items of the list `a` that also occur in the list `b`, in the order they have in `a`. It is correct, and it is quadratic: on two lists of 20,000 items it takes minutes. Make it linear without changing what it returns.
+        starter: |
+          def common(a, b):
+              return [x for x in a if x in b]
+
+          print(common([5, 3, 8, 3, 1], [3, 5, 9]))
+        solution: |
+          def common(a, b):
+              wanted = set(b)
+              return [x for x in a if x in wanted]
+
+          print(common([5, 3, 8, 3, 1], [3, 5, 9]))
+        tests: |
+          class _Spy(list):
+              cost = 0
+              def __iter__(self):
+                  for _item in list.__iter__(self):
+                      _Spy.cost += 1
+                      yield _item
+              def __getitem__(self, _k):
+                  _got = list.__getitem__(self, _k)
+                  _Spy.cost += len(_got) if isinstance(_k, slice) else 1
+                  return _got
+              def __contains__(self, _x):
+                  _Spy.cost += len(self)
+                  return list.__contains__(self, _x)
+              def count(self, _x):
+                  _Spy.cost += len(self)
+                  return list.count(self, _x)
+              def index(self, _x):
+                  _Spy.cost += len(self)
+                  return list.index(self, _x)
+          assert common([5, 3, 8, 3, 1], [3, 5, 9]) == [5, 3, 3], "The items of a that occur in b, in the order of a, repeats kept"
+          assert common([], [1, 2]) == [], "Nothing in a, nothing in common"
+          assert common([1, 2], []) == [], "Nothing in b, nothing in common"
+          assert common(["x", "y"], ["y", "z"]) == ["y"], "It should work for strings"
+          assert common([1, 2, 3], [3, 2, 1]) == [1, 2, 3], "The order of the result is the order of a"
+          _a = _Spy(range(0, 600, 2))
+          _b = _Spy(range(0, 600, 3))
+          _Spy.cost = 0
+          _got = common(_a, _b)
+          assert _got == list(range(0, 600, 6)), "The multiples of 2 that are also multiples of 3 are the multiples of 6"
+          assert _Spy.cost <= 2000, f"On lists of 300 and 200 items your function read {_Spy.cost} items, counting each one scanned. A linear method reads about 500. Each test of membership in a list scans the list."
+        wrong:
+          - "def common(a, b):\n    wanted = set(b)\n    return [x for x in wanted if x in a]\n"
+          - "def common(a, b):\n    return [x for x in a if x in set(a)]\n"
+          - "def common(a, b):\n    return sorted(set(a) & set(b))\n"
+        explanation: |
+          `x in b` on a list scans the list, so the comprehension did $n$ scans of $n$ items. Building a set from `b` costs one pass, $O(n)$, and after that each membership test is a single step, so the whole function is $O(n + n)$, which is $O(n)$. The set must be built **once, before** the comprehension. Writing `x in set(b)` inside it would rebuild the set for every item of `a` and be quadratic again. The intersection of two sets, `set(a) & set(b)`, is also linear, but it loses the order and the repeats, which the function is required to keep.
+        hints:
+          - What does one test of membership in a list cost?
+          - Which type answers a membership question in one step?
+          - Build it once, on a line before the comprehension.
+    - question:
+        id: fix-binary-search
+        type: code
+        mode: find-bug
+        system: s2
+        concepts: [m1.logarithms]
+        prompt: |
+          `binary_search(xs, target)` looks for `target` in a **sorted** list and returns its position, or `-1` if it is absent. It works by keeping two positions, `low` and `high`, with the target somewhere between them if it is there at all, and halving the gap. It fails to find some values that are present: `binary_search([2, 5, 8], 8)` returns `-1`. Fix it. It must remain logarithmic.
+        starter: |
+          def binary_search(xs, target):
+              low = 0
+              high = len(xs) - 1
+              while low < high:
+                  mid = (low + high) // 2
+                  if xs[mid] == target:
+                      return mid
+                  if xs[mid] < target:
+                      low = mid + 1
+                  else:
+                      high = mid - 1
+              return -1
+
+          print(binary_search([2, 5, 8], 8), binary_search([2, 5, 8], 5), binary_search([2, 5, 8], 6))
+        solution: |
+          def binary_search(xs, target):
+              low = 0
+              high = len(xs) - 1
+              while low <= high:
+                  mid = (low + high) // 2
+                  if xs[mid] == target:
+                      return mid
+                  if xs[mid] < target:
+                      low = mid + 1
+                  else:
+                      high = mid - 1
+              return -1
+
+          print(binary_search([2, 5, 8], 8), binary_search([2, 5, 8], 5), binary_search([2, 5, 8], 6))
+        tests: |
+          class _Spy(list):
+              cost = 0
+              def __iter__(self):
+                  for _item in list.__iter__(self):
+                      _Spy.cost += 1
+                      yield _item
+              def __getitem__(self, _k):
+                  _got = list.__getitem__(self, _k)
+                  _Spy.cost += len(_got) if isinstance(_k, slice) else 1
+                  return _got
+              def __contains__(self, _x):
+                  _Spy.cost += len(self)
+                  return list.__contains__(self, _x)
+              def index(self, _x):
+                  _Spy.cost += len(self)
+                  return list.index(self, _x)
+          assert binary_search([2, 5, 8], 8) == 2, "8 is at position 2"
+          assert binary_search([2, 5, 8], 2) == 0, "2 is at position 0"
+          assert binary_search([2, 5, 8], 5) == 1, "5 is at position 1"
+          assert binary_search([2, 5, 8], 6) == -1, "6 is absent"
+          assert binary_search([], 1) == -1, "Nothing is in an empty list"
+          assert binary_search([7], 7) == 0, "A list of one item, which is the target"
+          assert binary_search([7], 3) == -1, "A list of one item, which is not the target"
+          _xs = list(range(0, 200, 2))
+          assert all(binary_search(_xs, _v) == _v // 2 for _v in _xs), "Every value present in a list of 100 items should be found at its position"
+          assert all(binary_search(_xs, _v) == -1 for _v in range(-1, 201, 2)), "Every value absent from the list should give -1"
+          _big = _Spy(range(1024))
+          _Spy.cost = 0
+          assert binary_search(_big, 1023) == 1023, "The last of 1024 items should be found"
+          assert _Spy.cost <= 40, f"On 1024 items your function read {_Spy.cost} items. Binary search needs about 11 looks."
+        wrong:
+          - "def binary_search(xs, target):\n    for i in range(len(xs)):\n        if xs[i] == target:\n            return i\n    return -1\n"
+          - "def binary_search(xs, target):\n    low = 0\n    high = len(xs) - 1\n    while low <= high:\n        mid = (low + high) // 2\n        if xs[mid] == target:\n            return mid\n        if xs[mid] > target:\n            low = mid + 1\n        else:\n            high = mid - 1\n    return -1\n"
+          - "def binary_search(xs, target):\n    if target in xs:\n        return xs.index(target)\n    return -1\n"
+        explanation: |
+          `low` and `high` are both positions that might still hold the target. When they are equal there is exactly one candidate left, and it has not been looked at. The condition `low < high` stopped the loop at that moment and gave up. With `low <= high` the last candidate is examined, and the loop ends only when `low` has passed `high`, which means that no candidates remain. Each pass removes at least half of the candidates, so there are about $\log_2 n$ passes. A plain scan would also give the right answers, which is why the last test counts the looks.
+        hints:
+          - Follow the function by hand on the list [2, 5, 8] with the target 8. What are low and high when the loop stops?
+          - When low equals high, how many positions have not been ruled out?
+          - Has that position been examined?
+    - question:
+        id: write-most-common
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `most_common(xs)` that returns the value that occurs most often in a non-empty list. If several values tie, return the one among them that appears **first** in the list. It must run in $O(n)$ time.
+
+          `most_common(["b", "a", "b", "a", "c"])` is `"b"`.
+
+          Note that `xs.count(x)` reads the whole list, so calling it for each item is quadratic.
+        starter: |
+          def most_common(xs):
+              # Replace the next line with your own.
+              return xs[0]
+
+          print(most_common(["b", "a", "b", "a", "c"]), most_common([3, 1, 1, 3, 1]))
+        solution: |
+          def most_common(xs):
+              counts = {}
+              for x in xs:
+                  counts[x] = counts.get(x, 0) + 1
+              best = None
+              for x in xs:
+                  if best is None or counts[x] > counts[best]:
+                      best = x
+              return best
+
+          print(most_common(["b", "a", "b", "a", "c"]), most_common([3, 1, 1, 3, 1]))
+        tests: |
+          class _Spy(list):
+              cost = 0
+              def __iter__(self):
+                  for _item in list.__iter__(self):
+                      _Spy.cost += 1
+                      yield _item
+              def __getitem__(self, _k):
+                  _got = list.__getitem__(self, _k)
+                  _Spy.cost += len(_got) if isinstance(_k, slice) else 1
+                  return _got
+              def __contains__(self, _x):
+                  _Spy.cost += len(self)
+                  return list.__contains__(self, _x)
+              def count(self, _x):
+                  _Spy.cost += len(self)
+                  return list.count(self, _x)
+              def index(self, _x):
+                  _Spy.cost += len(self)
+                  return list.index(self, _x)
+          assert most_common(["b", "a", "b", "a", "c"]) == "b", "a and b both occur twice, and b appears first"
+          assert most_common([3, 1, 1, 3, 1]) == 1, "1 occurs three times"
+          assert most_common([7]) == 7, "With one item, that item is the most common"
+          assert most_common([4, 5, 6]) == 4, "When every value occurs once, the first is returned"
+          assert most_common([2, 9, 9, 2, 9, 2, 2]) == 2, "2 occurs four times and 9 three"
+          assert most_common(["x", "y", "y"]) == "y", "The most common value need not come first"
+          _big = _Spy([_k % 37 for _k in range(500)] + [5])
+          _Spy.cost = 0
+          assert most_common(_big) == 5, "In the large list, 5 occurs once more than anything else"
+          assert _Spy.cost <= 2600, f"On 501 items your function read {_Spy.cost} items, counting each one scanned. A linear method reads about 1000. Calling count for every item scans the whole list every time."
+        wrong:
+          - "def most_common(xs):\n    best = xs[0]\n    for x in xs:\n        if xs.count(x) > xs.count(best):\n            best = x\n    return best\n"
+          - "def most_common(xs):\n    counts = {}\n    for x in xs:\n        counts[x] = counts.get(x, 0) + 1\n    best = None\n    for x in xs:\n        if best is None or counts[x] >= counts[best]:\n            best = x\n    return best\n"
+          - "def most_common(xs):\n    counts = {}\n    for x in xs:\n        counts[x] = 1\n    best = None\n    for x in xs:\n        if best is None or counts[x] > counts[best]:\n            best = x\n    return best\n"
+        explanation: |
+          Two passes, one after the other, so the costs add: $O(n) + O(n)$ is $O(n)$. The first pass counts every value in a dictionary, where each update is a single step. The second walks the list in order and keeps the first value whose count beats the best so far. Because it uses a strict `>`, a later value with an equal count does not displace an earlier one, which is how the tie is settled in favour of the first. The first wrong answer in the tests is the natural one-liner with `count`, and it hides a full scan of the list inside the loop.
+        hints:
+          - First build a dictionary from each value to how often it occurs.
+          - Then walk the list again, keeping the best value found so far.
+          - Which comparison keeps the earlier value when two counts are equal?
+    - question:
+        id: write-merge
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          `a` and `b` are lists that are each already sorted, smallest first. Write `merge(a, b)` that returns one sorted list holding all the items of both, in $O(n)$ time, where $n$ is the total number of items.
+
+          The idea: keep a finger on the first unused item of each list. Repeatedly take the smaller of the two items under your fingers, and move that finger along. When one list is used up, the rest of the other follows as it is.
+
+          Do not call `sorted` or `sort`. Sorting takes $O(n \log n)$ and makes no use of the fact that the lists are already in order.
+        starter: |
+          def merge(a, b):
+              # Replace the next line with your own.
+              return a + b
+
+          print(merge([1, 4, 9], [2, 3, 10, 11]))
+        solution: |
+          def merge(a, b):
+              merged = []
+              i = 0
+              j = 0
+              while i < len(a) and j < len(b):
+                  if a[i] <= b[j]:
+                      merged.append(a[i])
+                      i += 1
+                  else:
+                      merged.append(b[j])
+                      j += 1
+              return merged + a[i:] + b[j:]
+
+          print(merge([1, 4, 9], [2, 3, 10, 11]))
+        tests: |
+          assert "sort" not in source, "Do not call sorted or sort. Use the two fingers."
+          assert merge([1, 4, 9], [2, 3, 10, 11]) == [1, 2, 3, 4, 9, 10, 11], "All seven items, in order"
+          assert merge([], []) == [], "Two empty lists give an empty list"
+          assert merge([], [1, 2]) == [1, 2], "When a is empty the result is b"
+          assert merge([1, 2], []) == [1, 2], "When b is empty the result is a"
+          assert merge([1, 1, 2], [1, 3]) == [1, 1, 1, 2, 3], "Repeats must all be kept"
+          assert merge([5, 6], [1, 2]) == [1, 2, 5, 6], "All of b may come before all of a"
+          assert merge([1, 2], [5, 6]) == [1, 2, 5, 6], "All of a may come before all of b"
+          import random as _r
+          _r.seed(4)
+          for _trial in range(20):
+              _a = sorted(_r.randint(0, 50) for _k in range(_r.randint(0, 12)))
+              _b = sorted(_r.randint(0, 50) for _k in range(_r.randint(0, 12)))
+              _a0, _b0 = list(_a), list(_b)
+              assert merge(_a, _b) == sorted(_a + _b), f"merge({_a0}, {_b0}) is not in order, or has lost or gained items"
+              assert _a == _a0 and _b == _b0, "The two lists must not be changed"
+        wrong:
+          - "def merge(a, b):\n    merged = []\n    i = 0\n    j = 0\n    while i < len(a) and j < len(b):\n        if a[i] <= b[j]:\n            merged.append(a[i])\n            i += 1\n        else:\n            merged.append(b[j])\n            j += 1\n    return merged\n"
+          - "def merge(a, b):\n    merged = []\n    i = 0\n    j = 0\n    while i < len(a) and j < len(b):\n        if a[i] <= b[j]:\n            merged.append(a[i])\n            i += 1\n        else:\n            merged.append(b[j])\n            j += 1\n    return merged + b[j:] + a[i:] if i < len(a) and j < len(b) else merged + a[:i] + b[:j]\n"
+          - "def merge(a, b):\n    merged = []\n    for x, y in zip(a, b):\n        merged.append(min(x, y))\n        merged.append(max(x, y))\n    return merged\n"
+        explanation: |
+          Each pass of the loop takes one item and moves one finger, and a finger never moves back, so the loop runs at most $n$ times: $O(n)$. When the loop ends, one list is used up and whatever is left of the other is already sorted and is larger than everything taken so far, so it is joined on as it stands. At that point one of the two slices is empty. Forgetting the leftovers, as the first wrong answer does, loses items. This function is the heart of **merge sort**: split a list in half, sort each half by the same method, and merge. The halving gives $\log_2 n$ levels, the merging does $O(n)$ work at each, and that is where the $O(n \log n)$ of sorting comes from.
+        hints:
+          - Keep two positions, one in each list, both starting at 0.
+          - While both lists have items left, take the smaller of the two current items and advance that position.
+          - When the loop stops, one list still has items. They are already in order.
+    - question:
+        id: numeric-feasible
+        type: numeric
+        system: s2
+        concepts: [m0.estimation-and-orders-of-magnitude]
+        prompt: |
+          A computer performs $10^7$ basic steps a second. A quadratic method is to be run on a list of $n$ items, taking about $n^2$ steps. What is the largest $n$, as a power of ten, for which it finishes in about a day? Take a day as $10^5$ seconds, and give $n$.
+        answer: "1000000"
+        explanation: In a day the computer performs 10^7 × 10^5 = 10^12 steps. The method needs n² steps, so n² = 10^12 and n = 10^6, a million. For ten million items the same method would need a hundred days.
+        hints:
+          - How many steps can the computer perform in a day?
+          - Which number, squared, gives that many steps?
+          - The square root of ten to the twelfth is ten to the sixth.
+    - question:
+        id: choice-recursion-slice
+        type: choice
+        system: s2
+        concepts: [e1.recursion]
+        prompt: |
+          What is the order of growth, in time, of this function on a list of $n$ numbers?
+
+          ```python
+          def total(xs):
+              if len(xs) == 0:
+                  return 0
+              return xs[0] + total(xs[1:])
+          ```
+        options:
+          - "$O(\\log n)$, because it is recursive."
+          - "$O(n)$, because there are n calls and each does one addition."
+          - "$O(n^2)$, because each of the n calls copies what remains of the list with a slice."
+          - "$O(2^n)$, because recursion is exponential."
+        answer: 2
+        explanation: There are n + 1 calls. The slice xs[1:] is not a basic step. It copies n - 1 items, then n - 2, and so on, which adds up to about half of n squared. Passing a position along instead of a slice would make it linear.
+        hints:
+          - How many calls are made?
+          - What does a slice cost?
+          - Add up the sizes of all the slices.
+  connections:
+    - text: |
+        The puzzle was two correct methods that could not be told apart on a thousand items and differed by two months on ten million. The difference was the kind of growth. One method touched each item once and the other paired each item with every other. To see this from the code, you count basic steps as a function of the input size $n$, keep the fastest-growing term, drop its constant, and call what is left the order: $O(n)$ for one, $O(n^2)$ for the other. And you ask the doubling question: twice the input, how much more work?
+
+        You have a ladder to place any program on, from $O(1)$ up to $O(2^n)$, and you know that some single lines hide loops. A membership test in a list is linear. In a set it is constant.
+
+        Two threads continue.
+
+        Several times in this lesson you replaced a slow method by a fast one: a set for a list, a merge for a sort, a halving search for a scan. Each time there was a risk. The fast version is cleverer, and cleverness is where mistakes live. The binary search was wrong by a single character. How do you make sure that an improved function still gives the right answers? The hidden tests did it by comparing it with the slow, obviously correct method on many inputs. That habit, written down as code that can be run again after every change, is [[e1.testing-with-pytest]], next.
+
+        You also saw that memory has an order of growth, and that producing values one at a time can bring it from $O(n)$ down to $O(1)$. A function that produces its results lazily is the last tool of this cluster, in [[e1.generators-and-context-managers]].

@@ -58,15 +58,38 @@ export function explainFailure(error: string): { note: string; detail: string | 
  * Lists the Python features a piece of code uses, so a lesson can be held to
  * the features its learner has already been taught. Returns JSON, or the
  * string "syntax-error" for code that does not parse.
+ *
+ * An attribute the code defines for itself, a method of its own class or a
+ * field it assigns such as self.x, is not a feature of Python and is not
+ * listed. context is other code shown alongside, whose definitions count too.
  */
-export function featureProgram(code: string): string {
+export function featureProgram(code: string, context = ""): string {
   return `import ast as _ast, builtins as _b, json as _json
 _STRUCT = {"If","IfExp","For","While","Break","Continue","FunctionDef","Return","Lambda","ClassDef","List","Tuple",
   "Dict","Set","Subscript","Slice","ListComp","DictComp","SetComp","GeneratorExp","Try","Raise","Assert","With",
   "JoinedStr","Starred","Global","Nonlocal","Pass","Delete","Yield","YieldFrom","Await","AsyncFunctionDef","Match",
   "NamedExpr","Assign","AugAssign","AnnAssign","BoolOp","Compare"}
-def _features(src):
+def _own(src):
+    own = set()
+    try:
+        tree = _ast.parse(src)
+    except SyntaxError:
+        return own
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.Attribute) and isinstance(node.ctx, _ast.Store):
+            own.add(node.attr)
+        elif isinstance(node, _ast.ClassDef):
+            for item in node.body:
+                if isinstance(item, _ast.FunctionDef):
+                    own.add(item.name)
+                elif isinstance(item, _ast.Assign):
+                    own.update(t.id for t in item.targets if isinstance(t, _ast.Name))
+                elif isinstance(item, _ast.AnnAssign) and isinstance(item.target, _ast.Name):
+                    own.add(item.target.id)
+    return own
+def _features(src, context):
     found = set()
+    own = _own(src) | _own(context)
     for node in _ast.walk(_ast.parse(src)):
         name = type(node).__name__
         if name in _STRUCT:
@@ -80,7 +103,8 @@ def _features(src):
         elif isinstance(node, _ast.Call) and isinstance(node.func, _ast.Name) and hasattr(_b, node.func.id):
             found.add("call:" + node.func.id)
         elif isinstance(node, _ast.Attribute):
-            found.add("attr:" + node.attr)
+            if node.attr not in own:
+                found.add("attr:" + node.attr)
         elif isinstance(node, _ast.Import):
             found.update("import:" + alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, _ast.ImportFrom):
@@ -89,7 +113,7 @@ def _features(src):
             found.add("const:" + type(node.value).__name__)
     return sorted(found)
 try:
-    print(_json.dumps(_features(${py(code)})))
+    print(_json.dumps(_features(${py(code)}, ${py(context)})))
 except SyntaxError:
     print("syntax-error")
 `;

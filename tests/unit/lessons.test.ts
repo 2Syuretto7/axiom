@@ -2,7 +2,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadGraph } from "@/lib/graph/load";
 import { nextConcept, teachingPath } from "@/lib/learning/next";
-import { checkProgram, explainFailure } from "@/lib/lessons/harness";
+import { checkProgram, explainFailure, featureProgram } from "@/lib/lessons/harness";
 import { FIGURE_NAMES } from "@/lib/lessons/figures";
 import { loadLessons, loadPythonFeatures, readLessonFiles, type LessonFile } from "@/lib/lessons/load";
 import { runPython } from "@/lib/lessons/node-python";
@@ -134,6 +134,14 @@ describe("choosing the next lesson", () => {
 });
 
 describe("checking code", () => {
+  it("counts a library's attributes as Python to be taught, but not the ones the code defines itself", async () => {
+    const code = "class Point:\n    scale = 2\n    def __init__(self, x):\n        self.x = x\n    def double(self):\n        return self.x * self.scale\np = Point(3)\nprint(p.double(), p.x.real)\n";
+    const listed = JSON.parse((await runPython(featureProgram(code))).out) as string[];
+    expect(listed.filter((feature) => feature.startsWith("attr:"))).toEqual(["attr:real"]);
+    expect(listed).toContain("node:ClassDef");
+    const use = JSON.parse((await runPython(featureProgram("print(p.x, p.y)\n", code))).out) as string[];
+    expect(use.filter((feature) => feature.startsWith("attr:"))).toEqual(["attr:y"]);
+  });
   it("lets tests read the learner's names and printed output", async () => {
     const ok = await runPython(checkProgram("x = 2\nprint(x * 3)\n", 'assert x == 2\nassert output == "6\\n"'));
     expect(ok.error).toBeNull();
