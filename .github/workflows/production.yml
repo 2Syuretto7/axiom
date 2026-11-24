@@ -7,10 +7,9 @@ name: Production check
 # starts this. (It does not send GitHub's deployment events for this project, which is
 # why an earlier version of this workflow, waiting for those, never ran.)
 #
-# PRODUCTION_URL is a repository variable, not a secret: the public address of the live
-# site, for example https://axiom.example.com. The address cannot be worked out from
-# here, because Vercel's own <project>-<account>.vercel.app address sits behind a Vercel
-# login. Until the variable is set this check is skipped rather than failing.
+# The address below is public, not a secret. A repository variable named PRODUCTION_URL
+# overrides it, should the site ever move. Vercel's own <project>-<account>.vercel.app
+# address is no use here because it sits behind a Vercel login.
 on:
   status:
 
@@ -20,10 +19,9 @@ permissions:
 jobs:
   smoke:
     name: Verify production
-    # Skipped until the site's public address is known; see PRODUCTION_URL above.
     if: >-
       github.event.context == 'Vercel' && github.event.state == 'success' &&
-      contains(github.event.branches.*.name, 'main') && vars.PRODUCTION_URL != ''
+      contains(github.event.branches.*.name, 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -38,4 +36,4 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
         env:
-          LIVE_URL: ${{ vars.PRODUCTION_URL }}
+          LIVE_URL: ${{ vars.PRODUCTION_URL || 'https://axiom.arnavraja.in' }}
