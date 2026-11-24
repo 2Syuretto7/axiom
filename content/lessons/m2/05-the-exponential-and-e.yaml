@@ -1,0 +1,614 @@
+concept: m2.the-exponential-and-e
+minutes: 105
+claim: You can recognise exponential growth and decay by their constant ratio, derive the number e from compound interest, explain why e is the natural base, move between any exponential and e using the natural logarithm, and compute doubling times and half-lives.
+recalls: [m2.injective-surjective-and-bijective-maps]
+uses: [m2.sets, m2.functions-as-machines, m2.composition-and-inverses, m0.fractions, m0.decimals-and-percentages, m0.powers-and-roots, m0.ratio-and-proportion, m0.estimation-and-orders-of-magnitude, m1.variables-and-expressions, m1.linear-equations, m1.straight-lines-and-slope, m1.exponent-laws, m1.logarithms, e0.expressions, e0.booleans-and-conditionals, e0.loops, e0.functions, e0.lists-and-tuples, e0.reading-errors-and-debugging]
+leads: [m2.trigonometric-functions-on-the-unit-circle]
+starter: |
+  # Scratch space. Pay 100% interest in n instalments and watch the total.
+  for n in [1, 2, 4, 12, 365, 1000000]:
+      print(n, (1 + 1 / n) ** n)
+parts:
+  recall:
+    - text: |
+        [[m2.injective-surjective-and-bijective-maps]] gave you the words for a function that can be undone: a bijection. One example kept returning. $x \mapsto b^x$ is injective, its range is the positive numbers, and its inverse is the logarithm. Today that family of functions is studied for its own sake, and one member of it turns out to be special. Three quick pulls first.
+    - question:
+        id: recall-classify
+        type: choice
+        system: s1
+        concepts: [m2.injective-surjective-and-bijective-maps]
+        prompt: |
+          $f : \mathbb{R} \to (0, \infty)$, $f(x) = 10^x$. Which is true?
+        options: ["Injective only", "Surjective only", "Bijective", "Neither"]
+        answer: 2
+        explanation: |
+          It is strictly increasing, so injective, and every positive $y$ is $10^{\log_{10} y}$, so it is surjective onto $(0, \infty)$.
+        hints:
+          - Look carefully at the codomain.
+          - Which function undoes it?
+    - question:
+        id: recall-pigeonhole
+        type: numeric
+        system: s1
+        concepts: [m2.injective-surjective-and-bijective-maps]
+        prompt: |
+          A function sends 11 inputs to a set of 10 outputs. At least how many inputs must share an output with another input?
+        answer: "2"
+        explanation: By the pigeonhole principle some output receives at least two of the eleven inputs.
+        hints:
+          - Eleven pigeons, ten holes.
+          - What is the least that the fullest hole can contain?
+    - question:
+        id: recall-injective-test
+        type: choice
+        system: s1
+        concepts: [m2.injective-surjective-and-bijective-maps]
+        prompt: |
+          Which of these functions from $\mathbb{R}$ to $\mathbb{R}$ is injective?
+        options: ["$x \\mapsto x^2$", "$x \\mapsto \\lvert x \\rvert$", "$x \\mapsto 2^x$", "$x \\mapsto 5$"]
+        answer: 2
+        explanation: A larger exponent always gives a larger power of 2, so no two inputs share an output. The others all merge inputs.
+        hints:
+          - Apply the horizontal line test.
+          - Which one is strictly increasing?
+  puzzle:
+    - text: |
+        A bank, in a generous mood, offers **100% interest a year**. Put in ₹1 and at the end of the year you have ₹2.
+
+        You ask for the interest to be paid in two halves instead: 50% after six months and 50% at the end. It sounds like the same thing. It is not. After six months you have ₹1.50, and the second 50% is paid on **that**:
+
+        $$1 \;\longrightarrow\; 1.5 \;\longrightarrow\; 2.25.$$
+
+        Twenty-five paise more, because for the second half of the year your interest earned interest. So you push. Four payments of 25%:
+
+        $$1.25^4 = 2.4414\ldots$$
+
+        Twelve monthly payments of $\tfrac{100}{12}$%: about 2.6130. Better every time. The bank's clerk is getting nervous, and so should you be getting excited. If the interest is paid every day, every hour, every second, **does the total grow without limit?** Could you become arbitrarily rich in one year from one rupee, just by asking for the interest to be chopped finely enough?
+
+        Each finer division helps. But each helps less than the one before. Whether a sum of ever-smaller improvements can be boundless is not obvious, and the answer to this particular case was found by Jacob Bernoulli in 1683. It is one of the most important numbers there is.
+  intuition:
+    - text: |
+        The figure shows your balance through the year. The blue staircase is the bank's version: flat, then a jump each time interest is paid. Step through "how often", from once a year to once an hour.
+    - figure: growth
+      props: { start: 1 }
+    - text: |
+        Two things happen as the payments become more frequent. The steps become too small to see, so the staircase becomes a smooth curve. And the final balance does **not** run away. It creeps up towards a ceiling just above ₹2.71 and stays there.
+
+        Why is there a ceiling? Because the two effects of chopping more finely pull against each other. There are more payments, which helps. But each payment is smaller, which hurts. Twice as many payments of half the size very nearly cancel out. What survives is only the "interest on interest", and there is a limited amount of that to be had in one year.
+
+        The smooth curve is what you get in the limit: money that earns interest **continuously**, at every instant, on everything it has earned up to that instant. Its rule is the simplest growth law there could be:
+
+        > **At every moment, the rate of growth is equal to the current amount.**
+
+        More money, faster growth, in exact proportion. That one sentence describes money at continuous interest, bacteria with unlimited food, a rumour in a large crowd, a chain reaction. The amount after one unit of time, starting from 1, is the same number in all of them. It is called $e$:
+
+        $$e = 2.718281828\ldots$$
+
+        It is not a number somebody chose. Like $\pi$, it was found.
+  derivation:
+    - text: |
+        **Exponential functions.** Fix a base $b > 0$ with $b \ne 1$. The **exponential function with base $b$** is
+
+        $$f : \mathbb{R} \to (0, \infty), \qquad f(x) = b^x.$$
+
+        The variable is in the **exponent**. Do not confuse this with a power function such as $x^2$, where the variable is the base. The lesson on exponent laws gave $b^x$ a meaning for whole, negative and fractional $x$. For every other real $x$, such as $\sqrt{2}$, the value is fixed by filling in the gaps so that the curve has no jumps. What you need to know is that every law of exponents continues to hold for all real exponents.
+
+        Four facts follow at once, for every base.
+
+        - $f(0) = b^0 = 1$. Every exponential curve passes through $(0, 1)$.
+        - $b^x > 0$ always. The curve never touches the horizontal axis.
+        - If $b > 1$ the function is strictly increasing: **growth**. If $0 < b < 1$ it is strictly decreasing: **decay**. In both cases it is injective.
+        - Its range is all of $(0, \infty)$, so as a function to $(0, \infty)$ it is a bijection, with inverse $\log_b$.
+
+        **The signature of an exponential.** Compare what happens when the input takes equal steps.
+
+        | $x$ | 0 | 1 | 2 | 3 | 4 |
+        | --- | --- | --- | --- | --- | --- |
+        | linear, $3x + 1$ | 1 | 4 | 7 | 10 | 13 |
+        | exponential, $3^x$ | 1 | 3 | 9 | 27 | 81 |
+
+        The line **adds** the same amount for each step: constant difference. The exponential **multiplies** by the same amount for each step: constant ratio. This follows from the first law of exponents,
+
+        $$f(x + h) = b^{x + h} = b^h \cdot b^x = b^h \cdot f(x),$$
+
+        and it is the defining property. A step of $h$ in the input multiplies the output by $b^h$, no matter where you start. A quantity grows exponentially exactly when it grows by the same **percentage** in every equal period of time. A population that grows by 2% a year is exponential, with $b = 1.02$. In everyday speech "exponential" is used for "very fast". In mathematics it means "constant ratio", and an exponential with base 1.0001 is very slow for a very long time before it overtakes everything.
+
+        **Compound interest.** A principal $P$ earns interest at an annual rate $r$, written as a decimal, so that 8% is $r = 0.08$. If interest is added once a year, each year multiplies the balance by $(1 + r)$, and after $t$ years
+
+        $$A = P(1 + r)^t.$$
+
+        If instead the year's interest is split into $n$ equal instalments, each instalment multiplies the balance by $\left(1 + \dfrac{r}{n}\right)$, and there are $nt$ of them in $t$ years:
+
+        $$A = P\left(1 + \frac{r}{n}\right)^{nt}.$$
+
+        The puzzle is the case $P = 1$, $r = 1$, $t = 1$: the final balance is $\left(1 + \dfrac{1}{n}\right)^n$.
+
+        | Paid | $n$ | $\left(1 + \frac{1}{n}\right)^n$ |
+        | --- | --- | --- |
+        | yearly | 1 | 2 |
+        | half-yearly | 2 | 2.25 |
+        | quarterly | 4 | 2.44141 |
+        | monthly | 12 | 2.61304 |
+        | daily | 365 | 2.71457 |
+        | hourly | 8,760 | 2.71813 |
+        | every second | 31,536,000 | 2.71828 |
+
+        The numbers increase, but by less and less, and they never pass a certain value. That value is the number $e$:
+
+        $$\left(1 + \frac{1}{n}\right)^n \longrightarrow e = 2.71828\ldots \quad \text{as } n \text{ grows without bound.}$$
+
+        The arrow is read "approaches". The idea of a **limit**, a value that is approached as closely as you please but need not be reached, is used informally here. It will be made exact when you study sequences, and again in calculus. Like $\pi$, the number $e$ is not a fraction, and its decimal expansion never ends or repeats.
+
+        **Any rate.** What if the rate is not 100% but $r$? The balance after a year of $n$ instalments is $\left(1 + \dfrac{r}{n}\right)^n$. Write $n = mr$, so that $\dfrac{r}{n} = \dfrac{1}{m}$:
+
+        $$\left(1 + \frac{r}{n}\right)^n = \left(1 + \frac{1}{m}\right)^{mr} = \left[\left(1 + \frac{1}{m}\right)^m\right]^r.$$
+
+        As $n$ grows, so does $m$, and the square bracket approaches $e$. So
+
+        $$\left(1 + \frac{r}{n}\right)^n \longrightarrow e^r,$$
+
+        and the balance under **continuous compounding** at rate $r$ for $t$ years is
+
+        $$A = Pe^{rt}.$$
+
+        This is the formula for anything that grows at a rate proportional to its size. With a negative $r$ it describes decay.
+    - question:
+        id: compound-vs-continuous
+        type: choice
+        system: s2
+        prompt: |
+          ₹10,000 is invested for 10 years at 7% a year. Roughly how much more does continuous compounding give than compounding once a year? Use $1.07^{10} \approx 1.967$ and $e^{0.7} \approx 2.014$.
+        options: ["Nothing: they are the same", "About ₹470", "About ₹4,700", "About ₹20,000"]
+        answer: 1
+        explanation: |
+          Yearly: $10{,}000 \times 1.967 = 19{,}670$. Continuous: $10{,}000 \times 2.014 = 20{,}140$. The difference is about ₹470. Compounding more often helps, but only a little. Most of the gain comes from the first few subdivisions, as the table for $e$ showed.
+        hints:
+          - Write down both formulas, with r as a decimal.
+          - In the continuous formula the exponent is the rate times the time.
+          - Multiply each factor by the principal and subtract.
+    - text: |
+        **Why $e$ is the natural base.** There are infinitely many exponential functions. What makes $e^x$ the one that mathematicians and programmers reach for?
+
+        Ask how steep each curve is where it crosses the vertical axis. The slope of a curve at a point can be estimated as you would estimate the slope of a line: take a tiny step $h$ to the right and divide the rise by the run. At $x = 0$, where the height is $b^0 = 1$:
+
+        $$\text{slope at } 0 \approx \frac{b^h - 1}{h} \quad \text{for a very small } h.$$
+
+        Compute this with $h = 0.000001$ for a few bases:
+
+        | Base $b$ | 2 | 2.5 | $e$ | 3 |
+        | --- | --- | --- | --- | --- |
+        | slope at 0 | 0.6931 | 0.9163 | 1.0000 | 1.0986 |
+
+        The base 2 is not steep enough, and 3 is too steep. Exactly one base has slope **1** at the axis, and it is $e$. That is a second route to the same number, and it has nothing to do with banks.
+
+        Now use the constant-ratio property to find the slope of $e^x$ anywhere else:
+
+        $$\frac{e^{x + h} - e^x}{h} = e^x \cdot \frac{e^h - 1}{h} \approx e^x \cdot 1.$$
+
+        **At every point, the slope of $e^x$ equals its height.** The function is its own rate of change. This is the sentence from the intuition, "the rate of growth is equal to the current amount", now as a statement about a curve. For any other base the slope is the height times an awkward constant: for $2^x$ it is $0.6931 \times 2^x$. Only for base $e$ is the constant 1. Choosing $e$ as the base is like choosing units in which that constant disappears, and every formula of calculus becomes simpler as a result.
+
+        One consequence is useful every day. Near $x = 0$ the curve $e^x$ has height 1 and slope 1, so it hugs the line $1 + x$:
+
+        $$e^x \approx 1 + x \quad \text{when } x \text{ is small.}$$
+
+        So $e^{0.01} \approx 1.01$: growing continuously at 1% is almost the same as adding 1%.
+
+        **The natural logarithm.** The inverse of $x \mapsto e^x$ is the logarithm to base $e$. It is so common that it has its own name and symbol, the **natural logarithm** $\ln$:
+
+        $$\ln x = \log_e x, \qquad \ln(e^x) = x, \qquad e^{\ln x} = x \;\;(x > 0).$$
+
+        $\ln x$ answers the question "for how long must something grow continuously at 100% to become $x$ times as large?". So $\ln 1 = 0$, $\ln e = 1$, and $\ln 2 \approx 0.693$. All the laws of logarithms hold for it. A warning about notation: in mathematics, and in most programming languages, a bare `log` means the natural logarithm. In Python `math.log(x)` is $\ln x$, as you saw, and `math.exp(x)` is $e^x$. The constant itself is `math.e`.
+
+        **Every exponential is $e$ in disguise.** Since $b = e^{\ln b}$,
+
+        $$b^x = \left(e^{\ln b}\right)^x = e^{x \ln b}.$$
+
+        Any exponential function is $e$ raised to a constant times $x$. The constant $\ln b$ is exactly the "awkward constant" in the table above: $\ln 2 = 0.6931\ldots$ and $\ln 3 = 1.0986\ldots$. This means there is really only **one** exponential function, $e^x$, and all the others are obtained by stretching its input. A quantity that grows by the factor $b$ per unit of time grows continuously at the rate $k = \ln b$, and can be written $A = Pe^{kt}$.
+
+        **Doubling time and half-life.** How long does continuous growth at rate $r$ take to double? Solve $Pe^{rt} = 2P$:
+
+        $$e^{rt} = 2 \quad\Longrightarrow\quad rt = \ln 2 \quad\Longrightarrow\quad t = \frac{\ln 2}{r} \approx \frac{0.693}{r}.$$
+
+        The answer does not depend on $P$. An exponential takes the same time to go from 1 to 2 as from 1,000 to 2,000. With the rate written as a percentage this is the **rule of 70**: the doubling time is about 70 divided by the percentage rate. At 7% a year money doubles in about 10 years, and at 2% in about 35.
+
+        For decay, the same calculation gives the **half-life**, the time for the quantity to halve: $t = \dfrac{\ln 2}{|r|}$. After one half-life a half remains, after two a quarter, after ten less than a thousandth.
+
+        **Squashing with the exponential.** One function built from $e^x$ will be with you throughout machine learning. The **sigmoid**, or logistic function, is
+
+        $$\sigma(x) = \frac{1}{1 + e^{-x}}.$$
+
+        Follow the chain of functions. For a large positive $x$, $e^{-x}$ is nearly 0, so $\sigma(x)$ is nearly 1. For a large negative $x$, $e^{-x}$ is enormous, so $\sigma(x)$ is nearly 0. At $x = 0$ it is exactly $\tfrac{1}{2}$. The sigmoid is a strictly increasing bijection from $\mathbb{R}$ to the interval $(0, 1)$: it takes any real number and squashes it into something that can be read as a probability. Its inverse, found by solving $y = \sigma(x)$ for $x$, is $\ln\dfrac{y}{1 - y}$.
+    - question:
+        id: fix-growth-rate
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `grow(p, percent, years)` should return the balance when `p` is compounded continuously at an annual rate given **as a percentage**. `grow(1000, 5, 10)` should be about `1648.72`, but the function returns a number with 24 digits. Find the mistake and fix it.
+        starter: |
+          import math
+
+          def grow(p, percent, years):
+              return p * math.exp(percent * years)
+
+          print(grow(1000, 5, 10))
+        solution: |
+          import math
+
+          def grow(p, percent, years):
+              return p * math.exp(percent / 100 * years)
+
+          print(grow(1000, 5, 10))
+        tests: |
+          import math as _m
+          assert abs(grow(1000, 5, 10) - 1648.7212707) < 1e-4, "1000 at 5% for 10 years, compounded continuously, is 1000 times e to the 0.5. The formula needs the rate as a decimal."
+          assert abs(grow(1, 100, 1) - _m.e) < 1e-9, "1 at 100% for one year is e"
+          assert grow(250, 0, 30) == 250, "At 0% nothing changes"
+          assert abs(grow(1000, 7, 0) - 1000) < 1e-9, "After no time nothing has changed"
+          assert abs(grow(800, -10, 5) - 800 * _m.exp(-0.5)) < 1e-9, "A negative rate is decay"
+        wrong:
+          - "import math\n\ndef grow(p, percent, years):\n    return p * math.exp(percent / 100) * years\n\nprint(grow(1000, 5, 10))\n"
+          - "import math\n\ndef grow(p, percent, years):\n    return p * (1 + percent / 100) ** years\n\nprint(grow(1000, 5, 10))\n"
+          - "import math\n\ndef grow(p, percent, years):\n    return p * math.exp(percent * years) / 100\n\nprint(grow(1000, 5, 10))\n"
+        explanation: |
+          In $A = Pe^{rt}$ the rate is a decimal: 5% is 0.05. The starter used $r = 5$, which is 500% a year, and $e^{50}$ is about $5 \times 10^{21}$. A rate that has not been converted from a percentage is one of the commonest bugs in any code that models growth, and the exponential punishes it more severely than any other function would.
+        hints:
+          - Estimate the answer first. Should 1,000 at 5% for 10 years be anywhere near 10 to the power 24?
+          - What is 5% as a decimal?
+          - The exponent should be 0.5, not 50.
+  formal:
+    - text: |
+        For $b > 0$, $b \ne 1$, the **exponential function with base $b$** is $x \mapsto b^x$ from $\mathbb{R}$ to $(0, \infty)$. It is a bijection, strictly increasing if $b > 1$ and strictly decreasing if $0 < b < 1$, and for all real $x$ and $h$,
+
+        $$b^{x + h} = b^h \, b^x.$$
+
+        **The number $e$.** $e = 2.718281828\ldots$ is the value approached by $\left(1 + \dfrac{1}{n}\right)^n$ as $n$ grows without bound. For every real $r$, $\left(1 + \dfrac{r}{n}\right)^n$ approaches $e^r$.
+
+        **The natural logarithm** is $\ln = \log_e$, the inverse of $x \mapsto e^x$.
+
+        | Fact | Statement |
+        | --- | --- |
+        | Inverse pair | $\ln(e^x) = x$ for all real $x$, and $e^{\ln x} = x$ for $x > 0$ |
+        | Special values | $e^0 = 1$, $\ln 1 = 0$, $\ln e = 1$ |
+        | Change of base | $b^x = e^{x \ln b}$ and $\log_b x = \dfrac{\ln x}{\ln b}$ |
+        | Slope | the slope of the graph of $e^x$ at any point equals its height there |
+        | Small inputs | $e^x \approx 1 + x$ and $\ln(1 + x) \approx x$ when $\lvert x \rvert$ is small |
+
+        **Growth and decay.**
+
+        | Model | Formula |
+        | --- | --- |
+        | Compounded $n$ times a year | $A = P\left(1 + \dfrac{r}{n}\right)^{nt}$ |
+        | Compounded continuously | $A = Pe^{rt}$ |
+        | Doubling time, for $r > 0$ | $t = \dfrac{\ln 2}{r}$ |
+        | Half-life, for $r < 0$ | $t = \dfrac{\ln 2}{\lvert r \rvert}$ |
+
+        Here $P$ is the initial amount, $r$ the rate per unit time as a decimal, and $t$ the time.
+
+        **The sigmoid** $\sigma(x) = \dfrac{1}{1 + e^{-x}}$ is a strictly increasing bijection from $\mathbb{R}$ to $(0, 1)$ with $\sigma(0) = \tfrac{1}{2}$, $\sigma(-x) = 1 - \sigma(x)$ and inverse $\sigma^{-1}(y) = \ln\dfrac{y}{1 - y}$.
+  drill:
+    - text: Seconds each. Exponentials multiply. Logarithms undo them.
+    - question:
+        id: drill-constant-ratio
+        type: choice
+        system: s1
+        prompt: |
+          A quantity takes the values 5, 15, 45, 135 at times 0, 1, 2, 3. What kind of growth is this?
+        options: ["Linear, adding 10 each time", "Exponential, multiplying by 3 each time", "Quadratic", "None of these"]
+        answer: 1
+        explanation: Each value is three times the one before. Constant ratio is the signature of an exponential.
+        hints:
+          - Compare the differences, then the ratios.
+          - Which of the two is constant?
+    - question:
+        id: drill-through-one
+        type: numeric
+        system: s1
+        prompt: |
+          What is $e^0$?
+        answer: "1"
+        explanation: Any non-zero base to the power 0 is 1. Every exponential curve passes through the point (0, 1).
+        hints:
+          - The base does not matter here.
+          - What is anything to the power zero?
+    - question:
+        id: drill-ln-e
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\ln(e^5)$?
+        answer: "5"
+        explanation: The natural logarithm is the inverse of the exponential with base e, so they cancel.
+        hints:
+          - A function followed by its inverse.
+          - No arithmetic is needed.
+    - question:
+        id: drill-e-ln
+        type: numeric
+        system: s1
+        prompt: |
+          What is $e^{\ln 9}$?
+        answer: "9"
+        explanation: The exponential undoes the logarithm.
+        hints:
+          - The inverse pair, in the other order.
+          - What does e to the power of a logarithm give back?
+    - question:
+        id: drill-ln-one
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\ln 1$?
+        answer: "0"
+        explanation: |
+          $e^0 = 1$, so the power to which $e$ must be raised to give 1 is 0.
+        hints:
+          - To what power must e be raised to give 1?
+          - Every exponential curve passes through the same point on the vertical axis.
+    - question:
+        id: drill-approx-e
+        type: choice
+        system: s1
+        prompt: |
+          Which of these is closest to $e$?
+        options: ["2.5", "2.72", "3.14", "1.62"]
+        answer: 1
+        explanation: e is 2.71828 to five places. The third option is close to pi.
+        hints:
+          - It lies between 2 and 3.
+          - It is what one rupee becomes after a year at 100%, compounded continuously.
+    - question:
+        id: drill-rule-of-70
+        type: numeric
+        system: s1
+        prompt: |
+          By the rule of 70, about how many years does a quantity growing at 10% a year take to double?
+        answer: "7"
+        explanation: 70 divided by the percentage rate.
+        hints:
+          - Divide 70 by the rate in percent.
+          - The exact figure for continuous growth is ln 2 divided by 0.1.
+    - question:
+        id: drill-half-lives
+        type: choice
+        system: s1
+        prompt: |
+          A substance has a half-life of 3 days. What fraction of it remains after 9 days?
+        options: ["$\\dfrac{1}{3}$", "$\\dfrac{1}{6}$", "$\\dfrac{1}{8}$", "$\\dfrac{1}{9}$"]
+        answer: 2
+        explanation: Nine days is three half-lives, and halving three times leaves an eighth.
+        hints:
+          - How many half-lives fit into 9 days?
+          - Halve once for each.
+    - question:
+        id: drill-small-x
+        type: choice
+        system: s1
+        prompt: |
+          Without a calculator, which is the best estimate of $e^{0.02}$?
+        options: ["0.02", "1.02", "1.2", "2.72"]
+        answer: 1
+        explanation: For a small x, e to the x is close to 1 + x.
+        hints:
+          - Near zero the curve hugs a straight line.
+          - That line has height 1 and slope 1 at zero.
+    - question:
+        id: predict-exp-log
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          import math
+          print(math.exp(0), math.log(1), round(math.e, 3))
+        output: "1.0 0.0 2.718"
+        explanation: e to the 0 is 1, the natural log of 1 is 0, and e rounded to three places is 2.718. Both functions return floats.
+        hints:
+          - math.log is the natural logarithm.
+          - The results are floats.
+    - question:
+        id: predict-compound
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          balance = 1.0
+          for step in range(2):
+              balance = balance * 1.5
+          print(balance, balance > 2)
+        output: "2.25 True"
+        explanation: Two payments of 50% multiply by 1.5 twice, which gives 2.25. That is more than the 2 from a single payment of 100%.
+        hints:
+          - What is 1.5 times 1.5?
+          - Compare with a single doubling.
+  work:
+    - text: Slower now. Write the rate as a decimal before anything else.
+    - question:
+        id: work-doubling
+        type: numeric
+        system: s2
+        prompt: |
+          A population of bacteria grows continuously and doubles every 5 hours. After 20 hours it is how many times its original size?
+        answer: "16"
+        explanation: |
+          Twenty hours is four doubling times, so the factor is $2^4$. Check with the formula: the rate is $r = \dfrac{\ln 2}{5}$, and $e^{20r} = e^{4 \ln 2} = 2^4$.
+        hints:
+          - How many doubling times fit into 20 hours?
+          - Each one multiplies by 2. Do not add.
+          - You can confirm it with the continuous formula, where the rate is ln 2 divided by 5.
+    - question:
+        id: work-solve-for-time
+        type: choice
+        system: s2
+        prompt: |
+          An investment grows continuously at 6% a year. How long until it triples? Use $\ln 3 \approx 1.099$.
+        options: ["About 11.6 years", "About 18.3 years", "About 50 years", "About 33.3 years"]
+        answer: 1
+        explanation: |
+          $Pe^{0.06t} = 3P$ gives $0.06t = \ln 3$, so $t = \dfrac{1.099}{0.06} \approx 18.3$ years. The first option is the doubling time, $\dfrac{\ln 2}{0.06}$.
+        hints:
+          - Set P times e to the rt equal to 3P and cancel P.
+          - Take the natural logarithm of both sides to bring the exponent down.
+          - Divide ln 3 by the rate as a decimal.
+    - question:
+        id: write-compound
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `balance(p, r, n, t)` returning the balance after `t` years when a principal `p` earns interest at the annual rate `r`, given as a decimal, compounded `n` times a year. If `n` is `0`, treat that as a request for **continuous** compounding and use the exponential.
+        starter: |
+          import math
+
+          def balance(p, r, n, t):
+              # Replace the next line with your own.
+              return p
+
+          print(balance(1, 1, 1, 1), balance(1, 1, 12, 1), balance(1, 1, 0, 1))
+        solution: |
+          import math
+
+          def balance(p, r, n, t):
+              if n == 0:
+                  return p * math.exp(r * t)
+              return p * (1 + r / n) ** (n * t)
+
+          print(balance(1, 1, 1, 1), balance(1, 1, 12, 1), balance(1, 1, 0, 1))
+        tests: |
+          import math as _m
+          assert balance(1, 1, 1, 1) == 2, "One rupee at 100%, paid once, is 2"
+          assert balance(1, 1, 2, 1) == 2.25, "Paid twice: 1.5 squared"
+          assert abs(balance(1, 1, 12, 1) - 2.6130352902) < 1e-8, "Paid monthly: about 2.613"
+          assert abs(balance(1, 1, 0, 1) - _m.e) < 1e-12, "n = 0 means continuous compounding: e"
+          assert abs(balance(5000, 0.08, 4, 3) - 5000 * 1.02 ** 12) < 1e-6, "5000 at 8%, quarterly, for 3 years: twelve instalments of 2%"
+          assert abs(balance(5000, 0.08, 0, 3) - 5000 * _m.exp(0.24)) < 1e-6, "Continuous: 5000 times e to the power 0.24"
+          assert balance(300, 0.05, 12, 0) == 300, "After no time the balance is the principal"
+        wrong:
+          - "import math\n\ndef balance(p, r, n, t):\n    if n == 0:\n        return p * math.exp(r * t)\n    return p * (1 + r / n) ** t\n"
+          - "import math\n\ndef balance(p, r, n, t):\n    if n == 0:\n        return p * math.exp(r) * t\n    return p * (1 + r / n) ** (n * t)\n"
+          - "import math\n\ndef balance(p, r, n, t):\n    if n == 0:\n        return p * math.exp(r * t)\n    return p * (1 + r) ** (n * t)\n"
+        explanation: Each instalment multiplies by one plus the rate divided by n, and there are n times t instalments. The continuous case is the limit of that as n grows, P times e to the rt. Checking n equal to 0 first also avoids dividing by zero.
+        hints:
+          - Deal with the continuous case first, so that you never divide by zero.
+          - Each instalment pays the rate divided by n.
+          - How many instalments are there in t years?
+    - question:
+        id: write-sigmoid
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write two functions. `sigmoid(x)` returns $\dfrac{1}{1 + e^{-x}}$. `logit(y)` is its inverse, for $0 < y < 1$: it returns $\ln\dfrac{y}{1 - y}$. The program then prints the sigmoid of 0, and the result of applying `logit` to `sigmoid(2)`, rounded to 6 places.
+        starter: |
+          import math
+
+          def sigmoid(x):
+              # Replace the next line with your own.
+              return x
+
+          def logit(y):
+              # Replace the next line with your own.
+              return y
+
+          print(sigmoid(0), round(logit(sigmoid(2)), 6))
+        solution: |
+          import math
+
+          def sigmoid(x):
+              return 1 / (1 + math.exp(-x))
+
+          def logit(y):
+              return math.log(y / (1 - y))
+
+          print(sigmoid(0), round(logit(sigmoid(2)), 6))
+        tests: |
+          import math as _m
+          assert sigmoid(0) == 0.5, "The sigmoid of 0 is exactly one half"
+          assert abs(sigmoid(1) - 0.7310585786) < 1e-9, "The sigmoid of 1 is about 0.731"
+          assert abs(sigmoid(-1) + sigmoid(1) - 1) < 1e-12, "sigmoid(-x) is 1 - sigmoid(x)"
+          assert 0.999 < sigmoid(10) < 1 and 0 < sigmoid(-10) < 0.001, "Large inputs are squashed towards 1 and large negative inputs towards 0"
+          assert abs(logit(0.5)) < 1e-12, "The logit of one half is 0"
+          assert abs(logit(0.8) - _m.log(4)) < 1e-9, "The logit of 0.8 is ln(0.8 / 0.2) = ln 4"
+          for _x in [-3, -0.5, 0, 1.25, 4]:
+              assert abs(logit(sigmoid(_x)) - _x) < 1e-9, "logit should undo sigmoid"
+          for _y in [0.1, 0.5, 0.9]:
+              assert abs(sigmoid(logit(_y)) - _y) < 1e-9, "sigmoid should undo logit"
+          assert output.strip() == "0.5 2.0", "The program should print 0.5 2.0"
+        wrong:
+          - "import math\n\ndef sigmoid(x):\n    return 1 / (1 + math.exp(x))\n\ndef logit(y):\n    return math.log(y / (1 - y))\n\nprint(sigmoid(0), round(logit(sigmoid(2)), 6))\n"
+          - "import math\n\ndef sigmoid(x):\n    return 1 / 1 + math.exp(-x)\n\ndef logit(y):\n    return math.log(y / (1 - y))\n\nprint(sigmoid(0), round(logit(sigmoid(2)), 6))\n"
+          - "import math\n\ndef sigmoid(x):\n    return 1 / (1 + math.exp(-x))\n\ndef logit(y):\n    return math.log(y) / (1 - y)\n\nprint(sigmoid(0), round(logit(sigmoid(2)), 6))\n"
+        explanation: |
+          The sigmoid is a chain: negate, exponentiate, add 1, take the reciprocal. Its inverse undoes the chain backwards. From $y = \dfrac{1}{1 + e^{-x}}$, $\dfrac{1}{y} - 1 = e^{-x}$, so $e^x = \dfrac{y}{1 - y}$ and $x = \ln\dfrac{y}{1 - y}$. The pair is how a model's raw scores are turned into probabilities and back.
+        hints:
+          - Mind the brackets. The whole of 1 + e to the -x is the denominator.
+          - math.exp(-x) is e to the power -x.
+          - For logit, take the logarithm of the whole fraction.
+    - question:
+        id: fix-half-life
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `remaining(amount, half_life, time)` should return how much of a decaying quantity is left after `time`, given its half-life in the same units. `remaining(80, 3, 9)` should be `10.0`, since 9 is three half-lives. It returns `66.66...`. Find the mistake and fix it.
+        starter: |
+          def remaining(amount, half_life, time):
+              return amount * 0.5 ** half_life / time
+
+          print(remaining(80, 3, 9))
+        solution: |
+          def remaining(amount, half_life, time):
+              return amount * 0.5 ** (time / half_life)
+
+          print(remaining(80, 3, 9))
+        tests: |
+          assert abs(remaining(80, 3, 9) - 10) < 1e-9, "Three half-lives: 80 -> 40 -> 20 -> 10. The exponent is the number of half-lives that have passed."
+          assert remaining(80, 3, 0) == 80, "After no time, everything remains"
+          assert abs(remaining(80, 3, 3) - 40) < 1e-9, "After one half-life, half remains"
+          assert abs(remaining(100, 10, 5) - 100 * 0.5 ** 0.5) < 1e-9, "Half a half-life leaves 1 over root 2 of the amount"
+          assert abs(remaining(1, 2, 20) - 1 / 1024) < 1e-12, "Ten half-lives leave one part in 1024"
+        wrong:
+          - "def remaining(amount, half_life, time):\n    return amount * 0.5 ** (half_life / time)\n\nprint(remaining(80, 3, 9))\n"
+          - "def remaining(amount, half_life, time):\n    return amount * 0.5 * (time / half_life)\n\nprint(remaining(80, 3, 9))\n"
+          - "def remaining(amount, half_life, time):\n    return amount * 0.5 ** time / half_life\n\nprint(remaining(80, 3, 9))\n"
+        explanation: The number of half-lives that have passed is the time divided by the half-life, and the quantity is halved once for each, so that quotient is the exponent. It needs brackets, because a power is computed before a division. The starter also had the quotient upside down.
+        hints:
+          - How many half-lives fit into the time that has passed?
+          - That number is how many times the amount is halved, so it is the exponent.
+          - A power binds more tightly than division. Use brackets.
+    - question:
+        id: work-rewrite-base
+        type: choice
+        system: s2
+        prompt: |
+          A model's error is observed to follow $E(t) = 100 \times 0.5^{t/20}$, where $t$ is the number of training steps. Written in the form $E(t) = 100e^{-kt}$, what is $k$? Use $\ln 2 \approx 0.693$.
+        options: ["$k \\approx 0.5$", "$k \\approx 0.0347$", "$k \\approx 13.9$", "$k \\approx 0.693$"]
+        answer: 1
+        explanation: |
+          $0.5^{t/20} = e^{(t/20)\ln 0.5} = e^{-t \ln 2 / 20}$, so $k = \dfrac{\ln 2}{20} \approx 0.0347$. The error halves every 20 steps, and the half-life formula $t = \dfrac{\ln 2}{k}$ gives the same $k$.
+        hints:
+          - Write 0.5 as e to the power of ln 0.5.
+          - The logarithm of one half is minus the logarithm of 2.
+          - Or use the half-life formula. The half-life is 20 steps.
+    - question:
+        id: work-linear-vs-exp
+        type: choice
+        system: s2
+        prompt: |
+          Plan A pays you ₹1,00,000 every day. Plan B pays ₹1 on day 1, ₹2 on day 2, ₹4 on day 3, doubling each day. On which day does a **single day's** payment from plan B first exceed a single day's payment from plan A? Use $2^{10} \approx 1{,}000$.
+        options: ["Day 11", "Day 18", "Day 100", "Never"]
+        answer: 1
+        explanation: |
+          Plan B pays $2^{d - 1}$ on day $d$. $2^{16} = 65{,}536$ is too small and $2^{17} = 131{,}072$ is large enough, so $d - 1 = 17$ and $d = 18$. Estimating: $10^5 = 100 \times 10^3 \approx 2^{6.6} \times 2^{10}$, so about $2^{16.6}$. However large the constant payment, a doubling overtakes it, and after that the gap itself doubles every day.
+        hints:
+          - Write the payment of plan B on day d as a power of 2.
+          - How many doublings does it take to reach about one hundred thousand?
+          - Two to the 10 is about a thousand, so two to the 20 is about a million.
+  connections:
+    - text: |
+        You now own the function that describes every process whose rate of change is proportional to its size, and the one base that makes its mathematics clean.
+
+        It is everywhere in the work ahead. When a model is trained, its error commonly falls like $e^{-kt}$ at first, and the step size that controls training is often made to decay exponentially on purpose. The **sigmoid** you wrote turns a score into a probability, and its many-way cousin, softmax, which turns a list of scores into a list of probabilities by exponentiating each and dividing by the total, is the last step of every language model. The **natural logarithm** measures information and surprise, and the quantity that almost all classifiers are trained to minimise, cross-entropy, is a sum of natural logs of probabilities. The bell curve of statistics is $e^{-x^2/2}$. And the approximation $e^x \approx 1 + x$ is the first instance of an idea you will lean on constantly: close up, a smooth curve is a straight line.
+
+        The slope argument, taking a small step and dividing the rise by the run, was your first piece of calculus. Done properly, with limits, it will give the derivative, and the fact that $e^x$ is its own derivative is the reason this function appears in the solution of nearly every equation about change.
+
+        The exponential describes things that grow or die away. A great many things do neither: they **repeat**. Tides, seasons, sound, alternating current, a wheel going round. No exponential with a real exponent can do that, since it is strictly increasing or strictly decreasing for ever. Repetition needs functions that come back to where they started, and they are found by walking round a circle: [[m2.trigonometric-functions-on-the-unit-circle]]. At the end of that lesson the exponential will return, in a form you would not guess, and it will turn out that growth and rotation were one function all along.

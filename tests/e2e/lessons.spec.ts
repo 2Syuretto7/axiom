@@ -60,6 +60,44 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   await expect(curve).toContainText("It touches the x-axis at 1.");
   await curve.getByRole("slider", { name: "c" }).fill("4");
   await expect(curve).toContainText("It never meets the x-axis. b² − 4ac = −12.");
+  // Sets, maps, inverses, growth, the unit circle, and sums.
+  const venn = page.getByRole("figure").filter({ hasText: "Two sets" });
+  await expect(venn).toContainText("In both (A ∩ B): 6, 12.");
+  await expect(venn).toContainText("In A but not B (A ∖ B): 2, 4, 8, 10. In neither: 1, 5, 7, 11.");
+  await venn.getByRole("button", { name: "Increase B: multiples of" }).click();
+  await expect(venn).toContainText("In both (A ∩ B): 4, 8, 12.");
+  const arrows = page.getByRole("figure").filter({ hasText: "Arrow diagram" });
+  await expect(arrows).toContainText("f(x) = 2x mod m with m = 6");
+  await expect(arrows).toContainText("Injective: no, inputs 0 and 3 share the output 0. Surjective: no, nothing reaches 1, 3, 5. This map is neither.");
+  await arrows.getByRole("button", { name: "Decrease rule" }).click();
+  await expect(arrows).toContainText("Injective: yes, no output is hit twice. Surjective: yes, every output is hit. This map is a bijection.");
+  await arrows.getByRole("button", { name: "Decrease outputs (m)" }).click();
+  await expect(arrows).toContainText("Injective: no, inputs 0 and 5 share the output 1. Surjective: yes");
+  const inverse = page.getByRole("figure").filter({ hasText: "A function and its inverse" });
+  await expect(inverse).toContainText("f(x) = 2x − 2. Its inverse is g(x) = 0.5x + 1. f sends 3 to 4, and g sends 4 back to 3");
+  await inverse.getByRole("slider", { name: "slope" }).fill("0");
+  await expect(inverse).toContainText("there is no inverse");
+  const growth = page.getByRole("figure").filter({ hasText: "Compound growth" });
+  await expect(growth).toContainText("1 step, each multiplying by (1 + 1/1). After one year: ₹2.00000.");
+  await growth.getByRole("button", { name: "Increase how often" }).click();
+  await expect(growth).toContainText("every half-year: 2 steps");
+  await expect(growth).toContainText("After one year: ₹2.25000.");
+  for (let i = 0; i < 4; i++) await growth.getByRole("button", { name: "Increase how often" }).click();
+  await expect(growth).toContainText("every day: 365 steps, each multiplying by (1 + 1/365). After one year: ₹2.71457.");
+  const circle = page.getByRole("figure").filter({ hasText: "Unit circle" });
+  await expect(circle).toContainText("Angle 30° = π/6 radians. The point on the circle is (cos, sin) = (√3/2 ≈ 0.866, 1/2 ≈ 0.5). Check: cos² + sin² = 1.");
+  await circle.getByRole("slider", { name: "angle" }).fill("14");
+  await expect(circle).toContainText("Angle 210° = 7π/6 radians. The point on the circle is (cos, sin) = (−√3/2 ≈ −0.866, −1/2 ≈ −0.5).");
+  await circle.getByRole("slider", { name: "angle" }).fill("6");
+  await expect(circle).toContainText("Angle 90° = π/2 radians. The point on the circle is (cos, sin) = (0, 1).");
+  const stairs = page.getByRole("figure").filter({ hasText: "Sum of the first n whole numbers" });
+  await expect(stairs).toContainText("4 × 5 ÷ 2 = 10");
+  for (let i = 0; i < 6; i++) await stairs.getByRole("button", { name: "Increase n" }).click();
+  await expect(stairs).toContainText("1 + 2 + … + 10 is the blue staircase: 55 squares.");
+  const series = page.getByRole("figure").filter({ hasText: "Partial sums of a geometric series" });
+  await expect(series).toContainText("r = 0.5. The sum of the first 6 terms is 1.97. The totals close in on 1 ÷ (1 − r) = 2: the series converges.");
+  await series.getByRole("slider", { name: "ratio r" }).fill("1");
+  await expect(series).toContainText("The sum of the first 6 terms is 6. The ratio is not smaller than 1 in size, so the totals never settle: the series diverges.");
   await expect(page.locator(".prose-lesson img")).toHaveCount(0);
 
   // Wrong, then a hint, then right. Fractions and words are handled by the grader.
