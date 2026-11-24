@@ -19,6 +19,8 @@ export type ValidateOptions = {
   run: RunPython;
   /** Lessons are meant to be long and dense. The shortest prose a lesson may have. */
   minWords: number;
+  /** While writing: check the content of these lesson files only. The graph rules still cover every lesson. */
+  only?: (file: string) => boolean;
 };
 
 const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
@@ -84,6 +86,7 @@ export async function validateLessons(options: ValidateOptions): Promise<Issue[]
   }
 
   for (const [concept, { file, lesson }] of lessons) {
+    if (options.only && !options.only(file)) continue;
     const add = (where: string, message: string) => issues.push({ file, where, message });
     const past = ancestors(graph, concept);
     const future = dependants.get(concept) ?? new Set<string>();
@@ -104,8 +107,12 @@ export async function validateLessons(options: ValidateOptions): Promise<Issue[]
     const mentionable = new Set([...near, ...lesson.leads]);
     const allowedPython = new Set([concept, ...past].flatMap((id) => features.get(id) ?? []));
 
-    const checkCode = async (where: string, code: string) => {
-      const result = await run(featureProgram(code));
+    const shown = Object.values(lesson.parts)
+      .flat()
+      .flatMap((block) => ("text" in block ? pythonExamples(block.text) : []))
+      .join("\n");
+    const checkCode = async (where: string, code: string, context = "") => {
+      const result = await run(featureProgram(code, context));
       const listed = result.out.trim();
       if (result.error || listed === "syntax-error") return false;
       const beyond = (JSON.parse(listed) as string[]).filter((feature) => !allowedPython.has(feature));
@@ -132,8 +139,9 @@ export async function validateLessons(options: ValidateOptions): Promise<Issue[]
       } catch (error) {
         add(where, `Does not render: ${(error as Error).message}`);
       }
-      for (const [, code] of text.matchAll(/```python\n([\s\S]*?)```/g)) {
-        if (!(await checkCode(where, code))) add(where, "A Python example in the text does not parse");
+      // Examples are read in the light of the whole lesson, so a class defined in one passage may be used in a later one.
+      for (const code of pythonExamples(text)) {
+        if (!(await checkCode(where, code, shown))) add(where, "A Python example in the text does not parse");
       }
     };
 
@@ -181,12 +189,20 @@ export async function validateLessons(options: ValidateOptions): Promise<Issue[]
   return issues;
 }
 
+/** The Python examples in a passage. A method shown on its own, indented as it would be in its class, is moved to the margin. */
+const pythonExamples = (text: string) =>
+  [...text.matchAll(/```python\n([\s\S]*?)```/g)].map(([, code]) => {
+    const lines = code.split("\n");
+    const margin = Math.min(...lines.filter((line) => line.trim()).map((line) => line.length - line.trimStart().length));
+    return lines.map((line) => line.slice(Number.isFinite(margin) ? margin : 0)).join("\n");
+  });
+
 async function checkQuestion(
   q: Question,
   at: string,
   add: (where: string, message: string) => void,
   run: RunPython,
-  checkCode: (where: string, code: string) => Promise<boolean>,
+  checkCode: (where: string, code: string, context?: string) => Promise<boolean>,
   checkText: (where: string, text: string, inline?: boolean) => Promise<void>,
 ) {
   const passes = async (code: string) => (await run(checkProgram(code, (q as { tests: string }).tests))).error === null;
@@ -224,7 +240,8 @@ async function checkQuestion(
     }
     case "code": {
       if (!(await checkCode(at, q.solution))) add(at, "The reference solution does not parse");
-      const starterParses = await checkCode(at, q.starter);
+      // The starter may already call what the learner is asked to define.
+      const starterParses = await checkCode(at, q.starter, q.solution);
       if (q.mode === "write" && !starterParses) add(at, "The starter does not parse");
       if (!(await passes(q.solution))) add(at, "The reference solution fails its own tests");
       if (await passes(q.starter)) add(at, "The starter already passes the tests");

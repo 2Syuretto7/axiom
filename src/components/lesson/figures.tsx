@@ -837,6 +837,141 @@ function PartialSums(props: Props) {
   );
 }
 
+const factorialOf = (k: number) => Array.from({ length: k }, (_, i) => i + 1).reduce((a, b) => a * b, 1);
+
+/** The calls of factorial(n) piling up while each waits for the next, then finishing from the top down. */
+function CallStack(props: Props) {
+  const [n, setN] = useState(clamp(Math.round(num(props.n, 3)), 1, 5));
+  const [step, setStep] = useState(0);
+  const last = 2 * n + 1;
+  const at = Math.min(step, last);
+  const returned = Math.max(0, at - n); // how many calls have finished
+  const frames = at <= n ? at + 1 : n + 1 - returned; // calls still on the stack
+  const top = frames - 1;
+  const argOf = (i: number) => n - i;
+  let summary: string;
+  if (at < n) {
+    summary = `Step ${at}: factorial(${argOf(top)}) has been called. ${argOf(top)} is not 0, so it needs factorial(${argOf(top) - 1}) and must wait. ${frames} call${frames === 1 ? " is" : "s are"} on the stack.`;
+  } else if (at === n) {
+    summary = `Step ${at}: factorial(0) has been called. It is the base case and returns 1 without calling anything. ${frames} calls are on the stack, the deepest it gets.`;
+  } else if (at < last) {
+    const k = argOf(top);
+    summary = `Step ${at}: factorial(${k - 1}) returned ${factorialOf(k - 1)}. factorial(${k}) resumes with its own n = ${k} and computes ${k} × ${factorialOf(k - 1)} = ${factorialOf(k)}. ${frames} call${frames === 1 ? " is" : "s are"} on the stack.`;
+  } else {
+    summary = `Step ${at}: factorial(${n}) returned ${factorialOf(n)}. The stack is empty. ${n + 1} calls were made in all.`;
+  }
+  const height = 38;
+  return (
+    <Frame
+      title="The call stack"
+      summary={summary}
+      controls={
+        <>
+          <Stepper label="step" value={at} onChange={setStep} min={0} max={last} />
+          <Stepper
+            label="n"
+            value={n}
+            onChange={(v) => {
+              setN(v);
+              setStep(0);
+            }}
+            min={1}
+            max={5}
+          />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`The stack of unfinished calls of factorial(${n}) at step ${at}, holding ${frames} call${frames === 1 ? "" : "s"}`}>
+        <line x1="60" x2="380" y1="262" y2="262" className="fig-axis" />
+        {Array.from({ length: n + 1 }, (_, i) => {
+          const y = 262 - (i + 1) * (height + 4);
+          const live = i < frames;
+          const k = argOf(i);
+          const note = !live ? "" : i < top ? `waiting for factorial(${k - 1})` : at === n ? "base case: returns 1" : at > n ? `${k} × ${factorialOf(k - 1)} = ${factorialOf(k)}` : "running";
+          return (
+            <g key={i}>
+              <rect x="60" y={y} width="320" height={height} className={live ? (i === top ? "fig-accent" : "fig-fill") : "fig-ghost"} />
+              {live ? (
+                <>
+                  <text x="72" y={y + 24} className="fig-mono" style={i === top ? { fill: "var(--bg)" } : undefined}>
+                    factorial({k})
+                  </text>
+                  <text x="368" y={y + 23} textAnchor="end" className="fig-small" style={i === top ? { fill: "var(--bg)" } : undefined}>
+                    {note}
+                  </text>
+                </>
+              ) : null}
+            </g>
+          );
+        })}
+      </svg>
+    </Frame>
+  );
+}
+
+const RATES: { name: string; f: (n: number) => number }[] = [
+  { name: "log₂ n", f: (n) => Math.log2(n) },
+  { name: "n", f: (n) => n },
+  { name: "n log₂ n", f: (n) => n * Math.log2(n) },
+  { name: "n²", f: (n) => n * n },
+  { name: "2ⁿ", f: (n) => 2 ** n },
+];
+
+/** How five kinds of running time grow with the size of the input. */
+function GrowthRates(props: Props) {
+  const [n, setN] = useState(clamp(Math.round(num(props.n, 8)), 2, 32));
+  const top = 1100;
+  const gx = (x: number) => 44 + ((x - 1) / 31) * 330;
+  const gy = (v: number) => 250 - (Math.min(v, top) / top) * 230;
+  const whole = (v: number) => group(Math.round(v));
+  return (
+    <Frame
+      title="How running times grow"
+      summary={`For an input of size n = ${n}: log₂ n = ${fmt(Math.round(Math.log2(n) * 10) / 10)} steps, n = ${n}, n log₂ n = ${whole(n * Math.log2(n))}, n² = ${whole(n * n)}, 2ⁿ = ${whole(2 ** n)}. Doubling n adds one step to log₂ n, doubles n, multiplies n² by four, and squares 2ⁿ.`}
+      controls={<Slider label="size n" value={n} onChange={setN} min={2} max={32} />}
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`Curves of log n, n, n log n, n squared and 2 to the n, marked at n = ${n}`}>
+        <line x1={gx(1)} x2={gx(32)} y1={gy(0)} y2={gy(0)} className="fig-axis" />
+        <line x1={gx(1)} x2={gx(1)} y1={gy(0)} y2={gy(top)} className="fig-axis" />
+        {[250, 500, 750, 1000].map((v) => (
+          <g key={v}>
+            <line x1={gx(1)} x2={gx(32)} y1={gy(v)} y2={gy(v)} className="fig-grid" />
+            <text x={gx(1) - 6} y={gy(v) + 4} textAnchor="end" className="fig-small">
+              {v}
+            </text>
+          </g>
+        ))}
+        {[8, 16, 24, 32].map((x) => (
+          <text key={x} x={gx(x)} y={gy(0) + 16} textAnchor="middle" className="fig-small">
+            {x}
+          </text>
+        ))}
+        <line x1={gx(n)} x2={gx(n)} y1={gy(0)} y2={gy(top)} className="fig-guide" />
+        {RATES.map((rate) => {
+          const points: string[] = [];
+          let end = 1;
+          for (let x = 1; x <= 32; x += 0.25) {
+            const v = rate.f(x);
+            if (v > top) break;
+            points.push(`${gx(x).toFixed(1)},${gy(v).toFixed(1)}`);
+            end = x;
+          }
+          const value = rate.f(n);
+          return (
+            <g key={rate.name}>
+              <polyline points={points.join(" ")} className="fig-line" />
+              <text x={Math.min(gx(end) + 5, 392)} y={Math.max(gy(rate.f(end)) + (end >= 32 ? 4 : -4), 14)} className="fig-small">
+                {rate.name}
+              </text>
+              {value <= top ? <circle cx={gx(n)} cy={gy(value)} r="4" className="fig-accent" /> : null}
+            </g>
+          );
+        })}
+      </svg>
+    </Frame>
+  );
+}
+
 const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "place-value": PlaceValue,
   "number-line": NumberLine,
@@ -855,6 +990,8 @@ const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "unit-circle": UnitCircle,
   "triangle-sum": TriangleSum,
   "partial-sums": PartialSums,
+  "call-stack": CallStack,
+  "growth-rates": GrowthRates,
 };
 
 export function Figure({ name, props }: { name: string; props?: Props }) {
