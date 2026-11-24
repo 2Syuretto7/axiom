@@ -1,0 +1,673 @@
+concept: e3.stacks-and-queues
+minutes: 80
+claim: You can say what a stack and a queue promise, build each so that every operation takes constant time, explain why a list makes a good stack and a poor queue, and choose between them by asking which item must be dealt with next, as in matching brackets, evaluating an expression, and serving requests in order.
+recalls: [e3.arrays-and-linked-lists]
+uses: [e1.recursion, e1.complexity-and-big-o, e1.classes-and-objects, e1.exceptions, e1.modules-and-imports, e0.lists-and-tuples, e0.dictionaries-and-sets, e0.strings, e0.loops, e0.functions, e0.booleans-and-conditionals]
+leads: [e3.hash-tables, e3.trees-and-heaps, e3.graphs-and-traversal, e3.amortised-analysis]
+starter: |
+  # Scratch space. Count the brackets in each line. Do the counts tell you which lines are well formed?
+  lines = ["f(a[1], {2: (3)})", "([)]", "(()", "())("]
+
+  for text in lines:
+      counts = [text.count(c) for c in "()[]{}"]
+      print(text, counts)
+parts:
+  recall:
+    - text: |
+        [[e3.arrays-and-linked-lists]] ended by noticing that an array is cheap to change at its end and a linked list at its head, and that many programs need no more than that. Three quick pulls first.
+    - question:
+        id: recall-end
+        type: choice
+        system: s1
+        concepts: [e3.arrays-and-linked-lists]
+        prompt: |
+          `xs` is a Python list of $n$ items. Which pair of operations are both $O(1)$?
+        options: ["`xs.insert(0, x)` and `xs.pop(0)`", "`xs.append(x)` and `xs.pop()`", "`xs.insert(0, x)` and `xs.pop()`", "`xs.append(x)` and `xs.pop(0)`"]
+        answer: 1
+        explanation: Both work at the end of the array, where nothing has to move.
+        hints:
+          - Which end of an array can change without moving other items?
+          - pop() with no argument removes the last item.
+    - question:
+        id: recall-front-moves
+        type: numeric
+        system: s1
+        concepts: [e3.arrays-and-linked-lists]
+        prompt: |
+          An array holds 8 items. How many items move when the item at position 0 is removed?
+        answer: "7"
+        explanation: Every remaining item moves one place left.
+        hints:
+          - Which items come after position 0?
+          - All but the one removed.
+    - question:
+        id: recall-linked-front
+        type: choice
+        system: s1
+        concepts: [e3.arrays-and-linked-lists]
+        prompt: |
+          What does it cost to remove the first node of a linked list of $n$ nodes?
+        options: ["$O(1)$", "$O(\\log n)$", "$O(n)$", "$O(n^2)$"]
+        answer: 0
+        explanation: The head simply becomes the second node. No other node changes.
+        hints:
+          - Which link changes?
+          - Does the length of the list matter?
+  puzzle:
+    - text: |
+        A program editor must tell you, as you type, whether your brackets are well formed. Four lines to judge:
+
+        | Line | Well formed? |
+        | --- | --- |
+        | `f(a[1], {2: (3)})` | yes |
+        | `([)]` | no |
+        | `(()` | no |
+        | `())(` | no |
+
+        The obvious method is to count. Run the starter: it counts each kind of bracket. The third line is caught, with two `(` and one `)`. But the second and fourth lines have perfectly equal counts and are still wrong. In `([)]` the round bracket is closed while a square one is still open inside it. In `())(` a bracket is closed before it was opened.
+
+        Counting is not enough. As you read along the line, you need to remember something about the brackets you have passed.
+
+        **What, exactly, do you have to remember? And when a closing bracket arrives, which one of the remembered brackets does it have to match?**
+
+        The answer is a way of organising memory so simple that it hardly seems like a data structure. It is also how your own function calls have been kept track of all along.
+  intuition:
+    - text: |
+        Read `f(a[1], {2: (3)})` slowly. You meet `(`, then `[`. Now `]` arrives. Which opener must it match? Not the first one you saw. The **most recent** one that is still open. Brackets nest, so whatever opened last must close first.
+
+        So keep the openers in a pile. Each new opener goes on top. A closer is compared with the top of the pile, and if they match, the top is taken off. You never look at anything but the top. At the end the pile must be empty.
+
+        A pile that you add to and take from at the top only is a **stack**. A pile of plates is one: the last plate put on is the first taken off. Last in, first out.
+
+        Now a different job. Requests arrive at a server faster than it can answer them. They must wait, and fairness says that the one that has waited longest is served next. That is a line of people at a counter: join at the back, leave from the front. It is a **queue**. First in, first out.
+
+        Both hold a collection of items, and both let you do only two things, add one and remove one. The entire difference is **which** item comes out. Try it.
+    - figure: stack-queue
+      props: { items: 3 }
+    - text: |
+        With A, B, C added in that order, the stack gives them back as C, B, A, reversed. The queue gives them back as A, B, C, in the order they came. Add and remove in a mixed sequence and the two orders part company quickly.
+  derivation:
+    - text: |
+        **The stack.** A stack supports two operations and promises one thing about them.
+
+        | Operation | Meaning |
+        | --- | --- |
+        | **push** | add an item |
+        | **pop** | remove and return the item most recently pushed and not yet popped |
+
+        A third, **peek**, looks at that item without removing it.
+
+        A Python list is already a good stack, and the last lesson says why. Treat the **end** of the list as the top. Then push is `append` and pop is `pop()`, both at the end of an array, where nothing moves: $O(1)$ each. Peek is `stack[-1]`.
+
+        ```python
+        stack = []
+        stack.append("(")
+        stack.append("[")
+        print(stack.pop(), stack)
+        ```
+
+        This shows `[ ['(']`. Had you used the front of the list as the top, every push and pop would have moved every item, and the same idea would cost $O(n)$ an operation. The structure is the same. Only the choice of end differs.
+
+        **Matching brackets.** Here is the method from the intuition, made exact.
+
+        ```python
+        def balanced(text):
+            closes = {")": "(", "]": "[", "}": "{"}
+            stack = []
+            for c in text:
+                if c in "([{":
+                    stack.append(c)
+                elif c in closes:
+                    if len(stack) == 0 or stack.pop() != closes[c]:
+                        return False
+            return len(stack) == 0
+        ```
+
+        Follow it on `([)]`. Push `(`, push `[`. Then `)` arrives, and the top is `[`, which is not its partner: `False`. On `())(`, push `(`, pop it for the first `)`, and then the second `)` finds the stack empty: `False`. On `(()`, the line ends with one `(` still on the stack: `False`. The three ways a line can be wrong are the three places the function can refuse. Other characters are ignored.
+
+        Each character is handled in $O(1)$, so the whole check is $O(n)$ in the length of the line.
+
+        **The call stack is a stack.** When you studied recursion you watched calls pile up and unwind. A function that calls another must wait, and the one called last finishes first. Python keeps the waiting calls on a stack, which is where the name came from. This means any recursive function can be rewritten with a loop and a stack of your own, holding the work still to be done. Here is the total of a nested list, without recursion:
+
+        ```python
+        def total(nested):
+            stack = [nested]
+            result = 0
+            while len(stack) > 0:
+                item = stack.pop()
+                if type(item) == list:
+                    for part in item:
+                        stack.append(part)
+                else:
+                    result += item
+            return result
+        ```
+
+        Whatever is popped is either a number, which is added, or a list, whose parts are pushed to be dealt with later. Nothing is lost and nothing is done twice. The stack holds exactly the work not yet done.
+
+        **The queue.** A queue also supports two operations.
+
+        | Operation | Meaning |
+        | --- | --- |
+        | **enqueue** | add an item at the back |
+        | **dequeue** | remove and return the item that has been waiting longest |
+
+        A Python list makes a poor queue. Items must join at one end and leave from the other, and one of those ends is the front of the array. `xs.pop(0)` moves every remaining item, $O(n)$. You met the consequence at the end of the last lesson: emptying a list from the front is $O(n^2)$ in all.
+
+        A linked list has the opposite shape, and it can be made to fit. Removing at the head is $O(1)$. Adding at the far end is $O(1)$ too, **if the last node is remembered** as well as the first, so that no walk is needed to find it.
+
+        ```python
+        class Node:
+            def __init__(self, value, next):
+                self.value = value
+                self.next = next
+
+        class Queue:
+            def __init__(self):
+                self.head = None
+                self.tail = None
+
+            def enqueue(self, value):
+                node = Node(value, None)
+                if self.tail is None:
+                    self.head = node
+                else:
+                    self.tail.next = node
+                self.tail = node
+
+            def dequeue(self):
+                node = self.head
+                self.head = node.next
+                if self.head is None:
+                    self.tail = None
+                return node.value
+        ```
+
+        Items join at the tail and leave from the head. The one delicate point is the empty queue. When the last item leaves, the head becomes `None`, and the tail must be set to `None` with it. Otherwise the tail goes on pointing at a node that is no longer in the queue.
+
+        In practice you will not write this class. Python supplies `collections.deque`, a double-ended queue, with $O(1)$ adding and removing at **both** ends.
+
+        ```python
+        from collections import deque
+
+        queue = deque()
+        queue.append("first")
+        queue.append("second")
+        print(queue.popleft(), len(queue))
+        ```
+
+        This shows `first 1`. Use `append` to join at the back and `popleft` to leave from the front. A deque used with `append` and `pop` is a stack, so it serves as either.
+    - question:
+        id: derivation-tail
+        type: choice
+        system: s2
+        prompt: |
+          In the linked queue, `dequeue` sets `self.tail = None` when the head has become `None`. What goes wrong if that line is left out?
+        options:
+          - "Nothing. The tail is only used for speed."
+          - "After the queue empties, the tail still points at the removed node. The next `enqueue` attaches the new node to that dead node and leaves the head as `None`, so the new item can never be dequeued."
+          - "The queue returns its items in reverse order."
+          - "`dequeue` becomes $O(n)$."
+        answer: 1
+        explanation: |
+          `enqueue` decides whether the queue is empty by testing the tail. With a stale tail it takes the queue to be non-empty and links the new node after the old one, which the head no longer leads to. The head remains `None`, and the next `dequeue` fails. A structure that keeps two records of one fact, here "the queue is empty", must change both together. The property that must hold between operations, that head and tail are both `None` or both nodes of the same list, is called an **invariant**, and bugs in data structures are almost always a broken invariant.
+        hints:
+          - How does enqueue decide whether the queue is empty?
+          - After the last item leaves, what does the tail still point at?
+          - Where does the next new node get attached, and can the head reach it?
+    - text: |
+        **Choosing between them.** The only question is which item should be dealt with next.
+
+        | If the next item to handle is | Use | Examples |
+        | --- | --- | --- |
+        | the most recent one | a stack | brackets, undo, function calls, going back a page |
+        | the oldest one | a queue | requests to a server, print jobs, a buffer of batches waiting to be trained on |
+
+        The choice shapes whole algorithms. When you explore a maze and keep the places still to visit on a stack, you plunge down one corridor as far as it goes before trying another. Keep them in a queue and you spread out evenly, reaching everything one step away before anything two steps away. Same loop, different container, and a completely different search. You will see this made precise when graphs arrive.
+
+        **Evaluating an expression.** A calculator can be built on a stack. Write the expression with each operator **after** its two operands: $(3 + 4) \times 2$ becomes `3 4 + 2 *`. This is called postfix notation. It needs no brackets and no rules of precedence. Read it left to right:
+
+        - a number is pushed;
+        - an operator pops two numbers, combines them, and pushes the result.
+
+        For `3 4 + 2 *`: push 3, push 4. The `+` pops 4 and 3 and pushes 7. Push 2. The `*` pops 2 and 7 and pushes 14. At the end the stack holds the answer alone. The order of the two pops matters for subtraction: the first number popped is the **second** operand.
+    - question:
+        id: order-postfix
+        type: order
+        system: s2
+        prompt: Put the stack's contents in the order they occur while evaluating the postfix expression `5 1 2 + -`, starting after the first token.
+        steps:
+          - "`[5]`"
+          - "`[5, 1]`"
+          - "`[5, 1, 2]`"
+          - "`[5, 3]`"
+          - "`[2]`"
+        explanation: The three numbers are pushed in turn. The plus pops 2 and 1 and pushes 3. The minus pops 3, then 5, and computes 5 − 3, because the first number popped is the second operand. The result, 2, is left alone on the stack.
+        hints:
+          - Numbers are pushed as they are read.
+          - An operator replaces the top two numbers by one.
+          - For the minus, which number was pushed first?
+  formal:
+    - text: |
+        **Stack.** A collection with push and pop, where pop returns the item most recently pushed and not yet popped: last in, first out. With a Python list, push is `append` and pop is `pop()`, each $O(1)$.
+
+        **Queue.** A collection with enqueue and dequeue, where dequeue returns the item enqueued earliest and not yet dequeued: first in, first out. With a linked list that remembers its head and its tail, or with `collections.deque` using `append` and `popleft`, each is $O(1)$. With a Python list, `pop(0)` is $O(n)$.
+
+        **Balanced brackets.** A text is balanced exactly when, reading left to right with a stack of openers, every closer matches the top of the stack, which is then popped, and the stack is empty at the end.
+
+        **Postfix evaluation.** Push numbers. For an operator, pop $b$, then pop $a$, and push $a \mathbin{\text{op}} b$.
+  drill:
+    - text: Seconds each. Ask one thing every time. Which item comes out next?
+    - question:
+        id: drill-stack-pop
+        type: numeric
+        system: s1
+        prompt: |
+          1, 2 and 3 are pushed on a stack in that order. What does the first pop return?
+        answer: "3"
+        explanation: Last in, first out.
+        hints:
+          - Which item was pushed most recently?
+          - The top of the pile.
+    - question:
+        id: drill-queue-dequeue
+        type: numeric
+        system: s1
+        prompt: |
+          1, 2 and 3 are enqueued in that order. What does the first dequeue return?
+        answer: "1"
+        explanation: First in, first out.
+        hints:
+          - Which item has waited longest?
+          - The front of the line.
+    - question:
+        id: drill-stack-mixed
+        type: numeric
+        system: s1
+        prompt: |
+          On an empty stack: push 4, push 7, pop, push 9, pop, pop. What does the **last** pop return?
+        answer: "4"
+        explanation: The first pop returns 7, the second 9, and 4 has been at the bottom throughout.
+        hints:
+          - Track the stack after each step.
+          - After the first pop only 4 is left, then 9 goes on top.
+    - question:
+        id: drill-queue-mixed
+        type: numeric
+        system: s1
+        prompt: |
+          On an empty queue: enqueue 4, enqueue 7, dequeue, enqueue 9, dequeue, dequeue. What does the **last** dequeue return?
+        answer: "9"
+        explanation: The items leave in the order they arrived, 4, 7, 9.
+        hints:
+          - A queue returns items in arrival order.
+          - Which item arrived last?
+    - question:
+        id: drill-balanced-one
+        type: choice
+        system: s1
+        prompt: |
+          Is `([)]` balanced?
+        options: ["Yes, the counts are equal", "No, the round bracket closes while the square one is still open", "No, it has too many brackets", "Yes, every opener has a closer somewhere"]
+        answer: 1
+        explanation: When the round closer arrives, the top of the stack is a square opener.
+        hints:
+          - What is on top of the stack when the first closer arrives?
+          - Does it match?
+    - question:
+        id: drill-balanced-two
+        type: choice
+        system: s1
+        prompt: |
+          Is `{[()]}()` balanced?
+        options: ["Yes", "No, it ends with an extra pair", "No, the nesting is too deep", "No, the kinds are mixed"]
+        answer: 0
+        explanation: Each closer matches the most recent open bracket, and the stack is empty at the end.
+        hints:
+          - Push openers and pop for each closer.
+          - Is the stack empty when the line ends?
+    - question:
+        id: drill-depth
+        type: numeric
+        system: s1
+        prompt: |
+          While checking `((()))`, what is the largest number of items the stack holds at once?
+        answer: "3"
+        explanation: Three openers are pushed before the first closer arrives.
+        hints:
+          - How many openers come before the first closer?
+          - Each one is pushed.
+    - question:
+        id: drill-postfix
+        type: numeric
+        system: s1
+        prompt: |
+          What is the value of the postfix expression `3 4 + 2 *`?
+        answer: "14"
+        explanation: 3 + 4 is 7, and 7 × 2 follows.
+        hints:
+          - The plus combines the two numbers before it.
+          - The times combines that result with 2.
+    - question:
+        id: drill-postfix-minus
+        type: numeric
+        system: s1
+        prompt: |
+          What is the value of the postfix expression `9 4 -`?
+        answer: "5"
+        explanation: The first number popped, 4, is the second operand, so the result is 9 − 4.
+        hints:
+          - The operands are in the order they were written.
+          - 9 minus 4.
+    - question:
+        id: drill-cost
+        type: choice
+        system: s1
+        prompt: |
+          A Python list of $n$ items is used as a queue, with `append` and `pop(0)`. What does each dequeue cost?
+        options: ["$O(1)$", "$O(\\log n)$", "$O(n)$", "$O(n^2)$"]
+        answer: 2
+        explanation: Removing position 0 of an array moves every remaining item.
+        hints:
+          - Which end of the array does pop(0) work at?
+          - What happens to the other items?
+    - question:
+        id: drill-which
+        type: choice
+        system: s1
+        prompt: |
+          An editor's "undo" must reverse the most recent change first. Which structure holds the changes?
+        options: ["A queue", "A stack", "A sorted list", "A set"]
+        answer: 1
+        explanation: The most recent change is the first to be undone.
+        hints:
+          - Which change is undone first?
+          - Last in, first out.
+    - question:
+        id: predict-stack
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          stack = []
+          stack.append(1)
+          stack.append(2)
+          stack.pop()
+          stack.append(3)
+          print(stack.pop(), stack)
+        output: "3 [1]"
+        explanation: After 1 and 2 are pushed, 2 is popped, and 3 is pushed on top of 1. The final pop returns 3 and leaves [1].
+        hints:
+          - Track the list after each line.
+          - The last pop returns the item appended most recently.
+    - question:
+        id: predict-deque
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          from collections import deque
+
+          queue = deque([1, 2, 3])
+          queue.append(4)
+          print(queue.popleft(), queue.popleft(), list(queue))
+        output: "1 2 [3, 4]"
+        explanation: popleft removes from the front, so 1 and then 2 leave. The 4 joined at the back and is still waiting behind 3.
+        hints:
+          - append joins at the back and popleft leaves from the front.
+          - Two items leave, so two remain.
+  work:
+    - text: Slower now. For each problem, say what the container holds and what its top or front means.
+    - question:
+        id: write-balanced
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `balanced(text)`. Return `True` exactly when the round, square and curly brackets in `text` are well formed: every closer matches the most recent bracket still open, and nothing is left open at the end. Ignore every other character.
+        starter: |
+          def balanced(text):
+              # Replace the next line with your own.
+              return True
+
+          print(balanced("f(a[1], {2: (3)})"), balanced("([)]"))
+        solution: |
+          def balanced(text):
+              closes = {")": "(", "]": "[", "}": "{"}
+              stack = []
+              for c in text:
+                  if c in "([{":
+                      stack.append(c)
+                  elif c in closes:
+                      if len(stack) == 0 or stack.pop() != closes[c]:
+                          return False
+              return len(stack) == 0
+
+          print(balanced("f(a[1], {2: (3)})"), balanced("([)]"))
+        tests: |
+          assert balanced("f(a[1], {2: (3)})") is True, "f(a[1], {2: (3)}) is well formed"
+          assert balanced("([)]") is False, "In ([)] the round bracket closes while the square one is still open"
+          assert balanced("(()") is False, "In (() one bracket is never closed"
+          assert balanced("())(") is False, "In ())( a bracket is closed before it is opened"
+          assert balanced("") is True, "A text with no brackets is well formed"
+          assert balanced("no brackets here") is True, "A text with no brackets is well formed"
+          assert balanced("{[()]}()") is True, "{[()]}() is well formed"
+          assert balanced("]") is False, "A closer with nothing open is not well formed"
+          assert balanced("(]") is False, "A round opener cannot be closed by a square closer"
+          assert balanced("((((((((((") is False, "Ten openers and no closers"
+          assert balanced("()" * 500) is True, "A thousand brackets in matched pairs"
+          assert balanced("[(])") is False, "In [(]) the square bracket closes while the round one is still open"
+          assert output.strip() == "True False", "The program should print True False"
+        wrong:
+          - "def balanced(text):\n    return text.count('(') == text.count(')') and text.count('[') == text.count(']') and text.count('{') == text.count('}')\n\nprint(True, False)\n"
+          - "def balanced(text):\n    closes = {')': '(', ']': '[', '}': '{'}\n    stack = []\n    for c in text:\n        if c in '([{':\n            stack.append(c)\n        elif c in closes:\n            if len(stack) == 0 or stack.pop() != closes[c]:\n                return False\n    return True\n\nprint(True, False)\n"
+          - "def balanced(text):\n    closes = {')': '(', ']': '[', '}': '{'}\n    stack = []\n    for c in text:\n        if c in '([{':\n            stack.append(c)\n        elif c in closes:\n            if len(stack) == 0:\n                return False\n            stack.pop()\n    return len(stack) == 0\n\nprint(True, False)\n"
+          - "def balanced(text):\n    closes = {')': '(', ']': '[', '}': '{'}\n    stack = []\n    for c in text:\n        if c in '([{':\n            stack.append(c)\n        elif c in closes:\n            if len(stack) > 0 and stack.pop() != closes[c]:\n                return False\n    return len(stack) == 0\n\nprint(True, False)\n"
+          - "def balanced(text):\n    closes = {')': '(', ']': '[', '}': '{'}\n    stack = []\n    for c in text:\n        if c in '([{':\n            stack.append(c)\n        elif c in closes:\n            if len(stack) == 0 or stack[0] != closes[c]:\n                return False\n            stack.pop()\n    return len(stack) == 0\n\nprint(True, False)\n"
+        explanation: |
+          The stack holds the brackets that are open and not yet closed, the most recent on top. An opener is pushed. A closer must find a partner of its own kind on top, and there are two ways for it to fail: the stack is empty, or the top is the wrong kind. At the end, anything still on the stack was never closed. Each of the three checks catches a different mistake, and leaving out any one lets a bad line through. Counting cannot work, because the counts of `([)]` are identical to those of `([])`. What distinguishes them is order, and the stack is the record of order.
+        hints:
+          - Keep a list as a stack of the openers seen and not yet closed.
+          - For a closer, fail if the stack is empty or the popped opener is not its partner.
+          - At the end, the stack must be empty.
+    - question:
+        id: fix-queue
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          This linked queue should print 1 and then 2. It prints 1 and then stops with an error, because after the queue has been emptied once, new items are lost. Fix it.
+        starter: |
+          class Node:
+              def __init__(self, value, next):
+                  self.value = value
+                  self.next = next
+
+          class Queue:
+              def __init__(self):
+                  self.head = None
+                  self.tail = None
+
+              def enqueue(self, value):
+                  node = Node(value, None)
+                  if self.tail is None:
+                      self.head = node
+                  else:
+                      self.tail.next = node
+                  self.tail = node
+
+              def dequeue(self):
+                  node = self.head
+                  self.head = node.next
+                  return node.value
+
+          queue = Queue()
+          queue.enqueue(1)
+          print(queue.dequeue())
+          queue.enqueue(2)
+          print(queue.dequeue())
+        solution: |
+          class Node:
+              def __init__(self, value, next):
+                  self.value = value
+                  self.next = next
+
+          class Queue:
+              def __init__(self):
+                  self.head = None
+                  self.tail = None
+
+              def enqueue(self, value):
+                  node = Node(value, None)
+                  if self.tail is None:
+                      self.head = node
+                  else:
+                      self.tail.next = node
+                  self.tail = node
+
+              def dequeue(self):
+                  node = self.head
+                  self.head = node.next
+                  if self.head is None:
+                      self.tail = None
+                  return node.value
+
+          queue = Queue()
+          queue.enqueue(1)
+          print(queue.dequeue())
+          queue.enqueue(2)
+          print(queue.dequeue())
+        tests: |
+          _q = Queue()
+          _q.enqueue(1)
+          assert _q.dequeue() == 1, "A queue holding only 1 should give back 1"
+          _q.enqueue(2)
+          assert _q.head is not None, "After the queue has been emptied, a new item must still become the head"
+          assert _q.dequeue() == 2, "After emptying and refilling, the queue should give back 2"
+          _q = Queue()
+          for _v in [4, 7, 9]:
+              _q.enqueue(_v)
+          assert [_q.dequeue(), _q.dequeue(), _q.dequeue()] == [4, 7, 9], "Items should leave in the order they arrived"
+          _q.enqueue(5)
+          _q.enqueue(6)
+          assert [_q.dequeue(), _q.dequeue()] == [5, 6], "The queue should work again after being emptied"
+          _q = Queue()
+          _q.enqueue(1)
+          _q.enqueue(2)
+          assert _q.dequeue() == 1, "The first item in is the first out"
+          _q.enqueue(3)
+          assert [_q.dequeue(), _q.dequeue()] == [2, 3], "An item added while others wait should leave after them"
+          assert _q.head is None and _q.tail is None, "An empty queue should have both head and tail set to None"
+          assert output.split() == ["1", "2"], "The program should print 1 and then 2"
+        wrong:
+          - "class Node:\n    def __init__(self, value, next):\n        self.value = value\n        self.next = next\n\nclass Queue:\n    def __init__(self):\n        self.head = None\n        self.tail = None\n    def enqueue(self, value):\n        node = Node(value, None)\n        if self.tail is None:\n            self.head = node\n        else:\n            self.tail.next = node\n        self.tail = node\n    def dequeue(self):\n        node = self.head\n        self.head = node.next\n        return node.value\n\nprint(1)\nprint(2)\n"
+          - "class Node:\n    def __init__(self, value, next):\n        self.value = value\n        self.next = next\n\nclass Queue:\n    def __init__(self):\n        self.head = None\n        self.tail = None\n    def enqueue(self, value):\n        node = Node(value, None)\n        if self.tail is None:\n            self.head = node\n        else:\n            self.tail.next = node\n        self.tail = node\n    def dequeue(self):\n        node = self.head\n        self.head = node.next\n        self.tail = None\n        return node.value\n\nprint(1)\nprint(2)\n"
+          - "class Node:\n    def __init__(self, value, next):\n        self.value = value\n        self.next = next\n\nclass Queue:\n    def __init__(self):\n        self.head = None\n        self.tail = None\n    def enqueue(self, value):\n        self.head = Node(value, self.head)\n        if self.tail is None:\n            self.tail = self.head\n    def dequeue(self):\n        node = self.head\n        self.head = node.next\n        if self.head is None:\n            self.tail = None\n        return node.value\n\nprint(1)\nprint(2)\n"
+          - "class Node:\n    def __init__(self, value, next):\n        self.value = value\n        self.next = next\n\nclass Queue:\n    def __init__(self):\n        self.head = None\n        self.tail = None\n    def enqueue(self, value):\n        node = Node(value, None)\n        self.head = node\n        self.tail = node\n    def dequeue(self):\n        node = self.head\n        self.head = node.next\n        if self.head is None:\n            self.tail = None\n        return node.value\n\nprint(1)\nprint(2)\n"
+        explanation: |
+          When the last item leaves, the head becomes `None` but the tail was left pointing at the node just removed. `enqueue` tests the tail to decide whether the queue is empty, concluded that it was not, and attached the new node behind the dead one, where the head cannot reach it. The repair is one line in `dequeue`: when the head has become `None`, set the tail to `None` as well. Setting the tail to `None` on every dequeue is too much, since it cuts off the items still waiting. The fault only shows after the queue has been emptied and used again, which is exactly the kind of case a test must be written for on purpose.
+        hints:
+          - After the first dequeue, what are head and tail?
+          - Which of them does enqueue test to see whether the queue is empty?
+          - When the head becomes None in dequeue, set the tail to None too.
+    - question:
+        id: write-postfix
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `evaluate(tokens)`. `tokens` is a list making up a valid postfix expression: each token is a whole number, or one of the strings `"+"`, `"-"`, `"*"`. Return the value of the expression.
+        starter: |
+          def evaluate(tokens):
+              # Replace the next line with your own.
+              return 0
+
+          print(evaluate([3, 4, "+", 2, "*"]), evaluate([9, 4, "-"]))
+        solution: |
+          def evaluate(tokens):
+              stack = []
+              for token in tokens:
+                  if token == "+" or token == "-" or token == "*":
+                      b = stack.pop()
+                      a = stack.pop()
+                      if token == "+":
+                          stack.append(a + b)
+                      elif token == "-":
+                          stack.append(a - b)
+                      else:
+                          stack.append(a * b)
+                  else:
+                      stack.append(token)
+              return stack.pop()
+
+          print(evaluate([3, 4, "+", 2, "*"]), evaluate([9, 4, "-"]))
+        tests: |
+          assert evaluate([3, 4, "+", 2, "*"]) == 14, "3 4 + 2 * is (3 + 4) * 2 = 14. You returned " + repr(evaluate([3, 4, "+", 2, "*"]))
+          assert evaluate([9, 4, "-"]) == 5, "9 4 - is 9 - 4 = 5. You returned " + repr(evaluate([9, 4, "-"]))
+          assert evaluate([7]) == 7, "A single number is its own value. You returned " + repr(evaluate([7]))
+          assert evaluate([5, 1, 2, "+", "-"]) == 2, "5 1 2 + - is 5 - (1 + 2) = 2. You returned " + repr(evaluate([5, 1, 2, "+", "-"]))
+          assert evaluate([2, 3, 4, "*", "+"]) == 14, "2 3 4 * + is 2 + 3 * 4 = 14. You returned " + repr(evaluate([2, 3, 4, "*", "+"]))
+          assert evaluate([2, 3, "+", 4, "*"]) == 20, "2 3 + 4 * is (2 + 3) * 4 = 20. You returned " + repr(evaluate([2, 3, "+", 4, "*"]))
+          assert evaluate([10, 2, 3, "-", "-"]) == 11, "10 2 3 - - is 10 - (2 - 3) = 11. You returned " + repr(evaluate([10, 2, 3, "-", "-"]))
+          assert evaluate([0, 6, "-"]) == -6, "0 6 - is 0 - 6 = -6. You returned " + repr(evaluate([0, 6, "-"]))
+          assert evaluate([1, 2, "+", 3, 4, "+", "*"]) == 21, "1 2 + 3 4 + * is (1 + 2) * (3 + 4) = 21. You returned " + repr(evaluate([1, 2, "+", 3, 4, "+", "*"]))
+          assert output.strip() == "14 5", "The program should print 14 5"
+        wrong:
+          - "def evaluate(tokens):\n    stack = []\n    for token in tokens:\n        if token == '+' or token == '-' or token == '*':\n            a = stack.pop()\n            b = stack.pop()\n            if token == '+':\n                stack.append(a + b)\n            elif token == '-':\n                stack.append(a - b)\n            else:\n                stack.append(a * b)\n        else:\n            stack.append(token)\n    return stack.pop()\n\nprint(14, 5)\n"
+          - "def evaluate(tokens):\n    stack = []\n    for token in tokens:\n        if token == '+' or token == '-' or token == '*':\n            b = stack.pop(0)\n            a = stack.pop(0)\n            if token == '+':\n                stack.append(a + b)\n            elif token == '-':\n                stack.append(b - a)\n            else:\n                stack.append(a * b)\n        else:\n            stack.append(token)\n    return stack.pop()\n\nprint(14, 5)\n"
+          - "def evaluate(tokens):\n    result = 0\n    for token in tokens:\n        if token != '+' and token != '-' and token != '*':\n            result += token\n    return result\n\nprint(14, 5)\n"
+          - "def evaluate(tokens):\n    stack = []\n    for token in tokens:\n        if token == '+' or token == '-' or token == '*':\n            b = stack.pop()\n            a = stack.pop()\n            if token == '+':\n                stack.append(a + b)\n            elif token == '-':\n                stack.append(a - b)\n            else:\n                stack.append(a + b)\n        else:\n            stack.append(token)\n    return stack.pop()\n\nprint(14, 5)\n"
+          - "def evaluate(tokens):\n    stack = []\n    for token in tokens:\n        if token == '+' or token == '-' or token == '*':\n            b = stack.pop()\n            a = stack.pop()\n            if token == '+':\n                stack.append(a + b)\n            elif token == '-':\n                stack.append(abs(a - b))\n            else:\n                stack.append(a * b)\n        else:\n            stack.append(token)\n    return stack.pop()\n\nprint(14, 5)\n"
+        explanation: |
+          The stack holds the values that have been computed and not yet used. A number is such a value and is pushed. An operator uses the two most recent values and replaces them by one. Because the stack returns the most recent first, the first pop yields the **second** operand, and for subtraction the order must be put right: pop `b`, then `a`, and compute `a - b`. Taking the operands from the front of the list turns the stack into a queue and pairs up the wrong numbers as soon as an expression nests. Each token is handled in constant time, so the evaluation is $O(n)$. The way a Python expression is turned into steps for the machine is very close to this.
+        hints:
+          - Push every number onto a stack.
+          - For an operator, pop the second operand first, then the first operand.
+          - Push the result, and return the one value left at the end.
+    - question:
+        id: work-two-stacks
+        type: choice
+        system: s2
+        prompt: |
+          A queue is built from two stacks, `inbox` and `outbox`. Enqueue pushes onto `inbox`. Dequeue pops from `outbox`, but if `outbox` is empty it first pops **every** item from `inbox` and pushes each onto `outbox`. Does this behave as a queue, and what does it cost?
+        options:
+          - "It is not a queue, because stacks reverse the order."
+          - "It is a queue. Moving the items from one stack to the other reverses them, so the oldest ends up on top of `outbox`. One dequeue may move many items, but each item is moved only once in its life, so $n$ operations cost $O(n)$ in all."
+          - "It is a queue, but every dequeue costs $O(n)$, so $n$ operations cost $O(n^2)$."
+          - "It works only when the queue is never empty."
+        answer: 1
+        explanation: |
+          A stack reverses order, and reversing twice restores it: the first item pushed onto `inbox` is at its bottom, so it is the last to be moved and lands on top of `outbox`, ready to leave first. Items already in `outbox` are older than everything in `inbox`, so they rightly leave first. As to cost, a single dequeue can be expensive, moving the whole of `inbox`. But follow one item through its life: pushed once onto `inbox`, moved once, popped once. That is at most a fixed number of steps for each item, so any sequence of $n$ operations takes $O(n)$ steps in total, an average of $O(1)$ each. Reasoning about the total over a sequence, when single operations vary, is called amortised analysis, and it has a lesson of its own in this cluster.
+        hints:
+          - What order are the items in after being moved from one stack to the other?
+          - Which stack holds the older items?
+          - Count how many times any one item is pushed and popped in total.
+    - question:
+        id: work-recursion-depth
+        type: choice
+        system: s2
+        prompt: |
+          A recursive function that walks a linked list of a million nodes, calling itself once for each node, fails in Python with "maximum recursion depth exceeded". The loop with an explicit stack from this lesson, or a plain loop, does not. Why?
+        options:
+          - "Recursion is always slower than a loop."
+          - "Each unfinished call occupies a frame on Python's call stack, which is limited to about a thousand frames by default. A million nested calls exceed it. A loop keeps its pending work in an ordinary list, or needs none, and is limited only by memory."
+          - "Linked lists cannot be used with recursion."
+          - "The recursive function has a bug."
+        answer: 1
+        explanation: |
+          Recursion uses the call stack as its memory of what remains to be done: each call that is waiting for a deeper one holds a frame. The depth of the recursion is the height of that stack, and Python refuses to let it grow past a set limit, to turn runaway recursion into an error instead of a crash. Recursion that halves its problem is only about 20 deep for a million items and is safe. Recursion that goes one step deeper for each item is as deep as the data is long. Knowing that the call stack is a real stack with a real limit tells you when to replace recursion by a loop with a stack of your own.
+        hints:
+          - What does Python keep for each call that has not finished?
+          - How many calls are unfinished at once when walking a million nodes one call at a time?
+          - Where does the explicit stack keep its pending work?
+  connections:
+    - text: |
+        The puzzle asked what you must remember to check brackets, when counting fails. You must remember the brackets still open, in order, and a closer must match the most recent of them. A pile that you add to and take from only at the top holds exactly that. It is a stack, and the three ways a line can be malformed are the three ways the check can fail: a closer meets an empty stack, a closer meets the wrong opener, or openers are left at the end.
+
+        A stack returns the newest item and a queue the oldest. That is the whole difference, and it was enough to decide how each should be built. From [[e3.arrays-and-linked-lists]] you knew that an array is cheap at its end, so a list is a ready-made stack. A queue works at both ends, so it needs a linked list that remembers its tail, or a deque. In both, every operation is $O(1)$.
+
+        The stack also explained something you had been using since you met recursion: waiting function calls are kept on one, which is why the last call made is the first to return, and why recursion a million deep fails.
+
+        Two threads lead on. Keeping pending work on a stack or on a queue gives the two great ways of exploring, depth first and breadth first, in [[e3.graphs-and-traversal]]. And when the next item to handle is neither the newest nor the oldest but the **smallest**, you need the priority queue of [[e3.trees-and-heaps]]. The two-stack queue, cheap on average though not at every step, returns in [[e3.amortised-analysis]].
+
+        Before those, a different question about collections. A stack and a queue hand you an item of **their** choosing. Often you want a particular one: is this word in the vocabulary, what is the count for this key? A list must search for it, item by item. You were told that a set and a dictionary answer in $O(1)$, however much they hold, and were given a picture of houses arranged by name. The next lesson, [[e3.hash-tables]], builds one out of the only two things you have: an array, which can jump to any position, and linked lists, to hold what collides.
