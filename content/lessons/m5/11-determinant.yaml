@@ -1,0 +1,950 @@
+concept: m5.determinant
+minutes: 100
+claim: You can derive the determinant of a 2 by 2 matrix as the signed area of the parallelogram on its columns, explain why that one number is the factor by which the map scales every area, read its sign as orientation and its vanishing as the loss of an inverse, derive the product rule and what each row operation does to it, compute the determinant of any square matrix from the pivots of elimination, and say what the determinant is a poor measure of.
+recalls: [m5.change-of-basis]
+uses: [m5.identity-and-inverse, m5.elimination-and-linear-systems, m5.matrix-multiplication-as-composition, m5.matrices-as-linear-maps, m5.transpose, m5.rank, m5.matrix-vector-product, m4.dot-product, m4.projection-onto-a-vector, m4.linear-independence, e1.comprehensions-and-iterators, e0.functions, e0.loops, e0.lists-and-tuples]
+leads: [e5.arrays-dtype-and-shape, m8.characteristic-polynomial, m12.jacobian, m12.multiple-integrals-and-change-of-variables, m7.conditioning]
+starter: |
+  # Scratch space. The area of the parallelogram on the two columns of a matrix,
+  # found the slow way, as base times height, beside the quick number ad - bc.
+  def area(A):
+      u = [A[0][0], A[1][0]]
+      v = [A[0][1], A[1][1]]
+      base = (u[0] ** 2 + u[1] ** 2) ** 0.5
+      along = (u[0] * v[0] + u[1] * v[1]) / base
+      height = max(v[0] ** 2 + v[1] ** 2 - along ** 2, 0) ** 0.5
+      return base * height
+
+  maps = [
+      ["stretch", [[2, 0], [0, 1]]],
+      ["shear", [[1, 1], [0, 1]]],
+      ["mixing", [[2, 1], [1, 2]]],
+      ["mirror", [[0, 1], [1, 0]]],
+      ["squash", [[1, 2], [0.5, 1]]],
+  ]
+
+  for name, A in maps:
+      print(name, round(area(A), 6), A[0][0] * A[1][1] - A[0][1] * A[1][0])
+parts:
+  recall:
+    - text: |
+        [[m5.change-of-basis]] ended with a number that would not change. The mixing matrix with rows $(2, 1)$ and $(1, 2)$ gave $2 \times 2 - 1 \times 1 = 3$, and its diagonal form gave $3 \times 1 = 3$. It was $ad - bc$, the number that decided long ago whether a $2 \times 2$ matrix had an inverse. Three quick pulls before finding out what it measures.
+    - question:
+        id: recall-similar
+        type: choice
+        system: s1
+        concepts: [m5.change-of-basis]
+        prompt: |
+          A map has the usual matrix $A$. In the basis given by the columns of $B$ its matrix is
+        options: ['$BAB^{-1}$', '$B^{-1}AB$', '$AB$', '$B^{\mathsf{T}}AB$ always']
+        answer: 1
+        explanation: Translate in with B, act with A, translate back with the inverse of B.
+        hints:
+          - The factor that acts first stands on the right.
+          - The first job is to turn a new address into usual coordinates.
+    - question:
+        id: recall-inverse
+        type: choice
+        system: s1
+        concepts: [m5.identity-and-inverse]
+        prompt: |
+          The matrix with rows $(a, b)$ and $(c, d)$ has an inverse exactly when
+        options: ['$ad - bc \neq 0$', '$a + d \neq 0$', '$ad + bc \neq 0$', 'all four entries are non-zero']
+        answer: 0
+        explanation: The inverse formula divides by ad − bc, and when that number is zero the columns lie along one line.
+        hints:
+          - What does the formula for the inverse divide by?
+          - It is a difference of two products.
+    - question:
+        id: recall-perpendicular
+        type: numeric
+        system: s1
+        concepts: [m4.dot-product]
+        prompt: |
+          What is the dot product of $(3, 1)$ with $(-1, 3)$?
+        answer: "0"
+        explanation: 3 × (−1) + 1 × 3 = 0. Exchanging the two components and negating one gives a perpendicular vector of the same length, a quarter turn.
+        hints:
+          - Multiply matching components and add.
+          - The two products cancel.
+  puzzle:
+    - text: |
+        Run the starter. For five matrices you know well it works out the area of the parallelogram whose sides are the two columns, the long way: the length of the first column as the base, and the height of the second column above it, by Pythagoras. Beside each area it prints the quick number $ad - bc$.
+
+        | map | area, by base times height | $ad - bc$ |
+        |---|---|---|
+        | stretch | 2 | 2 |
+        | shear | 1 | 1 |
+        | mixing | 3 | 3 |
+        | mirror | 1 | −1 |
+        | squash | 0 | 0 |
+
+        The columns of a matrix are where the map sends $(1, 0)$ and $(0, 1)$, so the parallelogram on the columns is where the map sends the unit square. The area of that image is what the first number measures.
+
+        And a subtraction of two products, with no square roots and no heights, lands on that area every time. Every time but one, where it lands on the area with a minus sign.
+
+        **Why should $ad - bc$ be an area at all? What is the minus sign for the mirror telling you? And if it describes what happens to one square, does it say anything about what the map does to any other shape?**
+  intuition:
+    - text: |
+        Start with what each of these maps does to the unit square, which has area 1.
+
+        The stretch doubles every horizontal length and leaves heights alone. The square becomes a 2 by 1 rectangle. Area 2.
+
+        The shear slides the top edge of the square sideways. The base is still 1 and the height is still 1, so the area is still 1, although no angle of the square survives. Lean a pack of cards over and the side of the pack changes shape, and its area cannot change, because every card is still there and no card has changed length.
+    - figure: linear-map
+      props: { map: shear, amount: 1 }
+    - text: |
+        The squash sends both unit vectors onto one line. The square is pressed flat into a segment. Area 0. That is the matrix that could not be undone: once two different places have been pressed onto one, no map can pull them apart again.
+
+        The mirror exchanges the two axes. The square lands exactly on itself, so the area is 1. But something has happened that area alone does not see. Walk round the unit square from $(1, 0)$ to $(0, 1)$: you turn anticlockwise. After the mirror, the first corner is at $(0, 1)$ and the second at $(1, 0)$: the same walk now turns clockwise. The plane has been turned over, like a sheet of paper flipped face down. The number $ad - bc$ notices. It reports the area, and it reports a flip by its sign.
+
+        In the figure below the first column is fixed at $(2, 0)$ and the second has length 1.5. Turn the second column round. The area swells to its greatest when the columns are perpendicular, shrinks to nothing when the second column comes into line with the first, and comes back **negative** on the other side, when the second column has passed to the clockwise side of the first.
+    - figure: determinant
+      props: { angle: 90 }
+    - text: |
+        So one number holds three pieces of news about a map of the plane.
+
+        - **Its size** is the factor by which areas are scaled.
+        - **Its sign** says whether the plane was turned over.
+        - **Its being zero** says the plane was flattened onto a line or a point, and the map cannot be undone.
+
+        This number is called the **determinant** of the matrix, written $\det(A)$. The name is an old one. It is the number that determines whether a system of equations has exactly one solution. The derivation finds the formula from the picture, shows that the factor applies to every shape and not only to the unit square, and then carries all of it to matrices of any size, where the pivots of elimination will hand it over almost for nothing.
+  derivation:
+    - text: |
+        **The area of the parallelogram.** Let the columns of $A$ be $\mathbf{u} = (a, c)$ and $\mathbf{v} = (b, d)$:
+
+        $$A = \begin{pmatrix} a & b \\ c & d \end{pmatrix}.$$
+
+        The area of the parallelogram with sides $\mathbf{u}$ and $\mathbf{v}$ is base times height. Take $\mathbf{u}$ as the base, of length $|\mathbf{u}|$. The height is how far $\mathbf{v}$ reaches in the direction perpendicular to $\mathbf{u}$.
+
+        A vector perpendicular to $\mathbf{u}$ is easy to write down. Turn $\mathbf{u}$ a quarter turn anticlockwise:
+
+        $$\mathbf{n} = (-c, a).$$
+
+        It is perpendicular, since $\mathbf{u} \cdot \mathbf{n} = -ac + ca = 0$, and it has the same length as $\mathbf{u}$. How far $\mathbf{v}$ reaches along $\mathbf{n}$ is a projection, the kind you computed with dot products: the component of $\mathbf{v}$ along $\mathbf{n}$ is $\dfrac{\mathbf{v} \cdot \mathbf{n}}{|\mathbf{n}|}$. So
+
+        $$\text{area} = \text{base} \times \text{height} = |\mathbf{u}| \times \frac{\mathbf{v} \cdot \mathbf{n}}{|\mathbf{n}|} = \mathbf{v} \cdot \mathbf{n},$$
+
+        because $|\mathbf{n}| = |\mathbf{u}|$ and the two lengths cancel. And that dot product is
+
+        $$\mathbf{v} \cdot \mathbf{n} = (b, d) \cdot (-c, a) = ad - bc.$$
+
+        The square roots of the starter were never needed. They cancelled, and what is left is two products and a subtraction.
+
+        $$\det(A) = ad - bc.$$
+
+        **The sign.** A dot product can be negative, and this one is negative exactly when $\mathbf{v}$ points away from $\mathbf{n}$, that is, when $\mathbf{v}$ lies on the **clockwise** side of $\mathbf{u}$. So the formula gives a **signed area**: positive when the second column is anticlockwise from the first, as $(0, 1)$ is from $(1, 0)$, and negative when it is clockwise. For the mirror the columns are $(0, 1)$ and $(1, 0)$, the second clockwise from the first, and the determinant is $0 \times 0 - 1 \times 1 = -1$. A positive determinant means the map keeps the sense of turning. A negative one means the plane has been turned over.
+
+        Write $D(\mathbf{u}, \mathbf{v})$ for this signed area as a function of the two columns. Three facts about it follow from $D(\mathbf{u}, \mathbf{v}) = \mathbf{v} \cdot \mathbf{n}$, and everything else in the lesson is built on them.
+
+        1. **It is linear in each column, the other held fixed.** With $\mathbf{u}$ fixed, $\mathbf{n}$ is fixed, and a dot product with a fixed vector is a linear map of $\mathbf{v}$. So $D(\mathbf{u}, t\mathbf{v}) = t\,D(\mathbf{u}, \mathbf{v})$ and $D(\mathbf{u}, \mathbf{v} + \mathbf{w}) = D(\mathbf{u}, \mathbf{v}) + D(\mathbf{u}, \mathbf{w})$. In the picture: stretch one side by $t$ and the area is multiplied by $t$.
+        2. **Exchanging the columns changes the sign.** $D(\mathbf{v}, \mathbf{u}) = bc - ad = -D(\mathbf{u}, \mathbf{v})$. The same parallelogram, walked round the other way. So the function is linear in the first column as well.
+        3. **Two equal columns give zero.** $D(\mathbf{u}, \mathbf{u}) = ac - ca = 0$. A parallelogram with both sides along one line is flat.
+
+        Put the first and third together and you get the fact about the shear.
+
+        $$D(\mathbf{u}, \mathbf{v} + t\mathbf{u}) = D(\mathbf{u}, \mathbf{v}) + t\,D(\mathbf{u}, \mathbf{u}) = D(\mathbf{u}, \mathbf{v}).$$
+
+        **Adding a multiple of one column to the other does not change the determinant.** Sliding one side of a parallelogram along the direction of the other keeps the base and keeps the height.
+
+        **Zero means dependent.** The parallelogram is flat exactly when one column is a multiple of the other, which is when the columns are dependent, which is when the matrix is singular. So $\det(A) = 0$ exactly when $A$ has no inverse. The condition $ad - bc \neq 0$ in the inverse formula was the statement that the unit square is not crushed.
+
+        **Why the factor applies to every shape.** So far the determinant is the area of the image of one square. Take any other square with sides along the axes, of side $s$ and with a corner at the point $\mathbf{p}$. Its points are $\mathbf{p} + x\,\mathbf{e}_1 + y\,\mathbf{e}_2$ for $x$ and $y$ between 0 and $s$. A linear map sends them to $A\mathbf{p} + x\,\mathbf{u} + y\,\mathbf{v}$: the parallelogram with sides $s\mathbf{u}$ and $s\mathbf{v}$, moved to start at $A\mathbf{p}$. Moving a shape does not change its area, and by linearity in each column $D(s\mathbf{u}, s\mathbf{v}) = s^2 D(\mathbf{u}, \mathbf{v})$. The square had area $s^2$. So **every such square, wherever it sits and whatever its size, has its area multiplied by the same factor, $|\det(A)|$.**
+
+        Now take any region at all: a disc, a blot of ink. Cover it with a fine grid of small squares, as you covered the region under a curve with thin rectangles to define an integral. The area of the region is the limit of the total area of the squares inside it. The map multiplies the area of every one of those squares by the same factor, so it multiplies the total by that factor, and the limit with it.
+
+        $$\text{area of the image of a region} = |\det(A)| \times \text{area of the region}.$$
+
+        A disc of area $\pi$ is sent by the mixing matrix to an ellipse of area $3\pi$. Nobody had to find the axes of the ellipse.
+
+        **The product rule.** Apply $B$ and then $A$. The first multiplies every area by $|\det(B)|$ and the second multiplies the result by $|\det(A)|$. The composite is the matrix $AB$, so it multiplies areas by $|\det(AB)|$. And the signs agree as well: two maps that each turn the plane over leave it the right way up between them, as two minus signs make a plus.
+
+        $$\det(AB) = \det(A)\,\det(B).$$
+
+        This can also be checked by brute force for $2 \times 2$ matrices: multiply out both sides and the eight products match. The picture tells you why. Several facts fall out of the product rule at once.
+
+        - $\det(I) = 1$, since the identity moves nothing.
+        - If $A$ is invertible, $\det(A)\det(A^{-1}) = \det(I) = 1$, so $\det(A^{-1}) = \dfrac{1}{\det(A)}$. The map that undoes a tripling of area divides area by three.
+        - $\det(AB) = \det(BA)$, although $AB$ and $BA$ are different matrices.
+        - And the observation that closed the last lesson: for any invertible $B$,
+
+        $$\det(B^{-1}AB) = \det(B^{-1})\,\det(A)\,\det(B) = \frac{1}{\det(B)}\,\det(A)\,\det(B) = \det(A).$$
+
+        **Similar matrices have the same determinant.** That is why the mixing matrix and its diagonal form both gave 3. The determinant belongs to the map and not to the table. How much a map scales area cannot depend on the grid somebody chose to draw on the plane.
+    - question:
+        id: derivation-sum
+        type: choice
+        system: s2
+        prompt: |
+          The determinant was called linear in each column. A student concludes that $\det(A + B) = \det(A) + \det(B)$. Test it on $A = B = I$, the $2 \times 2$ identity. What is true?
+        options:
+          - "The student is right. $\\det(2I) = 2$."
+          - "The student is wrong. $\\det(I) + \\det(I) = 2$, but $2I$ doubles both columns, each doubling multiplies the determinant by 2, and $\\det(2I) = 4$. The determinant is linear in one column at a time, the others held fixed, and it is not a linear function of the whole matrix."
+          - "The student is wrong, because $\\det(2I) = 0$."
+          - "The student is right for $2 \\times 2$ matrices and wrong for larger ones."
+        answer: 1
+        explanation: |
+          $2I$ sends the unit square to a square of side 2, of area 4. Linearity in each column separately means that doubling **one** column doubles the determinant. Doubling both doubles it twice. In general, for an $n \times n$ matrix, $\det(cA) = c^n\det(A)$, one factor of $c$ for each column. The same warning applies to sums: $A + B$ changes every column at once, and no rule turns $\det(A + B)$ into a simple function of $\det(A)$ and $\det(B)$. The determinant respects **products** of matrices, which are compositions of maps. It does not respect sums.
+        hints:
+          - What does 2I do to the unit square?
+          - How many columns were doubled?
+          - Each doubled column contributes its own factor of 2.
+    - text: |
+        **Three dimensions, and more.** A $3 \times 3$ matrix sends the unit cube to a slanted box whose three edges at one corner are the three columns. Define its determinant as the **signed volume** of that box. Everything above carries over, because none of the arguments depended on the dimension being two.
+
+        - **Volume is base times height.** Fix all the columns but one. They span the base. The volume is the area of the base times the reach of the remaining column in the direction perpendicular to the base, and that reach is a dot product with a fixed vector. So the determinant is linear in each column, the others held fixed.
+        - **Two equal columns give zero**, because the box is flat. More generally, dependent columns give zero, so a singular matrix has determinant zero.
+        - **Adding a multiple of one column to another changes nothing**, by the same two-line calculation as before.
+        - **Exchanging two columns changes the sign.** The sign records whether the map turns space into its mirror image, as a left hand is the mirror image of a right hand. An exchange of two axes is a mirror.
+        - **The factor applies to every region**, by covering it with small cubes, and so **the product rule holds**, by composing.
+
+        In $n$ dimensions there is nothing to picture, and the same properties are taken as the definition: the determinant is the one function of the columns that is linear in each column, changes sign when two columns are exchanged, and equals 1 for the identity. It measures $n$-dimensional volume, with a sign.
+
+        **Rows do as well as columns.** For a $2 \times 2$ matrix, exchanging $b$ and $c$ leaves $ad - bc$ alone, so $\det(A^{\mathsf{T}}) = \det(A)$. The same is true in every dimension. So each statement about columns is also true of rows. In particular:
+
+        - **adding a multiple of one row to another row leaves the determinant unchanged;**
+        - **exchanging two rows multiplies it by $-1$;**
+        - **multiplying one row by $t$ multiplies it by $t$.**
+
+        Those are the row operations of elimination. You can see the first two through the product rule as well. Each row operation is multiplication by a matrix $E$. Subtracting a multiple of one row from another is a shear, with determinant 1. Exchanging two rows is a mirror, with determinant $-1$.
+
+        **Triangular matrices.** Suppose $U$ is upper triangular, with diagonal entries $u_1, \dots, u_n$. If they are all non-zero, eliminate **upwards**: use each pivot to clear the entries above it, as Gauss–Jordan did. Those are all additions of a multiple of one row to another, so the determinant does not change, and what is left is the diagonal matrix with the same diagonal. A diagonal matrix sends the unit cube to a box with sides $u_1, \dots, u_n$ along the axes, of volume $u_1 u_2 \cdots u_n$. If some diagonal entry is zero, $U$ has fewer than $n$ pivots, it is singular, and its determinant is zero, which is also what the product gives. Either way,
+
+        $$\det(U) = u_1 u_2 \cdots u_n.$$
+
+        **The determinant from elimination.** Now the whole computation is in hand. Eliminate $A$ to an upper triangular $U$, using only two kinds of step: adding a multiple of one row to another, and exchanging two rows. The first kind changes nothing. Each exchange changes the sign. So
+
+        $$\det(A) = (-1)^{\text{number of row exchanges}} \times (\text{product of the pivots}).$$
+
+        Try it on the $2 \times 2$ matrix, with $a \neq 0$. The first pivot is $a$. Subtracting $\frac{c}{a}$ times row 1 from row 2 leaves the second pivot $d - \frac{c}{a}b$. Their product is $ad - bc$.
+
+        And on the café system of the elimination lesson, with rows $(1, 1, 1)$, $(2, 3, 1)$ and $(1, -1, 2)$. Elimination gave the triangle with rows $(1, 1, 1)$, $(0, 1, -1)$ and $(0, 0, -1)$, with no exchanges. The pivots are $1$, $1$ and $-1$.
+
+        $$\det = 1 \times 1 \times (-1) = -1.$$
+
+        It is not zero, which is why the café had exactly one answer. Its size says the matrix keeps volumes, and its sign says the matrix turns space into its mirror image.
+
+        The cost is the cost of elimination, about $\frac{1}{3}n^3$ multiplications. There is also a formula, which for a $3 \times 3$ matrix with rows $(a, b, c)$, $(d, e, f)$, $(g, h, i)$ reads
+
+        $$\det = a(ei - fh) - b(di - fg) + c(dh - eg).$$
+
+        It comes from linearity in the first row: the row is $a$ times $(1, 0, 0)$ plus $b$ times $(0, 1, 0)$ plus $c$ times $(0, 0, 1)$, and each piece leaves a $2 \times 2$ determinant behind. For the café matrix it gives $1 \times 7 - 1 \times 3 + 1 \times (-5) = -1$, as it must. The same expansion works for any size, but it has $n!$ terms. For $n = 20$ that is more than $10^{18}$ products, against a few thousand for elimination. **Nobody computes a large determinant from the formula.** The formula is for thinking, and for sizes 2 and 3.
+
+        **An invertibility test, with a warning.** The chain of equivalent statements about a square matrix that this cluster has been building now has its last link.
+
+        $$A \text{ invertible} \iff \text{columns independent} \iff \text{rank } n \iff n \text{ pivots} \iff N(A) = \{\mathbf{0}\} \iff \det(A) \neq 0.$$
+
+        But the determinant is a poor measure of how **close** a matrix is to being singular. Take $0.1\,I$ in a hundred dimensions. It shrinks every vector to a tenth of its length, an entirely harmless map with the inverse $10\,I$. Its determinant is $0.1^{100} = 10^{-100}$, as near to zero as any number you will meet. And the matrix with rows $(1, 1)$ and $(1, 1.01)$, whose inverse had entries in the hundreds and wrecked the answers it touched, has the unremarkable determinant $0.01$, which becomes $100$ if you measure in units ten times smaller on each axis. The determinant multiplies together all the stretch factors of a map. Trouble comes from the **ratio** between the largest and the smallest of them, which the product cannot see.
+
+        For the same reason determinants of large matrices overflow or underflow a float. Software returns the **logarithm** of the absolute value instead, which is the sum of the logarithms of the absolute values of the pivots, together with the sign.
+
+        **Finding the directions a map only scales.** The last lesson found the vectors $(1, 1)$ and $(1, -1)$ by staring at a pattern. The determinant finds them by calculation. An eigenvector is a non-zero $\mathbf{b}$ with $A\mathbf{b} = \lambda\mathbf{b}$, which is $(A - \lambda I)\,\mathbf{b} = \mathbf{0}$. A non-zero vector sent to zero means that $A - \lambda I$ is singular. So the eigenvalues are exactly the numbers $\lambda$ with
+
+        $$\det(A - \lambda I) = 0.$$
+
+        For the mixing matrix, $A - \lambda I$ has rows $(2 - \lambda, 1)$ and $(1, 2 - \lambda)$, and its determinant is $(2 - \lambda)^2 - 1$. That is zero when $2 - \lambda = \pm 1$: $\lambda = 1$ or $\lambda = 3$. Those were the two factors. And in a basis of eigenvectors the matrix is diagonal, so **the determinant is the product of the eigenvalues**: $3 \times 1 = 3$. Each eigenvalue is the stretch along one direction, and the stretches multiply to give the change in area.
+
+        **Solving by determinants.** Linearity gives a formula for the solution of $A\mathbf{x} = \mathbf{b}$. With columns $\mathbf{u}$ and $\mathbf{v}$, the system says $x\,\mathbf{u} + y\,\mathbf{v} = \mathbf{b}$. Put $\mathbf{b}$ in place of the first column and take the determinant:
+
+        $$D(\mathbf{b}, \mathbf{v}) = D(x\mathbf{u} + y\mathbf{v},\; \mathbf{v}) = x\,D(\mathbf{u}, \mathbf{v}) + y\,D(\mathbf{v}, \mathbf{v}) = x\,\det(A).$$
+
+        So $x = D(\mathbf{b}, \mathbf{v}) / \det(A)$, and in the same way $y = D(\mathbf{u}, \mathbf{b}) / \det(A)$. This is **Cramer's rule**: each unknown is a ratio of two determinants, the upper one having $\mathbf{b}$ in place of the column of that unknown. It is the $2 \times 2$ inverse formula in another form. For large systems it is far slower than elimination and is never used. Its value is that it shows, in one line, why everything goes wrong as $\det(A)$ goes to zero.
+
+        **Where the determinant appears in machine learning.** Mostly in one place, and that place is the picture of this lesson. Suppose random points are spread evenly over a region, and a map with determinant 3 is applied to them. The same points now occupy three times the area, so they are a third as dense. **Density is divided by $|\det(A)|$.** Models that turn a simple distribution of points into a complicated one by a chain of invertible maps must keep account of the density at every step, and the account is kept by determinants. By the product rule the factors of a chain multiply, so their logarithms add, and the layers of such models are designed, often as triangular matrices, so that the determinant can be read off a diagonal. The same factor stands in the formula for the bell curve in many dimensions, and it is the factor that appears when variables are changed inside an integral over a region.
+    - question:
+        id: order-elimination
+        type: order
+        system: s2
+        prompt: Put in order the steps for finding the determinant of a square matrix by elimination.
+        steps:
+          - 'Start a running sign of $+1$ and take the first column.'
+          - 'If the entry in the pivot position is zero, exchange that row with a lower row that has a non-zero entry there, and flip the running sign. If no lower row has one, stop: the determinant is 0.'
+          - 'Subtract multiples of the pivot row from the rows below it to clear the column. This changes nothing.'
+          - 'Move to the next column and the next row, and repeat until the matrix is upper triangular.'
+          - 'Multiply the pivots together, and multiply by the running sign.'
+        explanation: Only two kinds of step are used. Adding a multiple of one row to another is a shear and leaves the determinant alone. An exchange is a mirror and reverses the sign, which is why the exchanges must be counted. The triangular matrix at the end has the product of its diagonal as its determinant. Multiplying a row by a number is deliberately never done, since it would change the determinant by that factor.
+        hints:
+          - The exchange, if one is needed, comes before the column is cleared.
+          - The pivots are multiplied only when all of them are known.
+          - The running sign must exist before the first exchange.
+  formal:
+    - text: |
+        **Definition, two by two.** For $A$ with rows $(a, b)$ and $(c, d)$, $\det(A) = ad - bc$. It is the signed area of the parallelogram on the columns of $A$, positive when the second column is anticlockwise from the first.
+
+        **Characterisation.** For $n \times n$ matrices the determinant is the unique function of the columns that is linear in each column with the others held fixed, changes sign when two columns are exchanged, and has $\det(I) = 1$. It is the signed $n$-dimensional volume of the image of the unit cube.
+
+        **Scaling of volume.** For every region $R$, $\text{volume}(A(R)) = |\det(A)| \times \text{volume}(R)$.
+
+        **Rules.** $\det(AB) = \det(A)\det(B)$. $\det(A^{\mathsf{T}}) = \det(A)$. $\det(A^{-1}) = 1/\det(A)$. $\det(cA) = c^n\det(A)$. $\det(B^{-1}AB) = \det(A)$.
+
+        **Row operations.** Adding a multiple of one row to another leaves the determinant unchanged. Exchanging two rows multiplies it by $-1$. Multiplying a row by $t$ multiplies it by $t$. The same holds for columns.
+
+        **Computation.** The determinant of a triangular matrix is the product of its diagonal entries. If elimination with row exchanges and row additions only takes $A$ to a triangular $U$, then $\det(A) = (-1)^k\,u_1 u_2 \cdots u_n$, where $k$ is the number of exchanges.
+
+        **Invertibility.** $A$ is invertible exactly when $\det(A) \neq 0$.
+
+        **Eigenvalues.** $\lambda$ is an eigenvalue of $A$ exactly when $\det(A - \lambda I) = 0$.
+  drill:
+    - text: Seconds each. For two by two, the main diagonal product minus the other one.
+    - question:
+        id: drill-two
+        type: numeric
+        system: s1
+        prompt: |
+          What is the determinant of the matrix with rows $(3, 1)$ and $(2, 4)$?
+        answer: "10"
+        explanation: 3 × 4 − 1 × 2.
+        hints:
+          - Multiply the two entries on the main diagonal.
+          - Subtract the product of the other two entries.
+    - question:
+        id: drill-negative
+        type: numeric
+        system: s1
+        prompt: |
+          What is the determinant of the matrix with rows $(1, 2)$ and $(3, 4)$?
+        answer: "-2"
+        explanation: 1 × 4 − 2 × 3. The second column is clockwise from the first.
+        hints:
+          - Multiply the two entries on the main diagonal.
+          - Subtract the product of the other two entries, which is the larger.
+    - question:
+        id: drill-zero
+        type: choice
+        system: s1
+        prompt: |
+          $\det(A) = 0$ for a square matrix $A$. Then
+        options: ["A is the zero matrix", "A flattens space onto something of lower dimension and has no inverse", "A is the identity", "A keeps every volume"]
+        answer: 1
+        explanation: A zero determinant means the image of the unit cube has no volume, so the columns are dependent and the map cannot be undone.
+        hints:
+          - What is the volume of the image of the unit cube?
+          - Can a flattening be undone?
+    - question:
+        id: drill-sign
+        type: choice
+        system: s1
+        prompt: |
+          A $2 \times 2$ matrix has determinant $-2$. What does the map do?
+        options: ["Halves areas", "Doubles areas and turns the plane over", "Doubles areas and keeps the sense of turning", "Flattens the plane"]
+        answer: 1
+        explanation: The size is the area factor and the minus sign records that anticlockwise has become clockwise.
+        hints:
+          - The size of the number is the area factor.
+          - The sign is about orientation.
+    - question:
+        id: drill-product
+        type: numeric
+        system: s1
+        prompt: |
+          $\det(A) = 3$ and $\det(B) = -2$. What is $\det(AB)$?
+        answer: "-6"
+        explanation: The determinant of a product is the product of the determinants.
+        hints:
+          - One map after the other multiplies the area factors.
+          - A single flip survives.
+    - question:
+        id: drill-inverse
+        type: numeric
+        system: s1
+        prompt: |
+          $\det(A) = 4$. What is $\det(A^{-1})$?
+        answer: "0.25"
+        explanation: The two determinants multiply to the determinant of the identity, which is 1.
+        hints:
+          - The inverse undoes the change in area.
+          - Take the reciprocal.
+    - question:
+        id: drill-triangular
+        type: numeric
+        system: s1
+        prompt: |
+          What is the determinant of the matrix with rows $(2, 5, 7)$, $(0, 3, 1)$ and $(0, 0, 4)$?
+        answer: "24"
+        explanation: The matrix is triangular, so the determinant is the product of the diagonal entries.
+        hints:
+          - Everything below the diagonal is zero.
+          - Multiply the three diagonal entries.
+    - question:
+        id: drill-exchange
+        type: choice
+        system: s1
+        prompt: |
+          Two rows of a matrix are exchanged. The determinant is
+        options: ["unchanged", "multiplied by −1", "set to zero", "doubled"]
+        answer: 1
+        explanation: An exchange is a mirror. Volume is kept and orientation is reversed.
+        hints:
+          - Does the size of the box change?
+          - What happened for the mirror in the puzzle?
+    - question:
+        id: drill-add
+        type: choice
+        system: s1
+        prompt: |
+          Three times row 1 is subtracted from row 2. The determinant is
+        options: ["unchanged", "multiplied by 3", "multiplied by −3", "reduced by 3"]
+        answer: 0
+        explanation: Adding a multiple of one row to another is a shear, which keeps base and height.
+        hints:
+          - This is the main step of elimination.
+          - A shear keeps area.
+    - question:
+        id: drill-scale-row
+        type: numeric
+        system: s1
+        prompt: |
+          A matrix has determinant 2. One of its rows is multiplied by 5. What is the determinant now?
+        answer: "10"
+        explanation: The determinant is linear in each row, so scaling one row scales it by the same factor.
+        hints:
+          - One side of the box has been stretched.
+          - Multiply by the stretch factor.
+    - question:
+        id: drill-scale-all
+        type: numeric
+        system: s1
+        prompt: |
+          A $2 \times 2$ matrix $A$ has determinant 3. What is $\det(2A)$?
+        answer: "12"
+        explanation: Both columns are doubled, and each doubling doubles the determinant.
+        hints:
+          - How many columns are doubled?
+          - Each one contributes a factor of 2.
+    - question:
+        id: drill-similar
+        type: choice
+        system: s1
+        prompt: |
+          $B$ is invertible. $\det(B^{-1}AB)$ equals
+        options: ['$\det(A)$', '$\det(A)\det(B)^2$', '$\det(A) / \det(B)^2$', '$-\det(A)$']
+        answer: 0
+        explanation: The determinants of B and of its inverse multiply to 1, leaving the determinant of A.
+        hints:
+          - Use the product rule on the three factors.
+          - What is the determinant of the inverse of B times the determinant of B?
+    - question:
+        id: drill-region
+        type: numeric
+        system: s1
+        prompt: |
+          A region of area 5 is mapped by a matrix with determinant $-3$. What is the area of its image?
+        answer: "15"
+        explanation: Areas are multiplied by the absolute value of the determinant. The sign is about orientation, and an area is never negative.
+        hints:
+          - Every area is multiplied by the same factor.
+          - Use the size of the determinant and ignore its sign.
+    - question:
+        id: drill-pivots
+        type: numeric
+        system: s1
+        prompt: |
+          Elimination of a $2 \times 2$ matrix needed one row exchange and produced the pivots 2 and 3. What is its determinant?
+        answer: "-6"
+        explanation: The product of the pivots, with one change of sign for the one exchange.
+        hints:
+          - Multiply the pivots.
+          - Each exchange reverses the sign.
+    - question:
+        id: predict-det2
+        type: predict
+        system: s1
+        prompt: Four of the maps you know. What does this show?
+        code: |
+          def det2(M):
+              return M[0][0] * M[1][1] - M[0][1] * M[1][0]
+
+          print(det2([[2, 0], [0, 1]]))
+          print(det2([[1, 1], [0, 1]]))
+          print(det2([[0, 1], [1, 0]]))
+          print(det2([[1, 2], [2, 4]]))
+        output: |
+          2
+          1
+          -1
+          0
+        explanation: The stretch doubles area. The shear keeps it. The mirror keeps it and turns the plane over. The last matrix has its second column equal to twice its first, so it flattens the plane.
+        hints:
+          - Main diagonal product minus the other product.
+          - In the last matrix one column is a multiple of the other.
+    - question:
+        id: predict-product
+        type: predict
+        system: s1
+        prompt: The mixing matrix after the mirror. What does this show?
+        code: |
+          def det2(M):
+              return M[0][0] * M[1][1] - M[0][1] * M[1][0]
+
+          def matmul(P, Q):
+              return [[sum([P[i][k] * Q[k][j] for k in range(len(Q))]) for j in range(len(Q[0]))] for i in range(len(P))]
+
+          A = [[2, 1], [1, 2]]
+          B = [[0, 1], [1, 0]]
+          C = matmul(A, B)
+          print(C)
+          print(det2(A), det2(B), det2(C))
+        output: |
+          [[1, 2], [2, 1]]
+          3 -1 -3
+        explanation: Multiplying on the right by the mirror exchanges the columns of A. The determinant of the product is 3 × (−1). Exchanging two columns reversed the sign, and the product rule says the same thing.
+        hints:
+          - The columns of the product are A applied to the columns of B.
+          - The determinant of a product is the product of the determinants.
+  work:
+    - text: Slower now. For each step, say what it does to the box, and so to the determinant.
+    - question:
+        id: write-det
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `det(A)` to return the determinant of a square matrix, given as a list of rows, by elimination.
+
+          Work down the columns. In each column choose as pivot the entry of largest absolute value on or below the diagonal. If that entry is smaller than `1e-12` in absolute value, return `0`. If the pivot is not already on the diagonal, exchange the two rows and reverse the sign of the result. Clear the column below the pivot. The determinant is the product of the pivots, with that sign. Do not change `A` itself.
+        starter: |
+          def det(A):
+              rows = [list(row) for row in A]
+              # Replace the next line with your own.
+              return 0
+
+          print(round(det([[1, 1, 1], [2, 3, 1], [1, -1, 2]]), 6))
+        solution: |
+          def det(A):
+              rows = [list(row) for row in A]
+              n = len(rows)
+              result = 1
+              for k in range(n):
+                  best = k
+                  for i in range(k + 1, n):
+                      if abs(rows[i][k]) > abs(rows[best][k]):
+                          best = i
+                  if abs(rows[best][k]) < 1e-12:
+                      return 0
+                  if best != k:
+                      rows[k], rows[best] = rows[best], rows[k]
+                      result = -result
+                  for i in range(k + 1, n):
+                      mult = rows[i][k] / rows[k][k]
+                      rows[i] = [a - mult * p for a, p in zip(rows[i], rows[k])]
+                  result = result * rows[k][k]
+              return result
+
+          print(round(det([[1, 1, 1], [2, 3, 1], [1, -1, 2]]), 6))
+        tests: |
+          def _near(got, want):
+              return abs(got - want) < 1e-6
+          assert _near(det([[1, 1, 1], [2, 3, 1], [1, -1, 2]]), -1), "The matrix of the café system has determinant -1"
+          assert _near(det([[2, 1], [1, 2]]), 3), "The mixing matrix has determinant 3"
+          assert _near(det([[0, 1], [1, 0]]), -1), "The mirror has determinant -1, and it needs a row exchange"
+          assert _near(det([[1, 2], [0.5, 1]]), 0), "The squash has determinant 0"
+          assert _near(det([[5]]), 5), "A 1 by 1 matrix has its one entry as its determinant"
+          assert _near(det([[2, 5, 7], [0, 3, 1], [0, 0, 4]]), 24), "A triangular matrix has the product of its diagonal, 24"
+          assert _near(det([[1, 2, 3], [4, 5, 6], [7, 8, 9]]), 0), "Rows [1, 2, 3], [4, 5, 6], [7, 8, 9] are dependent, so the determinant is 0"
+          assert _near(det([[0, 0, 1], [1, 0, 0], [0, 1, 0]]), 1), "A cycle of the three axes takes two exchanges, so its determinant is 1"
+          assert _near(det([[0, 2, 0], [3, 0, 0], [0, 0, 4]]), -24), "Rows [0, 2, 0], [3, 0, 0], [0, 0, 4] have determinant -24"
+          assert _near(det([[1, 2], [3, 4]]), -2), "Rows [1, 2] and [3, 4] have determinant -2"
+          assert _near(det([[2, 0, 0, 0], [0, 2, 0, 0], [0, 0, 2, 0], [0, 0, 0, 2]]), 16), "Twice the 4 by 4 identity has determinant 16"
+          _A = [[1, 2], [3, 4]]
+          det(_A)
+          assert _A == [[1, 2], [3, 4]], "det must not change the matrix it is given"
+          assert output.strip() == "-1.0", "The program should print -1.0"
+        wrong:
+          - |
+            def det(A):
+                rows = [list(row) for row in A]
+                n = len(rows)
+                result = 1
+                for k in range(n):
+                    best = k
+                    for i in range(k + 1, n):
+                        if abs(rows[i][k]) > abs(rows[best][k]):
+                            best = i
+                    if abs(rows[best][k]) < 1e-12:
+                        return 0
+                    if best != k:
+                        rows[k], rows[best] = rows[best], rows[k]
+                    for i in range(k + 1, n):
+                        mult = rows[i][k] / rows[k][k]
+                        rows[i] = [a - mult * p for a, p in zip(rows[i], rows[k])]
+                    result = result * rows[k][k]
+                return result
+
+            print(-1.0)
+          - |
+            def det(A):
+                result = 1
+                for k in range(len(A)):
+                    result = result * A[k][k]
+                return result
+
+            print(-1.0)
+          - |
+            def det(A):
+                rows = [list(row) for row in A]
+                n = len(rows)
+                result = 1
+                for k in range(n):
+                    if abs(rows[k][k]) < 1e-12:
+                        return 0
+                    for i in range(k + 1, n):
+                        mult = rows[i][k] / rows[k][k]
+                        rows[i] = [a - mult * p for a, p in zip(rows[i], rows[k])]
+                    result = result * rows[k][k]
+                return result
+
+            print(-1.0)
+          - |
+            def det(A):
+                rows = [list(row) for row in A]
+                n = len(rows)
+                result = 1
+                for k in range(n):
+                    best = k
+                    for i in range(k + 1, n):
+                        if abs(rows[i][k]) > abs(rows[best][k]):
+                            best = i
+                    if abs(rows[best][k]) < 1e-12:
+                        return 0
+                    if best != k:
+                        rows[k], rows[best] = rows[best], rows[k]
+                        result = -result
+                    for i in range(k + 1, n):
+                        mult = rows[i][k] / rows[k][k]
+                        rows[i] = [a - mult * p for a, p in zip(rows[i], rows[k])]
+                    result = result * rows[k][k]
+                return abs(result)
+
+            print(-1.0)
+          - |
+            def det(A):
+                rows = [list(row) for row in A]
+                n = len(rows)
+                result = 1
+                for k in range(n):
+                    best = k
+                    for i in range(k + 1, n):
+                        if abs(rows[i][k]) > abs(rows[best][k]):
+                            best = i
+                    if abs(rows[best][k]) < 1e-12:
+                        return 0
+                    if best != k:
+                        rows[k], rows[best] = rows[best], rows[k]
+                        result = -result
+                    for i in range(k + 1, n):
+                        mult = rows[i][k] / rows[k][k]
+                        rows[i] = [a - mult * p for a, p in zip(rows[i], rows[k])]
+                        result = result * mult
+                    result = result * rows[k][k]
+                return result
+
+            print(-1.0)
+          - |
+            def det(A):
+                n = len(A)
+                result = 1
+                for k in range(n):
+                    best = k
+                    for i in range(k + 1, n):
+                        if abs(A[i][k]) > abs(A[best][k]):
+                            best = i
+                    if abs(A[best][k]) < 1e-12:
+                        return 0
+                    if best != k:
+                        A[k], A[best] = A[best], A[k]
+                        result = -result
+                    for i in range(k + 1, n):
+                        mult = A[i][k] / A[k][k]
+                        A[i] = [a - mult * p for a, p in zip(A[i], A[k])]
+                    result = result * A[k][k]
+                return result
+
+            print(-1.0)
+        explanation: |
+          This is the elimination you wrote for solving systems, with one number carried along. Clearing a column adds multiples of the pivot row to the rows below, which are shears and change nothing, so nothing is recorded for them. An exchange is a mirror, so the running result changes sign. When a column is finished its pivot is final, and it is multiplied in. If the best available pivot is zero, the column cannot be cleared, the matrix has fewer than $n$ pivots, and the determinant is zero. The mirror matrix is the test that catches a forgotten sign: its pivots are 1 and 1, and only the exchange makes the answer $-1$. Multiplying the diagonal of the original matrix is right only if the matrix is triangular to begin with. Choosing the largest pivot, and not merely a non-zero one, is the partial pivoting of the elimination lesson, and it is there for the same reason: dividing by a tiny pivot magnifies rounding error.
+        hints:
+          - Keep a running result that starts at 1.
+          - After choosing the pivot row, exchange it into place and negate the result if it moved.
+          - Clear the column below the pivot, then multiply the result by the pivot.
+          - Return 0 as soon as the best pivot in a column is smaller than 1e-12 in absolute value.
+    - question:
+        id: write-polygon
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          The triangle with corners at the origin, $\mathbf{p}$ and $\mathbf{q}$ is half the parallelogram on $\mathbf{p}$ and $\mathbf{q}$, so its signed area is $\frac{1}{2}D(\mathbf{p}, \mathbf{q}) = \frac{1}{2}(p_1 q_2 - p_2 q_1)$.
+
+          A polygon is given as a list of its corners, in order round its edge. Its signed area is the sum of the signed areas of the triangles from the origin to each edge: corner 0 to corner 1, corner 1 to corner 2, and so on, **and the last corner back to corner 0**. The parts of those triangles that lie outside the polygon are counted once with each sign and cancel.
+
+          Write `polygon_area(points)` to return the signed area: positive if the corners are listed anticlockwise, negative if clockwise.
+        starter: |
+          def polygon_area(points):
+              # Replace the next line with your own.
+              return 0
+
+          print(polygon_area([[0, 0], [2, 1], [3, 3], [1, 2]]))
+        solution: |
+          def polygon_area(points):
+              total = 0
+              n = len(points)
+              for i in range(n):
+                  p = points[i]
+                  q = points[(i + 1) % n]
+                  total += p[0] * q[1] - p[1] * q[0]
+              return total / 2
+
+          print(polygon_area([[0, 0], [2, 1], [3, 3], [1, 2]]))
+        tests: |
+          def _near(got, want):
+              return abs(got - want) < 1e-9
+          assert _near(polygon_area([[0, 0], [2, 1], [3, 3], [1, 2]]), 3), "The image of the unit square under the mixing matrix has area 3"
+          assert _near(polygon_area([[0, 0], [1, 0], [1, 1], [0, 1]]), 1), "The unit square, anticlockwise, has area 1"
+          assert _near(polygon_area([[0, 0], [0, 1], [1, 1], [1, 0]]), -1), "The unit square, listed clockwise, has signed area -1"
+          assert _near(polygon_area([[0, 0], [4, 0], [0, 3]]), 6), "The triangle with corners [0, 0], [4, 0], [0, 3] has area 6"
+          assert _near(polygon_area([[10, 10], [12, 10], [12, 13], [10, 13]]), 6), "A 2 by 3 rectangle far from the origin still has area 6"
+          assert _near(polygon_area([[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]]), 3), "The L shape has area 3"
+          assert _near(polygon_area([[5, 1], [6, 4], [3, 2]]), 3.5), "The triangle with corners [5, 1], [6, 4], [3, 2] has area 3.5"
+          assert _near(polygon_area([[-1, -1], [1, -1], [1, 1], [-1, 1]]), 4), "A square of side 2 round the origin has area 4"
+          assert output.strip() == "3.0", "The program should print 3.0"
+        wrong:
+          - |
+            def polygon_area(points):
+                total = 0
+                n = len(points)
+                for i in range(n - 1):
+                    p = points[i]
+                    q = points[i + 1]
+                    total += p[0] * q[1] - p[1] * q[0]
+                return total / 2
+
+            print(3.0)
+          - |
+            def polygon_area(points):
+                total = 0
+                n = len(points)
+                for i in range(n):
+                    p = points[i]
+                    q = points[(i + 1) % n]
+                    total += p[0] * q[1] - p[1] * q[0]
+                return total
+
+            print(3.0)
+          - |
+            def polygon_area(points):
+                total = 0
+                n = len(points)
+                for i in range(n):
+                    p = points[i]
+                    q = points[(i + 1) % n]
+                    total += p[0] * q[1] - p[1] * q[0]
+                return abs(total) / 2
+
+            print(3.0)
+          - |
+            def polygon_area(points):
+                total = 0
+                n = len(points)
+                for i in range(n):
+                    p = points[i]
+                    q = points[(i + 1) % n]
+                    total += p[1] * q[0] - p[0] * q[1]
+                return total / 2
+
+            print(-3.0)
+          - |
+            def polygon_area(points):
+                total = 0
+                n = len(points)
+                for i in range(n):
+                    p = points[i]
+                    q = points[(i + 1) % n]
+                    total += abs(p[0] * q[1] - p[1] * q[0])
+                return total / 2
+
+            print(3.0)
+        explanation: |
+          Each edge contributes one $2 \times 2$ determinant, the signed area of the parallelogram on its two ends, and half of the total is the area. The signs do the work. For an edge that runs anticlockwise as seen from the origin the triangle counts positively, and for one that runs clockwise it counts negatively, so whatever the triangles cover outside the polygon is added once and taken away once. That is why the origin may be anywhere, even far outside the polygon, as in the test with the distant rectangle. That test also catches a forgotten closing edge. When the first corner is the origin the closing triangle is flat and its absence goes unnoticed. Taking the absolute value of each term destroys the cancelling, and taking it at the end throws away the direction of travel. The sign of this sum for three points is the standard test in geometric code for whether a path turns left or right.
+        hints:
+          - Loop over the corners, pairing each with the one after it.
+          - The corner after the last is corner 0. The remainder operator gives that index.
+          - Add p[0] * q[1] - p[1] * q[0] for each pair.
+          - Halve the total at the end.
+    - question:
+        id: fix-cramer
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `solve2(A, b)` should solve a $2 \times 2$ system by Cramer's rule: each unknown is the determinant of $A$ with the **column** of that unknown replaced by `b`, divided by the determinant of $A$. For the rows $(2, 1)$ and $(5, 3)$ and the right-hand side $(4, 11)$ the program should print `[1.0, 2.0]`. It prints `[-43.0, 18.0]`. Fix it.
+        starter: |
+          def det2(M):
+              return M[0][0] * M[1][1] - M[0][1] * M[1][0]
+
+          def solve2(A, b):
+              d = det2(A)
+              x = det2([b, A[1]]) / d
+              y = det2([A[0], b]) / d
+              return [x, y]
+
+          print(solve2([[2, 1], [5, 3]], [4, 11]))
+        solution: |
+          def det2(M):
+              return M[0][0] * M[1][1] - M[0][1] * M[1][0]
+
+          def solve2(A, b):
+              d = det2(A)
+              x = det2([[b[0], A[0][1]], [b[1], A[1][1]]]) / d
+              y = det2([[A[0][0], b[0]], [A[1][0], b[1]]]) / d
+              return [x, y]
+
+          print(solve2([[2, 1], [5, 3]], [4, 11]))
+        tests: |
+          def _close(got, want):
+              return len(got) == len(want) and all([abs(g - w) < 1e-9 for g, w in zip(got, want)])
+          assert _close(solve2([[2, 1], [5, 3]], [4, 11]), [1, 2]), "2x + y = 4 and 5x + 3y = 11 have the solution [1, 2]"
+          assert _close(solve2([[1, 0], [0, 1]], [7, -2]), [7, -2]), "With the identity the solution is the right-hand side"
+          assert _close(solve2([[1, 2], [3, 4]], [5, 6]), [-4, 4.5]), "x + 2y = 5 and 3x + 4y = 6 have the solution [-4, 4.5]"
+          assert _close(solve2([[1, 1], [0, 1]], [3, 2]), [1, 2]), "x + y = 3 and y = 2 have the solution [1, 2]"
+          assert _close(solve2([[0, 1], [2, 0]], [3, 8]), [4, 3]), "y = 3 and 2x = 8 have the solution [4, 3]"
+          assert _close(solve2([[2, 1], [1, 2]], [3, 3]), [1, 1]), "For the mixing matrix and [3, 3] the solution is [1, 1]"
+          assert output.strip() == "[1.0, 2.0]", "The program should print [1.0, 2.0]"
+        wrong:
+          - |
+            def det2(M):
+                return M[0][0] * M[1][1] - M[0][1] * M[1][0]
+
+            def solve2(A, b):
+                d = det2(A)
+                x = det2([b, A[1]]) / d
+                y = det2([A[0], b]) / d
+                return [x, y]
+
+            print([1.0, 2.0])
+          - |
+            def det2(M):
+                return M[0][0] * M[1][1] - M[0][1] * M[1][0]
+
+            def solve2(A, b):
+                d = det2(A)
+                x = det2([[b[0], A[0][1]], [b[1], A[1][1]]]) / d
+                y = det2([A[0], b]) / d
+                return [x, y]
+
+            print([1.0, 2.0])
+          - |
+            def det2(M):
+                return M[0][0] * M[1][1] - M[0][1] * M[1][0]
+
+            def solve2(A, b):
+                d = det2(A)
+                x = det2([[b[0], A[0][1]], [b[1], A[1][1]]]) / d
+                y = det2([[A[0][0], b[0]], [A[1][0], b[1]]]) / d
+                return [y, x]
+
+            print([1.0, 2.0])
+          - |
+            def det2(M):
+                return M[0][0] * M[1][1] - M[0][1] * M[1][0]
+
+            def solve2(A, b):
+                x = det2([[b[0], A[0][1]], [b[1], A[1][1]]])
+                y = det2([[A[0][0], b[0]], [A[1][0], b[1]]])
+                return [x * 1.0, y * 1.0]
+
+            print([1.0, 2.0])
+          - |
+            def det2(M):
+                return M[0][0] * M[1][1] - M[0][1] * M[1][0]
+
+            def solve2(A, b):
+                d = det2(A)
+                x = det2([[A[0][0], b[0]], [A[1][0], b[1]]]) / d
+                y = det2([[b[0], A[0][1]], [b[1], A[1][1]]]) / d
+                return [x, y]
+
+            print([1.0, 2.0])
+        explanation: |
+          The starter put `b` in place of a **row** of the matrix: `[b, A[1]]` is the matrix whose first row is `b`. The rule replaces a column. The system says $x\,\mathbf{u} + y\,\mathbf{v} = \mathbf{b}$ for the columns $\mathbf{u}$ and $\mathbf{v}$, and the determinant with $\mathbf{b}$ in the first column is $D(x\mathbf{u} + y\mathbf{v}, \mathbf{v}) = x\,D(\mathbf{u}, \mathbf{v})$, because the part along $\mathbf{v}$ adds a flat parallelogram. With `b` in a row the derivation says nothing, and the numbers are meaningless. As a list of rows, the matrix with `b` as its first column is `[[b[0], A[0][1]], [b[1], A[1][1]]]`. The bug is invisible for a symmetric matrix, where rows and columns are the same lists, so it survives any test that uses only the mixing matrix. A matrix stored as a list of rows makes rows easy to reach and columns awkward, and that is where slips of this kind come from.
+        hints:
+          - What matrix is the list [b, A[1]]? Write out its rows.
+          - The rule replaces a column of A by b, not a row.
+          - The matrix with b as its first column has rows [b[0], A[0][1]] and [b[1], A[1][1]].
+    - question:
+        id: work-eigen
+        type: choice
+        system: s2
+        prompt: |
+          $A$ has rows $(4, 1)$ and $(2, 3)$. For which numbers $\lambda$ is $A - \lambda I$ singular?
+        options:
+          - '$\lambda = 4$ and $\lambda = 3$'
+          - '$\lambda = 5$ and $\lambda = 2$'
+          - '$\lambda = 10$ only'
+          - '$\lambda = 7$ and $\lambda = 0$'
+        answer: 1
+        explanation: |
+          $A - \lambda I$ has rows $(4 - \lambda, 1)$ and $(2, 3 - \lambda)$. Its determinant is $(4 - \lambda)(3 - \lambda) - 2 = \lambda^2 - 7\lambda + 10 = (\lambda - 5)(\lambda - 2)$, which is zero for $\lambda = 5$ and $\lambda = 2$. These are the eigenvalues, the diagonal entries found for this matrix in the last lesson by trying the basis $(1, 1)$, $(1, -2)$. Two checks cost nothing. Their sum is 7, the trace $4 + 3$. Their product is 10, the determinant $4 \times 3 - 1 \times 2$. In the polynomial $\lambda^2 - 7\lambda + 10$ the trace and the determinant are sitting in plain view as the two coefficients.
+        hints:
+          - Subtract λ from each diagonal entry and take the determinant.
+          - Set the determinant to zero. It is a quadratic in λ.
+          - Factorise the quadratic.
+    - question:
+        id: work-scale
+        type: numeric
+        system: s2
+        prompt: |
+          A $3 \times 3$ matrix $A$ has determinant 5. What is $\det(2A)$?
+        answer: "40"
+        explanation: |
+          $2A$ has every column doubled. The determinant is linear in each column separately, so each of the three doublings multiplies it by 2: $2^3 \times 5$. In the picture, $2A$ is $A$ followed by a doubling of all lengths, and doubling all lengths multiplies a volume by 8. The common slip is to answer with a single factor of 2, treating the determinant as a linear function of the matrix. In $n$ dimensions the factor is $2^n$, which is why the determinant of a large matrix is so sensitive to the units of measurement and so often overflows.
+        hints:
+          - How many columns does the matrix have, and what happens to each?
+          - Each doubled column doubles the determinant.
+          - What does doubling every length do to a volume?
+    - question:
+        id: work-density
+        type: choice
+        system: s2
+        prompt: |
+          Ten thousand points are scattered evenly over the unit square, so there are 10 000 points per unit of area. Every point is moved by the matrix with rows $(2, 1)$ and $(0, 2)$. How many points per unit of area are there in the region they now occupy?
+        options:
+          - "10 000, since no points were lost"
+          - "2 500, since the same points are spread over a region of 4 times the area"
+          - "40 000, since the determinant is 4"
+          - "5 000, since the entries were doubled"
+        answer: 1
+        explanation: |
+          The determinant is $2 \times 2 - 1 \times 0 = 4$, so the unit square is sent to a parallelogram of area 4. The number of points has not changed, so the density is $10\,000 / 4$. **A map multiplies area by $|\det|$ and so divides density by $|\det|$.** This holds in every part of the region, since a linear map scales every small patch by the same factor. It is the rule that models built from chains of invertible maps use to keep track of probability: the density of the output at a point is the density of the input at the point it came from, divided by the absolute value of the determinant. For a chain, the divisions accumulate by the product rule, and in logarithms they are a sum.
+        hints:
+          - What is the determinant of the matrix?
+          - What is the area of the region the points now occupy?
+          - The same number of points, over a larger area.
+    - question:
+        id: work-conditioning
+        type: choice
+        system: s2
+        prompt: |
+          A program checks whether a $100 \times 100$ matrix is safe to invert by testing whether the absolute value of its determinant exceeds $10^{-6}$. It rejects $0.5\,I$, whose determinant is about $10^{-30}$. What is the right verdict on the test?
+        options:
+          - "The test is right. A determinant that small means the matrix is nearly singular."
+          - "The test is wrong. $0.5\\,I$ halves every vector and is undone exactly by $2I$. The determinant multiplies together a hundred harmless factors of 0.5. Nearness to singularity depends on how unequal the stretch factors are, which a product does not show."
+          - "The test is right, but the threshold should be $10^{-40}$."
+          - "The test is wrong, because the determinant of $0.5\\,I$ is 50."
+        answer: 1
+        explanation: |
+          The determinant of $0.5\,I$ in a hundred dimensions is $0.5^{100}$, about $8 \times 10^{-31}$, and the matrix is as well behaved as a matrix can be. Going the other way, a matrix can have determinant exactly 1 and be dangerous: the diagonal matrix with entries $10^{8}$ and $10^{-8}$ is one, and inverting it magnifies errors along one axis by a hundred million. The determinant is the product of all the stretch factors. What matters for inversion is the ratio of the largest to the smallest, a number that will be given a name when least squares is studied with care. No threshold on the determinant can stand in for it, since multiplying a matrix by a constant changes the determinant by that constant to the power $n$ and changes the ratio not at all.
+        hints:
+          - What does 0.5 I do to a vector, and what undoes it?
+          - How many factors of 0.5 are multiplied together?
+          - Would rescaling the matrix change how hard it is to invert?
+  connections:
+    - text: |
+        A subtraction of two products kept landing on an area. It does so because the height of one column above the other is a dot product with a quarter turn of the base, and when base is multiplied by height the lengths cancel and $ad - bc$ is what remains. The sign of that dot product says which side of the first column the second lies on, and so whether the map has turned the plane over.
+
+        From that one formula came everything else. The determinant is linear in each column and vanishes when two columns agree, so a shear leaves it alone. Every square, and so every region, has its area multiplied by the same factor, so the factors of two maps multiply: $\det(AB) = \det(A)\det(B)$. That rule gave the determinant of an inverse, and it settled the question left by [[m5.change-of-basis]]: $\det(B^{-1}AB) = \det(A)$, so the number belongs to the map. In any dimension the row operations of elimination do known things to it, and the determinant is the product of the pivots with a sign for the exchanges.
+
+        It closes a circle that this cluster has been drawing. A square matrix is invertible, its columns are independent, its rank is full, elimination finds a pivot in every column, its null space holds only the zero vector, and its determinant is not zero: six ways of saying one thing. The determinant is the one you can state as a single number, and the one you should trust least when the question is not "singular or not?" but "how nearly?". That question belongs to [[m7.conditioning]].
+
+        Three threads lead on from here. Setting $\det(A - \lambda I) = 0$ finds the directions that a map only scales, and the polynomial on the left is [[m8.characteristic-polynomial]]. A function of several variables that is not linear still looks linear near each point, and the matrix of that local linear map is [[m12.jacobian]]. Its determinant is the local factor by which the function scales area, which is what is needed for [[m12.multiple-integrals-and-change-of-variables]], and for the densities of the last work question.
+
+        And one thread is practical. In this cluster you wrote, by hand and in plain lists of rows, the matrix-vector product, the matrix product, the transpose, elimination, the rank and now the determinant. You know what each one does and why. But a list of lists is a slow and awkward home for a matrix: every entry is a separate object, every loop is run by the interpreter one step at a time, and a column cannot be reached without a comprehension, as the last bug showed. Real numerical work keeps a whole table of numbers in one block of memory, of one type, with a known shape, and hands the loops to compiled code. That object is the array. That is the next lesson, [[e5.arrays-dtype-and-shape]].
