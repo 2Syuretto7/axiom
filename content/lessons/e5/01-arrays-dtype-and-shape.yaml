@@ -1,0 +1,817 @@
+concept: e5.arrays-dtype-and-shape
+minutes: 90
+claim: You can explain what a NumPy array is, one block of numbers of one type with a shape laid over it, say why that design makes arithmetic on whole arrays possible and fast, create arrays and read their shape, number of axes, size, dtype and memory, predict what a dtype does to the values stored in it, including truncation and silent overflow, and choose a dtype on purpose.
+recalls: [m5.determinant]
+uses: [m5.matrix-vector-product, m5.matrices-as-linear-maps, e3.arrays-and-linked-lists, e1.special-methods-and-operator-overloading, e1.modules-and-imports, e1.exceptions, e1.complexity-and-big-o, e0.lists-and-tuples, e0.values-types-and-variables, e0.functions, m0.powers-and-roots, m0.estimation-and-orders-of-magnitude]
+leads: [e5.indexing-and-slicing, e5.broadcasting, e5.vectorisation, e5.reshaping-views-and-copies, e5.strides-and-memory-layout]
+starter: |
+  # Scratch space. The same numbers, held two ways.
+  import numpy as np
+
+  rows = [[1, 2, 3], [4, 5, 6]]
+  a = np.array(rows)
+
+  print(rows + rows)
+  print(a + a)
+
+  print(rows * 2)
+  print(a * 2)
+
+  b = np.array([1, 2, 3])
+  b[0] = 7.9
+  print(b)
+parts:
+  recall:
+    - text: |
+        [[m5.determinant]] closed a cluster in which you wrote every matrix routine by hand, on lists of rows, and it ended with a complaint: a list of lists is a slow and awkward home for a matrix. Three quick pulls before meeting the better one.
+    - question:
+        id: recall-det
+        type: numeric
+        system: s1
+        concepts: [m5.determinant]
+        prompt: |
+          What is the determinant of the matrix with rows $(2, 1)$ and $(1, 2)$?
+        answer: "3"
+        explanation: 2 × 2 − 1 × 1 = 3. The map triples every area.
+        hints:
+          - Main diagonal product minus the other product.
+          - Both products are of whole numbers.
+    - question:
+        id: recall-index
+        type: choice
+        system: s1
+        concepts: [e3.arrays-and-linked-lists]
+        prompt: |
+          An array stores equal-sized items side by side in memory. How does it find the item at position $i$?
+        options: ["By following i links from the first item", "By one calculation, the start address plus i times the size of an item", "By searching for it", "By sorting first"]
+        answer: 1
+        explanation: Equal sizes make the address a matter of arithmetic, so any item is reached in one step.
+        hints:
+          - Every item has the same size.
+          - Where does item i begin, counted from the start?
+    - question:
+        id: recall-matvec
+        type: choice
+        system: s1
+        concepts: [m5.matrix-vector-product]
+        prompt: |
+          `A` is a list of rows and `x` a list. Which expression is the matrix-vector product you wrote?
+        options:
+          - "`[sum([a * v for a, v in zip(row, x)]) for row in A]`"
+          - "`A + x`"
+          - "`[row + x for row in A]`"
+          - "`sum(A) * sum(x)`"
+        answer: 0
+        explanation: One dot product for each row of the matrix.
+        hints:
+          - The result has one entry for each row.
+          - Each entry is a dot product.
+  puzzle:
+    - text: |
+        Run the starter. The first line that matters is `import numpy as np`, which brings in a library called NumPy under the short name `np`. Then the same six numbers are held in two ways: as `rows`, the list of rows you have used throughout, and as `a`, which `np.array` builds from that list.
+
+        The same operations are applied to both, and they do different things.
+
+        - `rows + rows` is a list of **four** rows. The two lists were joined end to end.
+        - `a + a` is a table of the same shape with every number **doubled**. The two tables were added entry by entry.
+        - `rows * 2` is again four rows, the list repeated.
+        - `a * 2` is again every number doubled.
+
+        That is already worth a pause. For a matrix, `a + a` is what $A + A$ ought to mean. With lists you had to write a comprehension inside a comprehension to get it.
+
+        Then comes a smaller and stranger thing. `b` is built from `[1, 2, 3]`, and its first entry is set to `7.9`. A list would simply hold 7.9. The array prints `[7 2 3]`. The 0.9 has gone, without an error and without a warning.
+
+        **What is an array, that `+` adds its entries, and that it cannot hold 7.9? Both behaviours come from one design decision. What is it?**
+  intuition:
+    - text: |
+        Think about what a Python list of numbers really is. You saw it when you studied arrays and linked lists: a list is a row of **references**. Each slot holds the address of an object stored somewhere else. The object might be a whole number, or a decimal, or a string, or another list. The list does not know and does not care. That freedom is why a list can hold `[1, "two", 3.0]`.
+
+        The freedom has a price, paid on every operation. To add two lists of numbers entry by entry, Python must, for each position, follow a reference, ask the object what type it is, look up what `+` means for that type, do the addition, build a new object for the result, and store a reference to it. Five or six steps of bookkeeping surround one addition. And the numbers themselves are scattered over memory, each wrapped in its own object.
+
+        Now make the opposite decision. **Every entry has the same type, fixed in advance, and the raw values are stored side by side in one block of memory, with no wrapping.** Nothing else is stored for each entry. Beside the block, keep two small notes: what the type of every entry is, and how the block is to be read as a table.
+
+        That is a NumPy array. The type is its **dtype**. The reading as a table is its **shape**.
+
+        Both surprises of the puzzle follow.
+
+        Because every entry has the same known type, adding two arrays needs no questions asked along the way. It is one tight loop over two blocks of raw numbers, run by compiled code and not by the Python interpreter. So it is natural, and cheap, for `+` to mean "add entry by entry". The library made that choice for every arithmetic operator, by defining the special methods you met when you overloaded operators for your own classes.
+
+        And because every entry has the same type, an array of whole numbers has no room for 7.9. Each slot is exactly big enough for one whole number of a fixed size. So the 7.9 is converted to the type of the array on its way in, and a whole number cannot keep the 0.9.
+
+        The figure shows the other note, the shape. Twelve numbers sit in one block. The shape says how to read them: as one row of twelve, as three rows of four, as two slabs of three rows of two. Step through the shapes and watch the block. It does not change.
+    - figure: array-shape
+      props: { shape: 3x4, item: 6 }
+    - text: |
+        The place of an entry in the block is found by arithmetic. In a table of 3 rows and 4 columns, the entry in row 1 and column 2 is at place $1 \times 4 + 2 = 6$, counting from 0, because one whole row of 4 comes before it and then 2 more entries. This is the address arithmetic of an array, with one more multiplication, and it is why an array can reach any entry of a table in one step. It works only because every entry has the same size, which is one more reason for the single dtype.
+
+        So an array is three things: **a block of raw values, a dtype that says what each value is, and a shape that says how the block is read.** The rest of this lesson is about the last two, and the rest of this cluster is about what the three together make possible.
+  derivation:
+    - text: |
+        **Making arrays.** The plainest way is from a list, or a list of lists for a table.
+
+        ```python
+        import numpy as np
+
+        v = np.array([1.5, 2.0, 3.5])
+        A = np.array([[2, 1], [1, 2]])
+        ```
+
+        The rows must all have the same length. A table with rows of different lengths has no shape, and `np.array([[1, 2], [3]])` raises a `ValueError`.
+
+        Often you want an array of a given shape before you have the numbers. NumPy has makers for the common cases.
+
+        | call | result |
+        |---|---|
+        | `np.zeros((2, 3))` | 2 rows and 3 columns of 0.0 |
+        | `np.ones(4)` | four 1.0s |
+        | `np.full((2, 2), 7)` | a 2 by 2 table of 7s |
+        | `np.eye(3)` | the 3 by 3 identity matrix |
+        | `np.arange(5)` | 0, 1, 2, 3, 4, like `range` |
+        | `np.linspace(0, 1, 5)` | 5 evenly spaced values from 0 to 1, both ends included |
+
+        A shape with more than one axis is given as a tuple, which is why `np.zeros((2, 3))` has two pairs of brackets.
+
+        **Reading an array.** Every array carries its description with it, as attributes.
+
+        - `a.shape` is a tuple with the length of each axis. For the table of the puzzle it is `(2, 3)`: 2 rows, 3 columns.
+        - `a.ndim` is the number of axes, the length of the shape. Here 2.
+        - `a.size` is the number of entries, the product of the shape. Here 6.
+        - `a.dtype` is the type of every entry.
+        - `a.itemsize` is the number of bytes one entry takes, and `a.nbytes` is the number of bytes in the whole block, which is `size` times `itemsize`.
+
+        **Shape, with care.** The shape is a tuple, and its length matters as much as its numbers. Three arrays can each hold the numbers 1, 2, 3 and all be different.
+
+        - `np.array([1, 2, 3])` has shape `(3,)`. One axis. It is a plain list of three numbers, neither a row nor a column.
+        - `np.array([[1, 2, 3]])` has shape `(1, 3)`. Two axes. It is a table with one row.
+        - `np.array([[1], [2], [3]])` has shape `(3, 1)`. Two axes. It is a table with one column.
+
+        The comma in `(3,)` is Python's way of writing a tuple with one item. Mistaking one of these three for another is the most common source of confusion in array code, and the lesson on stretching arrays against each other will depend on telling them apart.
+
+        Arrays may have any number of axes. A batch of 32 pictures, each 28 by 28, is one array of shape `(32, 28, 28)`. A single number can be an array too, with shape `()`: no axes at all.
+
+        **The dtype.** The dtypes you will meet are few.
+
+        | dtype | each entry is | bytes |
+        |---|---|---|
+        | `float64` | a decimal number, the same as a Python `float` | 8 |
+        | `float32` | a decimal number kept to about 7 digits | 4 |
+        | `int64` | a whole number between about $\pm 9.2 \times 10^{18}$ | 8 |
+        | `int32` | a whole number between about $\pm 2.1 \times 10^{9}$ | 4 |
+        | `int8` | a whole number from $-128$ to 127 | 1 |
+        | `bool` | True or False | 1 |
+
+        When you build an array from a list, NumPy chooses the dtype by looking at the values. If any is a decimal, the array is `float64`, and whole numbers among them are converted: `np.array([1, 2.5, 3])` holds 1.0, 2.5 and 3.0. If all are whole, the array is the default whole-number type of the machine.
+
+        That default deserves a warning. On most laptops and servers it is `int64`. The Python on this page runs inside your browser, which is a 32-bit environment, and here it is `int32`. The same line of code gives arrays of different types on different machines. **Code that matters states its dtype**:
+
+        ```python
+        counts = np.array([3, 1, 4], dtype=np.int64)
+        weights = np.zeros((2, 3), dtype=np.float32)
+        ```
+
+        An existing array is converted with `a.astype(np.float64)`, which builds a new array of the new type and leaves the old one alone.
+
+        **What a fixed type does to a value.** A slot of a given dtype holds only values of that dtype, so anything put into it is converted.
+
+        A decimal put into a whole-number array loses its fractional part. It is cut off towards zero, not rounded: 7.9 becomes 7, and $-1.5$ becomes $-1$. That was the second surprise of the puzzle. The assignment `b[0] = 7.9` could not change the dtype of `b`, since the block was already laid out with whole-number slots, so the value gave way.
+
+        A whole number too large for its slot is worse. An `int8` has 8 bits, which can show $2^8 = 256$ different patterns, used for $-128$ to 127. Add 1 to 127 in an `int8` array and the pattern rolls over, as a car's distance counter rolls over from 999999 to 000000, and the result is $-128$. No error is raised. This is **overflow**.
+
+        A Python `int` never overflows, because Python gives it more memory as it grows. You have computed $2^{100}$ without a thought. An array cannot do that, because every slot is of fixed size. In an `int32` array the largest value is $2^{31} - 1 = 2\,147\,483\,647$, a little over two thousand million. Square 100 000 in such an array and the true answer, $10^{10}$, does not fit. What you get is $1\,410\,065\,408$, a number that looks entirely reasonable and is wrong.
+
+        The fixed size is the price of the speed, and you should know you are paying it.
+    - question:
+        id: derivation-why-one-type
+        type: choice
+        system: s2
+        prompt: |
+          Why must every entry of an array have the same dtype?
+        options:
+          - "It is a rule with no reason behind it."
+          - "With one type and one size for every entry, the block can hold raw values with nothing stored beside each, the place of any entry is found by arithmetic, and one compiled loop can process the whole block without asking each entry what it is."
+          - "Because Python lists also hold only one type."
+          - "Because mixed types would make the array take less memory."
+        answer: 1
+        explanation: |
+          All three gains come from the one restriction. Raw values with no wrapping make the block compact: a million `float64` values take 8 million bytes and no more. Equal sizes make the address of entry $i$ a matter of arithmetic, so any entry is reached in one step, as in the arrays you studied. And a known type means the loop that adds two blocks does not have to look up, a million times over, what addition means. A Python list makes the opposite choice. It holds references to objects of any type, which is flexible and, for arithmetic on many numbers, slow.
+        hints:
+          - What must be known to find entry i without looking at the entries before it?
+          - What does Python have to ask each object before adding it?
+          - Think about what is stored beside each value in a list, and in an array.
+    - text: |
+        **Memory, counted.** The memory of an array is easy to work out, and worth working out before building anything large: the number of entries times the bytes for each.
+
+        A table of word vectors for a language model might have 50 000 rows, one for each word piece, and 768 columns. That is $50\,000 \times 768 = 38\,400\,000$ entries. As `float64` it takes $38\,400\,000 \times 8 = 307\,200\,000$ bytes, about 307 megabytes. As `float32` it takes half that. This is why models are stored in `float32`, or in types smaller still: the weights are the memory, and halving the bytes of each halves the memory of all. The cost is precision, about 7 significant digits in place of 16, which for the weights of a model is nearly always enough.
+
+        A Python list of the same numbers would need 8 bytes for each reference and about 24 more for each number object, four times the memory of a `float64` array, scattered.
+
+        **Arithmetic on whole arrays.** With two arrays of the same shape, every arithmetic operator works entry by entry and gives a new array of that shape.
+
+        ```python
+        u = np.array([1.0, 2.0, 3.0])
+        v = np.array([10.0, 20.0, 30.0])
+        print(u + v)
+        print(u * v)
+        print(u / 2)
+        ```
+
+        The results are 11, 22, 33, then 10, 40, 90, then 0.5, 1, 1.5. An operator between an array and a single number applies the number to every entry. These are exactly the vector operations of your vectors lessons, addition and scaling, and they no longer need a comprehension.
+
+        One point needs stating plainly, because it catches everyone once. **`*` between two arrays multiplies entry by entry. It is not the matrix product.** For the product you derived as composition of maps, Python has the operator `@`:
+
+        ```python
+        A = np.array([[2, 1], [1, 2]])
+        x = np.array([1, 1])
+        print(A @ x)
+        print(A * A)
+        print(A @ A)
+        ```
+
+        `A @ x` is the matrix-vector product, 3 and 3. `A * A` squares each entry, giving rows 4, 1 and 1, 4. `A @ A` is the matrix product, with rows 5, 4 and 4, 5. The three-line function `matmul` that you wrote and tested is the single character `@`. You may now use it, because you know what it does.
+
+        **How an array prints.** `print` shows an array without commas, with the rows of a table one under another, and a decimal array shows a point after each whole value, as in `[1.  2.5 3. ]`. The missing commas tell you at a glance that you are looking at an array and not a list. `a.tolist()` turns an array back into nested lists when you need them.
+
+        **What an array is not.** It is not a list that grows. A list has `append`, with spare room kept ready, as you saw when you counted the cost of doubling. An array has a fixed size. Making a longer one means building a new block and copying. So arrays are built at their full size, often with `np.zeros`, and filled.
+    - question:
+        id: order-add
+        type: order
+        system: s2
+        prompt: Put in order what happens when Python evaluates `a + b` for two arrays of the same shape.
+        steps:
+          - 'Python sees that `a` is an array and hands the `+` to the method the array type defines for it.'
+          - 'NumPy checks that the two shapes fit, and chooses the dtype of the result from the dtypes of `a` and `b`.'
+          - 'A new block of memory is set aside for the result.'
+          - 'One compiled loop runs over the two blocks, adding raw values and writing each sum into the new block.'
+          - 'The new block is returned as an array, with its shape and its dtype.'
+        explanation: Python is involved only at the start, to find out what `+` means for this type, and at the end, to receive the result. Between the two, the work on the entries is done by compiled code on raw values, with no Python object for each number. That is the whole reason an array operation on a million numbers takes a few thousandths of a second.
+        hints:
+          - The operator must first be handed to the type that defines it.
+          - The result needs somewhere to go before the loop can write to it.
+          - The shape and dtype of the result are known before any entry is added.
+  formal:
+    - text: |
+        **Array.** A NumPy array is a block of memory holding values of one type, together with a **dtype**, the type and size in bytes of each value, and a **shape**, a tuple giving the length of each axis.
+
+        **Attributes.** For an array `a`: `a.shape`; `a.ndim`, the length of the shape; `a.size`, the product of the shape; `a.dtype`; `a.itemsize`, the bytes for each entry; and `a.nbytes`, equal to `a.size * a.itemsize`.
+
+        **Place in the block.** In an array of shape $(m, n)$ stored row by row, the entry at index $[i, j]$ is at place $i \times n + j$.
+
+        **Conversion.** A value stored into an array is converted to the dtype of the array. A decimal stored as a whole number is cut off towards zero. A whole number outside the range of a whole-number dtype of $b$ bits wraps round modulo $2^b$, with no error.
+
+        **Arithmetic.** For arrays of the same shape, `+`, `-`, `*`, `/` and `**` act entry by entry. With a single number, they act on every entry. The matrix product is `@`.
+  drill:
+    - text: Seconds each. Block, dtype, shape.
+    - question:
+        id: drill-shape
+        type: choice
+        system: s1
+        prompt: |
+          What is the shape of `np.array([[1, 2, 3], [4, 5, 6]])`?
+        options: ["`(3, 2)`", "`(2, 3)`", "`(6,)`", "`(2,)`"]
+        answer: 1
+        explanation: Two rows, each of three entries. The number of rows comes first.
+        hints:
+          - Count the rows first.
+          - Then count the entries in one row.
+    - question:
+        id: drill-ndim
+        type: numeric
+        system: s1
+        prompt: |
+          What is `a.ndim` for an array of shape `(32, 28, 28)`?
+        answer: "3"
+        explanation: The number of axes is the length of the shape.
+        hints:
+          - Count the numbers in the shape.
+          - Their values do not matter here.
+    - question:
+        id: drill-size
+        type: numeric
+        system: s1
+        prompt: |
+          What is `a.size` for an array of shape `(4, 5)`?
+        answer: "20"
+        explanation: The number of entries is the product of the lengths of the axes.
+        hints:
+          - Multiply the lengths of the axes.
+          - Four rows, each of five entries.
+    - question:
+        id: drill-dtype
+        type: choice
+        system: s1
+        prompt: |
+          What is the dtype of `np.array([1, 2.5, 3])`?
+        options: ["A whole-number type", "`float64`", "A mixture, one type for each entry", "`bool`"]
+        answer: 1
+        explanation: One decimal among the values makes the whole array float64, and the whole numbers are converted.
+        hints:
+          - An array has one dtype for all its entries.
+          - Which type can hold all three values?
+    - question:
+        id: drill-add
+        type: choice
+        system: s1
+        prompt: |
+          What is `np.array([1, 2]) + np.array([10, 20])`?
+        options: ["`[1 2 10 20]`", "`[11 22]`", "`33`", "An error"]
+        answer: 1
+        explanation: Arrays add entry by entry.
+        hints:
+          - Arrays are not joined by +.
+          - Add the entries in matching places.
+    - question:
+        id: drill-list-add
+        type: choice
+        system: s1
+        prompt: |
+          What is `[1, 2] + [10, 20]`, for plain lists?
+        options: ["`[1, 2, 10, 20]`", "`[11, 22]`", "`33`", "An error"]
+        answer: 0
+        explanation: For lists, + joins them end to end.
+        hints:
+          - These are lists, not arrays.
+          - What did rows + rows give in the puzzle?
+    - question:
+        id: drill-nbytes
+        type: numeric
+        system: s1
+        prompt: |
+          How many bytes does the block of `np.zeros(10)` take? Its dtype is `float64`.
+        answer: "80"
+        explanation: Ten entries of 8 bytes each.
+        hints:
+          - How many bytes is one float64?
+          - Multiply by the number of entries.
+    - question:
+        id: drill-itemsize
+        type: numeric
+        system: s1
+        prompt: |
+          What is the `itemsize`, in bytes, of an array with dtype `float32`?
+        answer: "4"
+        explanation: The 32 in the name is the number of bits, and 8 bits make a byte.
+        hints:
+          - The number in the name counts bits.
+          - Divide by the number of bits in a byte.
+    - question:
+        id: drill-arange
+        type: numeric
+        system: s1
+        prompt: |
+          What is the last entry of `np.arange(5)`?
+        answer: "4"
+        explanation: Like range, it starts at 0 and stops before 5.
+        hints:
+          - It behaves like range.
+          - The stop value itself is left out.
+    - question:
+        id: drill-linspace
+        type: numeric
+        system: s1
+        prompt: |
+          What is the second entry of `np.linspace(0, 1, 5)`?
+        answer: "0.25"
+        explanation: Five evenly spaced values from 0 to 1 have four equal gaps between them.
+        hints:
+          - Five values have four gaps between them.
+          - Both ends are included.
+    - question:
+        id: drill-truncate
+        type: numeric
+        system: s1
+        prompt: |
+          `b = np.array([1, 2, 3])` and then `b[1] = 2.9`. What is `b[1]` now?
+        answer: "2"
+        explanation: The array holds whole numbers, so the value is cut off towards zero on its way in.
+        hints:
+          - What is the dtype of b?
+          - The fractional part is cut off, not rounded.
+    - question:
+        id: drill-overflow
+        type: choice
+        system: s1
+        prompt: |
+          `x = np.array([127], dtype=np.int8)`. What is `x + 1`?
+        options: ["`[128]`", "`[-128]`", "`[127]`", "An error"]
+        answer: 1
+        explanation: An int8 holds −128 to 127. One past the top wraps round to the bottom, silently.
+        hints:
+          - What is the largest value an int8 can hold?
+          - Think of a counter rolling over.
+    - question:
+        id: drill-star
+        type: choice
+        system: s1
+        prompt: |
+          `A = np.array([[2, 1], [1, 2]])`. What is `A * A`?
+        options: ["Rows 5, 4 and 4, 5", "Rows 4, 1 and 1, 4", "Rows 4, 2 and 2, 4", "The number 3"]
+        answer: 1
+        explanation: The star multiplies entry by entry, so each entry is squared. The matrix product is written with @.
+        hints:
+          - The star is not the matrix product.
+          - Square each entry.
+    - question:
+        id: predict-attributes
+        type: predict
+        system: s1
+        prompt: An array describes itself. What does this show?
+        code: |
+          import numpy as np
+
+          a = np.zeros((2, 3), dtype=np.float32)
+          print(a.shape, a.ndim, a.size)
+          print(a.dtype, a.itemsize, a.nbytes)
+          print(np.array([[1], [2], [3]]).shape)
+          print(np.array([1, 2, 3]).shape)
+        output: |
+          (2, 3) 2 6
+          float32 4 24
+          (3, 1)
+          (3,)
+        explanation: Two rows of three make 6 entries on 2 axes. Each float32 takes 4 bytes, so the block is 24 bytes. Three rows of one entry each is the shape (3, 1), a column. A plain list of three numbers has one axis, written (3,).
+        hints:
+          - The size is the product of the shape.
+          - The bytes are the size times the bytes for each entry.
+          - A list of lists has two axes even when the inner lists have one entry.
+    - question:
+        id: predict-star
+        type: predict
+        system: s1
+        prompt: The star and the at sign. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[2, 1], [1, 2]])
+          x = np.array([1, 1])
+          print(A @ x)
+          print(A * 10)
+          print((A @ A).tolist())
+        output: |
+          [3 3]
+          [[20 10]
+           [10 20]]
+          [[5, 4], [4, 5]]
+        explanation: A @ x is one dot product for each row. A times a number multiplies every entry. A @ A is the matrix product, and tolist turns it into nested lists, which print with commas.
+        hints:
+          - The at sign is the matrix product.
+          - An array prints without commas, and a table prints one row under another.
+          - A list prints with commas.
+  work:
+    - text: Slower now. For each array, say its dtype and its shape before saying anything else.
+    - question:
+        id: write-to-array
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          The functions of the last cluster took a matrix as a list of rows. Write `to_array(rows)` to turn such a list into a NumPy array with dtype `float64`, whatever kinds of numbers the list holds.
+
+          The result must be a table, an array with exactly two axes. If it is not, raise a `ValueError`. Rows of unequal length already make `np.array` raise a `ValueError`, and that may be left to happen.
+        starter: |
+          import numpy as np
+
+          def to_array(rows):
+              # Replace the next line with your own.
+              return rows
+
+          A = to_array([[2, 1], [1, 2]])
+          print(A.dtype, A.shape)
+        solution: |
+          import numpy as np
+
+          def to_array(rows):
+              a = np.array(rows, dtype=np.float64)
+              if a.ndim != 2:
+                  raise ValueError("the rows do not form a table")
+              return a
+
+          A = to_array([[2, 1], [1, 2]])
+          print(A.dtype, A.shape)
+        tests: |
+          import numpy as _np
+          def _raises(value):
+              try:
+                  to_array(value)
+              except ValueError:
+                  return True
+              return False
+          _a = to_array([[2, 1], [1, 2]])
+          assert isinstance(_a, _np.ndarray), "to_array must return a NumPy array"
+          assert _a.dtype == _np.float64, "The array must have dtype float64 even when the list holds whole numbers"
+          assert _a.shape == (2, 2), "Two rows of two give the shape (2, 2)"
+          assert _a.tolist() == [[2.0, 1.0], [1.0, 2.0]], "The entries must be the entries of the list"
+          assert to_array([[1, 2, 3]]).shape == (1, 3), "One row of three gives the shape (1, 3)"
+          assert to_array([[1.5], [2], [3]]).shape == (3, 1), "Three rows of one give the shape (3, 1)"
+          assert to_array([[True, False]]).dtype == _np.float64, "Even a list of True and False must come back as float64"
+          assert _raises([1, 2, 3]), "A plain list of numbers has one axis and must raise ValueError"
+          assert _raises([[[1, 2], [3, 4]]]), "A list of lists of lists has three axes and must raise ValueError"
+          assert _raises([[1, 2], [3]]), "Rows of unequal length must raise ValueError"
+          assert _raises(5), "A single number has no axes and must raise ValueError"
+          assert output.strip() == "float64 (2, 2)", "The program should print float64 (2, 2)"
+        wrong:
+          - |
+            import numpy as np
+
+            def to_array(rows):
+                a = np.array(rows)
+                if a.ndim != 2:
+                    raise ValueError("the rows do not form a table")
+                return a
+
+            print("float64 (2, 2)")
+          - |
+            import numpy as np
+
+            def to_array(rows):
+                return np.array(rows, dtype=np.float64)
+
+            A = to_array([[2, 1], [1, 2]])
+            print(A.dtype, A.shape)
+          - |
+            import numpy as np
+
+            def to_array(rows):
+                a = np.array(rows, dtype=np.float32)
+                if a.ndim != 2:
+                    raise ValueError("the rows do not form a table")
+                return a
+
+            print("float64 (2, 2)")
+          - |
+            import numpy as np
+
+            def to_array(rows):
+                a = np.array(rows, dtype=np.float64)
+                if a.ndim < 2:
+                    raise ValueError("the rows do not form a table")
+                return a
+
+            A = to_array([[2, 1], [1, 2]])
+            print(A.dtype, A.shape)
+          - |
+            import numpy as np
+
+            def to_array(rows):
+                if len(rows) == 0:
+                    raise ValueError("the rows do not form a table")
+                return [[float(v) for v in row] for row in rows]
+
+            print("float64 (2, 2)")
+        explanation: |
+          Two lines do the work. `np.array(rows, dtype=np.float64)` builds the block and states its type, so a list of whole numbers does not become a whole-number array whose size depends on the machine and into which no decimal could later be stored. Then the number of axes is checked. A function that expects a matrix should refuse a plain list of numbers at the door, where the mistake is easy to see, and not fail somewhere inside with a puzzling message. The check is on `ndim`, the length of the shape, and it must be `!= 2`: a list nested three deep has three axes and is no more a matrix than a flat list is. This small function is the pattern for the boundary of any numerical code: convert once, state the dtype, check the shape, and from there on trust the array.
+        hints:
+          - Pass dtype=np.float64 to np.array.
+          - The number of axes is the attribute ndim.
+          - Raise ValueError when ndim is anything other than 2.
+    - question:
+        id: write-table-bytes
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Before building a large array it is wise to know how much memory it will take. Write `table_bytes(shape, dtype)` to return the number of bytes in the block of an array with the given shape, a tuple, and the given dtype, **without building the array**.
+
+          `np.dtype(dtype).itemsize` gives the number of bytes for one entry of a dtype. An empty shape `()` is a single number.
+        starter: |
+          import numpy as np
+
+          def table_bytes(shape, dtype):
+              # Replace the next line with your own.
+              return 0
+
+          print(table_bytes((50000, 768), np.float32))
+        solution: |
+          import numpy as np
+
+          def table_bytes(shape, dtype):
+              count = 1
+              for length in shape:
+                  count = count * length
+              return count * np.dtype(dtype).itemsize
+
+          print(table_bytes((50000, 768), np.float32))
+        tests: |
+          import numpy as _np
+          assert table_bytes((50000, 768), _np.float32) == 153600000, "A table of 50000 by 768 float32 values takes 153600000 bytes"
+          assert table_bytes((50000, 768), _np.float64) == 307200000, "The same table as float64 takes twice as much"
+          assert table_bytes((10,), _np.float64) == 80, "Ten float64 values take 80 bytes"
+          assert table_bytes((), _np.int64) == 8, "A single int64 takes 8 bytes"
+          assert table_bytes((3, 4, 5), _np.int8) == 60, "Sixty int8 values take 60 bytes"
+          assert table_bytes((2, 3), _np.bool_) == 6, "Six True or False values take 6 bytes"
+          assert table_bytes((1000000, 1000000), _np.float64) == 8000000000000, "A million by a million float64 values would take 8 million million bytes, and must be counted without being built"
+          assert table_bytes((7, 0), _np.float64) == 0, "A table with no columns has no entries"
+          assert output.strip() == "153600000", "The program should print 153600000"
+        wrong:
+          - |
+            import numpy as np
+
+            def table_bytes(shape, dtype):
+                count = 1
+                for length in shape:
+                    count = count * length
+                return count
+
+            print(153600000)
+          - |
+            import numpy as np
+
+            def table_bytes(shape, dtype):
+                count = 0
+                for length in shape:
+                    count = count + length
+                return count * np.dtype(dtype).itemsize
+
+            print(153600000)
+          - |
+            import numpy as np
+
+            def table_bytes(shape, dtype):
+                count = 1
+                for length in shape:
+                    count = count * length
+                return count * 8
+
+            print(153600000)
+          - |
+            import numpy as np
+
+            def table_bytes(shape, dtype):
+                if len(shape) == 0:
+                    return 0
+                count = 1
+                for length in shape:
+                    count = count * length
+                return count * np.dtype(dtype).itemsize
+
+            print(153600000)
+          - |
+            import numpy as np
+
+            def table_bytes(shape, dtype):
+                return shape[0] * shape[1] * np.dtype(dtype).itemsize
+
+            print(153600000)
+        explanation: |
+          The number of entries is the product of the lengths of the axes, and the block takes that many times the bytes for one entry. Starting the product at 1 makes the empty shape come out right: no axes, one entry. The count is done in plain Python whole numbers, which cannot overflow, and that is deliberate. An array of a million by a million would need eight million million bytes, far more than any ordinary machine has, and the point of the function is to learn that from arithmetic, before asking for the memory. The table of the example, the word vectors of a mid-sized language model, takes about 154 megabytes as `float32`. Counts like this are made every day in machine learning, to decide whether a model fits on the machine that must run it.
+        hints:
+          - The number of entries is the product of the numbers in the shape.
+          - Start the product at 1, so that an empty shape gives 1.
+          - Multiply the number of entries by np.dtype(dtype).itemsize.
+    - question:
+        id: fix-squares
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `squares(values)` should return an array of the squares of a list of whole numbers, exactly, for values up to three thousand million. For `[3, 100000]` the second square should be 10000000000. The program prints `[         9 1410065408]`. Fix it, keeping the result an array of whole numbers.
+        starter: |
+          import numpy as np
+
+          def squares(values):
+              a = np.array(values, dtype=np.int32)
+              return a * a
+
+          print(squares([3, 100000]))
+        solution: |
+          import numpy as np
+
+          def squares(values):
+              a = np.array(values, dtype=np.int64)
+              return a * a
+
+          print(squares([3, 100000]))
+        tests: |
+          import numpy as _np
+          _s = squares([3, 100000])
+          assert isinstance(_s, _np.ndarray), "squares must return a NumPy array"
+          assert _s.tolist() == [9, 10000000000], "The square of 100000 is 10000000000"
+          assert squares([3000000001]).tolist() == [9000000006000000001], "The square of 3000000001 must be exact, digit for digit"
+          assert squares([-100000]).tolist() == [10000000000], "The square of a negative number is positive"
+          assert squares([0, 1, 2]).tolist() == [0, 1, 4], "Small numbers must still be squared"
+          assert squares([46341]).tolist() == [2147488281], "The square of 46341 is 2147488281, just past the largest int32"
+          assert _s.dtype == _np.int64, "The result should be an array of int64"
+          assert output.strip() == "[          9 10000000000]", "The program should print [          9 10000000000]"
+        wrong:
+          - |
+            import numpy as np
+
+            def squares(values):
+                a = np.array(values, dtype=np.int32)
+                return a * a
+
+            print("[          9 10000000000]")
+          - |
+            import numpy as np
+
+            def squares(values):
+                a = np.array(values, dtype=np.float64)
+                return (a * a).astype(np.int64)
+
+            print("[          9 10000000000]")
+          - |
+            import numpy as np
+
+            def squares(values):
+                a = np.array(values, dtype=np.int32)
+                return (a * a).astype(np.int64)
+
+            print("[          9 10000000000]")
+          - |
+            import numpy as np
+
+            def squares(values):
+                return [v * v for v in values]
+
+            print("[          9 10000000000]")
+          - |
+            import numpy as np
+
+            def squares(values):
+                a = np.array(values, dtype=np.int64)
+                return a * 2
+
+            print("[          9 10000000000]")
+        explanation: |
+          The numbers going in were small enough for an `int32`. The numbers coming out were not. $100\,000^2 = 10^{10}$, and the largest `int32` is about $2.1 \times 10^9$, so the product wrapped round: $10^{10} - 2 \times 2^{32} = 1\,410\,065\,408$. No error was raised, and the wrong value is of a believable size. The repair is to give the array a dtype with room for the results, `int64`, which holds whole numbers up to about $9.2 \times 10^{18}$. Converting after the multiplication is too late, since the damage is done inside the `int32` product. Going through `float64` fails in a different way: a float keeps about 16 significant digits, and the square of 3000000001 has 19, so its last digits come back wrong. The habit to form is to ask, of every whole-number array, how large its values can become after the arithmetic, not before.
+        hints:
+          - What is the largest value an int32 can hold?
+          - Is the square of 100000 larger than that?
+          - Choose a whole-number dtype with more bits when the array is made.
+    - question:
+        id: work-embedding
+        type: numeric
+        system: s2
+        prompt: |
+          A model keeps a table of 50 000 rows and 768 columns of `float32` values. How many megabytes does the block take? Count a megabyte as $10^6$ bytes.
+        answer: "153.6"
+        explanation: |
+          The table has $50\,000 \times 768 = 38\,400\,000$ entries, and a `float32` takes 4 bytes, so the block is $153\,600\,000$ bytes. As `float64` it would be twice that, and as a 16-bit type half. For a model with thousands of millions of weights, the choice of dtype is the difference between fitting on a machine and not fitting, which is why so much effort goes into running models with fewer bits for each weight.
+        hints:
+          - How many entries does the table have?
+          - How many bytes is one float32?
+          - Multiply, then divide by a million.
+    - question:
+        id: work-wrap
+        type: choice
+        system: s2
+        prompt: |
+          In an `int32` array, $100\,000 \times 100\,000$ comes out as $1\,410\,065\,408$. Where does that number come from?
+        options:
+          - "It is a random value left in memory."
+          - "The true product $10^{10}$ needs more than 32 bits. Only the lowest 32 bits are kept, which amounts to subtracting $2^{32} = 4\\,294\\,967\\,296$ until the result fits: $10^{10} - 2 \\times 2^{32} = 1\\,410\\,065\\,408$."
+          - "NumPy rounds large products to the nearest value it can store."
+          - "The product was computed in float32 and lost precision."
+        answer: 1
+        explanation: |
+          A 32-bit slot has $2^{32}$ patterns. Arithmetic that runs past the end wraps round, exactly as arithmetic on a clock does: the stored result is the true result reduced modulo $2^{32}$, read as a number between $-2^{31}$ and $2^{31} - 1$. Here two subtractions of $2^{32}$ bring $10^{10}$ into range. If the stored value had been "the nearest value that fits", it would have been $2\,147\,483\,647$, the largest `int32`, and the error would at least have been conspicuous. Wrapping gives values that look like ordinary data. A sum of squared errors computed in a small whole-number dtype can go negative this way, and a count of pixels in an 8-bit image can come out smaller than a count of half of them.
+        hints:
+          - How many different values can 32 bits show?
+          - What happens to a counter that runs past its last value?
+          - Subtract 2 to the power 32 from the true product until it is in range.
+    - question:
+        id: work-column
+        type: choice
+        system: s2
+        prompt: |
+          Three arrays hold the numbers 1, 2, 3: `p` has shape `(3,)`, `q` has shape `(1, 3)` and `r` has shape `(3, 1)`. Which statement is true?
+        options:
+          - "They are the same array, since they hold the same numbers."
+          - "`p` has one axis and is neither a row nor a column. `q` is a table with one row. `r` is a table with one column. All three have size 3, and they differ in the number of axes or in which axis has length 3."
+          - "`q` and `r` are the same, since both have two axes."
+          - "`p` is a column, because vectors are columns."
+        answer: 1
+        explanation: |
+          The blocks are identical: three numbers side by side. The shapes are not, and the shape decides how the array behaves in every operation that involves a second array. `p` has `ndim` 1. `q` and `r` have `ndim` 2, with the three entries laid along axis 1 in `q` and along axis 0 in `r`. In the mathematics of the last cluster a vector was written as a column without anyone asking, because nothing depended on it. In NumPy the question "one axis, a row, or a column?" always has an answer, and printing the shape is the way to find it. Most errors in array code are a shape that was not what its author believed.
+        hints:
+          - What is the number of axes of each?
+          - For the two with two axes, which axis has length 3?
+          - Does holding the same numbers make two arrays behave the same?
+    - question:
+        id: work-truncate
+        type: choice
+        system: s2
+        prompt: |
+          `b = np.array([1, 2, 3])` and then `b[0] = 7.9` leaves `b` as `[7 2 3]`. A colleague wants the array to hold 7.9. What should they do?
+        options:
+          - "Assign it twice."
+          - "Nothing can be done, because arrays hold only whole numbers."
+          - "Make the array a decimal type to begin with, for example `np.array([1, 2, 3], dtype=np.float64)`, or convert it with `b.astype(np.float64)`, and then assign."
+          - "Use `b[0] = round(7.9)`."
+        answer: 2
+        explanation: |
+          The dtype was fixed when the block was laid out. A list of whole numbers gave a whole-number array, and an assignment into an existing array converts the value to the array's type, never the array to the value's. So the type must be right before the assignment: stated when the array is made, or changed with `astype`, which builds a new block. Rounding would store 8, which is still not 7.9. This is the commonest way for the trap to be sprung: an array of zeros or of counts is made from whole numbers, and later a loop stores averages or probabilities into it, every one of which is silently cut down to 0 or 1.
+        hints:
+          - What is the dtype of b, and when was it decided?
+          - Does assigning into an array change its dtype?
+          - Which dtype can hold 7.9?
+  connections:
+    - text: |
+        The same six numbers behaved in two ways. As a list of rows, `+` joined them. As an array, `+` added them, and the array refused to keep the 0.9 of a 7.9. Both came from one decision: every entry has the same type, and the raw values lie side by side in one block.
+
+        That decision is the array. The **dtype** says what each entry is and how many bytes it takes. The **shape** says how the block is read, as a list, a table, or a stack of tables. With one type, the place of an entry is found by arithmetic, as in the arrays you studied before, the memory is the number of entries times the bytes for each, and an operation on the whole block is one loop in compiled code. So arithmetic operators act on whole arrays, entry by entry, and `@` is the matrix product you built by hand and proved things about, ending with [[m5.determinant]].
+
+        The fixed type has a cost, and you saw both forms of it. A decimal stored into a whole-number array is cut off. A whole number too large for its slot wraps round without a word. Neither raises an error, so the defence is a habit: state the dtype, and ask how large the values can get.
+
+        Everything in this cluster builds on the three parts. Stretching arrays of different shapes against each other is [[e5.broadcasting]]. Replacing Python loops by whole-array operations is [[e5.vectorisation]]. Reading one block with a different shape, and knowing when two arrays share a block, are [[e5.reshaping-views-and-copies]] and [[e5.strides-and-memory-layout]].
+
+        But first, an array is not much use until you can get at its parts. The functions of the last cluster reached a row with `A[i]` and had to build a column with a comprehension, which is where the last bug of that cluster came from. An array reaches a row, a column, a block of rows and columns, or every second entry, each in one short expression, and it does so without copying a single number. That is the next lesson, [[e5.indexing-and-slicing]].
