@@ -1,0 +1,639 @@
+concept: m3.cases-and-counterexamples
+minutes: 100
+claim: You can prove a statement by splitting it into cases that together cover every possibility, choose the cases by parity, remainder or sign, prove the triangle inequality, disprove a universal statement with a single verified counterexample, and search for counterexamples with some method.
+recalls: [m3.induction-and-strong-induction]
+uses: [m3.propositions-and-connectives, m3.quantifiers-and-their-negation, m3.direct-proof, m3.contrapositive-and-contradiction, m0.the-four-operations-and-order-of-operations, m1.inequalities-and-absolute-value, e0.booleans-and-conditionals, e0.loops, e0.functions, e0.dictionaries-and-sets, e1.comprehensions-and-iterators, e1.testing-with-pytest]
+leads: [m3.equivalence-relations-and-partitions, m3.reading-and-writing-epsilon-style-arguments]
+starter: |
+  # Scratch space. Fermat's numbers: 2 to the power (2 to the n), plus 1.
+  for n in range(6):
+      print(n, 2 ** (2 ** n) + 1)
+parts:
+  recall:
+    - text: |
+        [[m3.induction-and-strong-induction]] proved statements about every natural number from a base case and a step. Twice it showed how much can hang on a single small case: the horses, where the step failed only from 1 to 2, and the stamps, where four cases had to be done by hand. Three quick pulls first.
+    - question:
+        id: recall-two-parts
+        type: choice
+        system: s1
+        concepts: [m3.induction-and-strong-induction]
+        prompt: |
+          An inductive step $P(k) \Rightarrow P(k + 1)$ has been proved for every $k \ge 1$, and nothing else. What follows?
+        options: ["$P(n)$ for every $n \\ge 1$", "$P(n)$ for every $n \\ge 2$", "Nothing about any particular $P(n)$, until a base case is proved", "$P(1)$"]
+        answer: 2
+        explanation: The step passes truth along and creates none. Without a base case no domino has been pushed.
+        hints:
+          - Which domino has fallen?
+          - The step is an implication.
+    - question:
+        id: recall-sum
+        type: numeric
+        system: s1
+        concepts: [m3.induction-and-strong-induction]
+        prompt: |
+          What is $1 + 3 + 5 + \dots + 19$, the sum of the first ten odd numbers?
+        answer: "100"
+        explanation: The sum of the first $n$ odd numbers is $n^2$.
+        hints:
+          - How many terms are there?
+          - Square the number of terms.
+    - question:
+        id: recall-strong
+        type: choice
+        system: s1
+        concepts: [m3.induction-and-strong-induction]
+        prompt: |
+          The proof that every integer $n \ge 2$ is a product of primes split the step into two possibilities for $k + 1$. Which two?
+        options: ["Even or odd", "Prime, or a product $ab$ of two smaller integers each at least 2", "Positive or negative", "Greater or smaller than $k$"]
+        answer: 1
+        explanation: Either the number is prime and there is nothing to do, or it factorises into smaller numbers to which the hypothesis applies. Those two cases cover every integer from 2 upwards.
+        hints:
+          - What does it mean for a number not to be prime?
+          - The hypothesis was applied to two smaller numbers.
+  puzzle:
+    - text: |
+        Here are two claims about whole numbers. Each has been checked for its first few cases.
+
+        > **Claim A.** For every integer $n$, the number $n^2 + n$ is even.
+
+        $n = 1$ gives 2. $n = 2$ gives 6. $n = 3$ gives 12, $n = 4$ gives 20, $n = 5$ gives 30. All even.
+
+        > **Claim B.** For every integer $n \ge 0$, the number $2^{2^n} + 1$ is prime.
+
+        $n = 0$ gives 3. $n = 1$ gives 5. $n = 2$ gives 17, $n = 3$ gives 257, $n = 4$ gives 65537. All prime.
+
+        Claim B is due to Pierre de Fermat, one of the greatest mathematicians of the seventeenth century, who checked these five cases and wrote that he believed the pattern continued for ever. The next number is $2^{32} + 1 = 4{,}294{,}967{,}297$, which was far too large to test by hand in 1640.
+
+        One of these claims is true and one is false. Both passed five tests out of five. If you had to bet, the evidence would not help you.
+
+        Claim A is true, and a few lines will prove it for every integer at once, by looking separately at even $n$ and at odd $n$. Claim B is false. In 1732 Leonhard Euler found that
+
+        $$2^{32} + 1 = 641 \times 6{,}700{,}417.$$
+
+        Fermat's belief, held by the mathematical world for nearly a century, was destroyed by a single multiplication. As it turned out, no Fermat number beyond those first five has ever been found to be prime.
+
+        So a general claim can meet one of two fates, and the two could not be less alike. To **establish** it you need an argument that covers every case there is. To **destroy** it you need one case, checked.
+
+        **How do you organise a proof so that no case escapes? And how do you go looking for the one case that breaks a claim?**
+  intuition:
+    - text: |
+        You have been writing proofs by cases for as long as you have been writing `if`.
+
+        ```python
+        def describe(n):
+            if n % 2 == 0:
+                return "even"
+            else:
+                return "odd"
+        ```
+
+        Inside the first branch, you **know** that `n` is even. Nobody had to assume it. The `if` handed you that fact for nothing. Inside the second branch you know that `n` is odd. To be sure the function is right for every `n`, you check each branch using what that branch knows, and you check one more thing, the thing that is easiest to forget: **that every input lands in some branch**. A function with an `if` and an `elif` and no `else` works beautifully in each branch and returns `None` for the input nobody thought of.
+
+        A **proof by cases** is the same. An arbitrary integer $n$ gives you very little to compute with. But every integer is even or odd, and in each of those two cases you have a formula, $n = 2k$ or $n = 2k + 1$. You have traded one hard problem with no information for two easy problems with extra information. The price is the obligation to show that the cases leave nothing out.
+
+        The split by even and odd is the split by remainder on division by 2. The same works for any divisor. The figure sorts the numbers from 0 to 17 by their remainder. Set the modulus to 3, and then to 4, and step the chosen number up and down.
+    - figure: remainder-classes
+      props: { modulus: 3, number: 14 }
+    - text: |
+        Whatever the modulus $m$, two things are visible. **Every number is in some column**, so the columns are a complete list of cases. And **no number is in two columns**, though for a proof that matters less: cases are allowed to overlap, as long as they cover everything.
+
+        So "let $n$ be an integer" can always be followed by "then $n$ is $3q$, $3q + 1$ or $3q + 2$", and each of the three gives you a formula. Infinitely many integers have been reduced to three cases. That reduction, from infinitely many objects to a handful of kinds, is the whole power of the method.
+
+        A **counterexample** runs the other way. It does not cover the cases. It needs only one, the bare row of the grid from the lesson on quantifiers: one object that meets the hypothesis and fails the conclusion. The skill there is in knowing where to look.
+  derivation:
+    - text: |
+        **The logic of cases.** Suppose you want to prove $Q$, and you know that at least one of $P_1, P_2, \dots, P_m$ must hold. If you can prove each of
+
+        $$P_1 \Rightarrow Q, \qquad P_2 \Rightarrow Q, \qquad \dots, \qquad P_m \Rightarrow Q,$$
+
+        then $Q$ is proved. Whichever case is the true one, it leads to $Q$. A truth table confirms that $\bigl((P_1 \lor P_2) \land (P_1 \Rightarrow Q) \land (P_2 \Rightarrow Q)\bigr) \Rightarrow Q$ is a tautology.
+
+        Two conditions, then. The cases must be **exhaustive**: $P_1 \lor P_2 \lor \dots \lor P_m$ must be known to be true. And **every** case must be proved. One unproved case and there is no proof. The cases need not exclude each other.
+
+        > **Theorem (Claim A).** For every integer $n$, $n^2 + n$ is even.
+        >
+        > **Proof.** Let $n$ be an integer. Then $n$ is even or $n$ is odd.
+        >
+        > *Case 1: $n$ is even.* Then $n = 2k$ for some integer $k$, and $n^2 + n = 4k^2 + 2k = 2(2k^2 + k)$, which is even.
+        >
+        > *Case 2: $n$ is odd.* Then $n = 2k + 1$ for some integer $k$, and $n^2 + n = (4k^2 + 4k + 1) + (2k + 1) = 2(2k^2 + 3k + 1)$, which is even.
+        >
+        > In both cases $n^2 + n$ is even. $\blacksquare$
+
+        The format is worth copying exactly: say what the cases are and why they cover everything, label each, finish each, and close by saying that all are done. (There is a neater proof here: $n^2 + n = n(n + 1)$ is a product of two neighbours, one of which is even. That is also a proof by cases, lightly disguised.)
+
+        **Division with remainder.** The general source of cases for integers is this fact, which you have used since the first cluster and which Python's `//` and `%` compute.
+
+        > For every integer $n$ and every integer $d \ge 1$, there are **unique** integers $q$ and $r$ with
+        >
+        > $$n = dq + r \qquad\text{and}\qquad 0 \le r < d.$$
+
+        $q$ is the quotient and $r$ the remainder. The statement has an existence part and a uniqueness part, and together they say that every integer falls into **exactly one** of the $d$ cases $r = 0, 1, \dots, d - 1$. For $d = 2$ these are "even" and "odd". For negative $n$ the remainder is still taken to be at least 0: $-7 = 3 \times (-3) + 2$, and Python agrees that `-7 % 3` is 2.
+
+        > **Theorem.** The square of an integer leaves the remainder 0 or 1 on division by 3. It never leaves 2.
+        >
+        > **Proof.** Let $n$ be an integer. By division with remainder, $n = 3q$, $n = 3q + 1$ or $n = 3q + 2$ for some integer $q$.
+        >
+        > *Case 1: $n = 3q$.* Then $n^2 = 9q^2 = 3(3q^2)$, with remainder 0.
+        >
+        > *Case 2: $n = 3q + 1$.* Then $n^2 = 9q^2 + 6q + 1 = 3(3q^2 + 2q) + 1$, with remainder 1.
+        >
+        > *Case 3: $n = 3q + 2$.* Then $n^2 = 9q^2 + 12q + 4 = 3(3q^2 + 4q + 1) + 1$, with remainder 1.
+        >
+        > These cases cover every integer. $\blacksquare$
+
+        Look at what this little theorem lets you say. The number 1,000,001 leaves the remainder 2 on division by 3, since its digits add up to 2. So it is **not a perfect square**, and you know that without computing any square root. A statement about infinitely many squares was settled by three calculations, each with a letter in it.
+
+        The same game with 4 gives: a square leaves the remainder 0 or 1 on division by 4. So a sum of two squares leaves $0 + 0$, $0 + 1$ or $1 + 1$, that is, 0, 1 or 2, and **never 3**. No number of the form $4q + 3$, such as 7, 11, 19 or 1,000,003, is a sum of two squares. You can check a few by hand and feel how unobvious that was.
+
+        **Cases by sign.** Some definitions are themselves made by cases, and a proof about such a thing naturally follows the cases of the definition. The **absolute value** is the chief example:
+
+        $$\lvert x \rvert = \begin{cases} x & \text{if } x \ge 0, \\ -x & \text{if } x < 0. \end{cases}$$
+
+        First a small fact, proved by those two cases: **for every real $t$, both $t \le \lvert t \rvert$ and $-t \le \lvert t \rvert$**. If $t \ge 0$, then $\lvert t \rvert = t$, and $-t \le 0 \le t$. If $t < 0$, then $\lvert t \rvert = -t$, and $t < 0 < -t$. In both cases $\lvert t \rvert$ is the larger of $t$ and $-t$.
+
+        Now one of the most used inequalities in all of mathematics.
+
+        > **Theorem (the triangle inequality).** For all real numbers $x$ and $y$, $\quad \lvert x + y \rvert \le \lvert x \rvert + \lvert y \rvert$.
+        >
+        > **Proof.** Let $x$ and $y$ be real numbers.
+        >
+        > *Case 1: $x + y \ge 0$.* Then $\lvert x + y \rvert = x + y \le \lvert x \rvert + \lvert y \rvert$, because $x \le \lvert x \rvert$ and $y \le \lvert y \rvert$.
+        >
+        > *Case 2: $x + y < 0$.* Then $\lvert x + y \rvert = -x - y \le \lvert x \rvert + \lvert y \rvert$, because $-x \le \lvert x \rvert$ and $-y \le \lvert y \rvert$.
+        >
+        > The two cases cover every possibility. $\blacksquare$
+
+        Try numbers. With $x = 3$ and $y = 4$ both sides are 7. With $x = 3$ and $y = -4$ the left side is 1 and the right side is 7. When the signs differ, some of the size cancels, and the left side is smaller. The inequality says that the size of a sum is at most the sum of the sizes: two errors can add up, or partly cancel, and can never combine into something larger than both together.
+
+        There was a choice of how to split. Four cases by the signs of $x$ and of $y$ would also work, with more labour. A good choice of cases follows the thing that is awkward, here the absolute value of $x + y$, so that is what we split on.
+
+        Its most useful form is about distances. Since $\lvert a - b \rvert$ is the distance between $a$ and $b$ on the number line, putting $x = a - b$ and $y = b - c$ gives
+
+        $$\lvert a - c \rvert \le \lvert a - b \rvert + \lvert b - c \rvert.$$
+
+        Going from $a$ to $c$ directly is never longer than going by way of $b$. In two dimensions this is the fact that one side of a triangle is shorter than the other two together, which is where the name comes from. You will use this form in almost every argument about limits.
+
+        **Without loss of generality.** Sometimes two cases are mirror images. To prove something about two numbers $x$ and $y$ that treats them alike, the cases $x \le y$ and $y \le x$ differ only by swapping the names. One then writes "**without loss of generality**, $x \le y$" and proves just that case. The phrase is a claim, that the other case really is the same argument with the letters exchanged, and you should make sure it is true before writing it. If the statement does not treat $x$ and $y$ alike, it is not.
+
+        **Finitely many cases, by machine.** If the cases are finite in number and each can be checked mechanically, a program can check them, and **that is a proof**. A truth table is one: four rows, or eight, and nothing is left out. What is not a proof is checking some of infinitely many cases. The line falls between "all" and "many", and has nothing to do with whether a human or a machine did the checking.
+
+        The art is to reduce an infinite problem to a finite one by argument, and then compute. "A square leaves 0 or 1 on division by 3" concerns all integers. The argument that only the remainder of $n$ matters cuts it down to three cases, and a program can check three cases. The famous instance is the four colour theorem, that every map can be coloured with four colours so that neighbouring countries differ. In 1976 it was reduced by hand to 1,936 configurations, and those were checked by computer. It was the first major theorem proved in this way.
+    - question:
+        id: order-triangle
+        type: order
+        system: s2
+        prompt: Put the lines of the proof of the triangle inequality, $\lvert x + y \rvert \le \lvert x \rvert + \lvert y \rvert$, in order.
+        steps:
+          - "Let $x$ and $y$ be real numbers. Recall that $t \\le \\lvert t \\rvert$ and $-t \\le \\lvert t \\rvert$ for every real $t$."
+          - "Case 1: $x + y \\ge 0$. Then $\\lvert x + y \\rvert = x + y$."
+          - "Since $x \\le \\lvert x \\rvert$ and $y \\le \\lvert y \\rvert$, this is at most $\\lvert x \\rvert + \\lvert y \\rvert$."
+          - "Case 2: $x + y < 0$. Then $\\lvert x + y \\rvert = -x - y$."
+          - "Since $-x \\le \\lvert x \\rvert$ and $-y \\le \\lvert y \\rvert$, this is at most $\\lvert x \\rvert + \\lvert y \\rvert$."
+          - "The two cases cover every possibility, so the inequality holds for all real $x$ and $y$."
+        explanation: The objects are named and the lemma recalled. Each case states what it assumes, uses the definition of absolute value to remove the bars from the left side, and then applies the half of the lemma that fits. The closing line says that the cases are exhaustive.
+        hints:
+          - Each case opens by stating its assumption and removing the absolute value.
+          - Which half of the lemma goes with x + y, and which with −x − y?
+          - The remark that the cases cover everything comes last.
+    - text: |
+        **Counterexamples.** Now the other fate. To disprove
+
+        $$\forall x,\ P(x) \Rightarrow Q(x)$$
+
+        is to prove its negation, $\exists x,\ P(x) \land \neg Q(x)$, and an existential statement is proved by a witness. A **counterexample** is an object that satisfies the hypothesis and violates the conclusion. One is enough. It must be exhibited, and both halves must be **checked**: that it meets the hypothesis, and that it fails the conclusion. A counterexample that does not meet the hypothesis refutes nothing.
+
+        | Claim | Counterexample | Check |
+        | --- | --- | --- |
+        | For every real $x$, $x^2 \ge x$. | $x = \tfrac{1}{2}$ | $\tfrac{1}{4} < \tfrac{1}{2}$ |
+        | For all real $a$, $b$: $(a + b)^2 = a^2 + b^2$. | $a = b = 1$ | $4 \ne 2$ |
+        | Every prime is odd. | 2 | prime, and even |
+        | If $a \mid bc$, then $a \mid b$ or $a \mid c$. | $a = 4$, $b = 2$, $c = 2$ | $4 \mid 4$, and 4 does not divide 2 |
+        | The sum of two irrational numbers is irrational. | $\sqrt{2}$ and $-\sqrt{2}$ | both irrational, and the sum is 0 |
+        | $2^{2^n} + 1$ is prime for every $n \ge 0$. | $n = 5$ | $641 \times 6{,}700{,}417$ |
+
+        Notice what a counterexample does **not** show. It does not show that the claim is always false. $x^2 \ge x$ holds for most real numbers. It shows that the claim is not always true, and so, as a universal statement, false.
+
+        **Where to look.** Counterexamples are not found by luck. They live in predictable places.
+
+        1. **Small cases.** Try 0, 1, 2 and so on, in order. Many false claims fail early.
+        2. **Extreme and degenerate cases.** Zero. One. Negative numbers. Fractions between 0 and 1, where squaring makes things smaller. The empty set and the empty list. Two objects that are equal when the claim silently imagines them different. The largest and smallest values allowed. These are the cases a claim's author did not picture.
+        3. **Where the proof gets stuck.** Try to prove the claim. If a step will not go through, ask what would have to be true for it to fail, and build that. The failed proof of "$\sqrt{4}$ is irrational" stalled at $q^2 = r^2$ and handed you $p = 2$, $q = 1$. A stuck proof is a map to the counterexample.
+        4. **Systematic search.** Write a program that tries cases in order and stops at the first failure. You did this for Euler's polynomial. It finds the smallest counterexample in the range searched.
+        5. **Random search.** When the cases are too many to enumerate, try random ones. This is what property-based testing tools do.
+
+        Some true-looking claims hold for an astonishingly long time. $n^2 + n + 41$ is prime for forty values. Fermat's numbers are prime for five and then fail at a ten-digit number. A conjecture of Pólya from 1919, about the prime factors of the numbers up to $n$, holds for every $n$ up to 906,150,256 and fails at the next. Euler conjectured that a fifth power is never the sum of four fifth powers, and it stood for two centuries until a computer search in 1966 found $27^5 + 84^5 + 110^5 + 133^5 = 144^5$. The published paper is two sentences long. A counterexample needs no commentary.
+
+        **Prove or disprove.** In real work nobody tells you which fate a statement deserves. The method is a loop.
+
+        1. Test small and extreme cases. If one fails, you are done.
+        2. If all pass, try to prove it.
+        3. If the proof sticks, use the sticking point to design a harder test. Go back to 1.
+
+        Each failed proof improves your search, and each failed search improves your understanding of why the statement might be true. It is the cycle of testing and debugging, applied to ideas.
+
+        The same loop tells you about **converses**. To show that $P \Rightarrow Q$ is true and its converse false, you need a proof of the first and a counterexample to the second. "If $n$ is divisible by 4 then $n$ is even": a direct proof one way, and the number 6 the other way.
+    - question:
+        id: counterexample-valid
+        type: choice
+        system: s2
+        prompt: |
+          Claim: "For every integer $n$, if $n$ is prime, then $2^n - 1$ is prime." Which of these is a counterexample?
+        options:
+          - "$n = 4$, since $2^4 - 1 = 15 = 3 \\times 5$."
+          - "$n = 3$, since $2^3 - 1 = 7$."
+          - "$n = 11$, since $2^{11} - 1 = 2047 = 23 \\times 89$."
+          - "$n = 9$, since $2^9 - 1 = 511 = 7 \\times 73$."
+        answer: 2
+        explanation: |
+          A counterexample must satisfy the hypothesis and fail the conclusion: $n$ prime, and $2^n - 1$ not prime. 11 is prime and $2047 = 23 \times 89$. For $n = 4$ and $n = 9$ the conclusion fails, but so does the hypothesis, and an implication with a false hypothesis is true. They refute nothing. $n = 3$ is a confirming instance. The claim holds for $n = 2, 3, 5, 7$ and first fails at 11.
+        hints:
+          - What two things must a counterexample to "if P then Q" satisfy?
+          - Is 4 prime? Is 9?
+          - Which option has a prime n and a composite result?
+  formal:
+    - text: |
+        **Proof by cases.** If $P_1 \lor P_2 \lor \dots \lor P_m$ holds and $P_i \Rightarrow Q$ for each $i$, then $Q$. The cases must be exhaustive and need not be exclusive.
+
+        **Division with remainder.** For every integer $n$ and every integer $d \ge 1$ there are unique integers $q$, $r$ with $n = dq + r$ and $0 \le r < d$. So every integer has exactly one of the forms $dq, dq + 1, \dots, dq + (d - 1)$.
+
+        | Result | Cases used |
+        | --- | --- |
+        | $n^2 + n$ is even | $n$ even, $n$ odd |
+        | $n^2$ leaves remainder 0 or 1 on division by 3 | $n = 3q,\ 3q + 1,\ 3q + 2$ |
+        | $n^2$ leaves remainder 0 or 1 on division by 4 | $n$ even, $n$ odd |
+        | a sum of two squares never leaves remainder 3 on division by 4 | the remainders of the two squares |
+        | $t \le \lvert t \rvert$ and $-t \le \lvert t \rvert$ | $t \ge 0$, $t < 0$ |
+
+        **Triangle inequality.** For all real $x$, $y$: $\ \lvert x + y \rvert \le \lvert x \rvert + \lvert y \rvert$. For all real $a$, $b$, $c$: $\ \lvert a - c \rvert \le \lvert a - b \rvert + \lvert b - c \rvert$.
+
+        **Counterexample.** The statement $\forall x,\ P(x) \Rightarrow Q(x)$ is false exactly when there is an $x$ with $P(x) \land \neg Q(x)$. Such an $x$ is a counterexample, and one suffices.
+
+        **Exhaustive verification.** A statement about a finite domain is proved by checking every element. A statement about an infinite domain is not proved by checking any finite part of it.
+  drill:
+    - text: Seconds each. For a counterexample, check both the hypothesis and the failed conclusion.
+    - question:
+        id: drill-how-many-cases
+        type: numeric
+        system: s1
+        prompt: |
+          Into how many cases does division with remainder by 5 split the integers?
+        answer: "5"
+        explanation: The remainders 0, 1, 2, 3 and 4.
+        hints:
+          - What are the possible remainders?
+          - Count them, starting from 0.
+    - question:
+        id: drill-exhaustive
+        type: choice
+        system: s1
+        prompt: |
+          Which list of cases covers **every** real number $x$?
+        options:
+          - "$x > 0$ and $x < 0$"
+          - "$x \\ge 0$ and $x < 0$"
+          - "$x > 1$ and $x < 1$"
+          - "$x$ is an integer and $x$ is a fraction"
+        answer: 1
+        explanation: The first list forgets 0, and the third forgets 1. The fourth forgets the irrational numbers. A boundary value left out of every case is the commonest gap in a proof by cases.
+        hints:
+          - Look for a number that falls in neither case.
+          - What happens at the boundary?
+    - question:
+        id: drill-remainder-negative
+        type: numeric
+        system: s1
+        prompt: |
+          $-7 = 3q + r$ with $0 \le r < 3$. What is $r$?
+        answer: "2"
+        explanation: |
+          $-7 = 3 \times (-3) + 2$. The remainder is never negative.
+        hints:
+          - The quotient is −3, not −2.
+          - What must be added to −9 to reach −7?
+    - question:
+        id: drill-square-mod-3
+        type: numeric
+        system: s1
+        prompt: |
+          What remainder does $8^2$ leave on division by 3?
+        answer: "1"
+        explanation: |
+          $64 = 3 \times 21 + 1$. And 8 is of the form $3q + 2$, the third case of the theorem.
+        hints:
+          - Work out the square.
+          - Or use the theorem. Which of the three cases is 8?
+    - question:
+        id: drill-not-square
+        type: choice
+        system: s1
+        prompt: |
+          Which of these numbers cannot be a perfect square, by the remainder on division by 3?
+        options: ["$3000$", "$3001$", "$3002$", "All three could be"]
+        answer: 2
+        explanation: 3002 leaves the remainder 2, and no square does. The theorem does not say that the other two are squares, only that it cannot rule them out.
+        hints:
+          - What remainder does each leave on division by 3?
+          - Which remainder is impossible for a square?
+    - question:
+        id: drill-triangle
+        type: numeric
+        system: s1
+        prompt: |
+          For $x = -3$ and $y = 5$, what is $\lvert x \rvert + \lvert y \rvert - \lvert x + y \rvert$?
+        answer: "6"
+        explanation: |
+          $3 + 5 - 2$. The signs differ, so part of the size cancels, and the triangle inequality is strict.
+        hints:
+          - Work out each absolute value.
+          - The sum x + y is 2.
+    - question:
+        id: drill-counter-square
+        type: choice
+        system: s1
+        prompt: |
+          Which value is a counterexample to "for every real $x$, $x^2 \ge x$"?
+        options: ["$x = 2$", "$x = 0$", "$x = 0.5$", "$x = -1$"]
+        answer: 2
+        explanation: |
+          $0.25 < 0.5$. Squaring a number between 0 and 1 makes it smaller. The other three satisfy the claim.
+        hints:
+          - Where does squaring make a number smaller?
+          - Try a fraction between 0 and 1.
+    - question:
+        id: drill-counter-prime
+        type: numeric
+        system: s1
+        prompt: |
+          What is the counterexample to "every prime number is odd"?
+        answer: "2"
+        explanation: 2 is prime and even. It is the only one, and one is enough.
+        hints:
+          - Look at the smallest primes.
+          - Which prime is even?
+    - question:
+        id: drill-how-many-needed
+        type: choice
+        system: s1
+        prompt: |
+          How many counterexamples are needed to disprove a statement that begins "for every"?
+        options: ["One", "At least two, to be sure it was not an accident", "More than half of the cases", "Infinitely many"]
+        answer: 0
+        explanation: The negation of "for every" is "there is". A single verified witness to the negation settles the matter.
+        hints:
+          - What is the negation of a universal statement?
+          - How is an existential statement proved?
+    - question:
+        id: drill-product-irrational
+        type: choice
+        system: s1
+        prompt: |
+          "The product of two irrational numbers is irrational." Which pair is a counterexample?
+        options: ["$\\sqrt{2}$ and $\\sqrt{2}$", "$2$ and $3$", "$\\sqrt{2}$ and $1$", "$\\sqrt{2}$ and $\\sqrt{3}$"]
+        answer: 0
+        explanation: |
+          Both are irrational and the product is 2. In the second and third options a factor is rational, so the hypothesis is not met.
+        hints:
+          - Both numbers must be irrational.
+          - The product must be rational.
+    - question:
+        id: predict-squares-mod-4
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          print(sorted({(n * n) % 4 for n in range(-20, 21)}))
+        output: "[0, 1]"
+        explanation: A set comprehension collects the remainders of 41 squares on division by 4, and only two different values ever occur. An even number squared is a multiple of 4, and an odd number squared is one more than a multiple of 4.
+        hints:
+          - A set keeps each value once.
+          - Square an even number and an odd number, and divide each by 4.
+    - question:
+        id: predict-fermat
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          n = 2 ** 32 + 1
+          print(n % 641, n // 641)
+        output: "0 6700417"
+        explanation: This is Euler's counterexample to Fermat's claim. The fifth Fermat number is divisible by 641, and the quotient is 6,700,417. Python's integers are exact, so the remainder 0 is a proof that the number is not prime.
+        hints:
+          - What did Euler find about this number?
+          - The first value printed is a remainder.
+  work:
+    - text: Slower now. For a proof, list the cases and say why they cover everything. For a disproof, check both halves of the counterexample.
+    - question:
+        id: work-choose-cases
+        type: choice
+        system: s2
+        prompt: |
+          You want to prove that for every integer $n$, the number $n^3 - n$ is divisible by 3. Since $n^3 - n = (n - 1)\,n\,(n + 1)$, which split into cases finishes the proof most directly?
+        options:
+          - "$n$ even and $n$ odd."
+          - "$n > 0$, $n = 0$ and $n < 0$."
+          - "$n = 3q$, $n = 3q + 1$ and $n = 3q + 2$. In each case one of the three factors is a multiple of 3."
+          - "$n$ prime and $n$ not prime."
+        answer: 2
+        explanation: |
+          The question is about divisibility by 3, so split by the remainder on division by 3. If $n = 3q$, the factor $n$ is a multiple of 3. If $n = 3q + 1$, then $n - 1 = 3q$. If $n = 3q + 2$, then $n + 1 = 3(q + 1)$. Among three neighbouring integers, one is always a multiple of 3. The cases should be chosen to fit what has to be shown.
+        hints:
+          - Which property is the conclusion about?
+          - Split by the remainder that matters for that property.
+          - In each case, look for the factor that is a multiple of 3.
+    - question:
+        id: work-find-gap
+        type: choice
+        system: s2
+        prompt: |
+          **Claim.** For every real number $x$, $\ \dfrac{\lvert x \rvert}{x} = 1$ or $\dfrac{\lvert x \rvert}{x} = -1$.
+
+          **"Proof."** *Case 1: $x > 0$.* Then $\lvert x \rvert = x$ and the quotient is 1. *Case 2: $x < 0$.* Then $\lvert x \rvert = -x$ and the quotient is $-1$. In both cases the claim holds.
+
+          What is wrong?
+        options:
+          - "Case 1 is computed wrongly."
+          - "Case 2 is computed wrongly."
+          - "The cases are not exhaustive. $x = 0$ is in neither, and there the expression is not defined, so the claim is false as stated."
+          - "Nothing is wrong."
+        answer: 2
+        explanation: |
+          Both cases are handled correctly, and together they miss $x = 0$, where the quotient would be $\tfrac{0}{0}$. So the claim is false for "every real number" and true for every **non-zero** real number. The missing case is the counterexample, and repairing the statement means adding the hypothesis $x \ne 0$. The search for a gap in the cases and the search for a counterexample are the same search.
+        hints:
+          - Is there a real number that is in neither case?
+          - What does the expression give there?
+          - How should the claim be corrected?
+    - question:
+        id: write-residues
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          For a formula `f` built from whole-number additions and multiplications of `n`, the remainder of `f(n)` on division by `m` depends only on the remainder of `n`. So the `m` cases $n = 0, 1, \dots, m - 1$ stand for all integers.
+
+          Write `residues(f, m)`. It returns the **sorted list**, without repeats, of the remainders that `f(n)` leaves on division by `m` across those `m` cases. The program uses it to find which remainders a square can leave on division by 8.
+        starter: |
+          def residues(f, m):
+              # Replace the next line with your own.
+              return []
+
+          print(residues(lambda n: n * n, 8))
+        solution: |
+          def residues(f, m):
+              return sorted({f(n) % m for n in range(m)})
+
+          print(residues(lambda n: n * n, 8))
+        tests: |
+          assert residues(lambda n: n * n, 3) == [0, 1], "A square leaves 0 or 1 on division by 3"
+          assert residues(lambda n: n * n, 4) == [0, 1], "A square leaves 0 or 1 on division by 4"
+          assert residues(lambda n: n * n, 8) == [0, 1, 4], "A square leaves 0, 1 or 4 on division by 8"
+          assert residues(lambda n: n * n + n, 2) == [0], "n squared plus n is always even"
+          assert residues(lambda n: n ** 3 - n, 6) == [0], "n cubed minus n is always a multiple of 6"
+          assert residues(lambda n: n, 5) == [0, 1, 2, 3, 4], "n itself leaves every remainder"
+          assert residues(lambda n: 2 * n + 1, 2) == [1], "2n + 1 is always odd"
+          assert residues(lambda n: n * n * n, 7) == [0, 1, 6], "A cube leaves 0, 1 or 6 on division by 7"
+          assert residues(lambda n: 7, 1) == [0], "Everything leaves the remainder 0 on division by 1"
+          assert isinstance(residues(lambda n: n, 3), list), "Return a list"
+          assert output.strip() == "[0, 1, 4]", "The program should print [0, 1, 4]"
+        wrong:
+          - "def residues(f, m):\n    return sorted({f(n) % m for n in range(1, m)})\n\nprint([0, 1, 4])\n"
+          - "def residues(f, m):\n    return sorted(f(n) % m for n in range(m))\n\nprint([0, 1, 4])\n"
+          - "def residues(f, m):\n    return sorted({f(n) for n in range(m)})\n\nprint([0, 1, 4])\n"
+          - "def residues(f, m):\n    return sorted({f(n % m) for n in range(m)})\n\nprint([0, 1, 4])\n"
+        explanation: |
+          The set comprehension runs through the $m$ cases and keeps each remainder once, and `sorted` turns the set into an ordered list. This is a proof by cases carried out by machine, and it **is** a proof, given the argument that only the remainder of $n$ matters, because then the $m$ cases are all the cases there are. The output `[0, 1, 4]` says that a square never leaves 2, 3, 5, 6 or 7 on division by 8. One consequence: a sum of three squares never leaves 7, so numbers such as 7, 15, 23 and 31 are not sums of three squares.
+        hints:
+          - Which values of n stand for all the cases?
+          - Collect f(n) % m in a set, so that repeats disappear.
+          - sorted turns a set into an ordered list.
+    - question:
+        id: write-fermat-factor
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `fermat_factor(n)`. It returns the **smallest factor greater than 1** of the Fermat number $2^{2^n} + 1$. If the Fermat number is prime, that factor is the number itself. Search upwards from 2, and stop as soon as the candidate squared exceeds the number, since a number with no factor up to its square root is prime.
+
+          The program prints the answers for $n = 0$ to 5. Five of them repeat Fermat's evidence, and the sixth is Euler's counterexample.
+        starter: |
+          def fermat_factor(n):
+              # Replace the next line with your own.
+              return 1
+
+          print([fermat_factor(n) for n in range(6)])
+        solution: |
+          def fermat_factor(n):
+              number = 2 ** (2 ** n) + 1
+              d = 2
+              while d * d <= number:
+                  if number % d == 0:
+                      return d
+                  d += 1
+              return number
+
+          print([fermat_factor(n) for n in range(6)])
+        tests: |
+          assert fermat_factor(0) == 3, "2 to the 1, plus 1, is 3, which is prime"
+          assert fermat_factor(1) == 5, "2 squared plus 1 is 5, which is prime"
+          assert fermat_factor(2) == 17, "2 to the 4, plus 1, is 17, which is prime"
+          assert fermat_factor(3) == 257, "2 to the 8, plus 1, is 257, which is prime"
+          assert fermat_factor(4) == 65537, "2 to the 16, plus 1, is 65537, which is prime"
+          assert fermat_factor(5) == 641, "2 to the 32, plus 1, is divisible by 641"
+          assert (2 ** 32 + 1) % fermat_factor(5) == 0, "The value returned must divide the Fermat number"
+          assert output.strip() == "[3, 5, 17, 257, 65537, 641]", "The program should print [3, 5, 17, 257, 65537, 641]"
+        wrong:
+          - "def fermat_factor(n):\n    return 2 ** (2 ** n) + 1\n\nprint([3, 5, 17, 257, 65537, 641])\n"
+          - "def fermat_factor(n):\n    number = 2 ** (2 * n) + 1\n    d = 2\n    while d * d <= number:\n        if number % d == 0:\n            return d\n        d += 1\n    return number\n\nprint([3, 5, 17, 257, 65537, 641])\n"
+          - "def fermat_factor(n):\n    number = 2 ** (2 ** n) + 1\n    d = 2\n    while d * d < number:\n        d += 1\n        if number % d == 0:\n            return d\n    return 1\n\nprint([3, 5, 17, 257, 65537, 641])\n"
+        explanation: |
+          The program prints `[3, 5, 17, 257, 65537, 641]`. Five primes, and then a factor. What took the best mathematicians in Europe ninety-two years is now a loop of 640 steps. The stopping rule deserves its one-line proof, by contradiction: if `number` $= ab$ with both $a$ and $b$ greater than its square root, then $ab$ would exceed `number`. So a composite number has a factor no greater than its square root, and when the loop ends without finding one, the number is prime. Do not call the function with $n = 6$ and expect the same speed. The smallest factor of the next Fermat number is 274,177.
+        hints:
+          - Build the Fermat number first. Mind the brackets in the exponent.
+          - Try d = 2, 3, 4, … and return the first d that divides it.
+          - If d times d has passed the number and nothing divided it, the number is prime, so return the number.
+    - question:
+        id: fix-middle
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `middle(a, b, c)` should return the median of three numbers, the one that would be in the middle if they were sorted. It reasons by cases: if `b` lies between the other two, return `b`. If `a` does, return `a`. Otherwise it must be `c`. It works for 1, 2, 3 in every order. But `middle(2, 2, 1)` returns 1, and the median of 2, 2, 1 is 2. The cases do not cover everything. Fix them.
+        starter: |
+          def middle(a, b, c):
+              if a < b < c or c < b < a:
+                  return b
+              if b < a < c or c < a < b:
+                  return a
+              return c
+
+          print(middle(3, 1, 2), middle(2, 2, 1))
+        solution: |
+          def middle(a, b, c):
+              if a <= b <= c or c <= b <= a:
+                  return b
+              if b <= a <= c or c <= a <= b:
+                  return a
+              return c
+
+          print(middle(3, 1, 2), middle(2, 2, 1))
+        tests: |
+          for _t in [(1, 2, 3), (1, 3, 2), (2, 1, 3), (2, 3, 1), (3, 1, 2), (3, 2, 1)]:
+              assert middle(_t[0], _t[1], _t[2]) == 2, "The median of 1, 2, 3 in any order is 2. It fails for " + str(_t)
+          for _t in [(2, 2, 1), (2, 1, 2), (1, 2, 2), (1, 1, 2), (1, 2, 1), (2, 1, 1), (5, 5, 5), (0, 0, -1), (-1, 0, 0), (7, 3, 7)]:
+              assert middle(_t[0], _t[1], _t[2]) == sorted(_t)[1], "With equal values the median is still the middle of the sorted three. It fails for " + str(_t)
+          assert middle(2.5, -1, 10) == 2.5, "It should work for any numbers"
+          assert output.strip() == "2 2", "The program should print 2 2"
+        wrong:
+          - "def middle(a, b, c):\n    if a < b < c or c < b < a:\n        return b\n    if b < a < c or c < a < b:\n        return a\n    if a == b:\n        return c\n    return c\n\nprint(2, 2)\n"
+          - "def middle(a, b, c):\n    return min(max(a, b), c)\n\nprint(2, 2)\n"
+          - "def middle(a, b, c):\n    if a <= b <= c or c <= b <= a:\n        return a\n    if b <= a <= c or c <= a <= b:\n        return b\n    return c\n\nprint(2, 2)\n"
+          - "def middle(a, b, c):\n    return (a + b + c) // 3\n\nprint(2, 2)\n"
+        explanation: |
+          The author pictured three **different** numbers, for which "strictly between" is right, and proved the function for those six orders. With a tie, as in 2, 2, 1, no number lies strictly between the other two, both `if` conditions are false, and the function falls through to `return c` for a reason that has nothing to do with `c` being the median. Changing `<` to `<=` makes the first two cases mean "lies between, ends included", and then the claim "if neither `a` nor `b` is between the others, `c` is" becomes true. This is rule 2 of the hunt: the counterexample was a degenerate case, two values equal where the author imagined them distinct. The tests found it by listing the tied arrangements on purpose.
+        hints:
+          - Trace middle(2, 2, 1) through both conditions.
+          - Is 2 strictly between 2 and 1?
+          - What should "between" mean when two of the values are equal?
+    - question:
+        id: work-prove-or-disprove
+        type: choice
+        system: s2
+        prompt: |
+          "For all real numbers $x$ and $y$, $\ \lvert x - y \rvert \le \lvert x \rvert - \lvert y \rvert$." Prove or disprove.
+        options:
+          - "True, by the triangle inequality."
+          - "False. $x = 1$, $y = -1$ gives $2 \\le 0$."
+          - "False. $x = 2$, $y = 1$ gives $1 \\le 1$."
+          - "True, because it holds whenever $x \\ge y \\ge 0$."
+        answer: 1
+        explanation: |
+          Test the extreme case of opposite signs: the left side is the distance between $1$ and $-1$, which is 2, and the right side is $1 - 1 = 0$. One verified counterexample, and the claim is false. The third option exhibits a case where the claim **holds**, which refutes nothing. The fourth proves the claim on part of the domain only. What the triangle inequality does give is the reverse direction: $\lvert x \rvert - \lvert y \rvert \le \lvert x - y \rvert$, from $\lvert x \rvert = \lvert (x - y) + y \rvert \le \lvert x - y \rvert + \lvert y \rvert$.
+        hints:
+          - Try numbers with opposite signs.
+          - A counterexample must make the inequality fail.
+          - Does a case in which the claim holds refute it?
+    - question:
+        id: work-relu
+        type: choice
+        system: s2
+        prompt: |
+          The function used in most neural networks is $\operatorname{relu}(x) = \max(x, 0)$. Someone claims the identity $\max(x, 0) = \dfrac{x + \lvert x \rvert}{2}$ for every real $x$. Which is a complete proof?
+        options:
+          - "For $x = 3$ both sides are 3, and for $x = -3$ both sides are 0."
+          - "If $x \\ge 0$, then $\\lvert x \\rvert = x$, the right side is $\\dfrac{2x}{2} = x$, and $\\max(x, 0) = x$. If $x < 0$, then $\\lvert x \\rvert = -x$, the right side is 0, and $\\max(x, 0) = 0$. These cases cover every real $x$."
+          - "If $x > 0$, then $\\lvert x \\rvert = x$ and both sides are $x$."
+          - "Both sides are never negative, so they are equal."
+        answer: 1
+        explanation: |
+          Both sides are defined by cases on the sign of $x$, so the proof follows those cases, and it says that they are exhaustive. The first option is two examples. The third proves one case and leaves out $x \le 0$. The fourth observes a shared property, which many unequal functions share as well. Identities like this one let a function defined by cases be written as a single formula, which is sometimes what the algebra of gradients needs.
+        hints:
+          - How is each side defined? By what kind of split?
+          - A proof for every real x must cover negative x and zero.
+          - Examples are not a proof of a universal statement.
+  connections:
+    - text: |
+        Cases and counterexamples are the two halves of settling a universal claim, and a working mathematician or engineer moves between them all day. The habits carry over directly to code. A function with branches is correct when each branch is correct **and** the branches are exhaustive, and the bug in `middle` was a proof by cases with a case missing. Good test suites are organised counterexample hunts: the empty list, the single element, the duplicate, zero, the negative number, the largest value. Modern type checkers will even verify that a `match` or an `if` chain over a fixed set of alternatives leaves none out, which is the exhaustiveness condition checked by machine.
+
+        The triangle inequality will be at your side from now on. It is the reason errors can be bounded at all: the error of a sum is at most the sum of the errors. Every argument about limits uses it, usually in the form "the distance from $a$ to $c$ is at most the distance from $a$ to $b$ plus the distance from $b$ to $c$". In higher dimensions the same inequality holds for the length of vectors, and it is one of the three properties that define what a "distance" or a "norm" is. When a paper bounds the difference between a model's output and the truth, look for the line where a term is added and subtracted and the triangle inequality is applied. It is nearly always there. You will use it yourself in [[m3.reading-and-writing-epsilon-style-arguments]].
+
+        One idea from this lesson deserves to be looked at for its own sake. Sorting the integers by their remainder on division by 3 put **every integer into exactly one of three classes**, and for many purposes two integers in the same class could be treated as the same: their squares left the same remainder, and one case stood for infinitely many numbers. That is a very general manoeuvre. Fractions do it, when $\tfrac{1}{2}$ and $\tfrac{2}{4}$ are treated as one number. Clock arithmetic does it. Whenever mathematics decides to regard different things as "the same in the respect that matters", it is cutting a set into classes. What kind of sameness cuts a set cleanly into classes, with no overlaps and nothing left out? The answer is three short conditions, and they are the subject of the next lesson: [[m3.equivalence-relations-and-partitions]].

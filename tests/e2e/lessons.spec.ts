@@ -113,6 +113,38 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   await expect(rates).toContainText("For an input of size n = 8: log₂ n = 3 steps, n = 8, n log₂ n = 24, n² = 64, 2ⁿ = 256.");
   await rates.getByRole("slider", { name: "size n" }).fill("16");
   await expect(rates).toContainText("For an input of size n = 16: log₂ n = 4 steps, n = 16, n log₂ n = 64, n² = 256, 2ⁿ = 65,536.");
+  const truth = page.getByRole("figure").filter({ hasText: "Truth table" });
+  await expect(truth).toContainText("P is true and Q is true. not P is false. P and Q is true. P or Q is true. P implies Q is true. P if and only if Q is true.");
+  await truth.getByRole("button", { name: "Switch Q" }).click();
+  await expect(truth).toContainText("P implies Q is false. P if and only if Q is false. This is the only row in which “P implies Q” is false");
+  await truth.getByRole("button", { name: "Switch P" }).click();
+  await expect(truth).toContainText("P is false and Q is false. not P is true. P and Q is false. P or Q is false. P implies Q is true. P if and only if Q is true.");
+  const dominoes = page.getByRole("figure").filter({ hasText: "Induction as falling dominoes" });
+  await expect(dominoes).toContainText("All 8 dominoes fall");
+  for (let i = 0; i < 3; i++) await dominoes.getByRole("button", { name: "Increase broken step" }).click();
+  await expect(dominoes).toContainText("the step from P(3) to P(4) fails. Dominoes 1 to 3 fall and the rest stand");
+  await dominoes.getByRole("button", { name: "Switch base case" }).click();
+  await expect(dominoes).toContainText("The base case P(1) has not been shown. So no domino falls");
+  const diagonal = page.getByRole("figure").filter({ hasText: "The diagonal argument" });
+  await expect(diagonal).toContainText("Row 1 has 0 in place 1, so the new sequence gets 1 there. So far the new sequence starts 1. It differs from row 1 in at least one place.");
+  for (let i = 0; i < 5; i++) await diagonal.getByRole("button", { name: "Increase row" }).click();
+  await expect(diagonal).toContainText("So far the new sequence starts 101011. It differs from each of rows 1 to 6 in at least one place, and continuing in the same way it differs from every row of the list");
+  await diagonal.getByRole("button", { name: "Increase list" }).click();
+  await expect(diagonal).toContainText("Row 1 has 0 in place 1");
+  const band = page.getByRole("figure").filter({ hasText: "A tolerance and the point where the terms stay inside it" });
+  await expect(band).toContainText("For the tolerance ε = 0.2, every term from N = 6 onwards is within 0.2 of 1. The first 5 terms are not.");
+  await band.getByRole("slider", { name: "tolerance in hundredths" }).fill("10");
+  await expect(band).toContainText("For the tolerance ε = 0.1, every term from N = 11 onwards is within 0.1 of 1. The first 10 terms are not.");
+  const classes = page.getByRole("figure").filter({ hasText: "Classes of whole numbers with the same remainder" });
+  await expect(classes).toContainText("The numbers fall into 3 classes, one for each remainder, and every number is in exactly one class. 14 leaves the remainder 2, and its class is shown: 2, 5, 8, 11, 14, 17, and so on.");
+  await classes.getByRole("button", { name: "Increase modulus" }).click();
+  await expect(classes).toContainText("The numbers fall into 4 classes, one for each remainder, and every number is in exactly one class. 14 leaves the remainder 2, and its class is shown: 2, 6, 10, 14, and so on.");
+  const keys = page.getByRole("figure").filter({ hasText: "Which key opens which lock" });
+  await expect(keys).toContainText("Pattern 1, one key for each lock. “For every lock there is a key that opens it” is true: every row has a mark. “There is a key that opens every lock” is false: no column is full.");
+  await keys.getByRole("button", { name: "Increase pattern" }).click();
+  await expect(keys).toContainText("“There is a key that opens every lock” is true: the column of key 2 is full.");
+  await keys.getByRole("button", { name: "Increase pattern" }).click();
+  await expect(keys).toContainText("“For every lock there is a key that opens it” is false: the row of lock 3 has no mark.");
   await expect(page.locator(".prose-lesson img")).toHaveCount(0);
 
   // Wrong, then a hint, then right. Fractions and words are handled by the grader.

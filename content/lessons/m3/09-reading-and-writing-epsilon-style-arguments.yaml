@@ -1,0 +1,709 @@
+concept: m3.reading-and-writing-epsilon-style-arguments
+minutes: 110
+claim: You can read a definition built from "for every epsilon there is" as a game of challenge and response, prove from the definition that a given sequence converges by saying how to find N from epsilon, prove that a sequence does not converge, use the triangle inequality with the epsilon-over-two device, and read and use the epsilon-delta definition of continuity.
+recalls: [m3.countable-and-uncountable-sets]
+uses: [m3.propositions-and-connectives, m3.quantifiers-and-their-negation, m3.direct-proof, m3.contrapositive-and-contradiction, m3.cases-and-counterexamples, m2.functions-as-machines, m2.sequences-and-series, m1.inequalities-and-absolute-value, m1.quadratics, e0.functions, e1.comprehensions-and-iterators, e1.modules-and-imports, e1.complexity-and-big-o]
+leads: [m11.sequences-and-epsilon-n-limits, m11.epsilon-delta-continuity-and-uniform-continuity, m6.fields-and-the-vector-space-axioms]
+starter: |
+  # Scratch space. How far is each term from 2? When does the distance drop below 0.01?
+  for n in [1, 10, 100, 1000, 10000]:
+      a = (2 * n + 1) / (n + 3)
+      print(n, a, abs(a - 2))
+parts:
+  recall:
+    - text: |
+        [[m3.countable-and-uncountable-sets]] ended with an uncomfortable fact: almost no real number can be written down exactly, by a person or by a computer, so that working with real numbers means working with approximations. This lesson is about saying exactly what "approximately" and "approaches" mean. Three quick pulls first.
+    - question:
+        id: recall-countable
+        type: choice
+        system: s1
+        concepts: [m3.countable-and-uncountable-sets]
+        prompt: |
+          Which of these sets is countable?
+        options: ["The real numbers", "The irrational numbers", "The rational numbers", "The infinite binary sequences"]
+        answer: 2
+        explanation: The rationals can be listed, by walking the diagonals of the grid of numerators and denominators. The other three cannot be listed, by the diagonal argument.
+        hints:
+          - Which one did you write a generator for?
+          - Three of these were shown to defeat every list.
+    - question:
+        id: recall-diagonal
+        type: choice
+        system: s1
+        concepts: [m3.countable-and-uncountable-sets]
+        prompt: |
+          The diagonal sequence $d$ is built from a list $s_0, s_1, s_2, \dots$ How does $d$ relate to $s_n$?
+        options:
+          - "It agrees with $s_n$ in place $n$."
+          - "It differs from $s_n$ in place $n$."
+          - "It differs from $s_n$ in every place."
+          - "It equals $s_n$ for some $n$."
+        answer: 1
+        explanation: One place of disagreement with each row is enough to make it different from every row.
+        hints:
+          - How was each term of d chosen?
+          - One difference is enough.
+    - question:
+        id: recall-floats
+        type: choice
+        system: s1
+        concepts: [m3.countable-and-uncountable-sets]
+        prompt: |
+          How many different values can a 64-bit `float` take, at most?
+        options: ["Countably infinitely many", "Uncountably many", "$2^{64}$, a finite number", "64"]
+        answer: 2
+        explanation: Sixty-four bits have $2^{64}$ patterns. The real numbers are uncountable, so nearly all of them can only be approximated.
+        hints:
+          - How many patterns can 64 bits show?
+          - Is that finite?
+  puzzle:
+    - text: |
+        Look at the sequence
+
+        $$a_n = \frac{2n + 1}{n + 3}, \qquad n = 1, 2, 3, \dots$$
+
+        The starter prints some of its terms: $a_1 = 0.75$, $a_{10} \approx 1.615$, $a_{100} \approx 1.951$, $a_{1000} \approx 1.995$, $a_{10000} \approx 1.9995$. You would say without hesitation that the sequence "approaches 2", or "tends to 2", or "gets closer and closer to 2".
+
+        A sceptic disagrees, and makes three objections.
+
+        *"It never reaches 2."* True. Every term is strictly less than 2.
+
+        *"It also gets closer and closer to 3."* Also true! Each term is nearer to 3 than the one before. It gets closer and closer to 100 as well, and to a million. "Closer and closer" does not pick out 2.
+
+        *"You have shown me five terms. The harmonic sums looked as if they were settling down for a million terms, and they were not. Why should I believe you about the terms you have not computed?"*
+
+        The third objection cannot be answered with more terms, as you have known since the lesson on quantifiers. It needs a proof. But the first two show that there is a prior problem: **before anyone can prove that the sequence approaches 2, somebody has to say what the sentence means.** It must mean something that is true of 2 and false of 3, and that does not require the sequence ever to arrive.
+
+        For a century and a half after Newton and Leibniz invented calculus, nobody could do this. The subject worked brilliantly, and rested on phrases such as "infinitely small" and "ultimately equal", which its critics mocked and its users could not defend. The repair, due mainly to Cauchy and Weierstrass in the nineteenth century, is the definition you met at the end of the last cluster, and it contains no motion and no infinity at all. It is a statement with three quantifiers.
+
+        **What does that definition demand, how do you meet its demand for every tolerance at once, and how do you write the argument down so that the sceptic has nothing left to say?**
+  intuition:
+    - text: |
+        Turn the sceptic into an opponent in a game, and the definition explains itself.
+
+        The **challenger** names a tolerance, a positive number, however small. Say 0.01. This is a demand: "show me that the terms get within 0.01 of 2, and stay there."
+
+        You, the **responder**, must answer with a position in the sequence, an index $N$, and a guarantee: "from the $N$th term onwards, **every** term is within 0.01 of 2."
+
+        For the sequence in the puzzle, the distance from 2 is $\dfrac{5}{n + 3}$, as a little algebra shows. That is below 0.01 as soon as $n + 3 > 500$. So you answer $N = 498$.
+
+        The challenger returns with a millionth. You answer $N = 5{,}000{,}000$. With a billionth: $N = 5{,}000{,}000{,}000$.
+
+        The sequence **converges to 2** if you can win every round: whatever tolerance is named, you have an answer. Now it is clear what a proof must be. It cannot be a list of your answers to particular challenges, since there are infinitely many possible challenges. It must be a **strategy**: a rule that takes the tolerance and produces the index, together with an argument that the rule always works. In programming terms, a proof of convergence is a **function** from the tolerance to the index, with a proof of its correctness.
+
+        Try the game with 3 in place of 2. The challenger names the tolerance 0.5. Every term is below 2, so every term is more than 1 away from 3, and no index will ever do. You lose at once. That is the difference between 2 and 3 that "closer and closer" could not express.
+
+        The figure shows the game for another sequence, $a_n = 1 + \dfrac{(-1)^n}{n}$, which hops from side to side of its limit 1. The shaded band is the tolerance. Make the tolerance smaller and watch the line marking $N$ move to the right.
+    - figure: epsilon-band
+      props: { tolerance: 0.2 }
+    - text: |
+        Three things to see. For each tolerance there **is** a line, beyond which every dot is inside the band. The smaller the tolerance, the further right the line: $N$ **depends on** the tolerance, and that is allowed. And the dots to the left of the line may be anywhere. The definition does not care what the sequence does at first. Convergence is entirely about the far end.
+
+        The tolerance is traditionally called $\varepsilon$, the Greek letter epsilon, and this whole style of reasoning is called **epsilon** argument. It has a reputation for difficulty that it does not deserve. It is a game with a fixed order of play, and you already own every tool needed to win it: quantifiers, to know the order of play. Direct proof, to write the strategy down. Inequalities and the triangle inequality, to do the estimating.
+  derivation:
+    - text: |
+        **The definition.** A sequence $(a_n)$ **converges** to the real number $L$ if
+
+        $$\forall \varepsilon > 0,\quad \exists N \in \mathbb{N},\quad \forall n \ge N,\quad \lvert a_n - L \rvert < \varepsilon.$$
+
+        Read it with the lesson on quantifiers in hand. $\lvert a_n - L \rvert$ is the distance between the term and the limit. The first quantifier, $\forall \varepsilon$, belongs to the challenger. The second, $\exists N$, is yours, and since it comes after $\varepsilon$, your $N$ may depend on $\varepsilon$. The third, $\forall n \ge N$, is the challenger's again: after you have named $N$, any later term may be tested. Since $n$ comes **after** $N$, your $N$ must be chosen without knowing $n$. It may depend on $\varepsilon$ and on nothing else.
+
+        **The shape of the proof.** A statement that begins $\forall \varepsilon > 0,\ \exists N$ is proved as every such statement is. For the "for every", take an arbitrary one. For the "there is", produce one. For the last "for every", take an arbitrary one again. So the skeleton is always the same four lines.
+
+        > Let $\varepsilon > 0$.
+        > Choose $N = \ldots$ (some expression in $\varepsilon$).
+        > Let $n \ge N$.
+        > Then $\lvert a_n - L \rvert = \ldots < \varepsilon$.
+
+        The only creative step is the second, finding $N$. It is found on scratch paper, by **working backwards** from the inequality wanted, exactly as with the inequality of the means in the lesson on direct proof. Then the proof is written forwards.
+
+        One fact about the real numbers is needed to guarantee that suitable indices exist: **for every real number $x$ there is a natural number greater than $x$**. The natural numbers are not bounded above. This is called the **Archimedean property**.
+
+        **First example.**
+
+        > **Theorem.** $\dfrac{1}{n} \to 0$.
+
+        *Scratch work.* We want $\left\lvert \tfrac{1}{n} - 0 \right\rvert < \varepsilon$, that is, $\tfrac{1}{n} < \varepsilon$, that is, $n > \tfrac{1}{\varepsilon}$. So any $N$ greater than $\tfrac{1}{\varepsilon}$ should do.
+
+        > **Proof.** Let $\varepsilon > 0$. Choose a natural number $N$ with $N > \dfrac{1}{\varepsilon}$, which exists by the Archimedean property. Let $n \ge N$. Then $n > \dfrac{1}{\varepsilon}$, so $\dfrac{1}{n} < \varepsilon$, and therefore
+        >
+        > $$\left\lvert \frac{1}{n} - 0 \right\rvert = \frac{1}{n} < \varepsilon. \qquad \blacksquare$$
+
+        That is a complete proof, and it answers every challenge at once. For $\varepsilon = 0.01$ it says: take $N = 101$. In Python the strategy is `math.floor(1 / eps) + 1`.
+
+        **Second example, and the right to be generous.**
+
+        > **Theorem.** $\dfrac{2n + 1}{n + 3} \to 2$.
+
+        *Scratch work.* First simplify the distance:
+
+        $$\left\lvert \frac{2n + 1}{n + 3} - 2 \right\rvert = \left\lvert \frac{2n + 1 - 2(n + 3)}{n + 3} \right\rvert = \left\lvert \frac{-5}{n + 3} \right\rvert = \frac{5}{n + 3}.$$
+
+        We want this below $\varepsilon$. We could solve $\tfrac{5}{n + 3} < \varepsilon$ exactly, giving $n > \tfrac{5}{\varepsilon} - 3$. But there is no prize for the smallest $N$. The definition asks for **some** $N$, and a larger one than necessary is just as good. So make life easy: $\tfrac{5}{n + 3} < \tfrac{5}{n}$, and $\tfrac{5}{n} < \varepsilon$ when $n > \tfrac{5}{\varepsilon}$.
+
+        > **Proof.** Let $\varepsilon > 0$. Choose a natural number $N > \dfrac{5}{\varepsilon}$. Let $n \ge N$. Then
+        >
+        > $$\left\lvert \frac{2n + 1}{n + 3} - 2 \right\rvert = \frac{5}{n + 3} < \frac{5}{n} \le \frac{5}{N} < \varepsilon. \qquad \blacksquare$$
+
+        The chain of inequalities in the last line is the typical look of an epsilon proof: the quantity is replaced step by step with something **larger and simpler**, until what is left is visibly below $\varepsilon$. Throwing away the 3 cost nothing that matters. Learning what you can afford to throw away is most of the skill, and it is the same skill as big-O: keep what governs the size and drop the rest.
+
+        The sceptic's first two objections are now answered. Nothing in the proof needed a term to equal 2. And the proof cannot be repeated for 3, because the distance from 3 never falls below 1.
+    - question:
+        id: order-epsilon-proof
+        type: order
+        system: s2
+        prompt: Put the lines of the proof that $a_n = \dfrac{2n + 1}{n + 3}$ converges to 2 in order.
+        steps:
+          - "Let $\\varepsilon > 0$."
+          - "Choose a natural number $N$ with $N > \\dfrac{5}{\\varepsilon}$."
+          - "Let $n \\ge N$."
+          - "Then $\\lvert a_n - 2 \\rvert = \\dfrac{5}{n + 3}$."
+          - "And $\\dfrac{5}{n + 3} < \\dfrac{5}{n} \\le \\dfrac{5}{N} < \\varepsilon$."
+          - "So $\\lvert a_n - 2 \\rvert < \\varepsilon$ for every $n \\ge N$, which proves that $a_n \\to 2$."
+        explanation: The order of the lines is the order of the quantifiers in the definition. The tolerance is given, then the index is chosen from it, then an arbitrary later term is taken, and only then is its distance from 2 estimated.
+        hints:
+          - The proof follows the order of the quantifiers in the definition.
+          - N must be chosen before n is introduced.
+          - The estimate comes after n has been introduced.
+    - text: |
+        **Proving that a sequence does not converge.** For this you need the negation of the definition, which you worked out in the lesson on quantifiers. $(a_n)$ does **not** converge to $L$ when
+
+        $$\exists \varepsilon > 0,\quad \forall N,\quad \exists n \ge N,\quad \lvert a_n - L \rvert \ge \varepsilon.$$
+
+        The roles are exchanged. Now **you** choose the tolerance, one tolerance, cleverly. The opponent names $N$, and you must find a term beyond it that lies outside the tolerance.
+
+        > **Theorem.** The sequence $a_n = (-1)^n$ does not converge to any real number.
+        >
+        > **Proof.** Suppose, for contradiction, that $a_n \to L$ for some real $L$. Apply the definition with $\varepsilon = 1$: there is an $N$ such that $\lvert a_n - L \rvert < 1$ for all $n \ge N$. Take an even $n \ge N$ and an odd $m \ge N$. Then $a_n = 1$ and $a_m = -1$, so $\lvert 1 - L \rvert < 1$ and $\lvert -1 - L \rvert < 1$. By the triangle inequality,
+        >
+        > $$2 = \lvert 1 - (-1) \rvert \le \lvert 1 - L \rvert + \lvert L - (-1) \rvert < 1 + 1 = 2.$$
+        >
+        > So $2 < 2$, a contradiction. $\blacksquare$
+
+        The idea is simple once seen. The terms 1 and $-1$ are 2 apart. No number $L$ can be within 1 of both. The triangle inequality, in its distance form, turns that picture into a line of algebra. Notice how the hypothesis "for every $\varepsilon$" was **used**: we were free to feed it whichever $\varepsilon$ we liked, and chose 1.
+
+        That is a point worth stating generally. A "for every $\varepsilon$" in what you are **proving** means $\varepsilon$ is handed to you and you must cope with whatever it is. A "for every $\varepsilon$" in what you are **given** is a machine you may run on any input of your choosing.
+
+        **A limit is unique.**
+
+        > **Theorem.** If $a_n \to L$ and $a_n \to M$, then $L = M$.
+        >
+        > **Proof.** Suppose, for contradiction, that $L \ne M$, and let $\varepsilon = \dfrac{\lvert L - M \rvert}{2}$, which is positive. Since $a_n \to L$, there is $N_1$ with $\lvert a_n - L \rvert < \varepsilon$ for all $n \ge N_1$. Since $a_n \to M$, there is $N_2$ with $\lvert a_n - M \rvert < \varepsilon$ for all $n \ge N_2$. Let $n = \max(N_1, N_2)$, so that both hold. Then
+        >
+        > $$\lvert L - M \rvert \le \lvert L - a_n \rvert + \lvert a_n - M \rvert < \varepsilon + \varepsilon = \lvert L - M \rvert,$$
+        >
+        > a contradiction. $\blacksquare$
+
+        Two devices appear here that you will use for ever. **Taking the maximum** of two indices gives a point beyond which two guarantees hold at once. And the triangle inequality is applied by going from $L$ to $M$ **by way of** $a_n$, a term that is close to both. This theorem is what entitles us to speak of "the" limit and to write $\lim a_n$.
+
+        **Limits add, and the epsilon-over-two device.**
+
+        > **Theorem.** If $a_n \to A$ and $b_n \to B$, then $a_n + b_n \to A + B$.
+
+        *Scratch work.* We must make $\lvert (a_n + b_n) - (A + B) \rvert$ small. Regroup it as $\lvert (a_n - A) + (b_n - B) \rvert$, which by the triangle inequality is at most $\lvert a_n - A \rvert + \lvert b_n - B \rvert$. Each of these two can be made as small as we please, since the hypotheses are machines that accept any tolerance. If each is below $\varepsilon$, the sum is only below $2\varepsilon$, which is not what was asked. So ask each machine for $\dfrac{\varepsilon}{2}$.
+
+        > **Proof.** Let $\varepsilon > 0$. Then $\dfrac{\varepsilon}{2} > 0$, so there are indices $N_1$ and $N_2$ such that $\lvert a_n - A \rvert < \dfrac{\varepsilon}{2}$ for all $n \ge N_1$ and $\lvert b_n - B \rvert < \dfrac{\varepsilon}{2}$ for all $n \ge N_2$. Let $N = \max(N_1, N_2)$ and let $n \ge N$. Then
+        >
+        > $$\lvert (a_n + b_n) - (A + B) \rvert \le \lvert a_n - A \rvert + \lvert b_n - B \rvert < \frac{\varepsilon}{2} + \frac{\varepsilon}{2} = \varepsilon. \qquad \blacksquare$$
+
+        Read it as a program. The theorem takes two strategies, one for each sequence, and builds a strategy for the sum: on being given $\varepsilon$, call each of the two with $\tfrac{\varepsilon}{2}$, and return the larger of their answers. You will write exactly that below. This proof is the template for a large part of analysis. An error is split into pieces by the triangle inequality, and the tolerance is shared out among the pieces as a **budget**: $\tfrac{\varepsilon}{2}$ each for two pieces, $\tfrac{\varepsilon}{3}$ each for three.
+
+        **Continuity: the same game for functions.** A function $f$ is **continuous at the point $a$** if
+
+        $$\forall \varepsilon > 0,\quad \exists \delta > 0,\quad \forall x,\quad \lvert x - a \rvert < \delta \;\Rightarrow\; \lvert f(x) - f(a) \rvert < \varepsilon.$$
+
+        The Greek letter $\delta$, delta, is a tolerance on the **input**, where $\varepsilon$ is a tolerance on the **output**. The game: the challenger says how accurate the output must be. You answer by saying how accurate the input must be to guarantee it. A function is continuous at $a$ when any accuracy of output, however demanding, can be bought by a sufficient accuracy of input. An engineer would call $\delta$ the tolerance to which a part must be machined so that the assembly performs within $\varepsilon$.
+
+        > **Theorem.** $f(x) = 3x + 1$ is continuous at every point $a$.
+        >
+        > **Proof.** Let $\varepsilon > 0$ and choose $\delta = \dfrac{\varepsilon}{3}$. Let $x$ satisfy $\lvert x - a \rvert < \delta$. Then
+        >
+        > $$\lvert f(x) - f(a) \rvert = \lvert 3x - 3a \rvert = 3\lvert x - a \rvert < 3\delta = \varepsilon. \qquad \blacksquare$$
+
+        The function multiplies errors by 3, so the input must be three times as accurate as the output.
+
+        A harder case shows a standard device. Take $f(x) = x^2$ at $a = 2$.
+
+        *Scratch work.* $\lvert x^2 - 4 \rvert = \lvert x - 2 \rvert \cdot \lvert x + 2 \rvert$. The first factor we control: it is below $\delta$. The second is a nuisance, because it depends on $x$. But if $x$ is close to 2, then $x + 2$ is close to 4. Make that precise by deciding, in advance, that $\delta$ will never be more than 1. Then $\lvert x - 2 \rvert < 1$ puts $x$ between 1 and 3, so $\lvert x + 2 \rvert < 5$. Then the product is below $5\delta$, and we want $5\delta \le \varepsilon$. Two requirements on $\delta$, so take the smaller.
+
+        > **Theorem.** $f(x) = x^2$ is continuous at 2.
+        >
+        > **Proof.** Let $\varepsilon > 0$ and choose $\delta = \min\!\left(1, \dfrac{\varepsilon}{5}\right)$. Let $\lvert x - 2 \rvert < \delta$. Since $\delta \le 1$, we have $1 < x < 3$, so $\lvert x + 2 \rvert < 5$. Since $\delta \le \dfrac{\varepsilon}{5}$,
+        >
+        > $$\lvert x^2 - 4 \rvert = \lvert x - 2 \rvert \cdot \lvert x + 2 \rvert < \delta \cdot 5 \le \varepsilon. \qquad \blacksquare$$
+
+        **Taking the minimum** of two deltas is to continuity what taking the maximum of two indices is to sequences: a way to meet two requirements at once.
+
+        **Reading such statements.** You will meet dozens of definitions of this kind: limits of functions, derivatives, uniform convergence, the convergence of an optimiser, the meaning of "with high probability". Read each one in the same way.
+
+        1. **List the quantifiers in order.** Who chooses what, and in what order?
+        2. **Work out what may depend on what.** Each "there exists" may depend on everything to its left, and on nothing to its right.
+        3. **Find the final inequality**, and say in words what it measures.
+        4. **Negate it**, to learn what a failure would look like.
+
+        Step 2 is where definitions that sound alike part company. In continuity at a point, $\delta$ comes after both $\varepsilon$ and the point $a$, so it may depend on both. If one $\delta$ must serve every point at once, the quantifiers are in another order and the property, called uniform continuity, is strictly stronger. It is the master key again.
+
+        You have in fact met a definition of this family already. In the lesson on complexity, $f(n)$ is $O(g(n))$ when
+
+        $$\exists C > 0,\quad \exists n_0,\quad \forall n \ge n_0,\quad f(n) \le C\,g(n).$$
+
+        "From some point onwards, $f$ is at most a constant multiple of $g$." To prove that $3n + 5$ is $O(n)$, produce the witnesses: $C = 4$ and $n_0 = 5$, because $3n + 5 \le 4n$ exactly when $n \ge 5$. Big-O statements are proved by exhibiting two numbers and checking an inequality, the same activity as choosing $N$.
+
+        **How these proofs go wrong.**
+
+        | Mistake | Why it is one |
+        | --- | --- |
+        | Letting $N$ depend on $n$ | $N$ is chosen before $n$. A rule such as "$N = n - 1$" answers a different, trivial statement. |
+        | Choosing $\varepsilon$ yourself in a proof of convergence | $\varepsilon$ is the challenger's. Proving it for $\varepsilon = 0.01$ proves it for one tolerance. |
+        | Showing that the distance decreases | $1 + \tfrac{1}{n}$ gets closer to 0 at every step and does not converge to 0. The distance must go below **every** tolerance. |
+        | Writing the scratch work as the proof | It runs from the conclusion backwards. Rewrite it forwards. |
+        | Forgetting that $\varepsilon > 0$ | With $\varepsilon = 0$ the demand could almost never be met. Dividing by $\varepsilon$ also needs it. |
+    - question:
+        id: flaw-n-depends
+        type: choice
+        system: s2
+        prompt: |
+          **Claim.** The sequence $a_n = n$ converges to 0. (Absurd: the terms grow without bound.)
+
+          **"Proof."** Let $\varepsilon > 0$. Let $n$ be given, and choose $N = n + 1$. Then there is no $n \ge N$ for which the inequality fails, since $n < N$. So the condition "for all $n \ge N$, $\lvert a_n \rvert < \varepsilon$" holds.
+
+          What is the error?
+        options:
+          - "$\\varepsilon$ should have been chosen as a particular number."
+          - "$N$ was chosen after $n$ and depends on it. In the definition $N$ comes before $n$, and one $N$ must then work for every $n \\ge N$."
+          - "The absolute value was computed wrongly."
+          - "There is no error. The sequence does converge to 0."
+        answer: 1
+        explanation: |
+          The definition's order is $\forall \varepsilon,\ \exists N,\ \forall n \ge N$. The "proof" plays the game in the order $\forall \varepsilon,\ \forall n,\ \exists N$, where the responder sees $n$ before answering and simply steps beyond it. That swapped statement is true of every sequence whatever, and says nothing. It is the same error as confusing "there is a key for every lock" with "every lock has a key". With $N$ fixed first, the challenger picks $n = \max(N, 1)$ and a tolerance of 1, and the claim fails.
+        hints:
+          - In what order do the quantifiers of the definition come?
+          - When was N chosen in this argument?
+          - May the responder look at n before naming N?
+  formal:
+    - text: |
+        **Convergence.** $(a_n)$ converges to $L$, written $a_n \to L$, if $\ \forall \varepsilon > 0,\ \exists N \in \mathbb{N},\ \forall n \ge N,\ \lvert a_n - L \rvert < \varepsilon$.
+
+        **Non-convergence.** $(a_n)$ does not converge to $L$ if $\ \exists \varepsilon > 0,\ \forall N \in \mathbb{N},\ \exists n \ge N,\ \lvert a_n - L \rvert \ge \varepsilon$.
+
+        **Continuity.** $f$ is continuous at $a$ if $\ \forall \varepsilon > 0,\ \exists \delta > 0,\ \forall x,\ \lvert x - a \rvert < \delta \Rightarrow \lvert f(x) - f(a) \rvert < \varepsilon$.
+
+        **Big-O.** $f(n)$ is $O(g(n))$ if $\ \exists C > 0,\ \exists n_0,\ \forall n \ge n_0,\ f(n) \le C\,g(n)$.
+
+        **Archimedean property.** For every real $x$ there is a natural number $N > x$.
+
+        **Template for $a_n \to L$.** Let $\varepsilon > 0$. Choose $N$ as an expression in $\varepsilon$ alone. Let $n \ge N$. Show $\lvert a_n - L \rvert < \varepsilon$ by a chain of inequalities.
+
+        | Result | Choice that proves it |
+        | --- | --- |
+        | $\dfrac{1}{n} \to 0$ | $N > \dfrac{1}{\varepsilon}$ |
+        | $\dfrac{2n + 1}{n + 3} \to 2$ | $N > \dfrac{5}{\varepsilon}$ |
+        | $(-1)^n$ has no limit | $\varepsilon = 1$, and the triangle inequality |
+        | a limit is unique | $\varepsilon = \dfrac{\lvert L - M \rvert}{2}$, $\ n = \max(N_1, N_2)$ |
+        | $a_n \to A$, $b_n \to B$ give $a_n + b_n \to A + B$ | $\dfrac{\varepsilon}{2}$ for each, $\ N = \max(N_1, N_2)$ |
+        | $3x + 1$ is continuous at every $a$ | $\delta = \dfrac{\varepsilon}{3}$ |
+        | $x^2$ is continuous at 2 | $\delta = \min\!\left(1, \dfrac{\varepsilon}{5}\right)$ |
+        | $3n + 5$ is $O(n)$ | $C = 4$, $n_0 = 5$ |
+  drill:
+    - text: Seconds each. Keep asking who chooses what, and in which order.
+    - question:
+        id: drill-who-chooses
+        type: choice
+        system: s1
+        prompt: |
+          In a proof that a sequence **converges**, who chooses $\varepsilon$?
+        options:
+          - "You do, and you pick a convenient small value."
+          - "It is given to you, arbitrary and positive, and you must cope with whatever it is."
+          - "It is always 0.01."
+          - "It is chosen after N."
+        answer: 1
+        explanation: The definition begins "for every epsilon", so the proof begins "let epsilon be positive", with nothing more assumed about it.
+        hints:
+          - What is the first quantifier of the definition?
+          - How is a "for every" statement proved?
+    - question:
+        id: drill-first-line
+        type: choice
+        system: s1
+        prompt: |
+          What is the first line of a proof from the definition that $a_n \to L$?
+        options: ["Let $n \\ge N$.", "Choose $N = 100$.", "Let $\\varepsilon > 0$.", "Suppose $a_n = L$."]
+        answer: 2
+        explanation: The proof follows the order of the quantifiers, and the tolerance comes first.
+        hints:
+          - Which quantifier comes first?
+          - Take an arbitrary one.
+    - question:
+        id: drill-n-for-reciprocal
+        type: numeric
+        system: s1
+        prompt: |
+          For $a_n = \dfrac{1}{n}$ and $\varepsilon = 0.01$, what is the **smallest** $N$ such that $\dfrac{1}{n} < 0.01$ for all $n \ge N$?
+        answer: "101"
+        explanation: |
+          $\tfrac{1}{100}$ equals 0.01 and is not below it. The next index is the first that works.
+        hints:
+          - For which n is 1/n exactly equal to the tolerance?
+          - The inequality is strict.
+    - question:
+        id: drill-distance
+        type: numeric
+        system: s1
+        prompt: |
+          $a_n = 3 + \dfrac{2}{n}$ and $L = 3$. What is $\lvert a_n - L \rvert$ when $n = 10$?
+        answer: "0.2"
+        explanation: The 3s cancel and leave 2 over 10.
+        hints:
+          - Subtract the limit from the term.
+          - What is 2 divided by 10?
+    - question:
+        id: drill-depends
+        type: choice
+        system: s1
+        prompt: |
+          In the definition of convergence, what may $N$ depend on?
+        options: ["On $\\varepsilon$ only", "On $n$ only", "On both $\\varepsilon$ and $n$", "On nothing"]
+        answer: 0
+        explanation: $N$ comes after $\varepsilon$ and before $n$ in the order of quantifiers. It may depend on what is to its left.
+        hints:
+          - Where does N stand among the quantifiers?
+          - It may depend only on what was chosen before it.
+    - question:
+        id: drill-delta-linear
+        type: numeric
+        system: s1
+        prompt: |
+          For $f(x) = 3x + 1$, the proof takes $\delta = \dfrac{\varepsilon}{3}$. What is $\delta$ when $\varepsilon = 0.6$?
+        answer: "0.2"
+        explanation: The function triples errors, so the input tolerance is a third of the output tolerance.
+        hints:
+          - Divide the tolerance by 3.
+          - A third of 0.6.
+    - question:
+        id: drill-half
+        type: choice
+        system: s1
+        prompt: |
+          In proving that $a_n + b_n \to A + B$, why is each hypothesis used with $\dfrac{\varepsilon}{2}$?
+        options:
+          - "Because the limits are halved."
+          - "Because the two errors add, by the triangle inequality, and two halves make $\\varepsilon$."
+          - "Because $\\varepsilon$ must be less than 1."
+          - "It is a convention with no reason."
+        answer: 1
+        explanation: The total error is at most the sum of the two errors. Giving each half the budget keeps the total within the tolerance.
+        hints:
+          - How many error terms does the triangle inequality produce?
+          - What must they add up to?
+    - question:
+        id: drill-max
+        type: choice
+        system: s1
+        prompt: |
+          One guarantee holds for all $n \ge 40$ and another for all $n \ge 75$. From which index do **both** hold?
+        options: ["40", "75", "115", "35"]
+        answer: 1
+        explanation: The larger of the two indices. Beyond it, n is past both.
+        hints:
+          - n must be at least 40 and at least 75.
+          - Take the maximum.
+    - question:
+        id: drill-limit
+        type: numeric
+        system: s1
+        prompt: |
+          What is the limit of $a_n = \dfrac{6n + 1}{2n + 5}$?
+        answer: "3"
+        explanation: For large $n$ the terms $+1$ and $+5$ are negligible, and the ratio of the leading coefficients remains.
+        hints:
+          - Divide the top and the bottom by n.
+          - What happens to 1/n and 5/n?
+    - question:
+        id: drill-closer-not-enough
+        type: choice
+        system: s1
+        prompt: |
+          The terms of $a_n = 1 + \dfrac{1}{n}$ get closer to 0 at every step. Does the sequence converge to 0?
+        options:
+          - "Yes, since the distance keeps decreasing."
+          - "No. Every term is more than 1 away from 0, so the tolerance 1 is never met."
+          - "Yes, eventually."
+          - "It cannot be decided."
+        answer: 1
+        explanation: Convergence needs the distance to fall below every tolerance. A distance that decreases towards 1 never falls below 1. The sequence converges to 1.
+        hints:
+          - How far from 0 is each term?
+          - Can the challenger name a tolerance that is never met?
+    - question:
+        id: drill-big-o
+        type: numeric
+        system: s1
+        prompt: |
+          $3n + 5 \le 4n$ holds from which smallest $n$ onwards?
+        answer: "5"
+        explanation: |
+          $3n + 5 \le 4n$ exactly when $5 \le n$. So $C = 4$ and $n_0 = 5$ are witnesses that $3n + 5$ is $O(n)$.
+        hints:
+          - Subtract 3n from both sides.
+          - What is left on the right?
+    - question:
+        id: predict-response
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          import math
+
+          def N(eps):
+              return math.floor(1 / eps) + 1
+
+          print(N(0.1), N(0.01), N(0.3))
+        output: "11 101 4"
+        explanation: This is the strategy for 1/n tending to 0. For each tolerance it returns the first natural number greater than 1 over the tolerance. A smaller tolerance needs a larger index.
+        hints:
+          - 1 / 0.1 is 10. What does the function return?
+          - 1 / 0.3 is a little over 3.
+    - question:
+        id: predict-outside
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          terms = [1 + (-1) ** n / n for n in range(1, 9)]
+          print([n for n in range(1, 9) if abs(terms[n - 1] - 1) >= 0.25])
+        output: "[1, 2, 3, 4]"
+        explanation: The distance of the nth term from 1 is 1/n. It is at least 0.25 for n up to 4, and below 0.25 from n = 5 onwards. So for the tolerance 0.25 the index N = 5 works.
+        hints:
+          - How far is the nth term from 1?
+          - For which n is 1/n at least a quarter?
+  work:
+    - text: Slower now. Do the scratch work backwards, and then check that your choice works forwards.
+    - question:
+        id: work-find-n
+        type: numeric
+        system: s2
+        prompt: |
+          $a_n = \dfrac{n}{n + 1}$ converges to 1. For $\varepsilon = 0.001$, what is the **smallest** $N$ such that $\lvert a_n - 1 \rvert < 0.001$ for all $n \ge N$?
+        answer: "1000"
+        explanation: |
+          $\lvert a_n - 1 \rvert = \left\lvert \dfrac{n - (n + 1)}{n + 1} \right\rvert = \dfrac{1}{n + 1}$. This is below $\tfrac{1}{1000}$ exactly when $n + 1 > 1000$, that is, $n \ge 1000$. At $n = 999$ the distance equals 0.001 and is not below it.
+        hints:
+          - Simplify the distance between the term and 1 to a single fraction.
+          - When is 1/(n + 1) less than one thousandth?
+          - Check the boundary case, where the two are equal.
+    - question:
+        id: work-choose-delta
+        type: choice
+        system: s2
+        prompt: |
+          To prove that $f(x) = x^2$ is continuous at $a = 3$, you write $\lvert x^2 - 9 \rvert = \lvert x - 3 \rvert \cdot \lvert x + 3 \rvert$. If you first require $\delta \le 1$, then $2 < x < 4$ and $\lvert x + 3 \rvert < 7$. Which choice of $\delta$ completes the proof?
+        options:
+          - "$\\delta = \\dfrac{\\varepsilon}{6}$"
+          - "$\\delta = \\min\\!\\left(1, \\dfrac{\\varepsilon}{7}\\right)$"
+          - "$\\delta = \\dfrac{\\varepsilon}{7}$"
+          - "$\\delta = \\max\\!\\left(1, \\dfrac{\\varepsilon}{7}\\right)$"
+        answer: 1
+        explanation: |
+          Two requirements must hold together: $\delta \le 1$, so that the bound $\lvert x + 3 \rvert < 7$ is valid, and $\delta \le \tfrac{\varepsilon}{7}$, so that $\lvert x - 3 \rvert \cdot 7 < \varepsilon$. The minimum satisfies both. The third option forgets the first requirement: for $\varepsilon = 700$ it gives $\delta = 100$, and $x = 50$ is then allowed, with $\lvert x + 3 \rvert$ far above 7. The first treats $\lvert x + 3 \rvert$ as exactly 6, which holds only at $x = 3$.
+        hints:
+          - How many conditions must delta satisfy?
+          - To satisfy two upper limits at once, take which of the two?
+          - Try a very large epsilon in the option without the 1.
+    - question:
+        id: write-response
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A proof of convergence is a strategy, and a strategy is a function. For $a_n = \dfrac{2n + 1}{n + 3}$ and $L = 2$, write `response(eps)`. Given any tolerance `eps > 0`, it returns a whole number `N` of at least 1 such that $\lvert a_n - 2 \rvert <$ `eps` for **every** $n \ge N$.
+
+          Your `N` need not be the smallest that works. It must work for every tolerance, including very large and very small ones. Use `math.floor`.
+        starter: |
+          import math
+
+          def response(eps):
+              # Replace the next line with your own.
+              return 1
+
+          print(response(0.01), response(1e-6))
+        solution: |
+          import math
+
+          def response(eps):
+              return math.floor(5 / eps) + 1
+
+          print(response(0.01), response(1e-6))
+        tests: |
+          for _eps in [10, 2, 1, 0.5, 0.1, 0.01, 0.003, 1e-6, 1e-9, 1e-12]:
+              _N = response(_eps)
+              assert type(_N) is int, "N must be a whole number, an int. For eps = " + str(_eps) + " you returned " + repr(_N)
+              assert _N >= 1, "N must be at least 1, since the sequence starts at n = 1"
+              for _n in [_N, _N + 1, _N + 2, _N + 10, 2 * _N, 1000 * _N]:
+                  assert 5 < _eps * (_n + 3), "For eps = " + str(_eps) + " you answered N = " + str(_N) + ", but the term with n = " + str(_n) + " is at distance 5/(n + 3) from 2, which is not below eps"
+          assert "print" in source, "Keep the line that prints two answers"
+        wrong:
+          - "import math\n\ndef response(eps):\n    return math.floor(1 / eps) + 1\n\nprint(response(0.01), response(1e-6))\n"
+          - "import math\n\ndef response(eps):\n    return math.floor(5 / eps) - 3\n\nprint(response(0.01), response(1e-6))\n"
+          - "import math\n\ndef response(eps):\n    return 5 / eps + 1\n\nprint(response(0.01), response(1e-6))\n"
+          - "import math\n\ndef response(eps):\n    return 1000000\n\nprint(response(0.01), response(1e-6))\n"
+        explanation: |
+          The distance is $\dfrac{5}{n + 3}$, and $n \ge \lfloor 5/\varepsilon \rfloor + 1$ gives $n > \dfrac{5}{\varepsilon}$, so $\dfrac{5}{n + 3} < \dfrac{5}{n} < \varepsilon$. Any larger answer would be accepted too. What cannot be accepted is a fixed number, however large: a tolerance small enough defeats it, and "for every $\varepsilon$" means that the challenger may be as demanding as he likes. The tests can only try ten tolerances and a few terms beyond each $N$. The three-line proof in the lesson is what covers all the rest, and it is why this function is correct.
+        hints:
+          - Work out the distance between the term and 2 as a single fraction.
+          - That fraction is less than 5/n. For which n is 5/n below eps?
+          - The first whole number greater than 5/eps is floor(5/eps) + 1.
+    - question:
+        id: write-delta
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          For $f(x) = x^2$ at the point 2, write `delta(eps)`. Given any `eps > 0`, it returns a positive number $\delta$ such that every $x$ with $\lvert x - 2 \rvert < \delta$ has $\lvert x^2 - 4 \rvert <$ `eps`. Use the choice from the lesson, which satisfies two requirements at once.
+
+          The tests try points across the whole interval from $2 - \delta$ to $2 + \delta$, for small tolerances and for large ones. They also reject a $\delta$ that is needlessly tiny: it must be at least `eps / 10` whenever `eps` is at most 5.
+        starter: |
+          def delta(eps):
+              # Replace the next line with your own.
+              return eps
+
+          print(delta(0.5), delta(100))
+        solution: |
+          def delta(eps):
+              return min(1, eps / 5)
+
+          print(delta(0.5), delta(100))
+        tests: |
+          for _eps in [100, 20, 5, 2, 1, 0.5, 0.01, 1e-6]:
+              _d = delta(_eps)
+              assert _d > 0, "delta must be positive. For eps = " + str(_eps) + " you returned " + repr(_d)
+              if _eps <= 5:
+                  assert _d >= _eps / 10, "For eps = " + str(_eps) + " your delta is needlessly small. The lesson's choice is at least eps / 5 here."
+              for _k in range(1, 2000):
+                  _x = 2 - _d + 2 * _d * _k / 2000
+                  assert abs(_x * _x - 4) < _eps, "For eps = " + str(_eps) + " you returned delta = " + str(_d) + ". But x = " + str(_x) + " is within delta of 2, and its square is " + str(_x * _x) + ", which is not within eps of 4."
+          assert output.split() == ["0.1", "1"], "The program should print 0.1 and then 1"
+        wrong:
+          - "def delta(eps):\n    return eps / 4\n\nprint(0.1, 1)\n"
+          - "def delta(eps):\n    return eps / 5\n\nprint(0.1, 1)\n"
+          - "def delta(eps):\n    return min(1, eps)\n\nprint(0.1, 1)\n"
+          - "def delta(eps):\n    return 1e-9\n\nprint(0.1, 1)\n"
+        explanation: |
+          $\lvert x^2 - 4 \rvert = \lvert x - 2 \rvert \cdot \lvert x + 2 \rvert$. Keeping $\delta \le 1$ confines $x$ to the interval from 1 to 3, where $\lvert x + 2 \rvert < 5$, and keeping $\delta \le \tfrac{\varepsilon}{5}$ then makes the product less than $\varepsilon$. `min` enforces both. Dividing by 4, the value of $x + 2$ at the point itself, is the tempting mistake, and it fails on the right-hand side of 2, where $x + 2$ is more than 4. Dropping the `min` fails for large tolerances, where $x$ is allowed to wander far from 2. In numerical work this is the question of **conditioning**: how much an error in the input is magnified in the output. Near 2, squaring magnifies errors about fourfold.
+        hints:
+          - Factor x squared minus 4.
+          - If delta is at most 1, how large can the size of x + 2 be?
+          - Two upper limits on delta, 1 and eps/5. Take the smaller.
+    - question:
+        id: fix-sum-response
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          The theorem that limits add is a recipe for combining strategies. `sum_response(response_a, response_b, eps)` is given a strategy for $a_n \to A$, a strategy for $b_n \to B$, and a tolerance. It should return an `N` beyond which $\lvert (a_n + b_n) - (A + B) \rvert <$ `eps`, built exactly as in the proof.
+
+          The version below makes **two** mistakes. With the strategies for $\tfrac{1}{n} \to 0$ and $\tfrac{5}{n} \to 0$ and the tolerance 0.1 it returns 11, and the 11th term of the sum is $\tfrac{6}{11}$, which is nowhere near within 0.1 of 0. Fix both.
+        starter: |
+          import math
+
+          def sum_response(response_a, response_b, eps):
+              return min(response_a(eps), response_b(eps))
+
+          print(sum_response(lambda e: math.floor(1 / e) + 1, lambda e: math.floor(5 / e) + 1, 0.1))
+        solution: |
+          import math
+
+          def sum_response(response_a, response_b, eps):
+              return max(response_a(eps / 2), response_b(eps / 2))
+
+          print(sum_response(lambda e: math.floor(1 / e) + 1, lambda e: math.floor(5 / e) + 1, 0.1))
+        tests: |
+          import math as _m
+          _ra = lambda e: _m.floor(1 / e) + 1
+          _rb = lambda e: _m.floor(5 / e) + 1
+          _rc = lambda e: _m.floor(1 / _m.sqrt(e)) + 1
+          for _eps in [1, 0.3, 0.1, 0.01, 1e-4]:
+              _N = sum_response(_ra, _rb, _eps)
+              for _n in [_N, _N + 1, _N + 7, 3 * _N]:
+                  assert 1 / _n + 5 / _n < _eps, "For 1/n + 5/n and eps = " + str(_eps) + " you returned N = " + str(_N) + ", but the term with n = " + str(_n) + " is " + str(6 / _n) + ", which is not below eps"
+              _N = sum_response(_rb, _ra, _eps)
+              assert 6 / _N < _eps, "The answer should not depend on the order in which the two strategies are given"
+              _N = sum_response(_rc, _rb, _eps)
+              for _n in [_N, _N + 1, 2 * _N]:
+                  assert 1 / (_n * _n) + 5 / _n < _eps, "For 1/n^2 + 5/n and eps = " + str(_eps) + " the term with n = " + str(_n) + " is not below eps"
+              _N = sum_response(_rb, _rb, _eps)
+              assert 10 / _N < _eps, "For 5/n + 5/n and eps = " + str(_eps) + " you returned N = " + str(_N) + ", but that term is " + str(10 / _N)
+          assert output.strip() == "101", "With tolerance 0.1 the two strategies are asked for 0.05 each, giving 21 and 101, and the larger is 101"
+        wrong:
+          - "import math\n\ndef sum_response(response_a, response_b, eps):\n    return max(response_a(eps), response_b(eps))\n\nprint(101)\n"
+          - "import math\n\ndef sum_response(response_a, response_b, eps):\n    return min(response_a(eps / 2), response_b(eps / 2))\n\nprint(101)\n"
+          - "import math\n\ndef sum_response(response_a, response_b, eps):\n    return max(response_a(eps / 2), response_b(eps))\n\nprint(101)\n"
+          - "import math\n\ndef sum_response(response_a, response_b, eps):\n    return max(response_a(eps * 2), response_b(eps * 2))\n\nprint(101)\n"
+        explanation: |
+          The proof has two devices and the starter got both wrong. The errors of the two sequences **add**, so each strategy must be asked for half the tolerance: with `eps` each, the sum is only guaranteed within twice the tolerance. And both guarantees must hold together, which happens beyond the **larger** index, the `max`: beyond the smaller one only one of them is in force. Each line of the proof became one piece of the code: "apply the hypothesis with $\varepsilon/2$" is the argument `eps / 2`, and "let $N = \max(N_1, N_2)$" is the `max`. A theorem of this kind is a higher-order function, taking strategies and returning a strategy.
+        hints:
+          - By the triangle inequality the two errors add. If each is below eps, what is the sum below?
+          - What tolerance should each strategy be asked for?
+          - From which index do both guarantees hold, the smaller or the larger?
+    - question:
+        id: order-sum-proof
+        type: order
+        system: s2
+        prompt: Put the lines of the proof that $a_n \to A$ and $b_n \to B$ give $a_n + b_n \to A + B$ in order.
+        steps:
+          - "Let $\\varepsilon > 0$."
+          - "Since $a_n \\to A$ and $b_n \\to B$, there are $N_1$ and $N_2$ with $\\lvert a_n - A \\rvert < \\dfrac{\\varepsilon}{2}$ for all $n \\ge N_1$ and $\\lvert b_n - B \\rvert < \\dfrac{\\varepsilon}{2}$ for all $n \\ge N_2$."
+          - "Let $N = \\max(N_1, N_2)$, and let $n \\ge N$."
+          - "By the triangle inequality, $\\lvert (a_n + b_n) - (A + B) \\rvert \\le \\lvert a_n - A \\rvert + \\lvert b_n - B \\rvert$."
+          - "Since $n \\ge N_1$ and $n \\ge N_2$, the right side is less than $\\dfrac{\\varepsilon}{2} + \\dfrac{\\varepsilon}{2} = \\varepsilon$."
+          - "Hence $a_n + b_n \\to A + B$."
+        explanation: The tolerance is given first. The hypotheses are then used, with half the tolerance each, to obtain two indices. Their maximum is the index for the sum. For a term beyond it, the triangle inequality splits the error in two, and each half is within its share of the budget.
+        hints:
+          - The tolerance is given before the hypotheses can be applied to half of it.
+          - N is defined from the two indices, so they must exist first.
+          - The triangle inequality is applied before the two halves are added.
+    - question:
+        id: work-diverges
+        type: choice
+        system: s2
+        prompt: |
+          You want to prove from the definition that $a_n = n$ does **not** converge to 7. The negation reads $\exists \varepsilon > 0,\ \forall N,\ \exists n \ge N,\ \lvert a_n - 7 \rvert \ge \varepsilon$. Which is a correct proof?
+        options:
+          - "Take $\\varepsilon = 1$. Given any $N$, let $n = \\max(N, 8)$. Then $n \\ge N$ and $\\lvert n - 7 \\rvert \\ge 1$."
+          - "Let $\\varepsilon > 0$ be arbitrary. Then for $n = 7$ the distance is 0, which is less than $\\varepsilon$."
+          - "Take $N = 8$. Then every later term is at least 1 away from 7."
+          - "Take $\\varepsilon = 1$ and $n = 7$. Then the distance is 0."
+        answer: 0
+        explanation: |
+          The negation begins with $\exists \varepsilon$, so you choose one tolerance. Then $N$ is the opponent's, so it must be arbitrary, and you answer with an $n$ that is at least $N$ and whose term is outside the tolerance. $n = \max(N, 8)$ does both. The third option fixes $N$, which is not yours to fix in this game, though it contains the right idea. The second proves something about one term, which is not what convergence or its negation is about.
+        hints:
+          - In the negation, which quantities do you choose and which are given?
+          - Your n must be at least N, whatever N is.
+          - The maximum of N and a suitable number serves both purposes.
+    - question:
+        id: work-stopping-rule
+        type: choice
+        system: s2
+        prompt: |
+          A training loop stops when the loss changes by less than $10^{-6}$ between two consecutive steps, and the engineer reports "the loss has converged". In the language of this lesson, what has actually been observed?
+        options:
+          - "That for every $\\varepsilon > 0$ there is an $N$ beyond which the loss is within $\\varepsilon$ of its limit."
+          - "That for one tolerance and one index, two consecutive terms were close to each other. That is neither \"for every tolerance\" nor \"for all later terms\", and it is not even about the distance to a limit."
+          - "That the loss has reached its minimum."
+          - "That the sequence of losses is not convergent."
+        answer: 1
+        explanation: |
+          Compare with the definition, quantifier by quantifier. The definition says $\forall \varepsilon$, and the rule tests one. It says $\forall n \ge N$, and the rule tests one $n$. It measures $\lvert a_n - L \rvert$, and the rule measures $\lvert a_{n+1} - a_n \rvert$. The harmonic sums satisfy this rule for any tolerance, since their consecutive differences shrink to nothing, and they do not converge at all. The stopping rule is a practical necessity, because nobody can run for ever. But "converged" in a training log means "stopped changing much", which is evidence of convergence and not the thing itself.
+        hints:
+          - How many tolerances does the rule test? How many does the definition require?
+          - Which distance does the rule measure, and which does the definition?
+          - Think of the partial sums of the harmonic series.
+  connections:
+    - text: |
+        This lesson closes the cluster on logic and proof, and it closes a circle that opened at the end of the cluster before. There, the definition of convergence appeared as something no program could check, built from the phrases "for every" and "there is". Since then you have learned what statements are and how they combine, what those two phrases mean and how to negate them, and four ways of proving: directly, by contrapositive, by contradiction and by induction. You have learned to split into cases and to hunt for counterexamples, to say when things are the same, and to tell one infinity from another. In this last lesson all of it was used at once. An epsilon proof is a direct proof of a statement with three quantifiers. Its negation is formed by the rules of the second lesson. Its estimates use the triangle inequality, which was proved by cases. Its non-convergence proofs go by contradiction.
+
+        Everything in calculus and analysis is written in this language. The derivative is a limit, defined with $\varepsilon$ and $\delta$. So is the integral. The statement that gradient descent converges, that a series for $e^x$ may be cut off after ten terms, that a neural network can approximate any continuous function to within $\varepsilon$, are all sentences of the form "for every tolerance there is a point from which". When you read such a theorem in a paper, you now know how to take it apart: list the quantifiers, see what depends on what, find the inequality, form the negation. You will meet these ideas in full when the course reaches real analysis, beginning with [[m11.sequences-and-epsilon-n-limits]] and [[m11.epsilon-delta-continuity-and-uniform-continuity]].
+
+        The habit of proof matters just as much where there are no epsilons. Linear algebra, the mathematics that machine learning is written in, is built from definitions and theorems about vectors, and when it is done properly it starts from a short list of axioms and proves everything else, as in [[m6.fields-and-the-vector-space-axioms]]. The methods are the ones you now have.
+
+        And for the engineering, the epsilon game is the daily business under other names. A tolerance in a test, `abs(result - expected) < 1e-9`, is an $\varepsilon$. The step size needed to reach a given accuracy is an $N$. The precision an input needs for a given precision of output is a $\delta$, and its ratio to $\varepsilon$ is the conditioning of the problem. A convergence guarantee for an optimiser is a function from the accuracy you want to the number of steps you must pay for, and you have written such functions today. What you have gained in this cluster is the ability to tell a guarantee from a hope, and a proof from a plot.

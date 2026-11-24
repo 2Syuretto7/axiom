@@ -1,0 +1,667 @@
+concept: m3.equivalence-relations-and-partitions
+minutes: 105
+claim: You can say what a relation is, test it for reflexivity, symmetry and transitivity, prove that a given relation is an equivalence relation, describe its classes, explain why equivalence relations and partitions are the same thing, compute with remainders, and say what it means for an operation on classes to be well defined.
+recalls: [m3.cases-and-counterexamples]
+uses: [m3.propositions-and-connectives, m3.quantifiers-and-their-negation, m3.direct-proof, m3.contrapositive-and-contradiction, m2.sets, m2.functions-as-machines, m2.injective-surjective-and-bijective-maps, m0.fractions, e0.strings, e0.functions, e0.lists-and-tuples, e0.dictionaries-and-sets, e1.comprehensions-and-iterators]
+leads: [m3.countable-and-uncountable-sets, m3.reading-and-writing-epsilon-style-arguments]
+starter: |
+  # Scratch space. Three numbers, each "close" to the next. Is the first close to the last?
+  def close(x, y):
+      return abs(x - y) <= 1
+
+  print(close(1.0, 1.8), close(1.8, 2.6), close(1.0, 2.6))
+parts:
+  recall:
+    - text: |
+        [[m3.cases-and-counterexamples]] ended by sorting the integers into classes by their remainder, so that one case could stand for infinitely many numbers, and it asked what kind of "sameness" cuts a set cleanly into classes. Three quick pulls first.
+    - question:
+        id: recall-cases
+        type: numeric
+        system: s1
+        concepts: [m3.cases-and-counterexamples]
+        prompt: |
+          Division with remainder by 4 sorts the integers into how many classes?
+        answer: "4"
+        explanation: One class for each of the remainders 0, 1, 2 and 3.
+        hints:
+          - What are the possible remainders?
+          - Count them from 0.
+    - question:
+        id: recall-remainder
+        type: numeric
+        system: s1
+        concepts: [m3.cases-and-counterexamples]
+        prompt: |
+          What remainder does $-5$ leave on division by 3? The remainder is never negative.
+        answer: "1"
+        explanation: |
+          $-5 = 3 \times (-2) + 1$.
+        hints:
+          - The quotient is −2.
+          - What must be added to −6 to reach −5?
+    - question:
+        id: recall-counterexample
+        type: choice
+        system: s1
+        concepts: [m3.cases-and-counterexamples]
+        prompt: |
+          What does it take to show that "for all $x$, $y$, $z$: if $P(x, y)$ and $P(y, z)$ then $P(x, z)$" is false?
+        options:
+          - "Three values with $P(x, y)$ true, $P(y, z)$ true and $P(x, z)$ false"
+          - "Three values with $P(x, z)$ false"
+          - "A proof that $P(x, z)$ is false for all values"
+          - "Three values with $P(x, y)$ false"
+        answer: 0
+        explanation: A counterexample satisfies the whole hypothesis and fails the conclusion. You will hunt for exactly such triples in this lesson.
+        hints:
+          - A counterexample meets the hypothesis.
+          - And it fails the conclusion.
+  puzzle:
+    - text: |
+        When are two things the same?
+
+        $\tfrac{1}{2}$ and $\tfrac{2}{4}$ are written with different numerals, and everybody agrees they are the same number. Three o'clock and fifteen o'clock are the same position of the hands. In Python, `{1, 2} == {2, 1}` is `True`, though the two were typed differently, and `"Delhi".lower() == "DELHI".lower()` treats two different strings as the same city. In each case, objects that are plainly different are being **regarded as equal**, because they agree in the respect that matters.
+
+        Much of mathematics, and much of data cleaning, consists of deciding what to regard as the same. So here is a harmless-looking proposal from an engineer whose sensor readings are noisy:
+
+        > Two readings are "the same" if they differ by at most 1.
+
+        The plan is to merge readings that are the same, and so reduce a long list of measurements to a short list of distinct values. Try it on $1.0,\ 1.8,\ 2.6$.
+
+        - $1.0$ and $1.8$ differ by $0.8$. The same. Merge them.
+        - $1.8$ and $2.6$ differ by $0.8$. The same. Merge them.
+        - So all three are one value. But $1.0$ and $2.6$ differ by $1.6$. **Not** the same.
+
+        The starter prints exactly this: `True True False`. The merged group contains two readings that are not "the same" as each other. And it gets worse. Carry on with $3.4, 4.2, 5.0, \dots$ and the chain swallows every reading there is, so that "the same" has come to mean nothing. Group them in a different order and you get different groups.
+
+        Compare the remainders from the last lesson. Sorting integers by "leaves the same remainder on division by 3" never misbehaved. Every number went into exactly one class, any two numbers in a class were alike, and the order of sorting made no difference.
+
+        **What does "leaves the same remainder" have that "differs by at most 1" lacks?** What exactly must a notion of sameness satisfy in order to divide a set cleanly into groups?
+  intuition:
+    - text: |
+        Think about what you take for granted whenever you sort things into piles: socks by colour, files by type, people by the month of their birth.
+
+        First, **everything goes in the pile of things like itself**. A sock is the same colour as itself. That sounds too obvious to say, and it is one of the three things that must be said.
+
+        Second, **likeness is mutual**. If this sock matches that one, then that one matches this one. You never have to ask in which order to compare.
+
+        Third, **likeness chains**. If sock A matches sock B, and B matches C, then A matches C. This is what lets you sort without comparing every pair. To place a new sock, you compare it with **one** sock from each pile, any one, and that settles its relation to the whole pile.
+
+        The third is what the engineer's rule lacked. $1.0$ was like $1.8$, and $1.8$ like $2.6$, and the chain did not close. So piles could not be formed: $1.8$ belonged with $1.0$ and with $2.6$, which did not belong with each other.
+
+        The figure shows the numbers from 0 to 17 sorted by remainder, now for the modulus 4. Pick a number and look at its column, its **class**. Then pick another number from the same column. The class shown is the same one. Whichever member you start from, you get the same class.
+    - figure: remainder-classes
+      props: { modulus: 4, number: 6 }
+    - text: |
+        That last observation matters more than it looks. A class has no boss. The column containing 6 is the class of 6, and equally the class of 2, of 10 and of 14. Any member will do to **name** it, and the name usually chosen is the smallest, the remainder itself. This is the same convenience as writing $\tfrac{1}{2}$ for the number that is also $\tfrac{2}{4}$ and $\tfrac{50}{100}$.
+
+        So the picture to hold is this. A good notion of sameness and a division of a set into non-overlapping piles are **one thing seen from two sides**. Give me the notion, and I form the piles. Give me the piles, and I define "the same" as "in the same pile". The three conditions above are exactly what makes the passage from the first to the second work. The rest of the lesson makes them precise and proves that.
+  derivation:
+    - text: |
+        **Relations.** A **relation** on a set $A$ is a predicate with two variables, both ranging over $A$: for each ordered pair $(a, b)$ it is true or false. We write $a \sim b$ when it is true, and say "$a$ is related to $b$". In Python, a relation is a function of two arguments that returns a Boolean, like `close` in the starter.
+
+        You know many relations already. On numbers there are $=$, $<$, $\le$ and "divides". On sets there is $\subseteq$. On people, "is a parent of" and "has the same birthday as". A relation is **not** a function from $A$ to $A$: an element may be related to many others, or to none.
+
+        **Three properties.** A relation $\sim$ on $A$ is
+
+        - **reflexive** if $\ \forall a \in A,\ a \sim a$;
+        - **symmetric** if $\ \forall a, b \in A,\ a \sim b \Rightarrow b \sim a$;
+        - **transitive** if $\ \forall a, b, c \in A,\ (a \sim b \land b \sim c) \Rightarrow a \sim c$.
+
+        Each is a universal statement, so each is **proved** by an argument about arbitrary elements and **refuted** by one counterexample. For transitivity that is a triple with $a \sim b$ and $b \sim c$ true and $a \sim c$ false. In the definition, $a$, $b$ and $c$ need not be different.
+
+        | Relation | Reflexive | Symmetric | Transitive |
+        | --- | --- | --- | --- |
+        | $a = b$ on numbers | yes | yes | yes |
+        | $a < b$ on numbers | no: $1 < 1$ is false | no: $1 < 2$, not $2 < 1$ | yes |
+        | $a \le b$ on numbers | yes | no: $1 \le 2$, not $2 \le 1$ | yes |
+        | $a$ divides $b$ on positive integers | yes | no: 2 divides 4 | yes |
+        | $a$ and $b$ differ by at most 1 | yes | yes | no: $1,\ 1.8,\ 2.6$ |
+        | $a$ and $b$ have the same remainder on division by 3 | yes | yes | yes |
+        | $a$ is a sibling of $b$ on people | no | yes | no: take $c = a$ |
+
+        Work through a few rows until each "no" is clear. The three properties are independent of one another: a relation can have any combination of them.
+
+        **Equivalence relations.** A relation that is reflexive, symmetric **and** transitive is an **equivalence relation**. These are the well-behaved notions of sameness. Equality is the model, and the three properties are exactly the features of equality that all reasoning about "the same" depends on. The relations $<$ and $\le$ and "divides" are useful for another purpose, putting things in **order**, and they fail symmetry, as an order must.
+
+        **Congruence.** The most important example after equality deserves its own notation. Fix an integer $m \ge 1$, the **modulus**. For integers $a$ and $b$ we say that $a$ is **congruent** to $b$ modulo $m$, and write
+
+        $$a \equiv b \pmod{m}, \qquad\text{when}\qquad m \mid (a - b).$$
+
+        So $17 \equiv 5 \pmod{12}$, because $17 - 5 = 12$, and that is the clock: seventeen o'clock is five o'clock. Also $-1 \equiv 4 \pmod{5}$, since $-1 - 4 = -5$.
+
+        Congruent numbers are exactly the numbers with the same remainder. If $a = mq + r$ and $b = mq' + r$, then $a - b = m(q - q')$. And conversely, if $m \mid (a - b)$, the two remainders differ by a multiple of $m$ while both lying between 0 and $m - 1$, which forces them to be equal. The definition by divisibility is the easier one to prove things with, because it unpacks into an equation.
+
+        > **Theorem.** Congruence modulo $m$ is an equivalence relation on $\mathbb{Z}$.
+        >
+        > **Proof.** *Reflexive.* Let $a$ be an integer. Then $a - a = 0 = m \times 0$, so $m \mid (a - a)$, that is, $a \equiv a$.
+        >
+        > *Symmetric.* Let $a \equiv b$. Then $a - b = mk$ for some integer $k$, so $b - a = m(-k)$, and $-k$ is an integer. Hence $b \equiv a$.
+        >
+        > *Transitive.* Let $a \equiv b$ and $b \equiv c$. Then $a - b = mk$ and $b - c = ml$ for some integers $k$ and $l$. Adding, $a - c = m(k + l)$, and $k + l$ is an integer. Hence $a \equiv c$. $\blacksquare$
+
+        Three direct proofs, each a few symbols long, in the style of the lesson on direct proof: unpack "divides", compute, pack.
+
+        **Equivalence classes.** Let $\sim$ be an equivalence relation on $A$. The **equivalence class** of an element $a$ is the set of everything related to it:
+
+        $$[a] = \{\, x \in A : x \sim a \,\}.$$
+
+        For congruence modulo 3 there are three classes:
+
+        $$[0] = \{\dots, -6, -3, 0, 3, 6, \dots\}, \quad [1] = \{\dots, -5, -2, 1, 4, 7, \dots\}, \quad [2] = \{\dots, -4, -1, 2, 5, 8, \dots\}.$$
+
+        And $[3]$ is not a fourth class. It is $[0]$ again, under another name. Any member of a class is called a **representative** of it.
+
+        Here is the central theorem. It says that the classes behave as piles should.
+
+        > **Theorem.** Let $\sim$ be an equivalence relation on $A$, and let $a, b \in A$.
+        >
+        > 1. $a \in [a]$. So every element is in some class, and no class is empty.
+        > 2. If $a \sim b$, then $[a] = [b]$.
+        > 3. If $a \not\sim b$, then $[a]$ and $[b]$ have no element in common.
+        >
+        > **Proof.** (1) By reflexivity $a \sim a$, so $a \in [a]$.
+        >
+        > (2) Suppose $a \sim b$. To prove that two sets are equal, we show that each is a subset of the other. Let $x \in [a]$. Then $x \sim a$, and with $a \sim b$, transitivity gives $x \sim b$, so $x \in [b]$. Thus $[a] \subseteq [b]$. For the other inclusion, symmetry gives $b \sim a$, and the same argument with the letters exchanged shows $[b] \subseteq [a]$.
+        >
+        > (3) We prove the contrapositive: if $[a]$ and $[b]$ have a common element, then $a \sim b$. Let $x$ be in both. Then $x \sim a$ and $x \sim b$. By symmetry $a \sim x$, and by transitivity $a \sim x \sim b$ gives $a \sim b$. $\blacksquare$
+
+        Read the proof again and mark where each of the three properties was used. Reflexivity put every element into a class. Symmetry and transitivity together made two classes that touch collapse into one. Drop any one of the three and some part of the theorem fails. With "differs by at most 1" the classes $[1.0]$ and $[2.6]$ are different and both contain $1.8$.
+
+        Parts 2 and 3 together say: **two classes are either identical or disjoint. They never partly overlap.**
+
+        **Partitions.** A **partition** of a set $A$ is a collection of subsets of $A$, called **blocks**, such that
+
+        - no block is empty,
+        - any two different blocks are disjoint,
+        - and every element of $A$ is in some block.
+
+        In short: every element is in **exactly one** block. The theorem just proved says that **the equivalence classes of an equivalence relation form a partition**.
+
+        The converse is true as well, and easier. Given a partition of $A$, define $a \sim b$ to mean "$a$ and $b$ are in the same block". This is reflexive, since $a$ is in the same block as itself. It is symmetric, obviously. And it is transitive: if $a$, $b$ share a block and $b$, $c$ share a block, those are the same block, namely the one block containing $b$. Its classes are the blocks you started with.
+
+        So an equivalence relation on a set and a partition of the set carry exactly the same information. To specify one is to specify the other.
+
+        **Sameness from a function.** Where do equivalence relations come from in practice? Nearly always from a **function**. Let $f : A \to B$ be any function, and define
+
+        $$a \sim b \quad\text{when}\quad f(a) = f(b).$$
+
+        This is always an equivalence relation, and the three proofs take one line each, because they are inherited from equality: $f(a) = f(a)$. If $f(a) = f(b)$ then $f(b) = f(a)$. If $f(a) = f(b)$ and $f(b) = f(c)$ then $f(a) = f(c)$. The class of $a$ is the set of all inputs that $f$ sends where it sends $a$.
+
+        "Same remainder" is this with $f(n) = n \bmod m$. "Same length" for strings has $f = $ `len`. "Equal ignoring case" has $f = $ `str.lower`. "Anagrams of each other" has $f(w) = $ the letters of $w$ in sorted order. In code, the function is called a **key**, and forming the classes is the most common operation in all of data processing, **group by**:
+
+        ```python
+        words = ["tea", "eat", "tan", "ate", "nat", "bat"]
+        groups = {}
+        for word in words:
+            key = "".join(sorted(word))
+            if key not in groups:
+                groups[key] = []
+            groups[key].append(word)
+        print(len(groups))
+        ```
+
+        This prints 3. The dictionary's keys are the values of $f$, and its values are the classes. Because "same key" is an equivalence relation, the result is a partition: every word is in exactly one list. You cannot write this loop for "differs by at most 1". There is no key function for it, and the absence of a key is the same fact as the failure of transitivity.
+
+        The value $f(a)$ serves as a **canonical form** for the class of $a$: a standard representative, computed from any member, such that two things are equivalent exactly when their canonical forms are **equal**. The remainder is the canonical form of an integer modulo $m$. A fraction in lowest terms with a positive denominator is the canonical form of a fraction. Lower case is a canonical form for text. Turning a messy test of equivalence into a plain test of equality, by putting both sides into canonical form first, is what programmers call **normalising**.
+    - question:
+        id: order-transitive
+        type: order
+        system: s2
+        prompt: Put the lines of this proof in order. It shows that congruence modulo $m$ is transitive.
+        steps:
+          - "Suppose $a \\equiv b$ and $b \\equiv c$ modulo $m$."
+          - "By the definition, $a - b = mk$ and $b - c = ml$ for some integers $k$ and $l$."
+          - "Adding the two equations, $a - c = mk + ml$."
+          - "So $a - c = m(k + l)$, where $k + l$ is an integer."
+          - "Hence $m$ divides $a - c$, that is, $a \\equiv c$ modulo $m$."
+        explanation: Assume the hypothesis of transitivity, unpack both congruences with their own letters, add so that $b$ cancels, and pack the result back into the definition of congruence.
+        hints:
+          - The hypothesis of transitivity is assumed first.
+          - Both congruences must be unpacked before they can be added.
+          - The last line states the conclusion as a congruence.
+    - text: |
+        **Arithmetic on classes.** The classes of congruence modulo $m$ can themselves be added and multiplied, and this is what makes them so useful. The rule is the natural one: to add two classes, add representatives and take the class of the result. On a clock, 9 o'clock plus 5 hours is 2 o'clock, $[9] + [5] = [14] = [2]$ modulo 12.
+
+        But there is something to check. The class $[9]$ is also $[21]$, and $[5]$ is also $[-7]$. If we had picked those representatives, we would have computed $[21 + (-7)] = [14]$. The same answer, fortunately. Is it always? If the answer depended on which representatives were picked, "the sum of two classes" would be meaningless. An operation on classes that gives the same result whichever representatives are used is called **well defined**, and it has to be proved.
+
+        > **Theorem.** If $a \equiv a'$ and $b \equiv b' \pmod{m}$, then
+        >
+        > $$a + b \equiv a' + b' \qquad\text{and}\qquad ab \equiv a'b' \pmod{m}.$$
+        >
+        > **Proof.** Write $a - a' = mk$ and $b - b' = ml$ with integers $k$ and $l$. For the sum, $(a + b) - (a' + b') = mk + ml = m(k + l)$. For the product,
+        >
+        > $$ab - a'b' = a(b - b') + b'(a - a') = a \cdot ml + b' \cdot mk = m(al + b'k). \qquad \blacksquare$$
+
+        So in any calculation built from additions and multiplications, **you may replace a number by anything congruent to it, at any stage**, and the remainder of the final result will not change. This is why a formula's remainder depends only on the remainder of its input, the fact the last lesson's `residues` function relied on. It is also why you can find the last digit of $7^{100}$ without computing a number of 85 digits. Work modulo 10: $7^2 = 49 \equiv 9$, so $7^4 \equiv 9^2 = 81 \equiv 1$, and therefore $7^{100} = (7^4)^{25} \equiv 1^{25} = 1$. The last digit is 1.
+
+        Not every operation on classes is well defined. Try to define "the numerator" of a rational number. $\tfrac{1}{2}$ and $\tfrac{2}{4}$ are the same number and have different numerators. So "the numerator of a rational number" means nothing until a canonical form, lowest terms, has been fixed. Whenever a function is defined on things that have many names, ask whether its value depends on the name.
+
+        **Fractions, properly.** You can now say what a rational number **is**. Take all pairs $(p, q)$ of integers with $q \ne 0$, and call $(p, q)$ and $(r, s)$ equivalent when $ps = qr$. That is the cross-multiplication test for $\tfrac{p}{q} = \tfrac{r}{s}$, written without division. It is an equivalence relation, and a rational number is an equivalence **class**: the fraction $\tfrac{1}{2}$ is the whole pile $\{(1, 2), (2, 4), (3, 6), (-1, -2), \dots\}$. The rules you learned for adding and multiplying fractions are well-defined operations on these classes. That is why $\tfrac{1}{2} + \tfrac{1}{3}$ and $\tfrac{2}{4} + \tfrac{3}{9}$ come to the same thing.
+
+        This way of building new objects, taking a set, declaring some of its members equivalent, and treating each class as a single thing, is one of the main construction methods of mathematics. The integers modulo $m$, the rationals, the real numbers, angles (real numbers modulo $2\pi$), and directions (vectors up to scaling) are all made this way.
+
+        **When sameness fails.** Return to the sensor readings. "Differs by at most 1" is reflexive and symmetric and not transitive, so it has no classes, and no amount of care in the code will produce a consistent grouping. The same holds for every "approximately equal": `math.isclose`, "within a tolerance", "similar enough". These are fine for comparing two given values. They cannot be used as a key for grouping, for removing duplicates, or for looking things up in a dictionary. To group noisy readings you must first **choose a key function**, such as rounding to the nearest whole number, and group by that. Rounding gives a true equivalence relation. It also has the cost you would expect: 1.49 and 1.51 fall into different classes, although they are closer than 1.51 and 2.49, which fall into the same one. There is no way round that. It is the price of transitivity.
+    - question:
+        id: which-fails
+        type: choice
+        system: s2
+        prompt: |
+          On the set of all real numbers, define $x \sim y$ to mean $xy > 0$. Is it an equivalence relation?
+        options:
+          - "Yes."
+          - "No. It is not reflexive, because $0 \\sim 0$ is false."
+          - "No. It is not symmetric."
+          - "No. It is not transitive."
+        answer: 1
+        explanation: |
+          $0 \times 0 = 0$, which is not greater than 0, so 0 is not related to itself. It is symmetric, since $xy = yx$, and transitive: if $xy > 0$ and $yz > 0$ then $x$, $y$, $z$ are all non-zero with the same sign. One element spoils it, and the degenerate element at that. On the **non-zero** reals it is an equivalence relation, with two classes, the positive numbers and the negative numbers.
+        hints:
+          - Check each property in turn, and try the special value 0.
+          - Is 0 related to itself?
+          - What happens if 0 is removed from the set?
+  formal:
+    - text: |
+        A **relation** on a set $A$ is a predicate on ordered pairs of elements of $A$, written $a \sim b$.
+
+        | Property | Definition |
+        | --- | --- |
+        | reflexive | $\forall a \in A,\ a \sim a$ |
+        | symmetric | $\forall a, b \in A,\ a \sim b \Rightarrow b \sim a$ |
+        | transitive | $\forall a, b, c \in A,\ (a \sim b \land b \sim c) \Rightarrow a \sim c$ |
+
+        An **equivalence relation** is a relation with all three properties. The **equivalence class** of $a$ is $[a] = \{x \in A : x \sim a\}$, and any element of a class is a **representative** of it.
+
+        A **partition** of $A$ is a collection of non-empty subsets of $A$, pairwise disjoint, whose union is $A$.
+
+        **Theorem.** The equivalence classes of an equivalence relation on $A$ form a partition of $A$, and $[a] = [b]$ exactly when $a \sim b$. Conversely, for any partition of $A$, "lies in the same block as" is an equivalence relation whose classes are the blocks.
+
+        **Kernel of a function.** For any function $f : A \to B$, the relation "$f(a) = f(b)$" is an equivalence relation on $A$.
+
+        **Congruence.** For an integer $m \ge 1$: $\ a \equiv b \pmod{m}$ means $m \mid (a - b)$, equivalently that $a$ and $b$ leave the same remainder on division by $m$. It is an equivalence relation with exactly $m$ classes, $[0], [1], \dots, [m - 1]$.
+
+        **Arithmetic modulo $m$.** If $a \equiv a'$ and $b \equiv b' \pmod{m}$, then $a + b \equiv a' + b'$ and $ab \equiv a'b' \pmod{m}$.
+
+        An operation defined on classes by means of representatives is **well defined** if its result does not depend on the representatives chosen.
+  drill:
+    - text: Seconds each. For each property, look for the counterexample before you believe it.
+    - question:
+        id: drill-less-than
+        type: choice
+        system: s1
+        prompt: |
+          Which of the three properties does "$<$" on the real numbers have?
+        options: ["Reflexive only", "Symmetric only", "Transitive only", "All three"]
+        answer: 2
+        explanation: |
+          $1 < 1$ is false, and $1 < 2$ does not give $2 < 1$. But $a < b$ and $b < c$ do give $a < c$.
+        hints:
+          - Is a number less than itself?
+          - If a is less than b, is b less than a?
+    - question:
+        id: drill-birthday
+        type: choice
+        system: s1
+        prompt: |
+          Is "has the same birthday as" an equivalence relation on a group of people?
+        options: ["Yes", "No, it is not reflexive", "No, it is not symmetric", "No, it is not transitive"]
+        answer: 0
+        explanation: It is "same value of a function", the function that gives each person a birthday. Any relation of that form is an equivalence relation.
+        hints:
+          - It compares the values of a function.
+          - Check each property quickly.
+    - question:
+        id: drill-near
+        type: choice
+        system: s1
+        prompt: |
+          "Lives within 10 km of" on a set of people. Which property fails?
+        options: ["Reflexivity", "Symmetry", "Transitivity", "None"]
+        answer: 2
+        explanation: A may live 8 km from B and B 8 km from C, with A and C 16 km apart. Every "is near" relation fails in this way.
+        hints:
+          - Is everyone within 10 km of themselves?
+          - Can a chain of near neighbours stretch a long way?
+    - question:
+        id: drill-congruent
+        type: choice
+        system: s1
+        prompt: |
+          Which statement is true?
+        options: ["$17 \\equiv 3 \\pmod{5}$", "$17 \\equiv 2 \\pmod{5}$", "$17 \\equiv 5 \\pmod{2}$", "Both the second and the third"]
+        answer: 3
+        explanation: |
+          $17 - 2 = 15$ is a multiple of 5, and $17 - 5 = 12$ is a multiple of 2. But $17 - 3 = 14$ is not a multiple of 5.
+        hints:
+          - Subtract, and ask whether the modulus divides the difference.
+          - Check each option separately.
+    - question:
+        id: drill-class-count
+        type: numeric
+        system: s1
+        prompt: |
+          How many equivalence classes has congruence modulo 6?
+        answer: "6"
+        explanation: One for each remainder from 0 to 5.
+        hints:
+          - One class per remainder.
+          - Which remainders are possible?
+    - question:
+        id: drill-negative-class
+        type: numeric
+        system: s1
+        prompt: |
+          Modulo 5, the class of $-1$ is the class of which number between 0 and 4?
+        answer: "4"
+        explanation: |
+          $-1 - 4 = -5$, a multiple of 5.
+        hints:
+          - Add the modulus to −1.
+          - The answer must be between 0 and 4.
+    - question:
+        id: drill-clock
+        type: numeric
+        system: s1
+        prompt: |
+          On a 12-hour clock it is 10 o'clock. What time does the clock show 7 hours later?
+        answer: "5"
+        explanation: |
+          $10 + 7 = 17 \equiv 5 \pmod{12}$.
+        hints:
+          - Add, then take away 12.
+          - Seventeen o'clock is which hour?
+    - question:
+        id: drill-last-digit
+        type: numeric
+        system: s1
+        prompt: |
+          What is the last digit of $1234 \times 5678$? Work modulo 10.
+        answer: "2"
+        explanation: |
+          Only the last digits matter: $4 \times 8 = 32$.
+        hints:
+          - Replace each number by its last digit.
+          - Multiply those and take the last digit again.
+    - question:
+        id: drill-partition
+        type: choice
+        system: s1
+        prompt: |
+          Which of these is a partition of $\{1, 2, 3, 4\}$?
+        options:
+          - "$\\{1, 2\\}$ and $\\{2, 3, 4\\}$"
+          - "$\\{1\\}$ and $\\{3, 4\\}$"
+          - "$\\{1, 3\\}$ and $\\{2, 4\\}$"
+          - "$\\{1, 2, 3, 4\\}$ and $\\emptyset$"
+        answer: 2
+        explanation: Every element is in exactly one block. In the first, 2 is in two blocks. In the second, 2 is in none. In the fourth, a block is empty.
+        hints:
+          - Every element must be in exactly one block.
+          - No block may be empty.
+    - question:
+        id: drill-canonical
+        type: choice
+        system: s1
+        prompt: |
+          What is the canonical form, in lowest terms, of the fraction $\dfrac{18}{24}$?
+        options: ["$\\dfrac{9}{12}$", "$\\dfrac{6}{8}$", "$\\dfrac{3}{4}$", "$0.75$"]
+        answer: 2
+        explanation: Divide the top and the bottom by their greatest common factor, 6. All four options name the same number, and only one is the agreed representative among fractions.
+        hints:
+          - Cancel every common factor.
+          - What is the largest number dividing both 18 and 24?
+    - question:
+        id: predict-anagrams
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          groups = {}
+          for word in ["tea", "eat", "tan", "ate", "nat"]:
+              key = "".join(sorted(word))
+              groups[key] = groups.get(key, []) + [word]
+          print(len(groups), groups["aet"])
+        output: "2 ['tea', 'eat', 'ate']"
+        explanation: The key of a word is its letters in sorted order, so anagrams share a key. The five words fall into two classes, and the class with the key "aet" holds its three members in the order they arrived.
+        hints:
+          - What is the key of "tea"? Of "eat"?
+          - How many different keys do the five words have?
+    - question:
+        id: predict-mod-product
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          print((17 * 23) % 5, ((17 % 5) * (23 % 5)) % 5)
+        output: "1 1"
+        explanation: Multiplying and then reducing gives the same remainder as reducing first and then multiplying. That is what it means for multiplication modulo 5 to be well defined.
+        hints:
+          - 17 leaves 2 and 23 leaves 3 on division by 5.
+          - What does the theorem about products of congruent numbers say?
+  work:
+    - text: Slower now. To prove a property, take arbitrary elements. To refute it, find particular ones.
+    - question:
+        id: work-integer-difference
+        type: choice
+        system: s2
+        prompt: |
+          On the real numbers, define $x \sim y$ to mean that $x - y$ is an integer. It is an equivalence relation. Which description of the class of $0.25$ is right?
+        options:
+          - "All real numbers between 0 and 1."
+          - "$\\{\\dots, -1.75, -0.75, 0.25, 1.25, 2.25, \\dots\\}$, all numbers that differ from $0.25$ by a whole number."
+          - "All numbers that round to 0."
+          - "Only $0.25$ itself."
+        answer: 1
+        explanation: |
+          $x \sim 0.25$ means $x = 0.25 + n$ for an integer $n$. Every class has exactly one representative in the interval from 0 up to but not including 1, the "fractional part", and that is its canonical form. This relation wraps the number line round a circle of circumference 1, which is how an angle or a phase is represented.
+        hints:
+          - Which numbers x make x − 0.25 an integer?
+          - Add and subtract whole numbers from 0.25.
+          - Note that −0.75 − 0.25 = −1.
+    - question:
+        id: work-last-digit-power
+        type: numeric
+        system: s2
+        prompt: |
+          What is the last digit of $3^{2025}$? Work modulo 10, and look for a power of 3 that is congruent to 1.
+        answer: "3"
+        explanation: |
+          $3^2 = 9$ and $3^4 = 81 \equiv 1 \pmod{10}$. Since $2025 = 4 \times 506 + 1$, $\ 3^{2025} = (3^4)^{506} \cdot 3 \equiv 1^{506} \cdot 3 = 3$. Replacing $3^4$ by 1 in the middle of the calculation is allowed because multiplication modulo 10 is well defined.
+        hints:
+          - Work out 3, 9, 27, 81 modulo 10. Where does 1 appear?
+          - Write 2025 as a multiple of 4 plus a remainder.
+          - Only the remainder of the exponent on division by 4 matters.
+    - question:
+        id: write-classes
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `classes(items, key)`. It returns the equivalence classes of `items` under "has the same key": a list of lists. The classes come in the order in which their first member appears in `items`, and inside each class the members keep their original order.
+
+          The program groups the numbers 0 to 9 by their remainder on division by 3.
+        starter: |
+          def classes(items, key):
+              # Replace the next line with your own.
+              return []
+
+          print(classes(range(10), lambda n: n % 3))
+        solution: |
+          def classes(items, key):
+              groups = {}
+              for item in items:
+                  k = key(item)
+                  if k not in groups:
+                      groups[k] = []
+                  groups[k].append(item)
+              return list(groups.values())
+
+          print(classes(range(10), lambda n: n % 3))
+        tests: |
+          assert classes(range(10), lambda n: n % 3) == [[0, 3, 6, 9], [1, 4, 7], [2, 5, 8]], "0 to 9 by remainder on division by 3"
+          assert classes(["tea", "eat", "tan", "ate", "nat", "bat"], lambda w: "".join(sorted(w))) == [["tea", "eat", "ate"], ["tan", "nat"], ["bat"]], "Anagrams, in order of first appearance"
+          assert classes([5, 3, 5, 1, 3], lambda n: n) == [[5, 5], [3, 3], [1]], "With the identity as key, equal values are grouped, in order of first appearance"
+          assert classes([], lambda n: n) == [], "No items, no classes"
+          assert classes(["a", "bb", "cc", "d", "eee"], len) == [["a", "d"], ["bb", "cc"], ["eee"]], "Strings by length"
+          assert classes([3, -3, 2, -2, 0], abs) == [[3, -3], [2, -2], [0]], "Numbers by absolute value"
+          assert classes([1, 2, 3], lambda n: 0) == [[1, 2, 3]], "A constant key puts everything in one class"
+          _c = classes(list(range(20)), lambda n: (n * n) % 7)
+          assert sorted(sum(_c, [])) == list(range(20)), "Every item must be in exactly one class"
+          assert all(len(_block) > 0 for _block in _c), "No class may be empty"
+          assert output.strip() == "[[0, 3, 6, 9], [1, 4, 7], [2, 5, 8]]", "The program should print the three classes of 0 to 9 modulo 3"
+        wrong:
+          - "def classes(items, key):\n    groups = {}\n    for item in items:\n        groups[key(item)] = [item]\n    return list(groups.values())\n\nprint([[0, 3, 6, 9], [1, 4, 7], [2, 5, 8]])\n"
+          - "def classes(items, key):\n    groups = {}\n    for item in items:\n        k = key(item)\n        if k not in groups:\n            groups[k] = []\n        groups[k].append(item)\n    return [groups[k] for k in sorted(groups)]\n\nprint([[0, 3, 6, 9], [1, 4, 7], [2, 5, 8]])\n"
+          - "def classes(items, key):\n    result = []\n    for item in items:\n        if len(result) > 0 and key(result[-1][0]) == key(item):\n            result[-1].append(item)\n        else:\n            result.append([item])\n    return result\n\nprint([[0, 3, 6, 9], [1, 4, 7], [2, 5, 8]])\n"
+          - "def classes(items, key):\n    groups = {}\n    for item in items:\n        k = key(item)\n        if k not in groups:\n            groups[k] = []\n        groups[k].append(k)\n    return list(groups.values())\n\nprint([[0, 3, 6, 9], [1, 4, 7], [2, 5, 8]])\n"
+        explanation: |
+          A dictionary from key to list is the partition: each item is appended to the one list its key selects, so it lands in exactly one class, and a class is created only when it has a first member, so none is empty. Python dictionaries remember the order in which keys were first inserted, which gives the order asked for. One pass over the data is enough, and it is enough **because** "same key" is transitive: an item is compared with nothing but its own key. Grouping by a relation that is not an equivalence would need every pair compared, and would still not produce classes.
+        hints:
+          - Use a dictionary whose keys are key values and whose values are lists.
+          - When a key is seen for the first time, start an empty list for it.
+          - The dictionary's values, in order, are the classes.
+    - question:
+        id: write-properties
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `properties(rel, items)` for a relation `rel(a, b)` and a finite list `items`. It returns a tuple of three Booleans, `(reflexive, symmetric, transitive)`, each decided by checking every case.
+
+          The program tests the starter's "differs by at most 1" on three readings.
+        starter: |
+          def properties(rel, items):
+              # Replace the next line with your own.
+              return (False, False, False)
+
+          print(properties(lambda x, y: abs(x - y) <= 1, [1.0, 1.8, 2.6]))
+        solution: |
+          def properties(rel, items):
+              reflexive = all(rel(a, a) for a in items)
+              symmetric = all(rel(b, a) for a in items for b in items if rel(a, b))
+              transitive = all(rel(a, c) for a in items for b in items for c in items if rel(a, b) and rel(b, c))
+              return (reflexive, symmetric, transitive)
+
+          print(properties(lambda x, y: abs(x - y) <= 1, [1.0, 1.8, 2.6]))
+        tests: |
+          _n = [0, 1, 2, 3, 4, 5]
+          assert properties(lambda a, b: a == b, _n) == (True, True, True), "Equality has all three properties"
+          assert properties(lambda a, b: a < b, _n) == (False, False, True), "Less than is only transitive"
+          assert properties(lambda a, b: a <= b, _n) == (True, False, True), "Less than or equal is reflexive and transitive, not symmetric"
+          assert properties(lambda a, b: a % 3 == b % 3, _n) == (True, True, True), "Congruence modulo 3 is an equivalence relation"
+          assert properties(lambda a, b: abs(a - b) <= 1, [1.0, 1.8, 2.6]) == (True, True, False), "Differs by at most 1 is not transitive: 1.0, 1.8, 2.6"
+          assert properties(lambda a, b: a != b, _n) == (False, True, False), "Not equal is symmetric only. It fails transitivity with c equal to a."
+          assert properties(lambda a, b: False, _n) == (False, True, True), "The relation that never holds is symmetric and transitive vacuously, and not reflexive"
+          assert properties(lambda a, b: a * b > 0, [-2, -1, 0, 1, 2]) == (False, True, True), "xy > 0 fails reflexivity at 0 only"
+          assert properties(lambda a, b: a * b > 0, [-2, -1, 1, 2]) == (True, True, True), "xy > 0 is an equivalence relation on non-zero numbers"
+          assert properties(lambda a, b: b == a + 1, _n) == (False, False, False), "Is one more than has none of the three"
+          assert properties(lambda a, b: True, []) == (True, True, True), "On an empty set every universal statement is true"
+          assert properties(lambda a, b: a == 0 or a == b, [0, 1, 2]) == (True, False, True), "A relation that is reflexive and transitive without being symmetric"
+          assert output.strip() == "(True, True, False)", "The program should print (True, True, False)"
+        wrong:
+          - "def properties(rel, items):\n    reflexive = all(rel(a, a) for a in items)\n    symmetric = all(rel(b, a) for a in items for b in items if rel(a, b))\n    transitive = all(rel(items[i], items[i + 2]) for i in range(len(items) - 2) if rel(items[i], items[i + 1]) and rel(items[i + 1], items[i + 2]))\n    return (reflexive, symmetric, transitive)\n\nprint((True, True, False))\n"
+          - "def properties(rel, items):\n    reflexive = any(rel(a, a) for a in items)\n    symmetric = all(rel(b, a) for a in items for b in items if rel(a, b))\n    transitive = all(rel(a, c) for a in items for b in items for c in items if rel(a, b) and rel(b, c))\n    return (reflexive, symmetric, transitive)\n\nprint((True, True, False))\n"
+          - "def properties(rel, items):\n    reflexive = all(rel(a, a) for a in items)\n    symmetric = all(rel(a, b) and rel(b, a) for a in items for b in items)\n    transitive = all(rel(a, c) for a in items for b in items for c in items if rel(a, b) and rel(b, c))\n    return (reflexive, symmetric, transitive)\n\nprint((True, True, False))\n"
+          - "def properties(rel, items):\n    reflexive = all(rel(a, a) for a in items)\n    symmetric = all(rel(b, a) for a in items for b in items if rel(a, b))\n    transitive = all(rel(a, c) for a in items for b in items for c in items if a != b and b != c and a != c and rel(a, b) and rel(b, c))\n    return (reflexive, symmetric, transitive)\n\nprint((True, True, False))\n"
+        explanation: |
+          Each property is a universal statement, so each is an `all`. Symmetry and transitivity are universal **implications**, and the `if` clause of the generator plays the part of the hypothesis: only the pairs and triples that satisfy it are examined, and when there are none the answer is `True`, vacuously. Notice that the triples must include those in which two of the three elements coincide. "Not equal" fails transitivity only through $a \ne b$, $b \ne a$, and yet $a = a$. On a finite set this exhaustive check is a proof. For congruence on all the integers, only the three short arguments in the lesson will do.
+        hints:
+          - Each property begins "for all", so each is an all( … ).
+          - For symmetry, look at every pair with rel(a, b) and ask for rel(b, a).
+          - For transitivity, three nested for clauses, with the hypothesis in an if clause.
+    - question:
+        id: fix-partition
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `is_partition(blocks, items)` should decide whether the list of lists `blocks` is a partition of the list of different values `items`: no block empty, no value in two blocks, and every value of `items` in some block, with nothing extra.
+
+          It is used to check that a data set has been split properly into training, validation and test parts. It has just approved a split in which one example appears in both the training part and the test part. Fix it so that all three conditions are checked.
+        starter: |
+          def is_partition(blocks, items):
+              covered = set()
+              for block in blocks:
+                  covered = covered | set(block)
+              return covered == set(items)
+
+          print(is_partition([[1, 2], [2, 3]], [1, 2, 3]))
+        solution: |
+          def is_partition(blocks, items):
+              seen = set()
+              for block in blocks:
+                  if len(block) == 0:
+                      return False
+                  for value in block:
+                      if value in seen:
+                          return False
+                      seen.add(value)
+              return seen == set(items)
+
+          print(is_partition([[1, 2], [2, 3]], [1, 2, 3]))
+        tests: |
+          assert is_partition([[1, 2], [3]], [1, 2, 3]) is True, "A proper partition into two blocks"
+          assert is_partition([[1, 2], [2, 3]], [1, 2, 3]) is False, "2 is in two blocks"
+          assert is_partition([[1], [3]], [1, 2, 3]) is False, "2 is in no block"
+          assert is_partition([[1, 2, 3], []], [1, 2, 3]) is False, "A block is empty"
+          assert is_partition([[1, 2], [3, 4]], [1, 2, 3]) is False, "4 is not one of the items"
+          assert is_partition([[1, 2], [3], [1]], [1, 2, 3]) is False, "1 is in the first block and the third"
+          assert is_partition([[3], [1], [2]], [1, 2, 3]) is True, "Three blocks of one, in any order"
+          assert is_partition([[1, 2, 3]], [1, 2, 3]) is True, "One block holding everything"
+          assert is_partition([], []) is True, "The empty set is partitioned by no blocks at all"
+          assert is_partition([], [1]) is False, "With no blocks, 1 is not covered"
+          assert is_partition([["a", "b"], ["c"]], ["c", "a", "b"]) is True, "The order of the items does not matter"
+          assert output.strip() == "False", "The program should print False"
+        wrong:
+          - "def is_partition(blocks, items):\n    covered = set()\n    total = 0\n    for block in blocks:\n        covered = covered | set(block)\n        total += len(block)\n    return covered == set(items) and total == len(items)\n\nprint(False)\n"
+          - "def is_partition(blocks, items):\n    seen = set()\n    for block in blocks:\n        if len(block) == 0:\n            return False\n        for value in block:\n            if value in seen:\n                return False\n            seen.add(value)\n    return True\n\nprint(False)\n"
+          - "def is_partition(blocks, items):\n    for i in range(len(blocks) - 1):\n        if len(set(blocks[i]) & set(blocks[i + 1])) > 0:\n            return False\n    covered = set()\n    for block in blocks:\n        if len(block) == 0:\n            return False\n        covered = covered | set(block)\n    return covered == set(items)\n\nprint(False)\n"
+        explanation: |
+          The starter checked one of the three conditions, that the union of the blocks is the whole set. A union forgets how many times a value occurred, so overlapping blocks went unnoticed, and an empty block adds nothing to a union. The repair walks through the blocks keeping the set of values seen so far: a value met twice means two blocks overlap. The practical case is serious. An example that sits in both the training part and the test part is called **leakage**, and it makes a model's test score better than its real performance, since the model is partly being examined on questions it has already seen. A correct split is exactly a partition.
+        hints:
+          - Which of the three conditions does the starter check?
+          - Taking a union loses the information that a value appeared twice.
+          - Keep a set of values already seen, and stop when a value turns up again.
+    - question:
+        id: work-well-defined
+        type: choice
+        system: s2
+        prompt: |
+          Someone defines a function on the integers modulo 6 by $g([a]) = [a \bmod 4]$, "take any representative, and return the class of its remainder on division by 4". Is $g$ well defined?
+        options:
+          - "Yes, because every integer has a remainder on division by 4."
+          - "No. $[1] = [7]$ modulo 6, but $1 \\bmod 4 = 1$ and $7 \\bmod 4 = 3$, and $[1] \\ne [3]$ modulo 6."
+          - "Yes, because $[a \\bmod 4]$ is always one of the six classes."
+          - "No, because 4 is smaller than 6."
+        answer: 1
+        explanation: |
+          A function on classes must give the same result for every representative of a class. Here two representatives of one class, 1 and 7, give different results, so the rule does not define a function at all. It is the "numerator of a fraction" problem again. To show that an operation is well defined needs a proof for all representatives. To show that it is not, one class with two disagreeing representatives is enough.
+        hints:
+          - Pick a class and two different representatives of it.
+          - Apply the rule to each.
+          - Do the two results name the same class?
+    - question:
+        id: work-key-or-not
+        type: choice
+        system: s2
+        prompt: |
+          A team wants to remove near-duplicate sentences from a data set. Two sentences are near-duplicates if they differ in at most two words. They plan to put each sentence into a dictionary keyed by "its near-duplicate group". What is the difficulty?
+        options:
+          - "Dictionaries cannot hold sentences."
+          - "\"Differs in at most two words\" is not transitive, so there are no well-defined groups and no key function that produces them."
+          - "The relation is not symmetric."
+          - "There is no difficulty."
+        answer: 1
+        explanation: |
+          Sentence A may differ from B in two words and B from C in two other words, so that A and C differ in four. The relation is reflexive and symmetric and not transitive, exactly like "differs by at most 1" for numbers. A dictionary key requires an equivalence relation, because a key **is** a function and "same key" is transitive. In practice one must either choose a true key, such as the sentence in lower case with punctuation removed, and accept that it captures only some near-duplicates, or else compare pairs and decide by some separate rule how chains are to be cut.
+        hints:
+          - Check the three properties for this relation.
+          - Can a chain of small changes add up to a large one?
+          - What kind of relation does "has the same key" always give?
+  connections:
+    - text: |
+        Equivalence relations are how mathematics makes new objects out of old ones, and how it says precisely that two descriptions describe the same thing. You will meet the construction again and again. Vectors that differ by a positive scaling have the same **direction**. Matrices that describe the same linear map in different coordinate systems are called **similar**, and the quantities worth knowing about a map, such as its eigenvalues, are those that are well defined on the class. Two neural networks whose hidden units have been reordered compute the same function, so the set of weight settings is divided into large classes of equivalent models, a fact that shapes the landscape that optimisation has to cross. In every case the questions are the two of this lesson: is the relation an equivalence, and is the thing I want to compute well defined on its classes?
+
+        In engineering the idea is everywhere under other names. A hash table works because "has the same key" is an equivalence relation. Grouping in a data frame, `GROUP BY` in a database, and removing duplicates all compute a partition from a key function. A train, validation and test split is a partition, and leakage is the failure of disjointness. Normalising text before comparing it is choosing canonical forms. Arithmetic modulo $2^{64}$ is what a processor's integers actually do, and arithmetic modulo a large prime is the foundation of the cryptography that protects every connection you make. And the rule that floating-point numbers must never be used as dictionary keys after "fuzzy" comparison is the non-transitivity of nearness, which no code can repair.
+
+        One of the simplest of all equivalence relations has been left to the end, because it leads somewhere astonishing. Say that two **sets** are equivalent when there is a bijection between them, a pairing of their elements one to one with nothing left over. For finite sets, this just means "having the same number of elements", and it is how a child counts: fingers against apples. But the definition does not mention the word "finite". It can be applied to infinite sets, and when it is, it gives answers that nobody expected. Are there as many even numbers as whole numbers? As many fractions as whole numbers? As many real numbers? The next lesson asks whether infinite sets come in different sizes: [[m3.countable-and-uncountable-sets]].
