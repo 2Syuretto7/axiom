@@ -1,0 +1,855 @@
+concept: e3.divide-and-conquer
+minutes: 90
+claim: You can solve a problem by splitting it into smaller copies of itself, describe the cost by a recurrence, find that cost by adding up the levels of the tree of calls, say from the number of copies, their size and the cost of combining which level dominates, and use the method to multiply and to raise to powers faster than the obvious way.
+recalls: [e3.binary-search]
+uses: [e3.sorting, e1.recursion, e1.complexity-and-big-o, e0.lists-and-tuples, e0.functions, e0.strings, m1.logarithms, m3.induction-and-strong-induction]
+leads: [e3.dynamic-programming, e3.amortised-analysis]
+starter: |
+  # Scratch space. Multiply two long numbers by splitting each into a high half and a low half.
+  # Four half-length products are needed. The second value returned counts the single-digit products.
+  def multiply(x, y):
+      if x < 10 or y < 10:
+          return x * y, 1
+      m = max(len(str(x)), len(str(y))) // 2
+      a, b = x // 10**m, x % 10**m
+      c, d = y // 10**m, y % 10**m
+      ac, n1 = multiply(a, c)
+      ad, n2 = multiply(a, d)
+      bc, n3 = multiply(b, c)
+      bd, n4 = multiply(b, d)
+      return ac * 10**(2 * m) + (ad + bc) * 10**m + bd, n1 + n2 + n3 + n4
+
+  print(multiply(1234, 5678))
+  print(multiply(12345678, 87654321))
+  print(multiply(1234567812345678, 8765432187654321))
+parts:
+  recall:
+    - text: |
+        [[e3.binary-search]] ended by setting two methods side by side. Merge sort halves a list and must deal with both halves. Binary search halves a list and deals with one. Today that comparison becomes a method of calculation. Three quick pulls first.
+    - question:
+        id: recall-looks
+        type: numeric
+        system: s1
+        concepts: [e3.binary-search]
+        prompt: |
+          What is the largest number of looks binary search can need on a sorted list of 1000 items?
+        answer: "10"
+        explanation: 1000 can be halved, rounding down, nine times before reaching 1, and each size costs one look.
+        hints:
+          - Halve repeatedly, rounding down, and count the sizes.
+          - Which power of 2 lies just below a thousand?
+    - question:
+        id: recall-merge-rounds
+        type: numeric
+        system: s1
+        concepts: [e3.sorting]
+        prompt: |
+          Merge sort is run on 32 items. How many rounds of merging are there?
+        answer: "5"
+        explanation: The sorted runs double in length each round, from 1 to 32, and $32 = 2^5$.
+        hints:
+          - The runs go from length 1 to 2 to 4 and so on.
+          - How many doublings reach 32?
+    - question:
+        id: recall-leap
+        type: choice
+        system: s1
+        concepts: [e1.recursion]
+        prompt: |
+          A recursive function is correct if its base case is right and
+        options:
+          - "it calls itself exactly once"
+          - "each call gives the right answer provided the calls it makes on smaller inputs do"
+          - "it never uses a loop"
+          - "it has been tested on large inputs"
+        answer: 1
+        explanation: That is the leap of faith, which is induction. Trust the smaller cases, and check only that this case follows from them.
+        hints:
+          - What may you assume about the calls on smaller inputs?
+          - Which method of proof climbs from smaller cases to larger?
+  puzzle:
+    - text: |
+        Multiply two numbers of a thousand digits each. The method you learnt at school multiplies every digit of one by every digit of the other: a million single-digit products. For numbers of $n$ digits it needs $n^2$.
+
+        People have multiplied this way for four thousand years. In 1960 Andrey Kolmogorov, one of the great mathematicians of the century, put it to a seminar in Moscow that nothing essentially faster could exist, and that $n^2$ was the true cost of multiplication.
+
+        Within a week a student of twenty-three in the audience, Anatoly Karatsuba, came back with a faster method.
+
+        **What could be faster than multiplying every digit by every digit?**
+
+        A natural thing to try is the plan of merge sort: split each number into a high half and a low half, multiply halves, and combine. Run the starter, which does that and counts the single-digit products. For numbers of 4, 8 and 16 digits it reports 16, 64 and 256. That is $n^2$ exactly. All the splitting has gained nothing.
+
+        So halving alone is not magic. It made sorting fast and it leaves multiplication where it was.
+
+        **What decides whether splitting a problem pays? And what did Karatsuba see?**
+  intuition:
+    - text: |
+        Look at what the starter does. Write the two numbers as
+
+        $$x = a \cdot 10^m + b, \qquad y = c \cdot 10^m + d,$$
+
+        where $a$ and $c$ are the high halves and $b$ and $d$ the low halves. For $x = 1234$ and $m = 2$, $a = 12$ and $b = 34$. Multiply out:
+
+        $$xy = ac \cdot 10^{2m} + (ad + bc) \cdot 10^m + bd.$$
+
+        Multiplying by a power of ten only shifts digits, and adding is cheap. The real work is the four products $ac$, $ad$, $bc$ and $bd$, each of numbers half as long.
+
+        Now count. One product of length $n$ becomes four of length $n/2$. Each of those becomes four of length $n/4$, sixteen in all. Each halving of the length multiplies the number of products by four. After $\log_2 n$ halvings the numbers are single digits, and there are
+
+        $$4^{\log_2 n} = (2^{\log_2 n})^2 = n^2$$
+
+        of them. Halving the size was exactly cancelled by quadrupling the count.
+
+        Merge sort was in a different position. One list of length $n$ becomes **two** of length $n/2$. Halving the size while only doubling the count leaves the total amount of material on each level the same, $n$, and there are $\log_2 n$ levels. Step through its levels once more.
+    - figure: sort-steps
+      props: { method: merge }
+    - text: |
+        So the question is a race between two numbers: **how fast the pieces multiply** and **how fast they shrink**. Four pieces of half the size is a draw with $n^2$. To win, multiplication needs fewer than four.
+
+        Karatsuba's observation is that the formula never needs $ad$ and $bc$ separately. It needs only their sum. And
+
+        $$(a + b)(c + d) = ac + ad + bc + bd,$$
+
+        so
+
+        $$ad + bc = (a + b)(c + d) - ac - bd.$$
+
+        The products $ac$ and $bd$ are needed anyway. **One** further product, of $a + b$ by $c + d$, then gives the middle term by subtraction. Three products where there were four, at the price of a few additions.
+
+        Three pieces of half the size. Each halving of the length multiplies the count by three, so there are $3^{\log_2 n}$ single-digit products. For a thousand digits, ten halvings: $3^{10} = 59049$ where the school method needs a million.
+  derivation:
+    - text: |
+        **The pattern.** Merge sort, binary search and both ways of multiplying follow one plan, called **divide and conquer**.
+
+        1. **Divide** the problem into smaller problems of the same kind.
+        2. **Conquer** each by the same method, until they are small enough to answer directly.
+        3. **Combine** the answers.
+
+        Correctness is the leap of faith of [[e1.recursion]]: assume the smaller problems are solved correctly and check the combining. The new matter is cost.
+
+        **Recurrences.** Write $T(n)$ for the cost on a problem of size $n$. The plan turns directly into an equation for $T$ in terms of itself, called a **recurrence**.
+
+        | method | pieces | size of each | dividing and combining | recurrence |
+        | --- | --- | --- | --- | --- |
+        | binary search | 1 | $n/2$ | 1 look | $T(n) = T(n/2) + 1$ |
+        | merge sort | 2 | $n/2$ | $n$ to merge | $T(n) = 2T(n/2) + n$ |
+        | multiplying, four products | 4 | $n/2$ | $n$ to add | $T(n) = 4T(n/2) + n$ |
+        | multiplying, three products | 3 | $n/2$ | $n$ to add | $T(n) = 3T(n/2) + n$ |
+
+        Adding or subtracting numbers of $n$ digits costs about $n$ steps, which is where the last column's $n$ comes from for multiplication.
+
+        **Solving by levels.** Draw the calls as a tree. At the top is the one problem of size $n$. Below it are its pieces, below them theirs. Then add up the cost of dividing and combining **level by level**.
+
+        Take merge sort. Level 0 has 1 problem of size $n$, costing $n$ to merge. Level 1 has 2 problems of size $n/2$, costing $n/2$ each, $n$ together. Level $k$ has $2^k$ problems of size $n/2^k$:
+
+        $$2^k \cdot \frac{n}{2^k} = n.$$
+
+        Every level costs the same, $n$. There are $\log_2 n$ levels, so $T(n) = n \log_2 n$. You found this in [[e3.sorting]] by the same count.
+
+        Take binary search. One problem on every level, costing 1. There are $\log_2 n$ levels: $T(n) = \log_2 n$.
+
+        Now the four-product multiplication. Level $k$ has $4^k$ problems of size $n/2^k$:
+
+        $$4^k \cdot \frac{n}{2^k} = 2^k \, n.$$
+
+        The levels are **not** equal. Each costs twice the one above: $n, 2n, 4n, \dots$ When each term of a sum is double the one before, the last term is larger than all the others together, as $8 > 4 + 2 + 1$. So the whole cost is less than twice the bottom level. The bottom level is level $\log_2 n$, costing $2^{\log_2 n} \cdot n = n^2$. So $T(n)$ is about $n^2$, as the starter showed.
+
+        And the three-product multiplication. Level $k$ has $3^k$ problems of size $n/2^k$:
+
+        $$3^k \cdot \frac{n}{2^k} = \left(\frac{3}{2}\right)^k n.$$
+
+        Each level costs one and a half times the one above. Again the bottom level dominates: the whole is less than three times the last term. The bottom level costs
+
+        $$\left(\frac{3}{2}\right)^{\log_2 n} n = \frac{3^{\log_2 n}}{2^{\log_2 n}} \, n = 3^{\log_2 n}.$$
+
+        **A tidier form.** The expression $3^{\log_2 n}$ is awkward. Take the logarithm to base 2 of it, using the rule that the logarithm of a power is the exponent times the logarithm:
+
+        $$\log_2 \left(3^{\log_2 n}\right) = \log_2 n \cdot \log_2 3 = \log_2 \left(n^{\log_2 3}\right).$$
+
+        Two numbers with the same logarithm are the same number, so
+
+        $$3^{\log_2 n} = n^{\log_2 3} \approx n^{1.585}.$$
+
+        Karatsuba's method costs about $n^{1.585}$. The exponent is below 2, and Kolmogorov's conjecture was false. For a thousand digits the gain is a factor of 17. For a million digits it is a factor of about 300, and the numbers multiplied in cryptography and in computing digits of $\pi$ are of that order. Python uses Karatsuba's method on its own whole numbers when they are long enough.
+    - question:
+        id: derive-level-cost
+        type: numeric
+        system: s2
+        prompt: |
+          A method splits a problem of size $n$ into 2 pieces of size $n/2$, and dividing and combining costs $n^2$. For $n = 16$, what is the total cost of dividing and combining on level 1, the level just below the top?
+        answer: "128"
+        explanation: |
+          Level 1 has 2 problems of size 8, each costing $8^2 = 64$. Compare level 0, one problem of size 16 costing 256. The level below the top costs half as much, and each further level halves again: $256, 128, 64, \dots$ Here the **top** level dominates, and the whole cost is less than twice the first term, so $T(n)$ is about $n^2$. When the combining is costly enough, the splitting below it hardly matters.
+        hints:
+          - How many problems are on level 1, and what is the size of each?
+          - Each problem of size 8 costs 8 squared.
+          - Multiply the cost of one by the number of them.
+    - text: |
+        **Three outcomes.** You have now seen all three things that can happen. Say a method makes $a$ pieces, each of size $n/b$, and that dividing and combining costs $n^d$. Level $k$ has $a^k$ problems of size $n/b^k$, costing
+
+        $$a^k \left(\frac{n}{b^k}\right)^d = \left(\frac{a}{b^d}\right)^k n^d.$$
+
+        From one level to the next the cost is multiplied by $a / b^d$: the pieces multiply by $a$, and the cost of each shrinks by $b^d$. Everything depends on whether that ratio is below, equal to, or above 1.
+
+        | race | which level dominates | cost | example |
+        | --- | --- | --- | --- |
+        | $a < b^d$ | the top: costs shrink going down | $n^d$ | 2 pieces of half size, combining $n^2$ |
+        | $a = b^d$ | none: every level costs the same | $n^d \log n$ | merge sort, binary search |
+        | $a > b^d$ | the bottom: costs grow going down | $n^{\log_b a}$ | multiplying with 3 or 4 products |
+
+        In the last row the cost is the number of smallest problems, the leaves of the tree: $a$ to the power of the number of levels, $a^{\log_b n} = n^{\log_b a}$. This table is known as the **master theorem**. You need not memorise it. Draw the tree, cost one level, and see which way the costs run.
+
+        Check it on binary search: $a = 1$, $b = 2$, $d = 0$, since the combining cost is the constant $1 = n^0$. Then $b^d = 1 = a$, the middle row, and the cost is $n^0 \log n = \log n$.
+
+        **Powers.** One more use, and one you will need. To compute $x^n$, the obvious way multiplies by $x$ again and again: $n - 1$ multiplications. But
+
+        $$x^n = \left(x^{n/2}\right)^2 \quad \text{when } n \text{ is even}, \qquad x^n = \left(x^{(n-1)/2}\right)^2 \cdot x \quad \text{when } n \text{ is odd}.$$
+
+        One piece of half the size, and one or two multiplications to combine.
+
+        ```python
+        def power(x, n):
+            if n == 0:
+                return 1
+            half = power(x, n // 2)
+            if n % 2 == 0:
+                return half * half
+            return half * half * x
+        ```
+
+        The recurrence is $T(n) = T(n/2) + 2$ at most, the recurrence of binary search, so the cost is about $2 \log_2 n$ multiplications. $x^{1000}$ takes about twenty where the obvious way takes 999.
+
+        Note the line `half = power(x, n // 2)`. The half-power is computed **once** and used twice. Write `power(x, n // 2) * power(x, n // 2)` and the function makes two calls of half the size: $T(n) = 2T(n/2) + 1$. By the table, $a = 2 > b^d = 1$, the bottom level dominates, and the cost is $n^{\log_2 2} = n$. The whole gain has gone, through computing the same thing twice.
+    - question:
+        id: derive-classify
+        type: choice
+        system: s2
+        prompt: |
+          A function on a list of $n$ items calls itself on each half of the list, and then does a constant amount of work. Its recurrence is $T(n) = 2T(n/2) + 1$. What is its cost?
+        options:
+          - "About $\\log_2 n$, like binary search, since it halves the list."
+          - "About $n$. The levels cost $1, 2, 4, \\dots$, doubling as they go down, so the bottom level of $n$ single items dominates, and the whole is less than $2n$."
+          - "About $n \\log_2 n$, like merge sort, since it makes two calls."
+          - "About $n^2$."
+        answer: 1
+        explanation: |
+          Level $k$ has $2^k$ calls, each costing 1 to combine. The sum $1 + 2 + 4 + \dots + n$ is $2n - 1$. In the table, $a = 2$, $b = 2$, $d = 0$, so $a > b^d$ and the cost is $n^{\log_2 2} = n$. It differs from binary search in keeping both halves, and from merge sort in combining for 1 where merge sort pays $n$. Finding the largest item of a list by halves is an example, and it does no better than a plain loop: every item must be looked at once whichever way you arrange it.
+        hints:
+          - How many calls are on level k, and what does each cost to combine?
+          - Add 1 + 2 + 4 and so on up to n.
+          - When each term doubles, the last is larger than all the others together.
+    - text: |
+        **When the pieces overlap.** Divide and conquer assumes that the pieces are separate problems. Consider the Fibonacci numbers, each the sum of the two before.
+
+        ```python
+        def fib(n):
+            if n < 2:
+                return n
+            return fib(n - 1) + fib(n - 2)
+        ```
+
+        This divides a problem into two smaller ones and combines by one addition, and it is disastrously slow: `fib(40)` makes over three hundred million calls. Two things have gone wrong. The pieces are barely smaller, $n - 1$ and $n - 2$ where a good split gives $n/2$, so the tree is $n$ levels deep where it should be $\log_2 n$. And the pieces are **not separate**: `fib(n - 1)` itself needs `fib(n - 2)`, which is then computed all over again alongside it. The same few small problems are solved millions of times.
+
+        That is not a failure of recursion. It is a sign that a different idea is needed, and the next lesson supplies it.
+  formal:
+    - text: |
+        **Divide and conquer.** Split a problem into smaller problems of the same kind, solve each recursively, and combine the answers. Problems below some size are answered directly.
+
+        **Recurrence.** An equation giving the cost $T(n)$ in terms of the cost on smaller sizes. A method that makes $a$ pieces of size $n/b$ and spends $f(n)$ dividing and combining has $T(n) = a\,T(n/b) + f(n)$.
+
+        **Tree of calls.** Level $k$ holds $a^k$ problems of size $n/b^k$, and there are $\log_b n$ levels. $T(n)$ is the sum of the costs of all levels.
+
+        **Master theorem.** For $T(n) = a\,T(n/b) + n^d$:
+
+        - if $a < b^d$ then $T(n)$ is $O(n^d)$,
+        - if $a = b^d$ then $T(n)$ is $O(n^d \log n)$,
+        - if $a > b^d$ then $T(n)$ is $O(n^{\log_b a})$.
+
+        **Identity.** $a^{\log_b n} = n^{\log_b a}$.
+
+        **Karatsuba multiplication.** With $x = a \cdot 10^m + b$ and $y = c \cdot 10^m + d$, compute $ac$, $bd$ and $(a + b)(c + d)$, and use $ad + bc = (a+b)(c+d) - ac - bd$. $T(n) = 3T(n/2) + n$, which is $O(n^{\log_2 3})$.
+
+        **Fast power.** $x^n = (x^{\lfloor n/2 \rfloor})^2$, times $x$ when $n$ is odd. $O(\log n)$ multiplications.
+  drill:
+    - text: Seconds each. In every recurrence, $n$ is a power of 2.
+    - question:
+        id: drill-rec-search
+        type: numeric
+        system: s1
+        prompt: |
+          $T(n) = T(n/2) + 1$ and $T(1) = 1$. What is $T(8)$?
+        answer: "4"
+        explanation: $T(2) = 2$, $T(4) = 3$, $T(8) = 4$. One is added for each halving.
+        hints:
+          - Work upwards from $T(1)$.
+          - Each doubling of $n$ adds 1.
+    - question:
+        id: drill-rec-merge
+        type: numeric
+        system: s1
+        prompt: |
+          $T(n) = 2T(n/2) + n$ and $T(1) = 0$. What is $T(8)$?
+        answer: "24"
+        explanation: $T(2) = 2$, $T(4) = 2 \times 2 + 4 = 8$, $T(8) = 2 \times 8 + 8$. That is $8 \log_2 8$.
+        hints:
+          - Work upwards. $T(2) = 2 \times 0 + 2$.
+          - Then find $T(4)$ from $T(2)$, and $T(8)$ from $T(4)$.
+    - question:
+        id: drill-rec-three
+        type: numeric
+        system: s1
+        prompt: |
+          $T(n) = 3T(n/2)$ and $T(1) = 1$. What is $T(8)$?
+        answer: "27"
+        explanation: Each halving multiplies by 3, and 8 halves three times, so $T(8) = 3^3$.
+        hints:
+          - How many times does 8 halve before reaching 1?
+          - Multiply by 3 once for each halving.
+    - question:
+        id: drill-rec-four
+        type: numeric
+        system: s1
+        prompt: |
+          $T(n) = 4T(n/2)$ and $T(1) = 1$. What is $T(8)$?
+        answer: "64"
+        explanation: $4^3$, which is $8^2$.
+        hints:
+          - Multiply by 4 once for each halving.
+          - 8 halves three times.
+    - question:
+        id: drill-pieces-level
+        type: numeric
+        system: s1
+        prompt: |
+          A method splits each problem into 3 pieces. How many problems are on level 4 of its tree of calls, counting the top as level 0?
+        answer: "81"
+        explanation: The count is multiplied by 3 at each level, so level 4 has $3^4$.
+        hints:
+          - Level 0 has one problem and level 1 has three.
+          - Multiply by 3 for each level down.
+    - question:
+        id: drill-levels
+        type: numeric
+        system: s1
+        prompt: |
+          A problem of size 4096 is halved until the pieces have size 1. How many halvings is that?
+        answer: "12"
+        explanation: $4096 = 2^{12}$.
+        hints:
+          - Write 4096 as a power of 2.
+          - 1024 is the tenth power.
+    - question:
+        id: drill-squarings
+        type: numeric
+        system: s1
+        prompt: |
+          Starting from $x$, how many squarings give $x^{16}$?
+        answer: "4"
+        explanation: $x \to x^2 \to x^4 \to x^8 \to x^{16}$.
+        hints:
+          - Each squaring doubles the exponent.
+          - How many doublings take 1 to 16?
+    - question:
+        id: drill-ratio
+        type: choice
+        system: s1
+        prompt: |
+          $T(n) = 2T(n/2) + n$. Going down one level of the tree, the total cost of a level is
+        options: ["halved", "unchanged", "doubled", "squared"]
+        answer: 1
+        explanation: Twice as many problems, each costing half as much to combine.
+        hints:
+          - How does the number of problems change?
+          - How does the cost of combining one of them change?
+    - question:
+        id: drill-case-bottom
+        type: choice
+        system: s1
+        prompt: |
+          $T(n) = 8T(n/2) + n^2$. Here $a = 8$ and $b^d = 4$. Which level of the tree dominates?
+        options: ["The top", "None, they are all equal", "The bottom", "The middle"]
+        answer: 2
+        explanation: The pieces multiply by 8 while the cost of each shrinks by 4, so each level costs twice the one above, and the last outweighs the rest.
+        hints:
+          - Compare the number of pieces with the factor by which each piece's cost shrinks.
+          - Do the levels grow or shrink going down?
+    - question:
+        id: drill-case-cost
+        type: choice
+        system: s1
+        prompt: |
+          $T(n) = 8T(n/2) + n^2$. What is its cost?
+        options: ["$n^2$", "$n^2 \\log n$", "$n^3$", "$8^n$"]
+        answer: 2
+        explanation: The bottom dominates, so the cost is $n^{\log_2 8} = n^3$.
+        hints:
+          - When the bottom dominates, the cost is $n$ to the power $\log_b a$.
+          - What is the logarithm of 8 to base 2?
+    - question:
+        id: drill-case-top
+        type: choice
+        system: s1
+        prompt: |
+          $T(n) = T(n/2) + n$. What is its cost?
+        options: ["$\\log n$", "$n$", "$n \\log n$", "$n^2$"]
+        answer: 1
+        explanation: The levels cost $n, n/2, n/4, \dots$, which add to less than $2n$. One piece against a cost that halves, so the top dominates.
+        hints:
+          - Write down the cost of the first three levels.
+          - What do $n$, half of $n$, a quarter of $n$ and so on add up to at most?
+    - question:
+        id: predict-calls
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          def calls(n):
+              if n <= 1:
+                  return 1
+              return 1 + calls(n // 2) + calls(n // 2)
+
+          print(calls(8), calls(16))
+        output: "15 31"
+        explanation: The function counts its own calls. The tree for 8 has $1 + 2 + 4 + 8$ of them, one less than twice the bottom level, and doubling the size adds a new bottom level of 16.
+        hints:
+          - calls(1) is 1 and calls(2) is 1 + 1 + 1.
+          - Each value is one more than twice the value for half the size.
+    - question:
+        id: predict-depth
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          def depth(n):
+              if n == 0:
+                  return 0
+              return 1 + depth(n // 2)
+
+          print(depth(1000), depth(1024))
+        output: "10 11"
+        explanation: The function counts the halvings, rounding down, needed to bring $n$ to 0. For 1000 the sizes are 1000, 500, 250, 125, 62, 31, 15, 7, 3 and 1. 1024 is the first number to need one more.
+        hints:
+          - Halve 1000 repeatedly, rounding down, and count the numbers you write, including the first.
+          - 1024 is a power of 2, the smallest number that halves down to 1 in ten steps.
+  work:
+    - text: Slower now. For each method, say how many pieces it makes, how large they are, and what the combining costs, before you write or judge it.
+    - question:
+        id: write-karatsuba
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          The starter is the puzzle's `multiply(x, y)`, which returns a pair: the product, and the number of single-digit products it used. It makes four recursive calls. Change it to make three, using $ad + bc = (a + b)(c + d) - ac - bd$. The product must stay right, and the count for the two 16-digit numbers must fall from 256 to below 200. Do not multiply long numbers directly: only the line under the first `if` may multiply two numbers that are not powers of ten.
+        starter: |
+          def multiply(x, y):
+              if x < 10 or y < 10:
+                  return x * y, 1
+              m = max(len(str(x)), len(str(y))) // 2
+              a, b = x // 10**m, x % 10**m
+              c, d = y // 10**m, y % 10**m
+              ac, n1 = multiply(a, c)
+              ad, n2 = multiply(a, d)
+              bc, n3 = multiply(b, c)
+              bd, n4 = multiply(b, d)
+              return ac * 10**(2 * m) + (ad + bc) * 10**m + bd, n1 + n2 + n3 + n4
+
+          print(multiply(1234567812345678, 8765432187654321)[1])
+        solution: |
+          def multiply(x, y):
+              if x < 10 or y < 10:
+                  return x * y, 1
+              m = max(len(str(x)), len(str(y))) // 2
+              a, b = x // 10**m, x % 10**m
+              c, d = y // 10**m, y % 10**m
+              ac, n1 = multiply(a, c)
+              bd, n2 = multiply(b, d)
+              both, n3 = multiply(a + b, c + d)
+              return ac * 10**(2 * m) + (both - ac - bd) * 10**m + bd, n1 + n2 + n3
+
+          print(multiply(1234567812345678, 8765432187654321)[1])
+        tests: |
+          for _x, _y in [(12, 34), (1234, 5678), (12345678, 87654321), (99999999, 99999999), (1000, 1000), (7, 123456), (123456, 7), (0, 5555), (31415926, 27), (1234567812345678, 8765432187654321)]:
+              assert multiply(_x, _y)[0] == _x * _y, "The product of " + str(_x) + " and " + str(_y) + " should be " + str(_x * _y) + ". You returned " + repr(multiply(_x, _y)[0])
+          _n = multiply(1234567812345678, 8765432187654321)[1]
+          assert _n < 200, "With three calls, the two 16-digit numbers need about 99 single-digit products. Yours used " + str(_n) + ". Four calls use 256"
+          assert _n > 20, "The count for the 16-digit numbers is " + str(_n) + ", which is too few to be true. Long numbers must be split, not multiplied directly"
+          assert multiply(12, 34)[1] == 3, "12 times 34 needs the three products 1 by 3, 2 by 4 and 3 by 7. You counted " + repr(multiply(12, 34)[1])
+          assert output.strip().isdigit() and 20 < int(output.strip()) < 200, "The program should print the count for the 16-digit numbers, which is about 99"
+        wrong:
+          - |
+            def multiply(x, y):
+                if x < 10 or y < 10:
+                    return x * y, 1
+                m = max(len(str(x)), len(str(y))) // 2
+                a, b = x // 10**m, x % 10**m
+                c, d = y // 10**m, y % 10**m
+                ac, n1 = multiply(a, c)
+                bd, n2 = multiply(b, d)
+                both, n3 = multiply(a + b, c + d)
+                return ac * 10**(2 * m) + both * 10**m + bd, n1 + n2 + n3
+
+            print(99)
+          - |
+            def multiply(x, y):
+                return x * y, 1
+
+            print(99)
+          - |
+            def multiply(x, y):
+                if x < 10 or y < 10:
+                    return x * y, 1
+                m = max(len(str(x)), len(str(y))) // 2
+                a, b = x // 10**m, x % 10**m
+                c, d = y // 10**m, y % 10**m
+                ac, n1 = multiply(a, c)
+                bd, n2 = multiply(b, d)
+                both, n3 = multiply(a + b, c + d)
+                return ac * 10**m + (both - ac - bd) * 10**m + bd, n1 + n2 + n3
+
+            print(99)
+          - |
+            def multiply(x, y):
+                if x < 10 or y < 10:
+                    return x * y, 1
+                m = max(len(str(x)), len(str(y))) // 2
+                a, b = x // 10**m, x % 10**m
+                c, d = y // 10**m, y % 10**m
+                ac, n1 = multiply(a, c)
+                bd, n2 = multiply(b, d)
+                ad, n3 = multiply(a, d)
+                return ac * 10**(2 * m) + (ad + ad) * 10**m + bd, n1 + n2 + n3
+
+            print(99)
+        explanation: |
+          The products $ac$ and $bd$ are kept. The two calls for $ad$ and $bc$ are replaced by one call for $(a + b)(c + d)$, and the middle term is that product less $ac$ and $bd$. Forgetting the subtraction leaves $ac + bd$ in the middle term twice over. The count for the 16-digit numbers comes out at 99. An ideal count would be $3^4 = 81$, since 16 halves four times, and the excess is because $a + b$ can spill into one more digit than $a$ or $b$, which makes some of the pieces slightly longer than half. That does not change the exponent. Each level still makes three pieces of about half the length, so the cost grows as $n^{\log_2 3}$, and the gap from $n^2$ widens with every doubling: the four-call version quadruples where this one triples.
+        hints:
+          - Keep the calls for ac and bd, and remove the calls for ad and bc.
+          - Make one call, multiply(a + b, c + d), and subtract ac and bd from its product to get the middle term.
+          - The count returned is the sum of the three counts from the three calls.
+    - question:
+        id: write-inversions
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          An inversion is a pair of items in the wrong order, a larger one before a smaller. Counting them pair by pair costs $n^2$. The starter is a merge sort that returns the sorted list together with a count, and at present it counts only the inversions inside each half. Add what is missing, so that `count_inversions` also counts the pairs with one item in each half, in the course of the merge, for no more than the cost of the sort.
+        starter: |
+          def sort_and_count(items):
+              if len(items) <= 1:
+                  return items, 0
+              middle = len(items) // 2
+              left, in_left = sort_and_count(items[:middle])
+              right, in_right = sort_and_count(items[middle:])
+              count = in_left + in_right
+              merged = []
+              i = 0
+              j = 0
+              while i < len(left) and j < len(right):
+                  if left[i] <= right[j]:
+                      merged.append(left[i])
+                      i += 1
+                  else:
+                      # An item of the right half is placed before some items of the left half.
+                      merged.append(right[j])
+                      j += 1
+              return merged + left[i:] + right[j:], count
+
+          def count_inversions(items):
+              return sort_and_count(items)[1]
+
+          print(count_inversions([5, 2, 8, 1, 9, 3, 7, 4]))
+        solution: |
+          def sort_and_count(items):
+              if len(items) <= 1:
+                  return items, 0
+              middle = len(items) // 2
+              left, in_left = sort_and_count(items[:middle])
+              right, in_right = sort_and_count(items[middle:])
+              count = in_left + in_right
+              merged = []
+              i = 0
+              j = 0
+              while i < len(left) and j < len(right):
+                  if left[i] <= right[j]:
+                      merged.append(left[i])
+                      i += 1
+                  else:
+                      # An item of the right half is placed before some items of the left half.
+                      merged.append(right[j])
+                      j += 1
+                      count += len(left) - i
+              return merged + left[i:] + right[j:], count
+
+          def count_inversions(items):
+              return sort_and_count(items)[1]
+
+          print(count_inversions([5, 2, 8, 1, 9, 3, 7, 4]))
+        tests: |
+          def _slow(items):
+              return len([1 for p in range(len(items)) for q in range(p + 1, len(items)) if items[p] > items[q]])
+          assert count_inversions([5, 2, 8, 1, 9, 3, 7, 4]) == 13, "The row 5, 2, 8, 1, 9, 3, 7, 4 has 13 inversions. You returned " + repr(count_inversions([5, 2, 8, 1, 9, 3, 7, 4]))
+          assert count_inversions([1, 2, 3, 4]) == 0, "A sorted list has no inversions. You returned " + repr(count_inversions([1, 2, 3, 4]))
+          assert count_inversions([4, 3, 2, 1]) == 6, "In [4, 3, 2, 1] every one of the 6 pairs is an inversion. You returned " + repr(count_inversions([4, 3, 2, 1]))
+          assert count_inversions([2, 1]) == 1, "[2, 1] has 1 inversion. You returned " + repr(count_inversions([2, 1]))
+          assert count_inversions([]) == 0, "An empty list has no inversions. You returned " + repr(count_inversions([]))
+          assert count_inversions([3, 3, 3]) == 0, "Equal items are not in the wrong order. [3, 3, 3] has 0 inversions. You returned " + repr(count_inversions([3, 3, 3]))
+          assert count_inversions([2, 1, 2, 1]) == 3, "[2, 1, 2, 1] has 3 inversions. You returned " + repr(count_inversions([2, 1, 2, 1]))
+          for _list in [[3, 1, 2], [1, 3, 2, 5, 4], [9, 1, 8, 2, 7, 3, 6, 4, 5], [5, 1, 4, 1, 5, 9, 2, 6, 5, 3], list(range(50, 0, -1))]:
+              assert count_inversions(_list) == _slow(_list), str(_list) + " has " + str(_slow(_list)) + " inversions. You returned " + repr(count_inversions(_list))
+          assert sort_and_count([3, 1, 2])[0] == [1, 2, 3], "sort_and_count should still return the sorted list first"
+          assert output.strip() == "13", "The program should print 13"
+        wrong:
+          - |
+            def sort_and_count(items):
+                if len(items) <= 1:
+                    return items, 0
+                middle = len(items) // 2
+                left, in_left = sort_and_count(items[:middle])
+                right, in_right = sort_and_count(items[middle:])
+                count = in_left + in_right
+                merged = []
+                i = 0
+                j = 0
+                while i < len(left) and j < len(right):
+                    if left[i] <= right[j]:
+                        merged.append(left[i])
+                        i += 1
+                    else:
+                        merged.append(right[j])
+                        j += 1
+                        count += 1
+                return merged + left[i:] + right[j:], count
+
+            def count_inversions(items):
+                return sort_and_count(items)[1]
+
+            print(13)
+          - |
+            def sort_and_count(items):
+                if len(items) <= 1:
+                    return items, 0
+                middle = len(items) // 2
+                left, in_left = sort_and_count(items[:middle])
+                right, in_right = sort_and_count(items[middle:])
+                count = in_left + in_right
+                merged = []
+                i = 0
+                j = 0
+                while i < len(left) and j < len(right):
+                    if left[i] <= right[j]:
+                        merged.append(left[i])
+                        i += 1
+                    else:
+                        merged.append(right[j])
+                        j += 1
+                        count += i
+                return merged + left[i:] + right[j:], count
+
+            def count_inversions(items):
+                return sort_and_count(items)[1]
+
+            print(13)
+          - |
+            def sort_and_count(items):
+                if len(items) <= 1:
+                    return items, 0
+                middle = len(items) // 2
+                left, in_left = sort_and_count(items[:middle])
+                right, in_right = sort_and_count(items[middle:])
+                count = in_left + in_right
+                merged = []
+                i = 0
+                j = 0
+                while i < len(left) and j < len(right):
+                    if left[i] < right[j]:
+                        merged.append(left[i])
+                        i += 1
+                    else:
+                        merged.append(right[j])
+                        j += 1
+                        count += len(left) - i
+                return merged + left[i:] + right[j:], count
+
+            def count_inversions(items):
+                return sort_and_count(items)[1]
+
+            print(13)
+          - |
+            def sort_and_count(items):
+                if len(items) <= 1:
+                    return items, 0
+                middle = len(items) // 2
+                left, in_left = sort_and_count(items[:middle])
+                right, in_right = sort_and_count(items[middle:])
+                count = in_left + in_right
+                merged = []
+                i = 0
+                j = 0
+                while i < len(left) and j < len(right):
+                    if left[i] <= right[j]:
+                        merged.append(left[i])
+                        i += 1
+                    else:
+                        merged.append(right[j])
+                        j += 1
+                        count += len(left)
+                return merged + left[i:] + right[j:], count
+
+            def count_inversions(items):
+                return sort_and_count(items)[1]
+
+            print(13)
+        explanation: |
+          Every inversion is of one of three kinds: both items in the left half, both in the right, or one in each. The recursion counts the first two kinds. For the third, look at the moment the merge takes an item from the right half. It is taken because it is smaller than `left[i]`, and since the left half is sorted, it is smaller than everything from position `i` onwards as well: `len(left) - i` items, each of which stood before it in the original list. Each of those pairs is an inversion, and all are counted with one addition. Adding 1 counts a single pair where there are many. Adding `i` counts the items of the left half already placed, which are the ones **not** inverted with it. Sorting the halves first does not disturb the count, since sorting a half moves no item across the middle. The recurrence is that of merge sort, $T(n) = 2T(n/2) + n$, so the count costs $n \log n$ where checking every pair costs $n^2$. This is the remark from the sorting lesson made exact: one comparison in a merge accounts for many inversions.
+        hints:
+          - When right[j] is placed before left[i], which other items of the left half is it also smaller than?
+          - The left half is sorted, so everything from position i to its end is at least left[i].
+          - Add len(left) - i to count each time an item is taken from the right half.
+    - question:
+        id: fix-power
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `power(x, n)` should compute $x^n$ for a whole number $n \ge 0$ with about $\log_2 n$ multiplications. It should print `1024 243 1`. It prints `256 9 1`. Fix it, keeping it fast.
+        starter: |
+          def power(x, n):
+              if n == 0:
+                  return 1
+              half = power(x, n // 2)
+              return half * half
+
+          print(power(2, 10), power(3, 5), power(7, 0))
+        solution: |
+          def power(x, n):
+              if n == 0:
+                  return 1
+              half = power(x, n // 2)
+              if n % 2 == 0:
+                  return half * half
+              return half * half * x
+
+          print(power(2, 10), power(3, 5), power(7, 0))
+        tests: |
+          for _x, _n in [(2, 10), (3, 5), (7, 0), (5, 1), (2, 2), (2, 3), (10, 6), (3, 13), (2, 64), (2, 100), (-2, 5), (1, 999)]:
+              assert power(_x, _n) == _x ** _n, str(_x) + " to the power " + str(_n) + " is " + str(_x ** _n) + ". You returned " + repr(power(_x, _n))
+          assert abs(power(1.5, 4) - 5.0625) < 1e-9, "1.5 to the power 4 is 5.0625. You returned " + repr(power(1.5, 4))
+          class _Counted:
+              used = 0
+              def __init__(self, v):
+                  self.v = v
+              def __mul__(self, other):
+                  _Counted.used += 1
+                  return _Counted(self.v * (other.v if isinstance(other, _Counted) else other))
+              def __rmul__(self, other):
+                  _Counted.used += 1
+                  return _Counted(self.v * other)
+          _r = power(_Counted(3), 1000)
+          assert _r.v == 3 ** 1000, "3 to the power 1000 came out wrong"
+          assert _Counted.used <= 40, "3 to the power 1000 should need about 20 multiplications. Yours used " + str(_Counted.used)
+          assert output.strip() == "1024 243 1", "The program should print 1024 243 1"
+        wrong:
+          - |
+            def power(x, n):
+                result = 1
+                for k in range(n):
+                    result = result * x
+                return result
+
+            print(power(2, 10), power(3, 5), power(7, 0))
+          - |
+            def power(x, n):
+                if n == 0:
+                    return 1
+                if n % 2 == 0:
+                    return power(x, n // 2) * power(x, n // 2)
+                return power(x, n // 2) * power(x, n // 2) * x
+
+            print(power(2, 10), power(3, 5), power(7, 0))
+          - |
+            def power(x, n):
+                if n == 0:
+                    return 1
+                half = power(x, n // 2)
+                return half * half * x
+
+            print("1024 243 1")
+          - |
+            def power(x, n):
+                if n == 0:
+                    return 1
+                half = power(x, n // 2)
+                if n % 2 == 0:
+                    return half * half
+                return half * half + x
+
+            print("1024 243 1")
+        explanation: |
+          `n // 2` rounds down, so for an odd `n` the half-power squared is $x^{n-1}$, one factor of $x$ short. The call `power(2, 10)` passes through $n = 5$ and $n = 1$, both odd, and loses a factor of 2 at each, giving 256. The repair is to multiply by `x` once more when `n` is odd. Two tempting repairs are no repairs. A loop that multiplies `n` times is correct and has thrown away the method. Calling `power(x, n // 2)` twice in one line is also correct, and it turns the recurrence $T(n) = T(n/2) + 2$ into $T(n) = 2T(n/2) + 1$: two pieces of half the size, the bottom level dominates, and the cost is back to about $n$ multiplications. Compute the half once and keep it in a variable.
+        hints:
+          - What is 5 // 2, and what is the square of x to that power?
+          - For an odd n, the square of the half-power is x to the power n - 1.
+          - When n is odd, multiply the square by x once more. Keep the half-power in a variable so that it is computed once.
+    - question:
+        id: work-strassen
+        type: choice
+        system: s2
+        prompt: |
+          Multiplying two $n \times n$ grids of numbers, which you will meet as matrices, costs $n^3$ by the direct method. Split each grid into four quarters of side $n/2$, and the direct method needs 8 products of quarters, with $n^2$ additions to combine. Volker Strassen found a way to manage with 7 products. What are the two costs?
+        options:
+          - "8 products give $n^3$ and 7 products give $n^2$."
+          - "8 products give $n^{\\log_2 8} = n^3$, no gain. 7 products give $n^{\\log_2 7} \\approx n^{2.81}$. In both, the pieces multiply faster than the factor of 4 by which the combining cost shrinks, so the bottom level dominates."
+          - "Both give $n^2 \\log n$, since combining costs $n^2$."
+          - "7 products give $\\frac{7}{8} n^3$, a saving of one eighth."
+        answer: 1
+        explanation: |
+          Here $a$ is 8 or 7, $b = 2$ and $d = 2$, so $b^d = 4$. Both 8 and 7 exceed 4, the levels grow going down, and the cost is the number of leaves, $n^{\log_2 a}$. With 8 that is $n^3$: as with the four-product multiplication, splitting alone gains nothing. With 7 the exponent drops to about 2.81. This is Karatsuba's discovery over again, one fewer product at every level of the recursion, compounded over all the levels. A saving of one eighth would be the result of saving one product once. Saving it at every level changes the exponent. Multiplying grids of numbers is the main work of a neural network, which is why the question of how fast it can be done is still studied.
+        hints:
+          - Find a, b and d, and compare a with b to the power d.
+          - When the bottom level dominates, the cost is n to the power of the logarithm of a to base b.
+          - The logarithm of 8 to base 2 is 3. Is the logarithm of 7 larger or smaller?
+    - question:
+        id: work-fib
+        type: choice
+        system: s2
+        prompt: |
+          `fib(n)` returns `fib(n - 1) + fib(n - 2)`, and `fib(40)` makes over three hundred million calls. Merge sort also makes two recursive calls, and sorts a million items with about two million. What is the essential difference?
+        options:
+          - "Addition is slower than merging."
+          - "Merge sort's two pieces are half the size and share nothing, so the tree is 20 levels deep and every piece is a different problem. The pieces of `fib` are smaller by only 1 and 2, so the tree is 40 levels deep, and they overlap: there are only 41 different problems, each solved over and over."
+          - "`fib` has no base case."
+          - "Merge sort uses a loop inside, and loops are faster."
+        answer: 1
+        explanation: |
+          Two things separate them. First, the depth. Halving reaches the bottom in $\log_2 n$ levels, while subtracting 1 takes $n$ levels, and a tree that doubles for $n$ levels is exponential in $n$. Second, the overlap. The two halves of a list have no item in common, so no work is repeated. But `fib(38)` is needed by `fib(40)` directly and again by `fib(39)`, and `fib(37)` is needed three times, and the repeats multiply all the way down. Three hundred million calls are being spent on forty-one different questions. Divide and conquer has nothing to say about that. The cure is plain once it is put that way: answer each question once and remember the answer.
+        hints:
+          - How deep is each tree of calls?
+          - How many different values of n does fib(40) ever ask about?
+          - Do the two halves of a list share any item? Do fib(39) and fib(38) share any work?
+    - question:
+        id: work-median
+        type: choice
+        system: s2
+        prompt: |
+          To find the middle value of an unsorted list, a method picks an item, splits the list into the items smaller and the items larger in one pass costing $n$, and then continues in only the part that must hold the middle value. Suppose each split leaves a part about half as long. What is the cost?
+        options:
+          - "About $n \\log_2 n$, since it is like sorting."
+          - "About $2n$. The recurrence is $T(n) = T(n/2) + n$, the levels cost $n, n/2, n/4, \\dots$, and these add to less than $2n$."
+          - "About $\\log_2 n$, like binary search."
+          - "About $n^2$."
+        answer: 1
+        explanation: |
+          One piece of half the size, with a combining cost of $n$: $a = 1$, $b = 2$, $d = 1$. Since $a < b^d$, the top level dominates and the cost is about $n$. The middle value is found without sorting, and for less than the cost of sorting. Compare the three methods that halve. Binary search keeps one half and pays 1 per level: $\log n$. This method keeps one half and pays $n$ on the first level, with each later level cheaper: $n$. Merge sort keeps both halves and pays $n$ on every level: $n \log n$. The same three numbers, pieces, size and combining cost, decide them all.
+        hints:
+          - How many pieces are kept, and what does the split cost?
+          - Write the costs of the first few levels and add them.
+          - A sum in which each term is half the one before is less than twice its first term.
+  connections:
+    - text: |
+        The puzzle asked what could be faster than multiplying every digit by every digit, and what decides whether splitting a problem pays. Splitting a product into four half-length products gains nothing, because the pieces quadruple exactly as fast as their cost falls. Karatsuba saw that the middle term can be had from one product in place of two, and three pieces of half the size cost $n^{\log_2 3}$, about $n^{1.585}$. Whether splitting pays is a race between the number of pieces and the factor by which each shrinks, and you can read off the winner by costing one level of the tree of calls and seeing whether the levels grow, shrink or stay equal.
+
+        The methods of the last two lessons are now cases of one table. Binary search from [[e3.binary-search]] keeps one half and combines for nothing. Merge sort from [[e3.sorting]] keeps two and combines for $n$, the balanced case in which every level costs the same. The tool throughout was the logarithm as a count of halvings, and the correctness of each method rested on the leap of faith of [[e1.recursion]].
+
+        You will meet the same analysis wherever something is halved: in the fast Fourier transform, which is two pieces of half the size with a linear combining step and so costs $n \log n$, and in the layers of a network that repeatedly halve an image.
+
+        The lesson ended on a method that fails. `fib` divides and combines, and takes three hundred million calls to answer forty-one questions, because its pieces overlap. Problems like that are everywhere: the best way to break a sentence into words, the cheapest route through a grid, the smallest number of edits that turn one string into another. Each has pieces that share their own pieces. The remedy is to solve each piece once and write its answer in a table, and it turns exponential costs into small polynomial ones. That is the next lesson, [[e3.dynamic-programming]].
