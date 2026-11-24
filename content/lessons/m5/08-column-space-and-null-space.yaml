@@ -1,0 +1,853 @@
+concept: m5.column-space-and-null-space
+minutes: 100
+claim: You can describe the column space of a matrix as everything it can output and the null space as everything it sends to zero, show that both are closed under adding and scaling, find the null space from the reduced rows, write every solution of a system as one particular solution plus a vector of the null space, explain why the null space is perpendicular to the rows, and read both spaces as what a model can express and what it cannot see.
+recalls: [m5.rank]
+uses: [m5.elimination-and-linear-systems, m5.transpose, m5.identity-and-inverse, m5.matrix-vector-product, m5.matrices-as-linear-maps, m4.linear-independence, m4.lines-planes-and-hyperplanes, m4.linear-combinations-and-span, m4.dot-product, e1.comprehensions-and-iterators, e0.functions, e0.loops, e0.lists-and-tuples]
+leads: [m5.basis-and-dimension, m7.orthogonal-subspaces, m7.least-squares-and-the-normal-equations]
+starter: |
+  # Scratch space. Four flats, three features: rooms, bathrooms, and their total.
+  X = [[3, 1, 4], [2, 1, 3], [4, 2, 6], [1, 1, 2]]
+
+  def predict(w):
+      return [sum([a * b for a, b in zip(row, w)]) for row in X]
+
+  # Try to hit the rents [10, 7, 14, 4]. Then try to hit [12, 7, 13, 5].
+  print(predict([3, 1, 0]))
+  print(predict([1, 1, -1]))
+parts:
+  recall:
+    - text: |
+        [[m5.rank]] counted how many dimensions the outputs of a matrix fill, and ended by asking which outputs those are, and which inputs are lost. Today both sets are described. Three quick pulls first.
+    - question:
+        id: recall-rank
+        type: numeric
+        system: s1
+        concepts: [m5.rank]
+        prompt: |
+          What is the rank of the matrix with rows $(1, 2)$ and $(0.5, 1)$?
+        answer: "1"
+        explanation: The second column, (2, 1), is twice the first, (1, 0.5). One independent column.
+        hints:
+          - Compare the two columns.
+          - How many pivots would elimination find?
+    - question:
+        id: recall-span
+        type: choice
+        system: s1
+        concepts: [m4.linear-combinations-and-span]
+        prompt: |
+          The span of a list of vectors is
+        options: ["the list itself", "the set of all their linear combinations", "the longest vector in the list", "the number of vectors in the list"]
+        answer: 1
+        explanation: Everything that can be reached by scaling the vectors and adding the results.
+        hints:
+          - It is a set of vectors, usually an infinite one.
+          - What can be built from the list by adding and scaling?
+    - question:
+        id: recall-free
+        type: choice
+        system: s1
+        concepts: [m5.elimination-and-linear-systems]
+        prompt: |
+          After elimination, a column with no pivot corresponds to
+        options: ["a contradiction", "a free variable", "a unique solution", "a row exchange"]
+        answer: 1
+        explanation: Nothing fixes the unknown of that column, so it may take any value, and the others are found in terms of it.
+        hints:
+          - Each pivot fixes one unknown.
+          - What about an unknown with no pivot?
+  puzzle:
+    - text: |
+        The four flats once more, with the three features that caused trouble before: rooms, bathrooms, and the total of the two. A model predicts rents as $X\mathbf{w}$, where $X$ has four rows and three columns.
+
+        The landlord shows you two lists of rents and asks whether your model can match each one exactly.
+
+        $$\mathbf{y} = (10, 7, 14, 4), \qquad \mathbf{y}' = (12, 7, 13, 5).$$
+
+        Run the starter. The weights $(3, 1, 0)$ give $(10, 7, 14, 4)$: the first list is matched. Now try to match the second. Adjust the weights as you like. You will get close and never arrive.
+
+        The second line of the starter is stranger. The weights $(1, 1, -1)$ predict a rent of **zero** for every flat. They are not zero weights, and the model's output is nothing at all.
+
+        Two questions, and you cannot answer either by trying weights, because there are infinitely many to try.
+
+        **Which lists of rents can this model match, and how would you recognise one that it cannot? And when a list can be matched, what are all the weights that match it?**
+  intuition:
+    - text: |
+        Take the first question. The prediction $X\mathbf{w}$ is a combination of the three columns of $X$, with the weights as coefficients. So the lists the model can match are exactly the combinations of the columns: their span. The columns are vectors in $\mathbb{R}^4$, and the third is the sum of the other two, so the span is the same as the span of the first two: a flat sheet, a plane through the origin, inside a space of four dimensions. The first list of rents lies on that sheet. The second does not. No weights will ever leave the sheet.
+
+        Now the second question. The weights $(1, 1, -1)$ produce the zero vector. So if $\mathbf{w}$ matches a list, then $\mathbf{w} + (1, 1, -1)$ matches it too, and so does $\mathbf{w}$ plus any multiple of $(1, 1, -1)$. The weights that match are a whole line in the space of weights.
+
+        The figure shows both ideas for a smaller matrix, one that takes the plane to the plane. The input $\mathbf{x}$ is steered by two controls. Move it along $(2, -1)$ and watch $A\mathbf{x}$.
+    - figure: null-space
+      props: { t: 1, s: 1 }
+    - text: |
+        Sliding $\mathbf{x}$ along $(2, -1)$ does not move $A\mathbf{x}$ at all. The faint line through $\mathbf{x}$ is the set of all inputs that share its output. Sliding $\mathbf{x}$ along the other control, $(1, 2)$, does move the output, but only up and down one fixed line, the line through $(2, 1)$.
+
+        Two sets have appeared, and they live in different places.
+
+        - In the space of **outputs**: the set of everything the matrix can produce. Here, the line through $(2, 1)$.
+        - In the space of **inputs**: the set of everything the matrix sends to zero. Here, the line through $(2, -1)$.
+
+        **The first set tells you which equations $A\mathbf{x} = \mathbf{b}$ can be solved. The second tells you how many solutions there are.** They are called the column space and the null space, and each is more than a set: adding or scaling its members never takes you out of it.
+  derivation:
+    - text: |
+        **Subspaces.** A set $S$ of vectors in $\mathbb{R}^n$ is a **subspace** if it contains the zero vector and is closed under the two operations of vectors: whenever $\mathbf{u}$ and $\mathbf{v}$ are in $S$, so is $\mathbf{u} + \mathbf{v}$, and whenever $\mathbf{v}$ is in $S$, so is $c\,\mathbf{v}$ for every number $c$. A line through the origin is a subspace. So is a plane through the origin, the whole space, and the set containing only $\mathbf{0}$. A line that misses the origin is not, and neither is a quarter of the plane, where scaling by $-1$ leads out.
+
+        The span of any list of vectors is a subspace: a sum of combinations is a combination, and so is a multiple of one.
+
+        **The column space.** For an $m \times n$ matrix $A$, the **column space** $C(A)$ is the set of all vectors $A\mathbf{x}$, as $\mathbf{x}$ ranges over $\mathbb{R}^n$. Since $A\mathbf{x}$ is the combination of the columns with coefficients $\mathbf{x}$, it is the span of the columns. It is a subspace of $\mathbb{R}^m$, the space of outputs.
+
+        $$A\mathbf{x} = \mathbf{b} \text{ has a solution} \iff \mathbf{b} \in C(A).$$
+
+        That is the definition restated, and it is the answer to the first question of the puzzle. The rank counts the independent columns, so it measures the size of the column space: rank 1 gives a line, rank 2 a plane.
+
+        **The null space.** The **null space** $N(A)$ is the set of all $\mathbf{x}$ with $A\mathbf{x} = \mathbf{0}$. It is a subspace of $\mathbb{R}^n$, the space of inputs. Check the three requirements. $A\mathbf{0} = \mathbf{0}$, so it contains the zero vector. If $A\mathbf{u} = \mathbf{0}$ and $A\mathbf{v} = \mathbf{0}$ then $A(\mathbf{u} + \mathbf{v}) = \mathbf{0} + \mathbf{0} = \mathbf{0}$. And $A(c\,\mathbf{v}) = c\,A\mathbf{v} = \mathbf{0}$. Each check is linearity and nothing more.
+
+        The null space always contains $\mathbf{0}$. It contains nothing else exactly when the columns of $A$ are independent, since a non-zero $\mathbf{c}$ with $A\mathbf{c} = \mathbf{0}$ is a dependency among the columns.
+
+        Keep the two homes apart. For a $3 \times 5$ matrix, the column space is made of vectors with 3 components and the null space of vectors with 5. Asking whether a vector belongs to both does not even make sense unless the matrix is square.
+
+        **Finding the null space.** Elimination does it. Take the matrix of the last lesson and reduce it, then keep going: clear **above** each pivot as well, and divide each row by its pivot. The result is the **reduced** form.
+
+        $$A = \begin{pmatrix} 1 & 2 & 1 & 4 \\ 2 & 4 & 5 & 14 \\ 3 & 6 & 6 & 18 \end{pmatrix} \to \begin{pmatrix} 1 & 2 & 1 & 4 \\ 0 & 0 & 3 & 6 \\ 0 & 0 & 0 & 0 \end{pmatrix} \to \begin{pmatrix} 1 & 2 & 0 & 2 \\ 0 & 0 & 1 & 2 \\ 0 & 0 & 0 & 0 \end{pmatrix}.$$
+
+        Row operations do not change the solutions of $A\mathbf{x} = \mathbf{0}$, so the null space of $A$ is the null space of the last matrix, whose equations are
+
+        $$x_1 + 2x_2 + 2x_4 = 0, \qquad x_3 + 2x_4 = 0.$$
+
+        The pivots are in columns 1 and 3. Columns 2 and 4 have none, so $x_2$ and $x_4$ are free. Each equation gives one pivot variable in terms of the free ones: $x_1 = -2x_2 - 2x_4$ and $x_3 = -2x_4$.
+
+        Now choose the free variables in the simplest independent ways: one of them 1 and the rest 0.
+
+        - $x_2 = 1$, $x_4 = 0$ gives $\mathbf{s}_1 = (-2, 1, 0, 0)$.
+        - $x_2 = 0$, $x_4 = 1$ gives $\mathbf{s}_2 = (-2, 0, -2, 1)$.
+
+        These are called the **special solutions**. Every solution is a combination of them: a solution with free values $x_2$ and $x_4$ is exactly $x_2\,\mathbf{s}_1 + x_4\,\mathbf{s}_2$, as you can confirm component by component. So
+
+        $$N(A) = \text{all combinations of } (-2, 1, 0, 0) \text{ and } (-2, 0, -2, 1).$$
+
+        In the reduced form the recipe is mechanical. For a free column, put 1 in its own place, 0 in the other free places, and in each pivot place put **minus** the entry of the free column in that pivot's row.
+
+        Count: one special solution for each free column, and there are $n - r$ free columns, where $r$ is the rank. Here $4 - 2 = 2$. The special solutions are independent, since each has a 1 in a place where the others have 0. So the null space is spanned by $n - r$ independent vectors. **The larger the rank, the smaller the null space.** What the outputs gain, the lost inputs give up.
+    - question:
+        id: derivation-homes
+        type: choice
+        system: s2
+        prompt: |
+          $A$ is a $3 \times 5$ matrix of rank 3. Which statement is right?
+        options:
+          - "The column space is all of $\\mathbb{R}^3$, and the null space is spanned by 2 independent vectors of $\\mathbb{R}^5$."
+          - "The column space is all of $\\mathbb{R}^5$, and the null space contains only the zero vector."
+          - "The column space is spanned by 2 vectors of $\\mathbb{R}^3$, and the null space is all of $\\mathbb{R}^5$."
+          - "Both spaces are in $\\mathbb{R}^3$."
+        answer: 0
+        explanation: |
+          The columns have 3 components, so the column space is inside $\mathbb{R}^3$, and with 3 independent columns it is all of $\mathbb{R}^3$: three independent vectors in three dimensions span everything. Inputs have 5 components, so the null space is inside $\mathbb{R}^5$. There are $5 - 3 = 2$ columns without pivots, hence 2 special solutions. So every right-hand side can be reached, and each is reached by a two-dimensional family of inputs. A matrix that is wider than it is tall always destroys something.
+        hints:
+          - How many components has a column? That is the home of the column space.
+          - How many components has an input? That is the home of the null space.
+          - The number of free columns is the number of columns minus the rank.
+    - text: |
+        **All the solutions of $A\mathbf{x} = \mathbf{b}$.** Suppose $\mathbf{x}_p$ is one solution, any one. It is called a **particular solution**.
+
+        *Adding a null vector gives another solution.* If $A\mathbf{x}_n = \mathbf{0}$ then $A(\mathbf{x}_p + \mathbf{x}_n) = \mathbf{b} + \mathbf{0} = \mathbf{b}$.
+
+        *Every solution arises so.* If $A\mathbf{x} = \mathbf{b}$ as well, then $A(\mathbf{x} - \mathbf{x}_p) = \mathbf{b} - \mathbf{b} = \mathbf{0}$, so $\mathbf{x} - \mathbf{x}_p$ is in the null space, and $\mathbf{x} = \mathbf{x}_p + (\mathbf{x} - \mathbf{x}_p)$.
+
+        $$\text{all solutions of } A\mathbf{x} = \mathbf{b} \;=\; \mathbf{x}_p + N(A).$$
+
+        **The solutions are the null space, shifted.** If the null space is a line through the origin, the solutions form a parallel line through $\mathbf{x}_p$. That is the faint line in the figure. The shifted set is not a subspace, since it misses the origin unless $\mathbf{b} = \mathbf{0}$. You met this shape before: a hyperplane $\mathbf{w} \cdot \mathbf{x} = c$ was a hyperplane through the origin, moved.
+
+        The two spaces now answer everything about a system.
+
+        | Question | Answer |
+        | --- | --- |
+        | Is there a solution? | Exactly when $\mathbf{b}$ is in the column space |
+        | If there is one, how many are there? | One for each vector of the null space |
+        | Is it unique? | Exactly when the null space is only $\mathbf{0}$ |
+
+        *The flats.* The null space of $X$ is the line of multiples of $(1, 1, -1)$: three columns, rank 2, one free variable. For the first list of rents a particular solution is $(3, 1, 0)$, so all the weights that match it are
+
+        $$\mathbf{w} = (3, 1, 0) + s\,(1, 1, -1).$$
+
+        With $s = -1$ and $s = -3$ these are $(2, 0, 1)$ and $(0, -2, 3)$, the three models that once looked so different. For the second list, elimination on the augmented matrix ends in a row reading $0 = c$ with $c \ne 0$. That row is the certificate that $\mathbf{y}'$ is outside the column space.
+
+        **The rows and the null space.** Read $A\mathbf{x} = \mathbf{0}$ by rows. It says that the dot product of **every row** with $\mathbf{x}$ is zero:
+
+        $$\mathbf{r}_1 \cdot \mathbf{x} = 0, \quad \mathbf{r}_2 \cdot \mathbf{x} = 0, \quad \dots, \quad \mathbf{r}_m \cdot \mathbf{x} = 0.$$
+
+        **A vector is in the null space exactly when it is perpendicular to every row.** Then it is perpendicular to every combination of the rows too. The span of the rows is called the **row space**. It is the column space of $A^{\mathsf{T}}$, and it lives in $\mathbb{R}^n$, alongside the null space. The two meet only at $\mathbf{0}$ and stand at right angles: every vector of one is perpendicular to every vector of the other.
+
+        In the figure the rows are $(1, 2)$ and $(0.5, 1)$, both along the direction $(1, 2)$, and the null space is along $(2, -1)$, with $(1, 2) \cdot (2, -1) = 0$. The two controls of the figure are these two directions. Every input is some amount along the rows plus some amount along the null space. The matrix responds only to the first part and is blind to the second.
+
+        **What the matrix cannot say, and what it cannot see.** Carry this over to models.
+
+        The **column space** is what the model can express. For a model $X\mathbf{w}$ it is the set of prediction vectors that some weights produce. Targets outside it cannot be fitted exactly, and the best that can be done is to find the point of the column space nearest to them. At that best point the errors $\mathbf{e}$ satisfy $X^{\mathsf{T}}\mathbf{e} = \mathbf{0}$, as you found with the transpose. Read that by rows of $X^{\mathsf{T}}$, which are the columns of $X$: **the error is perpendicular to every column**. It is in the null space of $X^{\mathsf{T}}$. The nearest point is where the miss stands at right angles to the sheet.
+
+        The **null space** is what the model cannot see. For a layer $W\mathbf{x}$, moving the input along the null space of $W$ changes nothing downstream. For a design matrix, moving the weights along its null space changes no prediction, so the data cannot choose among those weights. When there are more weights than examples, the matrix is wider than tall, its null space is never just $\mathbf{0}$, and the weights are never determined by the data alone.
+    - question:
+        id: order-complete
+        type: order
+        system: s2
+        prompt: Put the steps in order to prove that if $A\mathbf{x}_p = \mathbf{b}$, then every solution of $A\mathbf{x} = \mathbf{b}$ is $\mathbf{x}_p$ plus a vector of the null space.
+        steps:
+          - 'Let $\mathbf{x}$ be any solution, so $A\mathbf{x} = \mathbf{b}$.'
+          - 'Consider the difference $\mathbf{d} = \mathbf{x} - \mathbf{x}_p$.'
+          - 'By linearity, $A\mathbf{d} = A\mathbf{x} - A\mathbf{x}_p = \mathbf{b} - \mathbf{b} = \mathbf{0}$.'
+          - 'So $\mathbf{d}$ is in the null space of $A$.'
+          - 'And $\mathbf{x} = \mathbf{x}_p + \mathbf{d}$, the particular solution plus a vector of the null space.'
+        explanation: The proof takes an arbitrary solution and compares it with the known one. Their difference is sent to zero, because both are sent to the same place. So any two solutions differ by a vector of the null space, which is the whole content of the statement.
+        hints:
+          - Start with an arbitrary solution.
+          - The difference must be formed before the matrix is applied to it.
+          - The conclusion rewrites the solution as a sum.
+  formal:
+    - text: |
+        **Subspace.** A set of vectors in $\mathbb{R}^n$ that contains $\mathbf{0}$ and is closed under addition and under multiplication by numbers.
+
+        **Column space.** $C(A) = \{A\mathbf{x}\}$, the span of the columns of $A$, a subspace of $\mathbb{R}^m$ for $A$ of shape $m \times n$. $A\mathbf{x} = \mathbf{b}$ is solvable exactly when $\mathbf{b} \in C(A)$.
+
+        **Null space.** $N(A) = \{\mathbf{x} : A\mathbf{x} = \mathbf{0}\}$, a subspace of $\mathbb{R}^n$. $N(A) = \{\mathbf{0}\}$ exactly when the columns of $A$ are independent.
+
+        **Special solutions.** In the reduced form, each free column gives one: 1 in its own place, 0 in the other free places, and minus its entries in the pivot places. They are $n - r$ in number, independent, and span $N(A)$.
+
+        **Complete solution.** If $A\mathbf{x}_p = \mathbf{b}$, the solutions of $A\mathbf{x} = \mathbf{b}$ are exactly the vectors $\mathbf{x}_p + \mathbf{x}_n$ with $\mathbf{x}_n \in N(A)$.
+
+        **Row space.** The span of the rows, $C(A^{\mathsf{T}})$, a subspace of $\mathbb{R}^n$. Every vector of $N(A)$ is perpendicular to every vector of the row space.
+  drill:
+    - text: Seconds each. Column space is in the space of outputs. Null space is in the space of inputs.
+    - question:
+        id: drill-column-space
+        type: choice
+        system: s1
+        prompt: |
+          $A$ has columns $(1, 0.5)$ and $(2, 1)$. Its column space is
+        options: ["the whole plane", "the line through the origin along (2, 1)", "the line through the origin along (2, −1)", "the single point (2, 1)"]
+        answer: 1
+        explanation: Both columns are multiples of (2, 1), so every combination of them is too.
+        hints:
+          - What do combinations of the two columns look like?
+          - Both columns point along one direction.
+    - question:
+        id: drill-in-column-space
+        type: choice
+        system: s1
+        prompt: |
+          $A$ has columns $(1, 0.5)$ and $(2, 1)$. Does $A\mathbf{x} = (4, 2)$ have a solution?
+        options: ["Yes, because (4, 2) is a multiple of (2, 1)", "No, because the matrix is singular", "No, because (4, 2) is too long", "Yes, exactly one"]
+        answer: 0
+        explanation: (4, 2) lies on the line through (2, 1), which is the column space. There are infinitely many solutions, since the null space is a line.
+        hints:
+          - Is (4, 2) in the span of the columns?
+          - A singular matrix can still reach some right-hand sides.
+    - question:
+        id: drill-null-space
+        type: choice
+        system: s1
+        prompt: |
+          $A$ has rows $(1, 2)$ and $(0.5, 1)$. Which vector is in its null space?
+        options: ['$(1, 2)$', '$(2, -1)$', '$(2, 1)$', '$(1, 1)$']
+        answer: 1
+        explanation: (1, 2) · (2, −1) = 0 and (0.5, 1) · (2, −1) = 0. The vector is perpendicular to both rows.
+        hints:
+          - A null vector is perpendicular to every row.
+          - Dot each option with (1, 2).
+    - question:
+        id: drill-free
+        type: numeric
+        system: s1
+        prompt: |
+          A matrix has 5 columns and rank 2. How many special solutions span its null space?
+        answer: "3"
+        explanation: One for each column without a pivot, 5 − 2.
+        hints:
+          - How many columns have pivots?
+          - The rest are free.
+    - question:
+        id: drill-invertible-null
+        type: choice
+        system: s1
+        prompt: |
+          The null space of an invertible matrix is
+        options: ["empty", "the zero vector alone", "a line", "the whole space"]
+        answer: 1
+        explanation: Ax = 0 gives x = 0 on multiplying by the inverse. The null space is never empty, since it always contains the zero vector.
+        hints:
+          - Which vector does every matrix send to zero?
+          - Can an invertible matrix send anything else there?
+    - question:
+        id: drill-invertible-column
+        type: choice
+        system: s1
+        prompt: |
+          The column space of an invertible $3 \times 3$ matrix is
+        options: ["a line", "a plane", "all of three-dimensional space", "the zero vector alone"]
+        answer: 2
+        explanation: Every right-hand side b is reached, by the input that is the inverse applied to b.
+        hints:
+          - For which b does Ax = b have a solution?
+          - An invertible matrix reaches everything.
+    - question:
+        id: drill-home-null
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ is a $3 \times 5$ matrix. How many components have the vectors of its null space?
+        answer: "5"
+        explanation: The null space is a set of inputs, and inputs have one component for each column.
+        hints:
+          - The null space is made of inputs.
+          - How many components has an input?
+    - question:
+        id: drill-home-column
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ is a $3 \times 5$ matrix. How many components have the vectors of its column space?
+        answer: "3"
+        explanation: The column space is a set of outputs, and outputs have one component for each row.
+        hints:
+          - The column space is made of outputs.
+          - How many components has a column?
+    - question:
+        id: drill-shift
+        type: choice
+        system: s1
+        prompt: |
+          $A\mathbf{x}_p = \mathbf{b}$ and $A\mathbf{x}_n = \mathbf{0}$. What is $A(\mathbf{x}_p + 5\mathbf{x}_n)$?
+        options: ['$\mathbf{b}$', '$5\mathbf{b}$', '$\mathbf{0}$', '$6\mathbf{b}$']
+        answer: 0
+        explanation: By linearity it is b plus 5 times the zero vector.
+        hints:
+          - Apply A to each part.
+          - What is 5 times the zero vector?
+    - question:
+        id: drill-zero
+        type: choice
+        system: s1
+        prompt: |
+          Is the zero vector in the null space of every matrix?
+        options: ["Yes", "No", "Only for square matrices", "Only for singular matrices"]
+        answer: 0
+        explanation: Every matrix sends the zero vector to the zero vector.
+        hints:
+          - What is A times the zero vector?
+          - Does that depend on A?
+    - question:
+        id: drill-row
+        type: choice
+        system: s1
+        prompt: |
+          $A$ is the single row $(1, 1, -1)$. Is $(1, 1, 2)$ in its null space?
+        options: ["Yes, because 1 + 1 − 2 = 0", "No, because it is not a multiple of the row", "No, because it has three components", "Yes, because every vector is"]
+        answer: 0
+        explanation: The null space of a single row is the plane of vectors perpendicular to it.
+        hints:
+          - Dot the vector with the row.
+          - Is the result zero?
+    - question:
+        id: drill-flats
+        type: choice
+        system: s1
+        prompt: |
+          The design matrix of the flats has columns rooms, bathrooms and their total. Which vector is in its null space?
+        options: ['$(1, 1, 1)$', '$(1, 1, -1)$', '$(3, 1, 0)$', '$(0, 0, 1)$']
+        answer: 1
+        explanation: Rooms plus bathrooms minus total is the zero vector.
+        hints:
+          - Which combination of the three columns is zero?
+          - The third column is the sum of the first two.
+    - question:
+        id: drill-not-subspace
+        type: choice
+        system: s1
+        prompt: |
+          Which of these is **not** a subspace of the plane?
+        options: ["The line through the origin along (1, 2)", "The whole plane", "The line of points (x, 1)", "The zero vector alone"]
+        answer: 2
+        explanation: The line of points with second component 1 does not contain the zero vector.
+        hints:
+          - A subspace must contain the zero vector.
+          - Which of the sets misses the origin?
+    - question:
+        id: predict-null
+        type: predict
+        system: s1
+        prompt: Three inputs for the matrix of the lesson. What does this show?
+        code: |
+          A = [[1, 2, 1, 4], [2, 4, 5, 14], [3, 6, 6, 18]]
+
+          for x in [[-2, 1, 0, 0], [-2, 0, -2, 1], [1, 0, 0, 0]]:
+              print([sum([a * v for a, v in zip(row, x)]) for row in A])
+        output: |
+          [0, 0, 0]
+          [0, 0, 0]
+          [1, 2, 3]
+        explanation: The first two inputs are the special solutions, and the matrix sends them to zero. The third is the first unit vector, which picks out the first column.
+        hints:
+          - Dot each row with the input.
+          - The third input is a unit vector.
+    - question:
+        id: predict-family
+        type: predict
+        system: s1
+        prompt: One set of weights, shifted along the null space. What does this show?
+        code: |
+          X = [[3, 1, 4], [2, 1, 3], [4, 2, 6], [1, 1, 2]]
+          w = [3, 1, 0]
+          n = [1, 1, -1]
+
+          for s in [0, -1, -3]:
+              shifted = [a + s * b for a, b in zip(w, n)]
+              print(shifted, [sum([p * q for p, q in zip(row, shifted)]) for row in X])
+        output: |
+          [3, 1, 0] [10, 7, 14, 4]
+          [2, 0, 1] [10, 7, 14, 4]
+          [0, -2, 3] [10, 7, 14, 4]
+        explanation: Adding a multiple of the null vector to the weights changes the weights and leaves every prediction where it was. These are the three models that agreed on every flat.
+        hints:
+          - Compute w + s n for each s.
+          - What does X do to n?
+  work:
+    - text: Slower now. Say first which space a vector lives in, then whether it belongs.
+    - question:
+        id: write-in-column-space
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `in_column_space(A, b)`. `A` is a matrix stored as a list of rows and `b` is a vector with one entry for each row. Return `True` exactly when $A\mathbf{x} = \mathbf{b}$ has a solution.
+
+          Use this: $\mathbf{b}$ is a combination of the columns of $A$ exactly when adding $\mathbf{b}$ to $A$ as one more **column** does not raise the rank. `rank` is given.
+        starter: |
+          def rank(A):
+              rows = [list(row) for row in A]
+              m = len(rows)
+              n = len(rows[0])
+              r = 0
+              for k in range(n):
+                  if r < m:
+                      best = r
+                      for i in range(r + 1, m):
+                          if abs(rows[i][k]) > abs(rows[best][k]):
+                              best = i
+                      if abs(rows[best][k]) > 1e-9:
+                          rows[r], rows[best] = rows[best], rows[r]
+                          for i in range(r + 1, m):
+                              mult = rows[i][k] / rows[r][k]
+                              rows[i] = [a - mult * p for a, p in zip(rows[i], rows[r])]
+                          r += 1
+              return r
+
+          def in_column_space(A, b):
+              # Replace the next line with your own.
+              return True
+
+          X = [[3, 1, 4], [2, 1, 3], [4, 2, 6], [1, 1, 2]]
+          print(in_column_space(X, [10, 7, 14, 4]), in_column_space(X, [12, 7, 13, 5]))
+        solution: |
+          def rank(A):
+              rows = [list(row) for row in A]
+              m = len(rows)
+              n = len(rows[0])
+              r = 0
+              for k in range(n):
+                  if r < m:
+                      best = r
+                      for i in range(r + 1, m):
+                          if abs(rows[i][k]) > abs(rows[best][k]):
+                              best = i
+                      if abs(rows[best][k]) > 1e-9:
+                          rows[r], rows[best] = rows[best], rows[r]
+                          for i in range(r + 1, m):
+                              mult = rows[i][k] / rows[r][k]
+                              rows[i] = [a - mult * p for a, p in zip(rows[i], rows[r])]
+                          r += 1
+              return r
+
+          def in_column_space(A, b):
+              augmented = [A[i] + [b[i]] for i in range(len(A))]
+              return rank(augmented) == rank(A)
+
+          X = [[3, 1, 4], [2, 1, 3], [4, 2, 6], [1, 1, 2]]
+          print(in_column_space(X, [10, 7, 14, 4]), in_column_space(X, [12, 7, 13, 5]))
+        tests: |
+          _X = [[3, 1, 4], [2, 1, 3], [4, 2, 6], [1, 1, 2]]
+          assert in_column_space(_X, [10, 7, 14, 4]) is True, "The rents [10, 7, 14, 4] are 3 times the rooms plus the bathrooms"
+          assert in_column_space(_X, [12, 7, 13, 5]) is False, "No weights give the rents [12, 7, 13, 5]"
+          assert in_column_space(_X, [0, 0, 0, 0]) is True, "The zero vector is in every column space"
+          assert in_column_space(_X, [4, 3, 6, 2]) is True, "The third column is itself in the column space"
+          assert in_column_space([[1, 2], [0.5, 1]], [4, 2]) is True, "[4, 2] is on the line through [2, 1]"
+          assert in_column_space([[1, 2], [0.5, 1]], [1, 1]) is False, "[1, 1] is off the line through [2, 1]"
+          assert in_column_space([[2, 1], [1, 1]], [10, 7]) is True, "An invertible matrix reaches every right-hand side"
+          assert in_column_space([[1, 0], [0, 1], [0, 0]], [3, 4, 0]) is True, "[3, 4, 0] is 3 times the first column plus 4 times the second"
+          assert in_column_space([[1, 0], [0, 1], [0, 0]], [3, 4, 1]) is False, "No combination of the columns has a non-zero third entry"
+          assert in_column_space([[1, 2, 3], [4, 5, 6]], [7, -9]) is True, "A 2 by 3 matrix of rank 2 reaches every vector of two components"
+          assert in_column_space([[0, 0], [0, 0]], [0, 1]) is False, "The zero matrix reaches only the zero vector"
+          _A = [[1, 2], [3, 4]]
+          in_column_space(_A, [5, 6])
+          assert _A == [[1, 2], [3, 4]], "The function must not change the matrix it was given"
+          assert output.strip() == "True False", "The program should print True False"
+        wrong:
+          - |
+            def in_column_space(A, b):
+                return len(A[0]) >= len(A)
+
+            print(True, False)
+          - |
+            def rank(A):
+                rows = [list(row) for row in A]
+                m = len(rows)
+                n = len(rows[0])
+                r = 0
+                for k in range(n):
+                    if r < m:
+                        best = r
+                        for i in range(r + 1, m):
+                            if abs(rows[i][k]) > abs(rows[best][k]):
+                                best = i
+                        if abs(rows[best][k]) > 1e-9:
+                            rows[r], rows[best] = rows[best], rows[r]
+                            for i in range(r + 1, m):
+                                mult = rows[i][k] / rows[r][k]
+                                rows[i] = [a - mult * p for a, p in zip(rows[i], rows[r])]
+                            r += 1
+                return r
+
+            def in_column_space(A, b):
+                return rank(A) == len(A)
+
+            print(True, False)
+          - |
+            def rank(A):
+                rows = [list(row) for row in A]
+                m = len(rows)
+                n = len(rows[0])
+                r = 0
+                for k in range(n):
+                    if r < m:
+                        best = r
+                        for i in range(r + 1, m):
+                            if abs(rows[i][k]) > abs(rows[best][k]):
+                                best = i
+                        if abs(rows[best][k]) > 1e-9:
+                            rows[r], rows[best] = rows[best], rows[r]
+                            for i in range(r + 1, m):
+                                mult = rows[i][k] / rows[r][k]
+                                rows[i] = [a - mult * p for a, p in zip(rows[i], rows[r])]
+                            r += 1
+                return r
+
+            def in_column_space(A, b):
+                for i in range(len(A)):
+                    A[i].append(b[i])
+                return rank(A) == rank([row[:-1] for row in A])
+
+            print(True, False)
+          - |
+            def rank(A):
+                rows = [list(row) for row in A]
+                m = len(rows)
+                n = len(rows[0])
+                r = 0
+                for k in range(n):
+                    if r < m:
+                        best = r
+                        for i in range(r + 1, m):
+                            if abs(rows[i][k]) > abs(rows[best][k]):
+                                best = i
+                        if abs(rows[best][k]) > 1e-9:
+                            rows[r], rows[best] = rows[best], rows[r]
+                            for i in range(r + 1, m):
+                                mult = rows[i][k] / rows[r][k]
+                                rows[i] = [a - mult * p for a, p in zip(rows[i], rows[r])]
+                            r += 1
+                return r
+
+            def in_column_space(A, b):
+                augmented = [A[i] + [b[i]] for i in range(len(A))]
+                return rank(augmented) == len(augmented[0]) - 1
+
+            print(True, False)
+          - |
+            def in_column_space(A, b):
+                columns = [[row[j] for row in A] for j in range(len(A[0]))]
+                return b in columns
+
+            print(True, False)
+        explanation: |
+          If $\mathbf{b}$ is already a combination of the columns, then attaching it as a further column adds nothing new, and the rank stays the same. If it is not, it is independent of the columns that were there, and the rank goes up by one. So two calls of `rank` decide the matter, with no solution ever being computed. This is the same test as "elimination produces no row $0 = c$ with $c \ne 0$": such a row is exactly a pivot in the attached column. The answer does not depend on $A$ being square, or of full rank, or tall or wide. A singular matrix reaches some right-hand sides and not others, and the question is always about the particular $\mathbf{b}$. The new rows are built with `A[i] + [b[i]]`, which makes fresh lists and leaves the caller's matrix as it was.
+        hints:
+          - Build a new matrix whose rows are the rows of A, each with the matching entry of b added at the end.
+          - Compute the rank of that and the rank of A.
+          - b is in the column space exactly when the two ranks are equal.
+    - question:
+        id: write-special
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `special_solutions(R, pivots)`. `R` holds the non-zero rows of a matrix in **reduced** form: each pivot is 1 and is the only non-zero entry in its column. `pivots` lists the column of the pivot of each row, in order, counting from 0. Return the special solutions of $R\mathbf{x} = \mathbf{0}$ as a list of vectors, one for each column without a pivot, in order of those columns.
+
+          For a free column: put 1 in its own place, and in the place of each pivot put minus the entry of the free column in that pivot's row.
+        starter: |
+          def special_solutions(R, pivots):
+              # Replace the next line with your own.
+              return []
+
+          print(special_solutions([[1, 2, 0, 2], [0, 0, 1, 2]], [0, 2]))
+        solution: |
+          def special_solutions(R, pivots):
+              n = len(R[0])
+              found = []
+              for free in range(n):
+                  if free not in pivots:
+                      x = [0] * n
+                      x[free] = 1
+                      for i in range(len(pivots)):
+                          x[pivots[i]] = -R[i][free]
+                      found.append(x)
+              return found
+
+          print(special_solutions([[1, 2, 0, 2], [0, 0, 1, 2]], [0, 2]))
+        tests: |
+          assert special_solutions([[1, 2, 0, 2], [0, 0, 1, 2]], [0, 2]) == [[-2, 1, 0, 0], [-2, 0, -2, 1]], "For the matrix of the lesson the special solutions are [-2, 1, 0, 0] and [-2, 0, -2, 1]"
+          assert special_solutions([[1, 0, 1], [0, 1, 1]], [0, 1]) == [[-1, -1, 1]], "For the reduced flats, rows [1, 0, 1] and [0, 1, 1], the one special solution is [-1, -1, 1]"
+          assert special_solutions([[1, 2]], [0]) == [[-2, 1]], "For the single row [1, 2] the special solution is [-2, 1]"
+          assert special_solutions([[1, 0], [0, 1]], [0, 1]) == [], "With a pivot in every column there are no special solutions"
+          assert special_solutions([[0, 1, 3]], [1]) == [[1, 0, 0], [0, -3, 1]], "For the row [0, 1, 3] with its pivot in the second column, the special solutions are [1, 0, 0] and [0, -3, 1]"
+          assert special_solutions([[1, 0, 0, 5], [0, 1, 0, -4], [0, 0, 1, 2]], [0, 1, 2]) == [[-5, 4, -2, 1]], "Three pivots and one free column give the single special solution [-5, 4, -2, 1]"
+          assert special_solutions([[1, 3, 0, 0, 2], [0, 0, 1, 0, -1], [0, 0, 0, 1, 4]], [0, 2, 3]) == [[-3, 1, 0, 0, 0], [-2, 0, 1, -4, 1]], "Five columns with pivots in the first, third and fourth give two special solutions"
+          assert output.strip() == "[[-2, 1, 0, 0], [-2, 0, -2, 1]]", "The program should print [[-2, 1, 0, 0], [-2, 0, -2, 1]]"
+        wrong:
+          - |
+            def special_solutions(R, pivots):
+                n = len(R[0])
+                found = []
+                for free in range(n):
+                    if free not in pivots:
+                        x = [0] * n
+                        x[free] = 1
+                        for i in range(len(pivots)):
+                            x[pivots[i]] = R[i][free]
+                        found.append(x)
+                return found
+
+            print([[-2, 1, 0, 0], [-2, 0, -2, 1]])
+          - |
+            def special_solutions(R, pivots):
+                n = len(R[0])
+                found = []
+                for free in range(n):
+                    if free not in pivots:
+                        x = [0] * n
+                        x[free] = 1
+                        for i in range(len(pivots)):
+                            x[i] = -R[i][free]
+                        found.append(x)
+                return found
+
+            print([[-2, 1, 0, 0], [-2, 0, -2, 1]])
+          - |
+            def special_solutions(R, pivots):
+                n = len(R[0])
+                found = []
+                for free in range(n):
+                    if free not in pivots:
+                        x = [0] * n
+                        for i in range(len(pivots)):
+                            x[pivots[i]] = -R[i][free]
+                        found.append(x)
+                return found
+
+            print([[-2, 1, 0, 0], [-2, 0, -2, 1]])
+          - |
+            def special_solutions(R, pivots):
+                n = len(R[0])
+                found = []
+                for free in range(n):
+                    x = [0] * n
+                    x[free] = 1
+                    for i in range(len(pivots)):
+                        if pivots[i] != free:
+                            x[pivots[i]] = -R[i][free]
+                    found.append(x)
+                return found
+
+            print([[-2, 1, 0, 0], [-2, 0, -2, 1]])
+          - |
+            def special_solutions(R, pivots):
+                n = len(R[0])
+                x = [1] * n
+                for i in range(len(pivots)):
+                    x[pivots[i]] = -sum([R[i][f] for f in range(n) if f not in pivots])
+                if len(pivots) == n:
+                    return []
+                return [x]
+
+            print([[-2, 1, 0, 0], [-2, 0, -2, 1]])
+        explanation: |
+          In the reduced form, row $i$ reads: pivot variable $i$, plus the free variables times their entries in that row, equals zero. So each pivot variable is **minus** a combination of the free ones. Setting one free variable to 1 and the others to 0 leaves a single term: the pivot variable equals minus the entry of that free column in its row. The value belongs in the place of the pivot's **column**, `pivots[i]`, which is not the row number `i` once a column has been skipped. One solution comes from each free column, so the list has as many vectors as there are columns without pivots, and none when every column has one. These few vectors, together with elimination to reach the reduced form, describe every input the matrix destroys.
+        hints:
+          - Loop over the columns and skip those listed in pivots.
+          - For a free column, start with zeros and put 1 in that column's place.
+          - For each row i, set the entry at position pivots[i] to minus R[i][free].
+    - question:
+        id: fix-null
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `in_null_space(A, x)` should return `True` exactly when $A\mathbf{x} = \mathbf{0}$, to within `1e-9`. The matrix with rows $(1, 2)$ and $(0.5, 1)$ sends $(2, -1)$ to zero, so the program should print `True`. It prints `False`. Fix it.
+        starter: |
+          def in_null_space(A, x):
+              columns = [[row[j] for row in A] for j in range(len(A[0]))]
+              for column in columns:
+                  if abs(sum([a * v for a, v in zip(column, x)])) >= 1e-9:
+                      return False
+              return True
+
+          print(in_null_space([[1, 2], [0.5, 1]], [2, -1]))
+        solution: |
+          def in_null_space(A, x):
+              for row in A:
+                  if abs(sum([a * v for a, v in zip(row, x)])) >= 1e-9:
+                      return False
+              return True
+
+          print(in_null_space([[1, 2], [0.5, 1]], [2, -1]))
+        tests: |
+          assert in_null_space([[1, 2], [0.5, 1]], [2, -1]) is True, "Rows [1, 2] and [0.5, 1] are both perpendicular to [2, -1]"
+          assert in_null_space([[1, 2], [0.5, 1]], [1, -2]) is False, "[1, -2] is perpendicular to the columns, not to the rows"
+          assert in_null_space([[1, 2], [0.5, 1]], [0, 0]) is True, "The zero vector is in every null space"
+          assert in_null_space([[1, 2], [0.5, 1]], [1, 2]) is False, "[1, 2] is sent to [5, 2.5]"
+          _X = [[3, 1, 4], [2, 1, 3], [4, 2, 6], [1, 1, 2]]
+          assert in_null_space(_X, [1, 1, -1]) is True, "Rooms plus bathrooms minus total is the zero vector"
+          assert in_null_space(_X, [-2, -2, 2]) is True, "A multiple of a null vector is a null vector"
+          assert in_null_space(_X, [1, 1, 1]) is False, "The weights [1, 1, 1] predict [8, 6, 12, 4]"
+          _A = [[1, 2, 1, 4], [2, 4, 5, 14], [3, 6, 6, 18]]
+          assert in_null_space(_A, [-2, 1, 0, 0]) is True, "[-2, 1, 0, 0] is a special solution"
+          assert in_null_space(_A, [-2, 0, -2, 1]) is True, "[-2, 0, -2, 1] is a special solution"
+          assert in_null_space(_A, [-4, 1, -2, 1]) is True, "The sum of the two special solutions is in the null space"
+          assert in_null_space(_A, [1, 0, 0, 0]) is False, "The first unit vector is sent to the first column, [1, 2, 3]"
+          assert in_null_space([[1, 1], [1, -1]], [1, -1]) is False, "[1, -1] satisfies the first equation and not the second"
+          assert in_null_space([[1, 0], [-1, 0]], [1, 0]) is False, "[1, 0] is sent to [1, -1], whose entries add to 0 but which is not the zero vector"
+          assert output.strip() == "True", "The program should print True"
+        wrong:
+          - |
+            def in_null_space(A, x):
+                columns = [[row[j] for row in A] for j in range(len(A[0]))]
+                for column in columns:
+                    if abs(sum([a * v for a, v in zip(column, x)])) >= 1e-9:
+                        return False
+                return True
+
+            print(True)
+          - |
+            def in_null_space(A, x):
+                for row in A:
+                    if abs(sum([a * v for a, v in zip(row, x)])) < 1e-9:
+                        return True
+                return False
+
+            print(True)
+          - |
+            def in_null_space(A, x):
+                total = 0
+                for row in A:
+                    total += sum([a * v for a, v in zip(row, x)])
+                return abs(total) < 1e-9
+
+            print(True)
+          - |
+            def in_null_space(A, x):
+                return abs(sum([a * v for a, v in zip(A[0], x)])) < 1e-9
+
+            print(True)
+        explanation: |
+          The starter collected the **columns** of the matrix and dotted each with $\mathbf{x}$. But $A\mathbf{x}$ is computed by rows: its components are the dot products of the rows with $\mathbf{x}$, and $A\mathbf{x} = \mathbf{0}$ says that $\mathbf{x}$ is perpendicular to every **row**. Being perpendicular to the columns is a different condition, about a different matrix: it says $A^{\mathsf{T}}\mathbf{x} = \mathbf{0}$. For a matrix that is not square the two conditions are not even about vectors of the same length, and `zip` hid the mismatch by stopping early. For a symmetric matrix they coincide, which is the kind of test case that lets this bug through. The null space is perpendicular to the row space. The space perpendicular to the columns is the null space of the transpose, and it is where the errors of a best fit live.
+        hints:
+          - How is each component of Ax computed, from a row or from a column?
+          - What does Ax = 0 say about x and the rows?
+          - Loop over the rows of A, not over its columns.
+    - question:
+        id: work-complete
+        type: choice
+        system: s2
+        prompt: |
+          Elimination reduces a system in four unknowns to $x_1 + 2x_2 + 2x_4 = 3$ and $x_3 + 2x_4 = 1$. What are all its solutions?
+        options:
+          - "Only $(3, 0, 1, 0)$."
+          - "$(3, 0, 1, 0) + s\\,(-2, 1, 0, 0) + t\\,(-2, 0, -2, 1)$ for all numbers $s$ and $t$."
+          - "$s\\,(-2, 1, 0, 0) + t\\,(-2, 0, -2, 1)$ for all numbers $s$ and $t$."
+          - "There are none, since there are fewer equations than unknowns."
+        answer: 1
+        explanation: |
+          Set the free variables $x_2$ and $x_4$ to zero and read off the pivot variables: $x_1 = 3$, $x_3 = 1$. That is a particular solution, $(3, 0, 1, 0)$. The left sides are those of the lesson's matrix, whose null space is spanned by the special solutions $(-2, 1, 0, 0)$ and $(-2, 0, -2, 1)$. Every solution is the particular one plus a vector of the null space. The third option is the null space itself, the solutions when the right-hand sides are zero: it contains the origin, and the origin does not satisfy $x_3 + 2x_4 = 1$. The solutions form a plane in four-dimensional space, parallel to the null space and shifted off the origin.
+        hints:
+          - Find one solution by setting the free variables to 0.
+          - The null space depends only on the left sides.
+          - Add the general null vector to the particular solution.
+    - question:
+        id: work-certificate
+        type: choice
+        system: s2
+        prompt: |
+          For the flats with features rooms $\mathbf{r} = (3, 2, 4, 1)$ and bathrooms $\mathbf{b} = (1, 1, 2, 1)$, why can no weights match the rents $\mathbf{y}' = (12, 7, 13, 5)$?
+        options:
+          - "Because there are four flats and only two features, so no list of rents can be matched."
+          - "The first two flats force the weights: $3a + b = 12$ and $2a + b = 7$ give $a = 5$, $b = -3$. Those weights predict 14 for the third flat, not 13. So $\\mathbf{y}'$ is not a combination of $\\mathbf{r}$ and $\\mathbf{b}$: it is outside the column space."
+          - "Because the rents are not whole multiples of the features."
+          - "Because the null space is not zero."
+        answer: 1
+        explanation: |
+          The columns $\mathbf{r}$ and $\mathbf{b}$ are independent, so if $\mathbf{y}'$ were in their span the coefficients would be unique, and two of the four equations already pin them down. The remaining equations then act as tests, and the third fails: $5 \times 4 - 3 \times 2 = 14 \ne 13$. In elimination this failure appears as a row $0 = c$ with $c \ne 0$. Having more equations than unknowns does not by itself prevent a solution: the rents $(10, 7, 14, 4)$ are matched exactly. It means that the column space is a thin sheet inside the space of all possible rents, and most targets miss it. When they do, the question changes from "which weights fit?" to "which weights come closest?".
+        hints:
+          - Use two of the flats to find the only weights that could work.
+          - Test those weights on a third flat.
+          - A failed test means the target is not a combination of the columns.
+    - question:
+        id: work-wide
+        type: choice
+        system: s2
+        prompt: |
+          A model has 50 weights and is fitted to 30 examples, with design matrix $X$ of shape $30 \times 50$. Suppose the weights $\mathbf{w}$ fit the data exactly. How many other weight vectors fit exactly?
+        options:
+          - "None. An exact fit is unique."
+          - "Infinitely many. The rank is at most 30, so at least 20 columns have no pivot, the null space contains non-zero vectors, and $\\mathbf{w}$ plus any of them fits just as well."
+          - "Exactly 20."
+          - "It depends on whether the features were well chosen."
+        answer: 1
+        explanation: |
+          $X$ has 30 rows, so its rank is at most 30, and with 50 columns at least 20 are free. The null space is spanned by at least 20 independent special solutions. All solutions of $X\mathbf{w} = \mathbf{y}$ are one particular solution plus the null space, so the exact fits form a family with at least 20 free directions. No care in choosing features can prevent this, since it follows from the shape alone. The data cannot tell these fits apart, though they will disagree on new examples. Something other than the data has to choose among them: a preference for small weights, or the way the training procedure happens to move.
+        hints:
+          - What is the largest possible rank of a 30 by 50 matrix?
+          - How many columns are left without pivots?
+          - What can be added to a solution without spoiling it?
+    - question:
+        id: work-perpendicular
+        type: choice
+        system: s2
+        prompt: |
+          At the best-fitting weights for a design matrix $X$ and targets $\mathbf{y}$, the errors $\mathbf{e} = X\mathbf{w} - \mathbf{y}$ satisfy $X^{\mathsf{T}}\mathbf{e} = \mathbf{0}$. What does that say geometrically?
+        options:
+          - "The errors are all zero."
+          - "The error vector is perpendicular to every column of $X$, and so to the whole column space. The prediction is the point of the column space nearest to $\\mathbf{y}$."
+          - "The error vector is in the column space."
+          - "The error vector is perpendicular to every row of $X$."
+        answer: 1
+        explanation: |
+          The components of $X^{\mathsf{T}}\mathbf{e}$ are the dot products of the rows of $X^{\mathsf{T}}$ with $\mathbf{e}$, and those rows are the columns of $X$. So each column is perpendicular to $\mathbf{e}$, and therefore so is every combination of the columns. The prediction $X\mathbf{w}$ lies in the column space, and the miss $\mathbf{e}$ sticks straight out of it at a right angle. You met this picture when you projected a vector onto a line: the closest point was the one where the remainder was perpendicular to the line. This is the same fact with a sheet of any dimension in place of the line. The error is in the null space of $X^{\mathsf{T}}$, the fourth of the spaces a matrix carries, after the column space, the null space and the row space.
+        hints:
+          - What are the rows of the transpose of X?
+          - A product equal to zero says each of those rows is perpendicular to e.
+          - Compare with projection onto a line.
+  connections:
+    - text: |
+        A model could match one list of rents and not another, and when it matched, three quite different sets of weights did equally well. Both facts are now described. The lists the model can match are the column space of its matrix, the span of the columns, a subspace of the space of outputs. The weights that change nothing are the null space, the inputs sent to zero, a subspace of the space of inputs. A system $A\mathbf{x} = \mathbf{b}$ can be solved exactly when $\mathbf{b}$ is in the first, and its solutions are one particular solution shifted along the second.
+
+        Elimination computes both. The reduced form shows which columns have pivots, and each column without one gives a special solution. There are $n - r$ of those where the [[m5.rank]] is $r$, so a large rank means much is reached and little is lost. And reading $A\mathbf{x} = \mathbf{0}$ by rows showed that the null space is perpendicular to every row, as the errors of a best fit are perpendicular to every column. That perpendicularity between the spaces of a matrix is developed in [[m7.orthogonal-subspaces]], and finding the nearest point of the column space is [[m7.least-squares-and-the-normal-equations]].
+
+        Throughout this lesson and the last, some words have been used on credit. The column space was "a line" or "a plane" or "a sheet". The null space was "spanned by two independent vectors". The rank "measures the size" of the column space. Each time, the same thing was being counted: how many independent vectors it takes to span a subspace. But a subspace can be spanned in many ways. The null space above was spanned by two special solutions, and it is spanned equally by their sum and their difference. Is it certain that every way of spanning it, with no waste, uses the same number of vectors? If not, "dimension" would mean nothing.
+
+        It is certain, and proving it is short now that you have elimination. A list that spans a subspace with nothing wasted is a basis, the number of vectors in it is the dimension, and the count $r + (n - r) = n$ that appeared today becomes a theorem about every linear map. That is the next lesson, [[m5.basis-and-dimension]].

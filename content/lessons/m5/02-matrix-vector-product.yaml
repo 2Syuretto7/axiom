@@ -1,0 +1,740 @@
+concept: m5.matrix-vector-product
+minutes: 90
+claim: You can compute a matrix times a vector as a combination of the columns and as one dot product for each row, prove that the two agree, say when the product is defined and what it costs, read a system of equations as the single statement that a matrix times an unknown vector equals a known one, and recognise a layer of neurons and a table of data as the same product.
+recalls: [m5.matrices-as-linear-maps]
+uses: [m4.linear-independence, m4.lines-planes-and-hyperplanes, m4.dot-product, m4.linear-combinations-and-span, m4.vector-addition-and-scaling, m1.simultaneous-equations, m2.summation-and-product-notation, m2.functions-as-machines, e1.complexity-and-big-o, e1.exceptions, e1.comprehensions-and-iterators, e0.functions, e0.loops, e0.lists-and-tuples, e0.booleans-and-conditionals]
+leads: [m5.matrix-multiplication-as-composition, m5.transpose, m5.elimination-and-linear-systems, m5.column-space-and-null-space]
+starter: |
+  # Scratch space. Four flats, two features each: rooms and bathrooms.
+  # Two people predict the rents with weights 3 and 1.
+  X = [[3, 1], [2, 1], [4, 2], [1, 1]]
+  w = [3, 1]
+
+  # The first goes flat by flat.
+  print([sum([a * b for a, b in zip(row, w)]) for row in X])
+
+  # The second goes feature by feature.
+  rooms = [row[0] for row in X]
+  baths = [row[1] for row in X]
+  print([w[0] * r + w[1] * b for r, b in zip(rooms, baths)])
+parts:
+  recall:
+    - text: |
+        [[m5.matrices-as-linear-maps]] showed that a linear map is fixed by where it sends the unit vectors, that those images are the columns of its matrix, and that the output for any input is $A\mathbf{x} = x_1\mathbf{a}_1 + \dots + x_n\mathbf{a}_n$, the columns combined with the input's components as coefficients. It ended by promising that the rows have a meaning too. Three quick pulls first.
+    - question:
+        id: recall-columns
+        type: choice
+        system: s1
+        concepts: [m5.matrices-as-linear-maps]
+        prompt: |
+          A matrix has columns $(2, 1)$ and $(-1, 1)$. Where does its map send $(3, 2)$?
+        options: ['$(4, 5)$', '$(1, 2)$', '$(5, 4)$', '$(6, 2)$']
+        answer: 0
+        explanation: 3 (2, 1) + 2 (−1, 1) = (6 − 2, 3 + 2) = (4, 5).
+        hints:
+          - Take 3 of the first column and 2 of the second.
+          - Add them one component at a time.
+    - question:
+        id: recall-dot
+        type: numeric
+        system: s1
+        concepts: [m4.dot-product]
+        prompt: |
+          What is $(2, -1) \cdot (3, 2)$?
+        answer: "4"
+        explanation: 2 × 3 + (−1) × 2 = 6 − 2.
+        hints:
+          - Multiply matching components.
+          - Add the two products.
+    - question:
+        id: recall-shape
+        type: choice
+        system: s1
+        concepts: [m5.matrices-as-linear-maps]
+        prompt: |
+          A matrix has 4 rows and 2 columns. Its map takes vectors with
+        options: ["4 components to vectors with 2", "2 components to vectors with 4", "4 components to vectors with 4", "8 components to single numbers"]
+        answer: 1
+        explanation: One column for each input, so 2 inputs. Each column has 4 entries, so 4 outputs.
+        hints:
+          - Columns count the inputs.
+          - Rows count the outputs.
+  puzzle:
+    - text: |
+        Four flats are on file, each described by its number of rooms and its number of bathrooms. A model predicts rent as 3 for every room plus 1 for every bathroom. Two people are asked for the four predictions.
+
+        | Flat | Rooms | Bathrooms |
+        | --- | --- | --- |
+        | 1 | 3 | 1 |
+        | 2 | 2 | 1 |
+        | 3 | 4 | 2 |
+        | 4 | 1 | 1 |
+
+        The first works **across** the table. For each flat she takes its row and forms the dot product with the weights: $3 \times 3 + 1 \times 1 = 10$ for the first flat, then 7, 14 and 4. Four small sums, one to a flat.
+
+        The second works **down** the table. He never looks at a single flat. He takes the whole column of rooms, $(3, 2, 4, 1)$, and multiplies it by 3. He takes the whole column of bathrooms, $(1, 1, 2, 1)$, and multiplies it by 1. Then he adds the two long vectors: $(9, 6, 12, 3) + (1, 1, 2, 1) = (10, 7, 14, 4)$.
+
+        Run the starter. The two agree, as you would hope. But look at how differently they thought. She saw four separate questions, each answered by a dot product. He saw one vector being built out of two others. She would describe the model as "a rule applied to each flat". He would describe it as "a point in the span of the feature columns".
+
+        **Is it guaranteed that the two always agree, for every table and every set of weights? And what does each of them see that the other cannot?**
+  intuition:
+    - text: |
+        Follow one number through both computations: the prediction for the third flat, 14.
+
+        She gets it as $4 \times 3 + 2 \times 1$: the third flat's rooms times the room weight, plus the third flat's bathrooms times the bathroom weight.
+
+        He gets it as the third entry of $3\,(3, 2, 4, 1) + 1\,(1, 1, 2, 1)$, which is $3 \times 4 + 1 \times 2$.
+
+        The same two products, $4 \times 3$ and $2 \times 1$, added. Every entry of the table gets multiplied by the weight of its column, once. She gathers the products row by row. He gathers them column by column. Adding the same numbers in a different order cannot change the total.
+
+        So they must agree. What is interesting is that one computation carries two pictures, and each picture answers questions the other makes hard.
+
+        The figure shows a small case, a matrix with columns $(2, 1)$ and $(-1, 1)$, the machine of the last lesson. Change the two entries of $\mathbf{x}$ and watch the output $A\mathbf{x}$. The dashed path is his view: so much of the first column, then so much of the second. Read the summary for hers: the dot product of each row with $\mathbf{x}$.
+    - figure: matrix-vector
+      props: { x: 1.5, y: 1 }
+    - text: |
+        With $\mathbf{x} = (1.5, 1)$ the path goes $1.5$ of $(2, 1)$, then 1 of $(-1, 1)$, and ends at $(2, 2.5)$. The rows are $(2, -1)$ and $(1, 1)$, and $(2, -1) \cdot (1.5, 1) = 2$, $(1, 1) \cdot (1.5, 1) = 2.5$. Same point.
+
+        Now try to steer $A\mathbf{x}$ onto a target, say $(1, 2)$. You are hunting for the right amounts of the two columns. That is his picture, and it makes one thing obvious: since the columns point in different directions, you can reach any target, in exactly one way.
+
+        In her picture the same hunt reads: find $\mathbf{x}$ with $(2, -1) \cdot \mathbf{x} = 1$ and $(1, 1) \cdot \mathbf{x} = 2$. Two conditions on $\mathbf{x}$, each of which is a line in the plane. The answer is where the lines cross.
+
+        **One product. By columns, it builds a vector. By rows, it asks a list of questions.** The rest of the lesson makes both exact, and shows how much is already written in this form.
+  derivation:
+    - text: |
+        **The definition, and the rule for rows.** Let $A$ be an $m \times n$ matrix with columns $\mathbf{a}_1, \dots, \mathbf{a}_n$ and let $\mathbf{x}$ have $n$ components. The **matrix-vector product** is
+
+        $$A\mathbf{x} = x_1\mathbf{a}_1 + x_2\mathbf{a}_2 + \dots + x_n\mathbf{a}_n.$$
+
+        This is what the last lesson derived: it is the output of the linear map with matrix $A$. It is a vector with $m$ components.
+
+        Now ask for a single component of it, the $i$-th. The $i$-th component of a combination is the same combination of $i$-th components. The $i$-th component of column $\mathbf{a}_j$ is the entry $a_{ij}$, the one in row $i$ and column $j$. So
+
+        $$(A\mathbf{x})_i = x_1 a_{i1} + x_2 a_{i2} + \dots + x_n a_{in} = \sum_{j=1}^{n} a_{ij}\,x_j.$$
+
+        Read the right side. It runs along row $i$ of the matrix, multiplying each entry by the matching component of $\mathbf{x}$, and adds. That is a dot product:
+
+        $$(A\mathbf{x})_i = (\text{row } i \text{ of } A) \cdot \mathbf{x}.$$
+
+        This settles the puzzle. The column view is the definition. The row view is that definition read one component at a time. They cannot disagree, for any matrix and any vector.
+
+        For the machine of the last lesson,
+
+        $$\begin{pmatrix} 2 & -1 \\ 1 & 1 \end{pmatrix}\begin{pmatrix} 3 \\ 2 \end{pmatrix} = \begin{pmatrix} 2 \times 3 + (-1) \times 2 \\ 1 \times 3 + 1 \times 2 \end{pmatrix} = \begin{pmatrix} 4 \\ 5 \end{pmatrix}.$$
+
+        Here the vectors are written upright, as columns, which is the convention when they stand beside a matrix. A vector written upright and the same vector written in a line, $(4, 5)$, are the same vector.
+
+        **When the product is defined.** The row view needs each row to have as many entries as $\mathbf{x}$. The column view needs one coefficient for each column. Both say the same: **the number of columns of $A$ must equal the number of components of $\mathbf{x}$.** Then the result has one component for each row.
+
+        $$\underbrace{A}_{m \times n}\ \underbrace{\mathbf{x}}_{n}\ =\ \underbrace{A\mathbf{x}}_{m}$$
+
+        A $4 \times 2$ matrix times a vector of 2 components gives a vector of 4. The same matrix times a vector of 4 components means nothing. In Python the product by rows is one line, and it is worth knowing by heart:
+
+        ```python
+        [sum([a * b for a, b in zip(row, x)]) for row in A]
+        ```
+
+        Beware that `zip` stops quietly at the shorter of its two lists, so this line gives an answer even when the shapes do not fit. Code that multiplies matrices should check shapes and refuse.
+
+        **Cost.** Each of the $m$ rows needs $n$ multiplications. The product costs $m \times n$ multiplications, one for each entry of the matrix, so it is $O(mn)$. No entry can be skipped in general, since each one matters to the answer. A layer taking a thousand numbers to a thousand costs a million multiplications for every input it sees.
+
+        **Linearity again.** From the last lesson, $A(\mathbf{x} + \mathbf{y}) = A\mathbf{x} + A\mathbf{y}$ and $A(c\,\mathbf{x}) = c\,A\mathbf{x}$. The row view shows why at a glance: each component is a dot product, and the dot product has those two rules.
+
+        **Products you can do at sight.**
+
+        | Input | Output | Why |
+        | --- | --- | --- |
+        | $\mathbf{e}_j$, a unit vector | column $j$ of $A$ | one column taken once, the rest not at all |
+        | $(1, 1, \dots, 1)$ | the sum of each row | every column taken once |
+        | $\mathbf{0}$ | $\mathbf{0}$ | no column taken |
+        | any $\mathbf{x}$, with $A$ the do-nothing matrix | $\mathbf{x}$ | row $i$ is $\mathbf{e}_i$, and $\mathbf{e}_i \cdot \mathbf{x} = x_i$ |
+
+        One more kind is worth knowing. A matrix that is zero except on the diagonal from top left to bottom right is called **diagonal**. With diagonal entries $d_1, \dots, d_n$ it sends $\mathbf{x}$ to $(d_1 x_1, \dots, d_n x_n)$: each component is scaled by its own factor and none is mixed with another. It is the simplest kind of matrix there is, and much of the later theory is a search for a point of view from which a given matrix looks diagonal.
+    - question:
+        id: derivation-entry
+        type: choice
+        system: s2
+        prompt: |
+          $A$ is a $3 \times 2$ matrix and $\mathbf{x} = (x_1, x_2)$. Which expression is the **second** component of $A\mathbf{x}$?
+        options:
+          - '$a_{12}\,x_1 + a_{22}\,x_2$'
+          - '$a_{21}\,x_1 + a_{22}\,x_2$'
+          - '$a_{21}\,x_1 + a_{12}\,x_2$'
+          - '$a_{12}\,x_1 + a_{22}\,x_1 + a_{32}\,x_1$'
+        answer: 1
+        explanation: |
+          The second component is the dot product of the second **row** with $\mathbf{x}$. The entries of row 2 are $a_{21}$ and $a_{22}$: the first index, the row, stays at 2, and the second index runs along the row and matches the index of $x$. In $\sum_j a_{ij}\,x_j$ the repeated index $j$ is the one summed over, and the free index $i$ names the component. The first option runs down column 2, which is a different set of entries.
+        hints:
+          - The first index of an entry is its row.
+          - Which index stays fixed along row 2?
+          - The index that moves must match the index on x.
+    - text: |
+        **The row view: a list of questions.** Each row of $A$ is a vector $\mathbf{r}_i$ with $n$ components, and $(A\mathbf{x})_i = \mathbf{r}_i \cdot \mathbf{x}$. You know what a dot product with a fixed vector measures: how far $\mathbf{x}$ reaches along $\mathbf{r}_i$, scaled by the length of $\mathbf{r}_i$. So a matrix with $m$ rows takes $m$ measurements of its input, each along its own direction.
+
+        *A layer of neurons.* One neuron computes $\mathbf{w} \cdot \mathbf{x} + c$. Take $m$ neurons that all look at the same input, stack their weight vectors as the rows of a matrix $W$, and collect their biases in a vector $\mathbf{b}$. All $m$ of them at once compute
+
+        $$\mathbf{z} = W\mathbf{x} + \mathbf{b}.$$
+
+        This formula is the working part of nearly every layer of every neural network. Each row of $W$ is one neuron's question to the input. After it comes a function such as the rectifier, applied to each component of $\mathbf{z}$ separately.
+
+        *A table of data.* Stack the examples of a data set as rows, one row to each example and one column to each feature. That matrix, usually called $X$, is the **design matrix**. Then $X\mathbf{w}$ is the vector of predictions of a weighted-sum model for all the examples together. The woman in the puzzle was computing $X\mathbf{w}$ by rows.
+
+        **The column view: a vector being built.** $A\mathbf{x}$ is a linear combination of the columns, so as $\mathbf{x}$ ranges over all inputs, $A\mathbf{x}$ ranges over exactly **the span of the columns**. Nothing outside that span is ever produced. The man in the puzzle saw this: whatever the weights, the vector of predictions lies in the span of the two feature columns, a plane inside $\mathbb{R}^4$. A vector of true rents that lies off that plane cannot be matched exactly by any weights at all.
+
+        The column view also restates a definition you already have. The columns are linearly dependent when some combination of them, with coefficients not all zero, is the zero vector. That says precisely: **there is a vector $\mathbf{c} \ne \mathbf{0}$ with $A\mathbf{c} = \mathbf{0}$.** Add the redundant third feature to the flats, the total of rooms and bathrooms, and the dependency $\mathbf{r} + \mathbf{b} - \mathbf{t} = \mathbf{0}$ becomes $X(1, 1, -1) = \mathbf{0}$. Then $X(\mathbf{w} + s\,\mathbf{c}) = X\mathbf{w} + s\,X\mathbf{c} = X\mathbf{w}$ for every $s$: the weights can slide along $\mathbf{c}$ and no prediction moves. The three-line argument about undetermined weights is now one line.
+
+        **Systems of equations.** Take the two equations
+
+        $$2x_1 - x_2 = 4, \qquad x_1 + x_2 = 5.$$
+
+        The left sides are the dot products of $(2, -1)$ and $(1, 1)$ with the unknown $\mathbf{x} = (x_1, x_2)$. Those are the rows of the machine. So the pair of equations is the single statement
+
+        $$A\mathbf{x} = \mathbf{b}, \qquad A = \begin{pmatrix} 2 & -1 \\ 1 & 1 \end{pmatrix}, \quad \mathbf{b} = \begin{pmatrix} 4 \\ 5 \end{pmatrix}.$$
+
+        Every system of $m$ linear equations in $n$ unknowns is $A\mathbf{x} = \mathbf{b}$ for an $m \times n$ matrix $A$ of coefficients. And now the two views are two ways to understand what solving means.
+
+        *By rows:* each equation $\mathbf{r}_i \cdot \mathbf{x} = b_i$ is a hyperplane with normal $\mathbf{r}_i$. A solution is a point on all of them at once. Solving is finding where hyperplanes meet.
+
+        *By columns:* a solution is a set of coefficients that builds $\mathbf{b}$ out of the columns. Solving is asking whether $\mathbf{b}$ is in the span of the columns, and with what recipe.
+
+        Here the answer is $\mathbf{x} = (3, 2)$. By rows, the lines $2x_1 - x_2 = 4$ and $x_1 + x_2 = 5$ cross there. By columns, $3\,(2, 1) + 2\,(-1, 1) = (4, 5)$. In the last lesson you ran the machine forwards: given $\mathbf{x}$, find $A\mathbf{x}$. Solving a system runs it **backwards**: given the output, find the input.
+
+        The column view answers at once the two questions about any system.
+
+        - **Is there a solution?** Exactly when $\mathbf{b}$ lies in the span of the columns of $A$.
+        - **Is it the only one?** Exactly when the columns are independent, because coefficients with respect to an independent list are unique. If the columns are dependent, with $A\mathbf{c} = \mathbf{0}$, then every solution $\mathbf{x}$ comes with a whole line of others, $\mathbf{x} + s\,\mathbf{c}$.
+
+        What neither view gives yet is a **method** for finding the solution when there are more than two or three unknowns. That needs a systematic procedure, and it is coming.
+    - question:
+        id: order-rows
+        type: order
+        system: s2
+        prompt: Put the steps in order to prove that the $i$-th component of $A\mathbf{x}$ is the dot product of row $i$ of $A$ with $\mathbf{x}$.
+        steps:
+          - 'By definition, $A\mathbf{x} = x_1\mathbf{a}_1 + \dots + x_n\mathbf{a}_n$, where $\mathbf{a}_j$ is column $j$.'
+          - 'Vectors are added and scaled one component at a time, so the $i$-th component of the sum is $x_1 (\mathbf{a}_1)_i + \dots + x_n (\mathbf{a}_n)_i$.'
+          - 'The $i$-th component of column $j$ is the entry $a_{ij}$, so this is $a_{i1} x_1 + \dots + a_{in} x_n$.'
+          - 'The numbers $a_{i1}, \dots, a_{in}$ are exactly the entries of row $i$.'
+          - 'So the sum is the dot product of row $i$ with $\mathbf{x}$.'
+        explanation: The proof starts from the definition by columns, looks at one component, renames the pieces as entries of the matrix, and then notices that the entries involved are those of a single row. Nothing is computed. The same products are regrouped, which is all that separates the two people in the puzzle.
+        hints:
+          - Begin from the definition, which is by columns.
+          - Taking one component comes before naming entries.
+          - Recognising the dot product is the last step.
+  formal:
+    - text: |
+        **Matrix-vector product.** For an $m \times n$ matrix $A$ with columns $\mathbf{a}_j$ and a vector $\mathbf{x}$ with $n$ components, $A\mathbf{x} = \sum_j x_j\mathbf{a}_j$, a vector with $m$ components. It is defined only when the number of columns of $A$ equals the number of components of $\mathbf{x}$.
+
+        **By rows.** $(A\mathbf{x})_i = \sum_{j} a_{ij}\,x_j = \mathbf{r}_i \cdot \mathbf{x}$, where $\mathbf{r}_i$ is row $i$.
+
+        **Linearity.** $A(\mathbf{x} + \mathbf{y}) = A\mathbf{x} + A\mathbf{y}$ and $A(c\,\mathbf{x}) = c\,A\mathbf{x}$.
+
+        **Cost.** $mn$ multiplications.
+
+        **Special inputs.** $A\mathbf{e}_j$ is column $j$. $A\mathbf{0} = \mathbf{0}$.
+
+        **Systems.** $m$ linear equations in $n$ unknowns are $A\mathbf{x} = \mathbf{b}$ with $A$ of shape $m \times n$. A solution exists exactly when $\mathbf{b}$ is in the span of the columns of $A$. A solution, if there is one, is unique exactly when the columns are independent.
+
+        **Dependence.** The columns of $A$ are dependent exactly when $A\mathbf{c} = \mathbf{0}$ for some $\mathbf{c} \ne \mathbf{0}$.
+
+        **A layer.** $\mathbf{z} = W\mathbf{x} + \mathbf{b}$, with one neuron to each row of $W$.
+  drill:
+    - text: Seconds each. Across a row and down the vector, multiply and add.
+    - question:
+        id: drill-first
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has rows $(1, 2)$ and $(3, 4)$, and $\mathbf{x} = (1, 1)$. What is the first component of $A\mathbf{x}$?
+        answer: "3"
+        explanation: The first row dotted with x is 1 × 1 + 2 × 1.
+        hints:
+          - Use the first row only.
+          - Take its dot product with x.
+    - question:
+        id: drill-second
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has rows $(1, 2)$ and $(3, 4)$, and $\mathbf{x} = (1, 1)$. What is the second component of $A\mathbf{x}$?
+        answer: "7"
+        explanation: The second row dotted with x is 3 × 1 + 4 × 1.
+        hints:
+          - Use the second row only.
+          - Take its dot product with x.
+    - question:
+        id: drill-unit
+        type: choice
+        system: s1
+        prompt: |
+          $A$ has rows $(1, 2)$ and $(3, 4)$. What is $A\,(0, 1)$?
+        options: ['$(3, 4)$', '$(2, 4)$', '$(1, 3)$', '$(1, 2)$']
+        answer: 1
+        explanation: A unit vector picks out a column. The second column, read downwards, is (2, 4).
+        hints:
+          - Which unit vector is (0, 1)?
+          - It selects the matching column.
+    - question:
+        id: drill-shape-in
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ is a $2 \times 3$ matrix. How many components must $\mathbf{x}$ have for $A\mathbf{x}$ to be defined?
+        answer: "3"
+        explanation: One component for each column.
+        hints:
+          - x supplies one coefficient for each column.
+          - How many columns are there?
+    - question:
+        id: drill-shape-out
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ is a $2 \times 3$ matrix. How many components has $A\mathbf{x}$?
+        answer: "2"
+        explanation: One component for each row, each a dot product of that row with x.
+        hints:
+          - Each row produces one number.
+          - How many rows are there?
+    - question:
+        id: drill-undefined
+        type: choice
+        system: s1
+        prompt: |
+          $A$ is a $3 \times 2$ matrix and $\mathbf{x}$ has 3 components. The product $A\mathbf{x}$ is
+        options: ["a vector with 3 components", "a vector with 2 components", "not defined", "a single number"]
+        answer: 2
+        explanation: A has 2 columns and x has 3 components. Each row has only 2 entries to set against 3.
+        hints:
+          - Compare the number of columns with the length of x.
+          - They must be equal.
+    - question:
+        id: drill-three
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has rows $(1, 2, 3)$ and $(4, 5, 6)$, and $\mathbf{x} = (1, 0, -1)$. What is the first component of $A\mathbf{x}$?
+        answer: "-2"
+        explanation: 1 × 1 + 2 × 0 + 3 × (−1) = 1 − 3.
+        hints:
+          - Use the first row.
+          - The middle product is zero.
+    - question:
+        id: drill-ones
+        type: choice
+        system: s1
+        prompt: |
+          $A$ has rows $(1, 2, 3)$ and $(4, 5, 6)$. What is $A\,(1, 1, 1)$?
+        options: ['$(5, 7, 9)$', '$(6, 15)$', '$(1, 4)$', '$(21)$']
+        answer: 1
+        explanation: Multiplying by the vector of ones adds up each row. 1 + 2 + 3 = 6 and 4 + 5 + 6 = 15.
+        hints:
+          - Every entry of a row is multiplied by 1.
+          - Add up each row.
+    - question:
+        id: drill-diagonal
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has rows $(2, 0)$ and $(0, 3)$, and $\mathbf{x} = (5, 1)$. What is the second component of $A\mathbf{x}$?
+        answer: "3"
+        explanation: A diagonal matrix scales each component by its own factor. The second component, 1, is multiplied by 3.
+        hints:
+          - The second row is (0, 3).
+          - Only the second component of x survives.
+    - question:
+        id: drill-identity
+        type: choice
+        system: s1
+        prompt: |
+          $A$ has rows $(1, 0)$ and $(0, 1)$. What is $A\,(7, -2)$?
+        options: ['$(7, -2)$', '$(-2, 7)$', '$(5, 5)$', '$(0, 0)$']
+        answer: 0
+        explanation: Each row is a unit vector, and its dot product with x returns one component of x. The matrix does nothing.
+        hints:
+          - (1, 0) · x is the first component of x.
+          - (0, 1) · x is the second.
+    - question:
+        id: drill-cost
+        type: numeric
+        system: s1
+        prompt: |
+          How many multiplications does it take to compute $A\mathbf{x}$ for a $3 \times 4$ matrix $A$?
+        answer: "12"
+        explanation: Each of the 3 rows needs 4 multiplications, one for each entry of the matrix.
+        hints:
+          - How many multiplications does one row need?
+          - How many rows are there?
+    - question:
+        id: drill-solvable
+        type: choice
+        system: s1
+        prompt: |
+          $A\mathbf{x} = \mathbf{b}$ has a solution exactly when
+        options: ["A is square", "b is in the span of the columns of A", "b is in the span of the rows of A", "b is not the zero vector"]
+        answer: 1
+        explanation: Ax is a combination of the columns, so the vectors that can be produced are exactly the span of the columns.
+        hints:
+          - What kind of vector is Ax, in the column view?
+          - Which vectors can a combination of the columns reach?
+    - question:
+        id: drill-system
+        type: choice
+        system: s1
+        prompt: |
+          Which matrix $A$ writes the system $x_1 + 2x_2 = 5$, $3x_1 - x_2 = 1$ as $A\mathbf{x} = \mathbf{b}$?
+        options: ['Rows $(1, 3)$ and $(2, -1)$', 'Rows $(1, 2)$ and $(3, -1)$', 'Rows $(5, 1)$ and $(1, 2)$', 'Rows $(1, 2)$ and $(3, 1)$']
+        answer: 1
+        explanation: Each equation gives one row, made of its coefficients in order.
+        hints:
+          - One equation is one row.
+          - Copy the coefficients of each equation, signs included.
+    - question:
+        id: predict-rows
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          A = [[2, -1], [1, 1]]
+          x = [3, 2]
+
+          print([sum([a * b for a, b in zip(row, x)]) for row in A])
+        output: "[4, 5]"
+        explanation: Each row is dotted with x. The first gives 6 − 2 = 4 and the second 3 + 2 = 5. It is the machine of the last lesson, computed by rows this time.
+        hints:
+          - The outer comprehension makes one number for each row.
+          - The inner one is a dot product.
+    - question:
+        id: predict-layer
+        type: predict
+        system: s1
+        prompt: A layer of three neurons looking at one input. What does this show?
+        code: |
+          W = [[1, 1], [-1, -1], [1, 0]]
+          b = [-1.5, 0.5, 0]
+          x = [1, 1]
+
+          z = [sum([w * v for w, v in zip(row, x)]) + c for row, c in zip(W, b)]
+          print(z)
+          print([1 if t > 0 else 0 for t in z])
+        output: |
+          [0.5, -1.5, 1]
+          [1, 0, 1]
+        explanation: The three dot products are 2, −2 and 1. Adding the biases gives 0.5, −1.5 and 1. The first neuron is "and", the second fires only when both inputs are off, and the third copies the first input. For the input (1, 1) they give 1, 0 and 1.
+        hints:
+          - Dot each row of W with x, then add that neuron's bias.
+          - The last line turns each positive number into 1 and the rest into 0.
+  work:
+    - text: Slower now. Before computing, say what shape the answer must have.
+    - question:
+        id: write-matvec
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `matvec(A, x)`. `A` is a matrix stored as a non-empty list of rows and `x` is a list of numbers. Return the product as a list, computed by rows: one dot product for each row.
+
+          If the number of entries of `x` is not the number of columns of `A`, raise a `ValueError`.
+        starter: |
+          def matvec(A, x):
+              # Replace the next line with your own.
+              return []
+
+          print(matvec([[3, 1], [2, 1], [4, 2], [1, 1]], [3, 1]))
+        solution: |
+          def matvec(A, x):
+              if len(A[0]) != len(x):
+                  raise ValueError("shapes do not fit")
+              return [sum([a * b for a, b in zip(row, x)]) for row in A]
+
+          print(matvec([[3, 1], [2, 1], [4, 2], [1, 1]], [3, 1]))
+        tests: |
+          assert matvec([[3, 1], [2, 1], [4, 2], [1, 1]], [3, 1]) == [10, 7, 14, 4], "The four flats with weights [3, 1] give [10, 7, 14, 4]"
+          assert matvec([[2, -1], [1, 1]], [3, 2]) == [4, 5], "Rows [2, -1] and [1, 1] times [3, 2] give [4, 5]"
+          assert matvec([[1, 2], [3, 4]], [0, 1]) == [2, 4], "A unit vector picks out a column: [2, 4]"
+          assert matvec([[1, 2, 3], [4, 5, 6]], [1, 0, -1]) == [-2, -2], "A 2 by 3 matrix times [1, 0, -1] gives [-2, -2]"
+          assert matvec([[3, -1, 2]], [1, 1, 1]) == [4], "A single row gives a list with one number, [4]"
+          assert matvec([[1], [2], [3]], [5]) == [5, 10, 15], "A single column times [5] gives [5, 10, 15]"
+          assert matvec([[1, 0], [0, 1]], [7, -2]) == [7, -2], "The do-nothing matrix returns its input"
+          _raised = False
+          try:
+              matvec([[1, 2], [3, 4], [5, 6]], [1, 1, 1])
+          except ValueError:
+              _raised = True
+          assert _raised, "A 3 by 2 matrix cannot multiply a vector of 3 entries. Raise ValueError"
+          _raised = False
+          try:
+              matvec([[1, 2, 3], [4, 5, 6]], [1, 1])
+          except ValueError:
+              _raised = True
+          assert _raised, "A 2 by 3 matrix cannot multiply a vector of 2 entries. Raise ValueError"
+          assert output.strip() == "[10, 7, 14, 4]", "The program should print [10, 7, 14, 4]"
+        wrong:
+          - |
+            def matvec(A, x):
+                return [sum([a * b for a, b in zip(row, x)]) for row in A]
+
+            print([10, 7, 14, 4])
+          - |
+            def matvec(A, x):
+                if len(A) != len(x):
+                    raise ValueError("shapes do not fit")
+                return [sum([a * b for a, b in zip(row, x)]) for row in A]
+
+            print([10, 7, 14, 4])
+          - |
+            def matvec(A, x):
+                if len(A[0]) != len(x):
+                    raise ValueError("shapes do not fit")
+                return [sum(row) for row in A]
+
+            print([10, 7, 14, 4])
+          - |
+            def matvec(A, x):
+                if len(A[0]) != len(x):
+                    raise ValueError("shapes do not fit")
+                return [sum([A[i][j] * x[j] for i in range(len(A))]) for j in range(len(x))]
+
+            print([10, 7, 14, 4])
+          - |
+            def matvec(A, x):
+                if len(A[0]) != len(x):
+                    raise ValueError("shapes do not fit")
+                return [sum([a * b for a, b in zip(row, x)]) for row in A[:len(x)]]
+
+            print([10, 7, 14, 4])
+        explanation: |
+          The body is the row rule: for each row, a dot product with `x`. The check before it matters as much. `zip` stops at the shorter list without complaint, so the bare one-liner returns numbers for shapes that do not fit, and a silent wrong answer deep inside a model is far harder to find than an error at the place it was caused. Note what is compared: the length of `x` against the number of **columns**, `len(A[0])`, not the number of rows. The answer has one entry for each row, whatever the length of `x`. This small function is the one you will meet most often from here on. Before long a library will perform it for you, thousands of times faster, and what it performs is exactly this.
+        hints:
+          - Compare len(x) with the length of a row, and raise ValueError if they differ.
+          - For one row, the dot product is the sum of a * b over the pairs from zip(row, x).
+          - Make one such number for each row.
+    - question:
+        id: write-layer
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `layer(W, b, x)`. It models a layer of rectified neurons. `W` is a matrix with one row of weights for each neuron, `b` holds one bias for each neuron, and `x` is the input. Compute $\mathbf{z} = W\mathbf{x} + \mathbf{b}$, then return the list in which each $z_i$ is replaced by $\max(0, z_i)$.
+        starter: |
+          def layer(W, b, x):
+              # Replace the next line with your own.
+              return x
+
+          print(layer([[1, 1], [-1, -1], [1, 0]], [-1.5, 0.5, 0], [1, 1]))
+        solution: |
+          def layer(W, b, x):
+              z = [sum([w * v for w, v in zip(row, x)]) + c for row, c in zip(W, b)]
+              return [max(0, t) for t in z]
+
+          print(layer([[1, 1], [-1, -1], [1, 0]], [-1.5, 0.5, 0], [1, 1]))
+        tests: |
+          _W = [[1, 1], [-1, -1], [1, 0]]
+          _b = [-1.5, 0.5, 0]
+          assert layer(_W, _b, [1, 1]) == [0.5, 0, 1], "For the input [1, 1], z is [0.5, -1.5, 1], and the negative entry becomes 0"
+          assert layer(_W, _b, [0, 0]) == [0, 0.5, 0], "For the input [0, 0], z is the biases [-1.5, 0.5, 0], which rectify to [0, 0.5, 0]"
+          assert layer(_W, _b, [1, 0]) == [0, 0, 1], "For the input [1, 0], z is [-0.5, -0.5, 1]"
+          assert layer(_W, _b, [3, 2]) == [3.5, 0, 3], "For the input [3, 2], z is [3.5, -4.5, 3]"
+          assert layer([[2, -1], [1, 1]], [0, 0], [3, 2]) == [4, 5], "With zero biases and positive results the layer is the plain product, [4, 5]"
+          assert layer([[2, -1], [1, 1]], [0, -10], [3, 2]) == [4, 0], "The second bias, -10, pulls 5 down to -5, which becomes 0"
+          assert layer([[1, 2, 3]], [1], [1, 1, 1]) == [7], "One neuron with three inputs: 6 plus the bias 1"
+          assert layer([[1], [-1]], [0, 0], [-4]) == [0, 4], "Two neurons with one input: z is [-4, 4]"
+          assert output.strip() == "[0.5, 0, 1]", "The program should print [0.5, 0, 1]"
+        wrong:
+          - |
+            def layer(W, b, x):
+                return [sum([w * v for w, v in zip(row, x)]) + c for row, c in zip(W, b)]
+
+            print([0.5, 0, 1])
+          - |
+            def layer(W, b, x):
+                z = [sum([w * v for w, v in zip(row, x)]) for row in W]
+                return [max(0, t) for t in z]
+
+            print([0.5, 0, 1])
+          - |
+            def layer(W, b, x):
+                z = [max(0, sum([w * v for w, v in zip(row, x)])) + c for row, c in zip(W, b)]
+                return z
+
+            print([0.5, 0, 1])
+          - |
+            def layer(W, b, x):
+                z = [sum([w * v for w, v in zip(row, x)]) + c for row, c in zip(W, b)]
+                return [abs(t) for t in z]
+
+            print([0.5, 0, 1])
+          - |
+            def layer(W, b, x):
+                z = [sum([w * v for w, v in zip(row, x)]) + c for row, c in zip(W, b)]
+                return [1 if t > 0 else 0 for t in z]
+
+            print([0.5, 0, 1])
+        explanation: |
+          Three things happen in order. The matrix asks one question of the input for each row. The bias shifts each answer. The rectifier then keeps the positive answers and replaces the rest by 0. The order matters: the bias is added **before** the rectifier, so that a neuron can be silent until its dot product passes a threshold of its own choosing. The first two steps together are an affine map, and they could be absorbed into any affine map that followed. The third step is the one that is not linear, and it is what stops a stack of such layers from collapsing into one. A network is this function applied over and over, each layer's output becoming the next one's input.
+        hints:
+          - Compute one dot product for each row of W, and add that row's own bias.
+          - zip(W, b) pairs each row with its bias.
+          - Apply max(0, t) to each result afterwards.
+    - question:
+        id: fix-solves
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `solves(A, x, b)` should return `True` exactly when `x` is a solution of the system $A\mathbf{x} = \mathbf{b}$: **every** equation must hold, to within `1e-9`. The vector $(4, 4)$ satisfies $2x_1 - x_2 = 4$ and fails $x_1 + x_2 = 5$, so the program should print `False`. It prints `True`. Fix it.
+        starter: |
+          def solves(A, x, b):
+              for row, target in zip(A, b):
+                  left = sum([a * v for a, v in zip(row, x)])
+                  if abs(left - target) < 1e-9:
+                      return True
+              return False
+
+          print(solves([[2, -1], [1, 1]], [4, 4], [4, 5]))
+        solution: |
+          def solves(A, x, b):
+              for row, target in zip(A, b):
+                  left = sum([a * v for a, v in zip(row, x)])
+                  if abs(left - target) >= 1e-9:
+                      return False
+              return True
+
+          print(solves([[2, -1], [1, 1]], [4, 4], [4, 5]))
+        tests: |
+          _A = [[2, -1], [1, 1]]
+          assert solves(_A, [4, 4], [4, 5]) is False, "[4, 4] satisfies the first equation and not the second"
+          assert solves(_A, [3, 2], [4, 5]) is True, "[3, 2] satisfies both equations"
+          assert solves(_A, [1, 4], [4, 5]) is False, "[1, 4] satisfies the second equation and not the first"
+          assert solves(_A, [0, 0], [4, 5]) is False, "[0, 0] satisfies neither equation"
+          assert solves(_A, [3, 3], [4, 5]) is False, "[3, 3] misses the first equation by 1 below and the second by 1 above. The misses must not cancel"
+          assert solves(_A, [0, 0], [0, 0]) is True, "The zero vector solves any system whose right side is zero"
+          assert solves([[1, 1, 1], [2, 3, 1], [1, -1, 2]], [1, 2, 3], [6, 11, 5]) is True, "[1, 2, 3] satisfies all three equations"
+          assert solves([[1, 1, 1], [2, 3, 1], [1, -1, 2]], [1, 2, 3], [6, 11, 6]) is False, "[1, 2, 3] fails the third equation when its right side is 6"
+          assert solves([[3, 2, 4, 1], [1, 1, 2, 1]], [1, 1, 0, 0], [5, 2]) is True, "Two equations in four unknowns: [1, 1, 0, 0] satisfies both"
+          assert solves([[0.1], [0.2]], [3], [0.3, 0.6]) is True, "Tiny rounding differences should not count as a failure"
+          assert output.strip() == "False", "The program should print False"
+        wrong:
+          - |
+            def solves(A, x, b):
+                for row, target in zip(A, b):
+                    left = sum([a * v for a, v in zip(row, x)])
+                    if abs(left - target) < 1e-9:
+                        return True
+                return False
+
+            print(False)
+          - |
+            def solves(A, x, b):
+                left = sum([a * v for a, v in zip(A[-1], x)])
+                return abs(left - b[-1]) < 1e-9
+
+            print(False)
+          - |
+            def solves(A, x, b):
+                total = 0
+                for row, target in zip(A, b):
+                    total += sum([a * v for a, v in zip(row, x)]) - target
+                return abs(total) < 1e-9
+
+            print(False)
+          - |
+            def solves(A, x, b):
+                for row, target in zip(A, b):
+                    left = sum([a * v for a, v in zip(row, x)])
+                    if left != target:
+                        return False
+                return True
+
+            print(False)
+          - |
+            def solves(A, x, b):
+                for row, target in zip(A, b):
+                    left = sum([a * v for a, v in zip(row, x)])
+                    if abs(left - target) >= 1e-9:
+                        return True
+                return False
+
+            print(False)
+        explanation: |
+          The starter returned `True` at the first equation that held. A solution of a system is a point on **all** the hyperplanes, so the logic runs the other way: one failed equation is enough to answer `False`, and `True` may be returned only after every row has been checked. This is the pattern for any "for all" condition in a loop: leave early on a counterexample, and answer yes only at the end. Adding up the errors is no substitute, since a miss above in one equation can cancel a miss below in another. Notice how cheap checking is: one matrix-vector product and a comparison. Checking a proposed solution costs $mn$ multiplications. Finding one is harder, and it is the subject of elimination.
+        hints:
+          - What does the function do as soon as one equation is satisfied?
+          - A solution must satisfy every equation. When can you be sure of the answer early?
+          - Return False at the first equation that fails, and True after the loop.
+    - question:
+        id: work-solve
+        type: numeric
+        system: s2
+        prompt: |
+          The matrix $A$ has rows $(1, 2)$ and $(3, -1)$, and $A\mathbf{x} = (5, 1)$. What is $x_2$, the second component of $\mathbf{x}$?
+        answer: "2"
+        explanation: |
+          The rows give the equations $x_1 + 2x_2 = 5$ and $3x_1 - x_2 = 1$. Multiply the second by 2 and add it to the first: $7x_1 = 7$, so $x_1 = 1$, and then $1 + 2x_2 = 5$ gives $x_2 = 2$. Check by columns: $1\,(1, 3) + 2\,(2, -1) = (5, 1)$. The rows told you what to solve. The columns let you confirm the answer as a recipe for building $\mathbf{b}$.
+        hints:
+          - Write the two equations, one from each row.
+          - Remove one unknown by adding a multiple of one equation to the other.
+          - Check by combining the columns with your answer as coefficients.
+    - question:
+        id: work-no-solution
+        type: choice
+        system: s2
+        prompt: |
+          $A$ has columns $(1, 0.5)$ and $(2, 1)$. For which right side does $A\mathbf{x} = \mathbf{b}$ have **no** solution?
+        options:
+          - '$\mathbf{b} = (4, 2)$'
+          - '$\mathbf{b} = (1, 1)$'
+          - '$\mathbf{b} = (0, 0)$'
+          - '$\mathbf{b} = (-2, -1)$'
+        answer: 1
+        explanation: |
+          The second column is twice the first, so every combination of the columns is a multiple of $(2, 1)$, and the span of the columns is a single line. $(4, 2)$, $(0, 0)$ and $(-2, -1)$ are on that line. $(1, 1)$ is not, so no $\mathbf{x}$ produces it. For the right sides that are on the line there is not one solution but infinitely many: the columns are dependent, with $A\,(2, -1) = \mathbf{0}$, so any solution can be moved along $(2, -1)$. In the row view, the two equations $x_1 + 2x_2 = b_1$ and $0.5x_1 + x_2 = b_2$ are parallel lines, which either never meet or are the same line. A dependent set of columns gives no solution or too many, never exactly one.
+        hints:
+          - How are the two columns related?
+          - Which vectors can a combination of them reach?
+          - Which option is not a multiple of (2, 1)?
+    - question:
+        id: work-dependency
+        type: choice
+        system: s2
+        prompt: |
+          The design matrix $X$ for the four flats has three columns: rooms $\mathbf{r}$, bathrooms $\mathbf{b}$, and their total $\mathbf{t} = \mathbf{r} + \mathbf{b}$. Which statement follows from $X\,(1, 1, -1) = \mathbf{0}$?
+        options:
+          - "Every set of weights predicts a rent of 0."
+          - "$X\\mathbf{w}$ and $X(\\mathbf{w} + s\\,(1, 1, -1))$ are equal for every number $s$, so the predictions cannot tell these weights apart."
+          - "The weights $(1, 1, -1)$ are the best ones."
+          - "The matrix $X$ has a row of zeros."
+        answer: 1
+        explanation: |
+          By linearity, $X(\mathbf{w} + s\,\mathbf{c}) = X\mathbf{w} + s\,X\mathbf{c} = X\mathbf{w} + \mathbf{0}$. The vector $\mathbf{c} = (1, 1, -1)$ is a direction in the space of weights along which the model's output does not change at all. With $\mathbf{w} = (3, 1, 0)$ and $s = -1$ and $s = -3$ you get $(2, 0, 1)$ and $(0, -2, 3)$, the three models that agreed on every flat. The statement $X\mathbf{c} = \mathbf{0}$ with $\mathbf{c} \ne \mathbf{0}$ **is** the dependence of the columns, in the notation of matrices. The vectors that a matrix sends to zero will get a name and a lesson of their own.
+        hints:
+          - Use the rule for a matrix times a sum.
+          - What is s times the zero vector?
+          - Compare with the three sets of weights that predicted the same rents.
+    - question:
+        id: work-batch
+        type: choice
+        system: s2
+        prompt: |
+          A layer has a weight matrix of shape $1000 \times 4000$. It is applied to each of 64 inputs. About how many multiplications is that, and what are the shapes of one input and one output?
+        options:
+          - "About 4 million. Inputs have 1000 components and outputs 4000."
+          - "About 256 million. Inputs have 4000 components and outputs 1000."
+          - "About 64 thousand. Inputs have 4000 components and outputs 1000."
+          - "About 256 million. Inputs have 1000 components and outputs 4000."
+        answer: 1
+        explanation: |
+          The number of columns, 4000, is the number of components of an input. The number of rows, 1000, is the number of neurons and so of outputs. One product costs a multiplication for every entry of the matrix, $1000 \times 4000 = 4$ million, and 64 inputs cost 64 times that, 256 million. Almost all the arithmetic a network does is of this kind, which is why so much engineering goes into doing this one operation fast.
+        hints:
+          - Columns count inputs and rows count outputs.
+          - One product uses every entry of the matrix once.
+          - Multiply the cost of one product by the number of inputs.
+  connections:
+    - text: |
+        Two people predicted four rents. One took a dot product for each flat and the other added scaled columns of features. They agreed because they were adding the same products in a different order, and that regrouping is the whole proof that a matrix times a vector can be read by rows or by columns.
+
+        The two readings are worth more than the computation. By rows, a matrix is a list of questions put to its input, each a dot product: a layer of neurons, $W\mathbf{x} + \mathbf{b}$, or a system of equations, each one a hyperplane. By columns, it builds its output from a fixed set of ingredients, and can reach exactly their span. From [[m5.matrices-as-linear-maps]] you had the columns as the images of the unit vectors. Today the rows gained their meaning, and $A\mathbf{x} = \mathbf{b}$ joined them: the row view asks where hyperplanes meet, and the column view asks whether $\mathbf{b}$ can be built and in how many ways.
+
+        The old vocabulary translated cleanly. Columns are dependent exactly when $A\mathbf{c} = \mathbf{0}$ for some non-zero $\mathbf{c}$. A system has a solution exactly when the right side is in the span of the columns. Both statements will be developed fully: the method for solving in [[m5.elimination-and-linear-systems]], and the spans and the vectors sent to zero in [[m5.column-space-and-null-space]]. The rows and columns changing places has an operation of its own, [[m5.transpose]].
+
+        One question is more pressing than all of those. A network is not one layer. The output of the first matrix is handed to a second, and that to a third. Today's product takes a matrix and a **vector**. What happens when a vector passes through two matrices in turn? The result is again a linear map, so it has a matrix of its own. Finding that matrix from the two you started with is what it means to multiply a matrix by a matrix, and the rule for doing it, which looks arbitrary when it is merely stated, is forced on you once you ask for it this way. That is the next lesson, [[m5.matrix-multiplication-as-composition]].

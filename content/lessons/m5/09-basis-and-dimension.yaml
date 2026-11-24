@@ -1,0 +1,785 @@
+concept: m5.basis-and-dimension
+minutes: 95
+claim: You can say what a basis of a subspace is and why it gives every vector exactly one set of coordinates, prove that every basis of a subspace has the same number of vectors, define dimension as that number, find bases for the column space and the null space of a matrix, and use the fact that their dimensions add up to the number of columns.
+recalls: [m5.column-space-and-null-space]
+uses: [m5.rank, m5.elimination-and-linear-systems, m5.identity-and-inverse, m5.matrix-multiplication-as-composition, m5.matrix-vector-product, m5.matrices-as-linear-maps, m4.linear-independence, m4.linear-combinations-and-span, m4.lines-planes-and-hyperplanes, m10.differentiation-rules, m3.contrapositive-and-contradiction, e1.exceptions, e1.comprehensions-and-iterators, e0.functions, e0.loops, e0.lists-and-tuples]
+leads: [m5.change-of-basis, m5.determinant, m6.rank-nullity-theorem, m7.orthonormal-bases]
+starter: |
+  # Scratch space. Addresses in a town whose streets run along b1 and b2.
+  b1 = [2, 1]
+  b2 = [-1, 1]
+  print([1 * p + 2 * q for p, q in zip(b1, b2)])
+
+  # A third street direction is added: b3 = b1 + b2. Two addresses, one place.
+  b3 = [1, 2]
+  print([1 * p + 2 * q + 0 * r for p, q, r in zip(b1, b2, b3)])
+  print([0 * p + 1 * q + 1 * r for p, q, r in zip(b1, b2, b3)])
+parts:
+  recall:
+    - text: |
+        [[m5.column-space-and-null-space]] described the outputs a matrix can reach and the inputs it sends to zero, calling them lines and planes and counting the independent vectors that span them, and ended by asking whether that count is the same however the spanning is done. Three quick pulls first.
+    - question:
+        id: recall-special
+        type: numeric
+        system: s1
+        concepts: [m5.column-space-and-null-space]
+        prompt: |
+          A matrix has 4 columns and rank 2. How many special solutions span its null space?
+        answer: "2"
+        explanation: One for each column without a pivot, 4 − 2.
+        hints:
+          - How many columns have pivots?
+          - The others are free.
+    - question:
+        id: recall-unique
+        type: choice
+        system: s1
+        concepts: [m4.linear-independence]
+        prompt: |
+          A list of vectors is linearly independent exactly when each vector in its span
+        options: ["can be written as a combination of them in exactly one way", "is one of the vectors of the list", "has length 1", "is perpendicular to the others"]
+        answer: 0
+        explanation: Two different sets of coefficients for one vector would subtract to give a dependency.
+        hints:
+          - What would two recipes for one vector give when subtracted?
+          - Independence means coefficients are unique.
+    - question:
+        id: recall-wide
+        type: choice
+        system: s1
+        concepts: [m5.elimination-and-linear-systems]
+        prompt: |
+          A matrix with 3 rows and 5 columns always has
+        options: ["an inverse", "a non-zero vector in its null space", "rank 5", "independent columns"]
+        answer: 1
+        explanation: At most 3 pivots fit in 3 rows, so at least 2 columns are free, and each gives a non-zero solution of Ax = 0.
+        hints:
+          - How many pivots can 3 rows hold?
+          - What does a column without a pivot give?
+  puzzle:
+    - text: |
+        A town is laid out on a plain. One surveyor gives every place an address in the usual way: so far east, so far north. A second surveyor prefers the town's own streets, which run along the directions $(2, 1)$ and $(-1, 1)$. Her address for a place is: so many blocks along the first street, so many along the second. Run the first line of the starter. The address "1 block, then 2 blocks" is the place the first surveyor calls $(0, 3)$.
+
+        Both systems work. Every place has an address, and no place has two.
+
+        A third surveyor wants more flexibility and adds a diagonal street, along $(1, 2)$. Now addresses have three numbers. Run the rest of the starter. The addresses $(1, 2, 0)$ and $(0, 1, 1)$ are the same place. His system is ambiguous.
+
+        A fourth, to save paint, proposes a single street along $(2, 1)$. Now most of the town has no address at all.
+
+        Two streets were right for this plain, and three were too many, and one too few. But is that a fact about the plain, or about these particular streets? **Could some cleverer choice of street directions give every place exactly one address using three numbers, or one? And for a tilted sheet inside a space of a thousand dimensions, what is the right number of streets, and how would you find it?**
+  intuition:
+    - text: |
+        An addressing system has to do two things, and they pull in opposite directions.
+
+        It must **reach everywhere**. Every place must have at least one address. That asks for enough streets: the street directions must span the plain.
+
+        It must **never repeat**. No place may have two addresses. That asks for few enough streets: the directions must be independent, since you have seen that coefficients are unique exactly for independent lists.
+
+        The third surveyor's streets span the plain and are dependent, since $(1, 2) = (2, 1) + (-1, 1)$. The fourth's street is independent, being one non-zero vector, and does not span. The second surveyor's two streets do both.
+
+        The figure shows her system. The dashed grid is drawn along her streets. Move the two amounts and watch the place and its two descriptions.
+    - figure: basis-grid
+    - text: |
+        With amounts 1 and 2 the place is $(0, 3)$ in the usual coordinates. Its address in her system is $(1, 2)$. The place has not moved. It simply has two names, one in each system, and each system gives it only one. Every crossing of the dashed grid is a place whose address is a pair of whole numbers.
+
+        A list of vectors that spans and is independent is called a **basis**. The claim to be proved is that the number of vectors in a basis is not a matter of taste. Every basis of the plain has two vectors. Every basis of the null space in the last lesson has two. That number is a property of the space itself, and it is what the word **dimension** means.
+  derivation:
+    - text: |
+        **Basis.** Let $S$ be a subspace of $\mathbb{R}^n$. A **basis** of $S$ is a list of vectors $\mathbf{v}_1, \dots, \mathbf{v}_k$ in $S$ that
+
+        - **spans** $S$: every vector of $S$ is a combination of them, and
+        - is **linearly independent**.
+
+        The two conditions together say: **every vector of $S$ is a combination of the basis vectors in exactly one way.** Spanning gives at least one way and independence gives at most one. The coefficients are called the **coordinates** of the vector with respect to that basis.
+
+        The unit vectors $\mathbf{e}_1, \dots, \mathbf{e}_n$ are a basis of $\mathbb{R}^n$, the **standard basis**, and the coordinates with respect to it are the ordinary components. But it is one basis among infinitely many. For $n$ vectors in $\mathbb{R}^n$, put them as the columns of a square matrix $B$. They span when $B\mathbf{c} = \mathbf{v}$ can always be solved, and they are independent when the solution is unique. So
+
+        $$n \text{ vectors form a basis of } \mathbb{R}^n \iff \text{the matrix with those columns is invertible}.$$
+
+        For the town, the columns $(2, 1)$ and $(-1, 1)$ give $ad - bc = 2 + 1 = 3 \ne 0$. A basis.
+
+        **Every basis has the same size.** This is the theorem that makes dimension meaningful. It rests on one lemma.
+
+        *Lemma.* If $\mathbf{v}_1, \dots, \mathbf{v}_k$ span $S$, then any list of **more than** $k$ vectors in $S$ is dependent.
+
+        *Proof.* Take $\mathbf{w}_1, \dots, \mathbf{w}_j$ in $S$ with $j > k$. Let $V$ be the matrix with columns $\mathbf{v}_1, \dots, \mathbf{v}_k$. Each $\mathbf{w}_i$ is a combination of the $\mathbf{v}$'s, so $\mathbf{w}_i = V\mathbf{a}_i$ for some vector $\mathbf{a}_i$ of $k$ coefficients. Collect the $\mathbf{a}_i$ as the columns of a matrix $A$, of shape $k \times j$, and the $\mathbf{w}_i$ as the columns of $W$. Then
+
+        $$W = VA.$$
+
+        $A$ has $k$ rows and $j > k$ columns. A matrix that is wider than tall has a non-zero vector in its null space: $A\mathbf{c} = \mathbf{0}$ with $\mathbf{c} \ne \mathbf{0}$. Then $W\mathbf{c} = VA\mathbf{c} = V\mathbf{0} = \mathbf{0}$, and that is a dependency among the $\mathbf{w}$'s. $\blacksquare$
+
+        *Theorem.* Any two bases of a subspace $S$ have the same number of vectors.
+
+        *Proof.* Let one basis have $k$ vectors and another $j$. The first spans $S$ and the second is independent, so by the lemma $j$ cannot be more than $k$. The second spans and the first is independent, so $k$ cannot be more than $j$. Hence $j = k$. $\blacksquare$
+
+        Notice what did the work: the fact that a wide matrix has a non-zero null vector, which was a count of pivots. The whole idea of dimension stands on elimination.
+
+        **Dimension.** The **dimension** of a subspace $S$, written $\dim S$, is the number of vectors in any basis of $S$.
+
+        | Subspace | A basis | Dimension |
+        | --- | --- | --- |
+        | $\mathbb{R}^n$ | $\mathbf{e}_1, \dots, \mathbf{e}_n$ | $n$ |
+        | A line through the origin | one non-zero vector on it | 1 |
+        | A plane through the origin | two independent vectors in it | 2 |
+        | The zero vector alone | the empty list | 0 |
+
+        So the answer to the puzzle is no. Three streets on a plain can never be independent, and one can never span, however they are chosen. The lemma says that the size of any independent list is at most the size of any spanning list, and for a plain the two meet at 2.
+
+        **Two conditions for the price of one.** If you already know that $\dim S = k$, then for a list of **exactly** $k$ vectors in $S$, each condition implies the other.
+
+        - $k$ independent vectors in $S$ must span $S$. If some vector of $S$ were outside their span, adding it would give $k + 1$ independent vectors, and the lemma forbids that.
+        - $k$ vectors that span $S$ must be independent. If one were a combination of the others it could be dropped, leaving $k - 1$ vectors that span, and then a basis of $k$ independent vectors would contradict the lemma.
+
+        So to check that three vectors are a basis of $\mathbb{R}^3$ you need only check independence, or only spanning.
+    - question:
+        id: derivation-three-streets
+        type: choice
+        system: s2
+        prompt: |
+          A surveyor claims to have found three street directions on the plain such that every place has exactly one address of three numbers. Which reply is right?
+        options:
+          - "It is possible if the three directions are chosen far apart."
+          - "It is impossible. The two unit vectors span the plain, so by the lemma any three vectors of the plain are dependent, and a dependency gives some place two addresses."
+          - "It is possible if one of the three is the zero vector."
+          - "It is impossible, because addresses must be whole numbers."
+        answer: 1
+        explanation: |
+          The lemma compares any independent list with any spanning list: the independent one is never longer. Since two vectors span the plain, no three vectors of it can be independent. A dependency $c_1\mathbf{v}_1 + c_2\mathbf{v}_2 + c_3\mathbf{v}_3 = \mathbf{0}$ with coefficients not all zero means the addresses $(0, 0, 0)$ and $(c_1, c_2, c_3)$ name the same place, the origin, and adding it to any address gives a second address for that place. Including the zero vector makes matters worse, since it is dependent all on its own.
+        hints:
+          - How many vectors does it take to span the plain?
+          - What does the lemma say about a longer list in the same space?
+          - What does a dependency do to addresses?
+    - text: |
+        **Bases for the spaces of a matrix.** Let $A$ be $m \times n$ with rank $r$. Elimination hands you a basis for each of its spaces.
+
+        *The column space.* The pivot columns **of $A$ itself** are a basis for $C(A)$. They are independent, and every other column is a combination of them, as the lesson on rank showed. So
+
+        $$\dim C(A) = r.$$
+
+        Take care: the pivot columns of the **reduced** matrix will not do. Row operations preserve the relations among the columns and so tell you *which* columns to take, but they change the columns themselves, and with them the column space.
+
+        *The null space.* The special solutions are a basis for $N(A)$. They span it, and they are independent, each having a 1 where the others have 0. There is one for each free column, so
+
+        $$\dim N(A) = n - r.$$
+
+        *The row space.* The non-zero rows of the reduced matrix are a basis for the row space, since row operations do preserve the span of the rows. Its dimension is $r$ too.
+
+        For the matrix of the last two lessons, with rank 2 and four columns: the column space has basis $(1, 2, 3)$ and $(1, 5, 6)$, the first and third columns. The null space has basis $(-2, 1, 0, 0)$ and $(-2, 0, -2, 1)$. The row space has basis $(1, 2, 0, 2)$ and $(0, 0, 1, 2)$.
+
+        **The count.** Add the first two dimensions:
+
+        $$\dim C(A) + \dim N(A) = r + (n - r) = n.$$
+
+        The number of columns $n$ is the dimension of the space of inputs. So the statement reads: **the dimensions that go in equal the dimensions that come out plus the dimensions that are destroyed.** Every direction of input either survives as a direction of output or is flattened to zero, and none is counted twice. This is called the rank-nullity theorem, the dimension of the null space being known as the nullity.
+
+        It makes short work of things that took effort before. For a **square** matrix, $n \times n$: the null space is $\{\mathbf{0}\}$ exactly when $n - r = 0$, which is exactly when $r = n$, which is exactly when the column space is all of $\mathbb{R}^n$. **A square matrix loses nothing exactly when it reaches everything.** For maps between spaces of the same dimension, one-to-one and onto are the same condition. That is why $BA = I$ was enough to give $AB = I$.
+
+        And for a wide matrix, $n > m$: the rank is at most $m$, so the null space has dimension at least $n - m > 0$. For a tall one, $m > n$: the column space has dimension at most $n < m$, so it cannot be all of $\mathbb{R}^m$.
+
+        **A basis from a spanning list.** Given vectors that span a subspace with some waste among them, put them as the columns of a matrix, eliminate, and keep those in the pivot positions. The surviving vectors span the same subspace and are independent.
+
+        **Spaces that are not made of arrows.** The polynomials of degree at most 2 behave like vectors: they can be added and scaled. Every one is $a + bx + cx^2$ in exactly one way, so $1$, $x$, $x^2$ is a basis and the dimension is 3. The coefficient vector $(a, b, c)$ of the first lesson of this cluster was the list of coordinates in that basis.
+
+        Differentiation on these polynomials was the matrix $D$ with rows $(0, 1, 0)$, $(0, 0, 2)$ and $(0, 0, 0)$. Its rank is 2: the derivatives are the polynomials of degree at most 1, with basis $1$ and $x$. Its null space has dimension $3 - 2 = 1$: the polynomials whose derivative is zero, which are the constants. You knew both facts from calculus. The count $2 + 1 = 3$ ties them together: differentiating loses exactly one dimension, and it is the one that integration puts back as the arbitrary constant.
+
+        **Dimension in the language of models.** When an embedding is said to have 768 dimensions, the meaning is the plain one: each vector is a list of 768 numbers, a point of $\mathbb{R}^{768}$. A subtler use matters more. A cloud of such vectors may lie close to a subspace of far lower dimension, in which case a basis for that subspace describes each of them with far fewer coordinates. Finding such a basis is the idea behind compressing data. And when the weights that fit a data set exactly form a shifted null space, its dimension, $n - r$, is the number of directions in which the fit leaves the weights free.
+    - question:
+        id: order-lemma
+        type: order
+        system: s2
+        prompt: Put the steps in order to prove that if $\mathbf{v}_1, \mathbf{v}_2$ span $S$, then any three vectors $\mathbf{w}_1, \mathbf{w}_2, \mathbf{w}_3$ of $S$ are dependent.
+        steps:
+          - 'Each $\mathbf{w}_i$ is in $S$, so $\mathbf{w}_i = V\mathbf{a}_i$, where $V$ has columns $\mathbf{v}_1, \mathbf{v}_2$ and $\mathbf{a}_i$ has 2 components.'
+          - 'Put the $\mathbf{a}_i$ as the columns of a $2 \times 3$ matrix $A$, so that the matrix $W$ with columns $\mathbf{w}_i$ is $W = VA$.'
+          - '$A$ has more columns than rows, so there is a vector $\mathbf{c} \ne \mathbf{0}$ with $A\mathbf{c} = \mathbf{0}$.'
+          - 'Then $W\mathbf{c} = VA\mathbf{c} = V\mathbf{0} = \mathbf{0}$.'
+          - 'So $c_1\mathbf{w}_1 + c_2\mathbf{w}_2 + c_3\mathbf{w}_3 = \mathbf{0}$ with coefficients not all zero: the three are dependent.'
+        explanation: The proof writes each of the three vectors in terms of the two that span, gathers the coefficients into a small wide matrix, and uses the fact that a wide matrix always sends some non-zero vector to zero. That vector, passed through $V$, is a dependency among the three. The vectors may live in a space of any dimension. The argument only ever looks at the $2 \times 3$ table of coefficients.
+        hints:
+          - The three vectors must first be expressed through the two that span.
+          - The wide matrix has to exist before its null vector can be found.
+          - The dependency among the three vectors is the conclusion.
+  formal:
+    - text: |
+        **Basis.** A list of vectors in a subspace $S$ that spans $S$ and is linearly independent. Equivalently, every vector of $S$ is a combination of them in exactly one way. The coefficients are its coordinates with respect to the basis.
+
+        **Invertibility.** $n$ vectors form a basis of $\mathbb{R}^n$ exactly when the matrix with those columns is invertible.
+
+        **Lemma.** If $k$ vectors span $S$, any list of more than $k$ vectors of $S$ is dependent.
+
+        **Theorem.** All bases of $S$ have the same number of vectors. That number is $\dim S$.
+
+        **Exactly $k$ vectors.** If $\dim S = k$, a list of $k$ vectors in $S$ is a basis as soon as it is independent, and as soon as it spans.
+
+        **Spaces of a matrix.** For $A$ of shape $m \times n$ and rank $r$: the pivot columns of $A$ are a basis of $C(A)$, the special solutions are a basis of $N(A)$, and the non-zero rows of the reduced form are a basis of the row space. $\dim C(A) = r$, $\dim N(A) = n - r$, and the row space has dimension $r$.
+
+        **Rank-nullity.** $\dim C(A) + \dim N(A) = n$.
+  drill:
+    - text: Seconds each. A basis must reach everything and repeat nothing.
+    - question:
+        id: drill-too-many
+        type: choice
+        system: s1
+        prompt: |
+          Is the list $(1, 0)$, $(0, 1)$, $(1, 1)$ a basis of the plane?
+        options: ["Yes", "No, it spans but is dependent", "No, it is independent but does not span", "No, it neither spans nor is independent"]
+        answer: 1
+        explanation: The third vector is the sum of the first two, so some vectors have more than one set of coefficients.
+        hints:
+          - How many vectors can be independent in the plane?
+          - Does the list reach every vector?
+    - question:
+        id: drill-too-few
+        type: choice
+        system: s1
+        prompt: |
+          Is the list containing only $(2, 1)$ a basis of the plane?
+        options: ["Yes", "No, it spans but is dependent", "No, it is independent but does not span", "No, it neither spans nor is independent"]
+        answer: 2
+        explanation: One non-zero vector is independent, and its multiples fill only a line.
+        hints:
+          - Is one non-zero vector independent?
+          - What do its multiples fill?
+    - question:
+        id: drill-basis
+        type: choice
+        system: s1
+        prompt: |
+          Is the list $(2, 1)$, $(-1, 1)$ a basis of the plane?
+        options: ["Yes, because ad − bc is 3, not zero", "No, because the vectors are not perpendicular", "No, because they are not unit vectors", "No, because one component is negative"]
+        answer: 0
+        explanation: The matrix with these columns is invertible, so the two vectors are independent and span. A basis need not be perpendicular or of unit length.
+        hints:
+          - Compute ad − bc for the matrix with these columns.
+          - Does a basis have to be perpendicular?
+    - question:
+        id: drill-rn
+        type: numeric
+        system: s1
+        prompt: |
+          What is the dimension of $\mathbb{R}^5$?
+        answer: "5"
+        explanation: The five unit vectors are a basis.
+        hints:
+          - Count the standard unit vectors.
+          - Each has one component equal to 1.
+    - question:
+        id: drill-null-dim
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ is a $4 \times 7$ matrix of rank 3. What is the dimension of its null space?
+        answer: "4"
+        explanation: The number of columns minus the rank, 7 − 3.
+        hints:
+          - How many columns are there?
+          - Subtract the rank.
+    - question:
+        id: drill-column-dim
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ is a $4 \times 7$ matrix of rank 3. What is the dimension of its column space?
+        answer: "3"
+        explanation: The dimension of the column space is the rank.
+        hints:
+          - Which number counts the independent columns?
+          - The pivot columns are a basis.
+    - question:
+        id: drill-plane
+        type: numeric
+        system: s1
+        prompt: |
+          What is the dimension of the set of vectors $(x, y, z)$ with $x + y + z = 0$?
+        answer: "2"
+        explanation: It is the null space of the single row (1, 1, 1), a matrix with 3 columns and rank 1. 3 − 1 = 2. It is a plane through the origin.
+        hints:
+          - It is the null space of a matrix with one row.
+          - Columns minus rank.
+    - question:
+        id: drill-coordinates
+        type: numeric
+        system: s1
+        prompt: |
+          With basis $\mathbf{b}_1 = (2, 1)$ and $\mathbf{b}_2 = (-1, 1)$, a point has coordinates $(1, 2)$. What is its second component in the usual coordinates?
+        answer: "3"
+        explanation: 1 × (2, 1) + 2 × (−1, 1) = (0, 3).
+        hints:
+          - Take 1 of the first basis vector and 2 of the second.
+          - Add their second components.
+    - question:
+        id: drill-same-size
+        type: choice
+        system: s1
+        prompt: |
+          A subspace has a basis of 3 vectors. Another basis of the same subspace has
+        options: ["at least 3 vectors", "at most 3 vectors", "exactly 3 vectors", "any number of vectors"]
+        answer: 2
+        explanation: All bases of a subspace have the same number of vectors, the dimension.
+        hints:
+          - What does the theorem say about two bases?
+          - That common number is the dimension.
+    - question:
+        id: drill-free-span
+        type: choice
+        system: s1
+        prompt: |
+          Three vectors in $\mathbb{R}^3$ are linearly independent. Do they span $\mathbb{R}^3$?
+        options: ["Yes, always", "Only if they are perpendicular", "Not necessarily", "Never"]
+        answer: 0
+        explanation: In a space of dimension 3, three independent vectors are automatically a basis.
+        hints:
+          - The dimension is 3 and there are 3 vectors.
+          - Could a fourth independent vector exist?
+    - question:
+        id: drill-zero
+        type: numeric
+        system: s1
+        prompt: |
+          What is the dimension of the subspace containing only the zero vector?
+        answer: "0"
+        explanation: Its basis is the empty list. The zero vector itself can belong to no independent list.
+        hints:
+          - Can the zero vector be part of an independent list?
+          - How many vectors has an empty list?
+    - question:
+        id: drill-nullity
+        type: numeric
+        system: s1
+        prompt: |
+          A $5 \times 5$ matrix has a null space of dimension 2. What is its rank?
+        answer: "3"
+        explanation: Rank plus the dimension of the null space is the number of columns. 5 − 2 = 3.
+        hints:
+          - The two dimensions add up to the number of columns.
+          - Subtract 2 from 5.
+    - question:
+        id: drill-pivot-columns
+        type: choice
+        system: s1
+        prompt: |
+          Elimination on $A$ finds pivots in columns 1 and 3. Which vectors form a basis of the column space of $A$?
+        options: ["Columns 1 and 3 of the reduced matrix", "Columns 1 and 3 of A itself", "Rows 1 and 3 of A", "Columns 2 and 4 of A"]
+        answer: 1
+        explanation: Row operations show which columns are independent but change the columns themselves, so the basis must be taken from the original matrix.
+        hints:
+          - Do row operations keep the column space unchanged?
+          - They keep the relations among the columns, which tells you which ones to take.
+    - question:
+        id: predict-points
+        type: predict
+        system: s1
+        prompt: Three addresses in the town. What does this show?
+        code: |
+          b1 = [2, 1]
+          b2 = [-1, 1]
+
+          for c in [[1, 2], [1, 0], [0.5, -1]]:
+              print([c[0] * p + c[1] * q for p, q in zip(b1, b2)])
+        output: |
+          [0, 3]
+          [2, 1]
+          [2.0, -0.5]
+        explanation: Each address is so much of b1 plus so much of b2. (1, 2) gives (2 − 2, 1 + 2). (1, 0) is b1 itself. (0.5, −1) gives (1.0 + 1, 0.5 − 1), with floats because of the 0.5.
+        hints:
+          - Multiply b1 by the first number and b2 by the second, and add.
+          - An address of (1, 0) is one basis vector.
+    - question:
+        id: predict-pivot-basis
+        type: predict
+        system: s1
+        prompt: The matrix of the last lessons, with its pivots in columns 0 and 2. What does this show?
+        code: |
+          A = [[1, 2, 1, 4], [2, 4, 5, 14], [3, 6, 6, 18]]
+          pivots = [0, 2]
+
+          basis = [[row[j] for row in A] for j in pivots]
+          print(basis)
+          print(len(basis), len(A[0]) - len(basis))
+        output: |
+          [[1, 2, 3], [1, 5, 6]]
+          2 2
+        explanation: The pivot columns of A are collected as lists. They are a basis of the column space, so its dimension is 2. The null space has dimension 4 − 2 = 2.
+        hints:
+          - For each pivot position, the comprehension collects that column of A.
+          - The last line prints the rank and the number of columns minus the rank.
+  work:
+    - text: Slower now. For a basis, check both conditions, or check one and count.
+    - question:
+        id: write-is-basis
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `is_basis(vectors, n)`. `vectors` is a non-empty list of vectors, each with `n` components. Return `True` exactly when they form a basis of $\mathbb{R}^n$.
+
+          `rank` is given. Use the result of the lesson: in a space of dimension $n$, a list is a basis exactly when it has $n$ vectors and they are independent.
+        starter: |
+          def rank(A):
+              rows = [list(row) for row in A]
+              m = len(rows)
+              n = len(rows[0])
+              r = 0
+              for k in range(n):
+                  if r < m:
+                      best = r
+                      for i in range(r + 1, m):
+                          if abs(rows[i][k]) > abs(rows[best][k]):
+                              best = i
+                      if abs(rows[best][k]) > 1e-9:
+                          rows[r], rows[best] = rows[best], rows[r]
+                          for i in range(r + 1, m):
+                              mult = rows[i][k] / rows[r][k]
+                              rows[i] = [a - mult * p for a, p in zip(rows[i], rows[r])]
+                          r += 1
+              return r
+
+          def is_basis(vectors, n):
+              # Replace the next line with your own.
+              return True
+
+          print(is_basis([[2, 1], [-1, 1]], 2), is_basis([[2, 1], [-1, 1], [1, 2]], 2), is_basis([[2, 1]], 2))
+        solution: |
+          def rank(A):
+              rows = [list(row) for row in A]
+              m = len(rows)
+              n = len(rows[0])
+              r = 0
+              for k in range(n):
+                  if r < m:
+                      best = r
+                      for i in range(r + 1, m):
+                          if abs(rows[i][k]) > abs(rows[best][k]):
+                              best = i
+                      if abs(rows[best][k]) > 1e-9:
+                          rows[r], rows[best] = rows[best], rows[r]
+                          for i in range(r + 1, m):
+                              mult = rows[i][k] / rows[r][k]
+                              rows[i] = [a - mult * p for a, p in zip(rows[i], rows[r])]
+                          r += 1
+              return r
+
+          def is_basis(vectors, n):
+              return len(vectors) == n and rank(vectors) == n
+
+          print(is_basis([[2, 1], [-1, 1]], 2), is_basis([[2, 1], [-1, 1], [1, 2]], 2), is_basis([[2, 1]], 2))
+        tests: |
+          assert is_basis([[2, 1], [-1, 1]], 2) is True, "The two street directions are a basis of the plane"
+          assert is_basis([[2, 1], [-1, 1], [1, 2]], 2) is False, "Three vectors in the plane span it but are dependent"
+          assert is_basis([[2, 1]], 2) is False, "One vector is independent but does not span the plane"
+          assert is_basis([[1, 2], [2, 4]], 2) is False, "Two vectors along one line are not a basis of the plane"
+          assert is_basis([[1, 0, 0], [0, 1, 0], [0, 0, 1]], 3) is True, "The standard basis of three-dimensional space"
+          assert is_basis([[1, 0, 0], [1, 1, 0], [1, 1, 1]], 3) is True, "These three vectors are independent, so they are a basis"
+          assert is_basis([[1, 0, 1], [0, 1, 1], [1, 1, 2]], 3) is False, "The third vector is the sum of the first two"
+          assert is_basis([[1, 0, 0], [0, 1, 0]], 3) is False, "Two vectors cannot span a space of dimension 3"
+          assert is_basis([[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]], 3) is False, "Four vectors in a space of dimension 3 are dependent"
+          assert is_basis([[5]], 1) is True, "One non-zero number is a basis of the number line"
+          assert is_basis([[0]], 1) is False, "The zero vector is not a basis of anything"
+          assert output.strip() == "True False False", "The program should print True False False"
+        wrong:
+          - |
+            def is_basis(vectors, n):
+                return len(vectors) == n
+
+            print(True, False, False)
+          - |
+            def rank(A):
+                rows = [list(row) for row in A]
+                m = len(rows)
+                n = len(rows[0])
+                r = 0
+                for k in range(n):
+                    if r < m:
+                        best = r
+                        for i in range(r + 1, m):
+                            if abs(rows[i][k]) > abs(rows[best][k]):
+                                best = i
+                        if abs(rows[best][k]) > 1e-9:
+                            rows[r], rows[best] = rows[best], rows[r]
+                            for i in range(r + 1, m):
+                                mult = rows[i][k] / rows[r][k]
+                                rows[i] = [a - mult * p for a, p in zip(rows[i], rows[r])]
+                            r += 1
+                return r
+
+            def is_basis(vectors, n):
+                return rank(vectors) == n
+
+            print(True, False, False)
+          - |
+            def rank(A):
+                rows = [list(row) for row in A]
+                m = len(rows)
+                n = len(rows[0])
+                r = 0
+                for k in range(n):
+                    if r < m:
+                        best = r
+                        for i in range(r + 1, m):
+                            if abs(rows[i][k]) > abs(rows[best][k]):
+                                best = i
+                        if abs(rows[best][k]) > 1e-9:
+                            rows[r], rows[best] = rows[best], rows[r]
+                            for i in range(r + 1, m):
+                                mult = rows[i][k] / rows[r][k]
+                                rows[i] = [a - mult * p for a, p in zip(rows[i], rows[r])]
+                            r += 1
+                return r
+
+            def is_basis(vectors, n):
+                return rank(vectors) == len(vectors)
+
+            print(True, False, False)
+          - |
+            def is_basis(vectors, n):
+                return len(vectors) == n and all([any([v != 0 for v in vector]) for vector in vectors])
+
+            print(True, False, False)
+          - |
+            def is_basis(vectors, n):
+                if len(vectors) != n:
+                    return False
+                for i in range(n):
+                    for j in range(i + 1, n):
+                        pq = sum([a * b for a, b in zip(vectors[i], vectors[j])])
+                        pp = sum([a * a for a in vectors[i]])
+                        qq = sum([b * b for b in vectors[j]])
+                        if pq * pq == pp * qq:
+                            return False
+                return True
+
+            print(True, False, False)
+        explanation: |
+          Two checks, and each one matters. The count must be exactly $n$: fewer cannot span and more cannot be independent. And the rank of the matrix whose rows are the vectors must be $n$, which says they are independent. The rank does not care whether the vectors are stored as rows or as columns, since a matrix and its transpose have the same rank. Requiring only that the rank is $n$ accepts three vectors in the plane, which span and repeat. Requiring only that the rank equals the number of vectors accepts one vector in the plane, which is independent and falls short. Checking pairs for dependence is not enough in three dimensions, where three vectors can be dependent though no two are parallel. Spanning never had to be tested separately: with $n$ independent vectors in $\mathbb{R}^n$ it comes free.
+        hints:
+          - How many vectors must a basis of n-dimensional space have?
+          - What rank says that the vectors are independent?
+          - Require both conditions.
+    - question:
+        id: write-coordinates
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `coordinates(b1, b2, v)` for vectors of the plane. Return the list `[c1, c2]` of coordinates of `v` with respect to the basis `b1`, `b2`: the numbers with `c1 * b1 + c2 * b2` equal to `v`.
+
+          This is the system $B\mathbf{c} = \mathbf{v}$, where $B$ has `b1` and `b2` as its **columns**. Solve it with the formula for the inverse of a $2 \times 2$ matrix. If `b1` and `b2` are not a basis, raise a `ValueError`.
+        starter: |
+          def coordinates(b1, b2, v):
+              # Replace the next line with your own.
+              return v
+
+          print(coordinates([2, 1], [-1, 1], [0, 3]))
+        solution: |
+          def coordinates(b1, b2, v):
+              a, c = b1
+              b, d = b2
+              det = a * d - b * c
+              if det == 0:
+                  raise ValueError("not a basis")
+              return [(d * v[0] - b * v[1]) / det, (-c * v[0] + a * v[1]) / det]
+
+          print(coordinates([2, 1], [-1, 1], [0, 3]))
+        tests: |
+          def _close(got, want):
+              return len(got) == len(want) and all([abs(g - w) < 1e-9 for g, w in zip(got, want)])
+          assert _close(coordinates([2, 1], [-1, 1], [0, 3]), [1, 2]), "The place [0, 3] is 1 of [2, 1] and 2 of [-1, 1]"
+          assert _close(coordinates([2, 1], [-1, 1], [2, 1]), [1, 0]), "A basis vector has coordinates [1, 0] in its own basis"
+          assert _close(coordinates([2, 1], [-1, 1], [-1, 1]), [0, 1]), "The second basis vector has coordinates [0, 1]"
+          assert _close(coordinates([2, 1], [-1, 1], [0, 0]), [0, 0]), "The origin has coordinates [0, 0] in every basis"
+          assert _close(coordinates([1, 0], [0, 1], [7, -2]), [7, -2]), "In the standard basis the coordinates are the components"
+          assert _close(coordinates([0, 1], [1, 0], [7, -2]), [-2, 7]), "With the standard basis in the other order, the coordinates change places"
+          assert _close(coordinates([1, 1], [1, -1], [3, 1]), [2, 1]), "[3, 1] is 2 of [1, 1] plus 1 of [1, -1]"
+          assert _close(coordinates([1, 1], [1, 1.01], [0, 1]), [-100, 100]), "With nearly parallel basis vectors, [0, 1] has coordinates [-100, 100]"
+          assert _close(coordinates([3, 5], [1, 2], [13, 23]), [3, 4]), "[13, 23] is 3 of [3, 5] plus 4 of [1, 2]"
+          _raised = False
+          try:
+              coordinates([1, 2], [2, 4], [3, 3])
+          except ValueError:
+              _raised = True
+          assert _raised, "[1, 2] and [2, 4] lie along one line and are not a basis. Raise ValueError"
+          assert output.strip() == "[1.0, 2.0]", "The program should print [1.0, 2.0]"
+        wrong:
+          - |
+            def coordinates(b1, b2, v):
+                a, b = b1
+                c, d = b2
+                det = a * d - b * c
+                if det == 0:
+                    raise ValueError("not a basis")
+                return [(d * v[0] - b * v[1]) / det, (-c * v[0] + a * v[1]) / det]
+
+            print([1.0, 2.0])
+          - |
+            def coordinates(b1, b2, v):
+                a, c = b1
+                b, d = b2
+                det = a * d - b * c
+                if det == 0:
+                    raise ValueError("not a basis")
+                return [a * v[0] + b * v[1], c * v[0] + d * v[1]]
+
+            print([1.0, 2.0])
+          - |
+            def coordinates(b1, b2, v):
+                a, c = b1
+                b, d = b2
+                det = a * d - b * c
+                return [(d * v[0] - b * v[1]) / det, (-c * v[0] + a * v[1]) / det]
+
+            print([1.0, 2.0])
+          - |
+            def coordinates(b1, b2, v):
+                if b1[0] * b2[1] - b2[0] * b1[1] == 0:
+                    raise ValueError("not a basis")
+                first = sum([p * q for p, q in zip(v, b1)]) / sum([p * p for p in b1])
+                second = sum([p * q for p, q in zip(v, b2)]) / sum([p * p for p in b2])
+                return [first, second]
+
+            print([1.0, 2.0])
+          - |
+            def coordinates(b1, b2, v):
+                a, c = b1
+                b, d = b2
+                det = a * d - b * c
+                if det == 0:
+                    raise ValueError("not a basis")
+                return [(d * v[0] - b * v[1]), (-c * v[0] + a * v[1])]
+
+            print([1.0, 2.0])
+        explanation: |
+          Going from coordinates to the place is a multiplication: $\mathbf{v} = B\mathbf{c}$, with the basis vectors as the **columns** of $B$. Going from the place to its coordinates is the reverse, $\mathbf{c} = B^{-1}\mathbf{v}$. So the function unpacks the basis vectors as columns, with `b1` supplying $a$ and $c$, forms $ad - bc$, refuses if it is zero, and applies the inverse. Unpacking the basis vectors as rows solves a different system and is right only when the matrix is symmetric. Applying $B$ itself goes in the wrong direction. Taking a projection onto each basis vector is tempting, and it is right only when the two are perpendicular: for a slanted basis the two projections overlap and count part of the vector twice. A basis in which coordinates can be found by projection alone is an especially convenient kind, to be met later.
+        hints:
+          - Write B with b1 as its first column and b2 as its second, so that a, c come from b1 and b, d from b2.
+          - If ad − bc is 0 the vectors are not a basis.
+          - The coordinates are the inverse of B applied to v.
+    - question:
+        id: fix-column-basis
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `column_basis(A, U, pivots)` should return a basis for the column space of `A`, as a list of vectors. `U` is what elimination turned `A` into, and `pivots` lists the columns of the pivots, counting from 0. The column space of the matrix below is the line through $(1, 2)$, so the program should print `[[1, 2]]`. It prints `[[1, 0]]`. Fix it.
+        starter: |
+          def column_basis(A, U, pivots):
+              return [[row[j] for row in U] for j in pivots]
+
+          print(column_basis([[1, 2], [2, 4]], [[1, 2], [0, 0]], [0]))
+        solution: |
+          def column_basis(A, U, pivots):
+              return [[row[j] for row in A] for j in pivots]
+
+          print(column_basis([[1, 2], [2, 4]], [[1, 2], [0, 0]], [0]))
+        tests: |
+          assert column_basis([[1, 2], [2, 4]], [[1, 2], [0, 0]], [0]) == [[1, 2]], "The column space of rows [1, 2] and [2, 4] is the line through [1, 2], its first column"
+          assert column_basis([[1, 2, 1, 4], [2, 4, 5, 14], [3, 6, 6, 18]], [[1, 2, 1, 4], [0, 0, 3, 6], [0, 0, 0, 0]], [0, 2]) == [[1, 2, 3], [1, 5, 6]], "For the matrix of the lesson, the basis is its first and third columns, [1, 2, 3] and [1, 5, 6]"
+          assert column_basis([[3, 1, 4], [2, 1, 3], [4, 2, 6], [1, 1, 2]], [[3, 1, 4], [0, 1, 1], [0, 0, 0], [0, 0, 0]], [0, 1]) == [[3, 2, 4, 1], [1, 1, 2, 1]], "For the flats the basis is the columns of rooms and bathrooms"
+          assert column_basis([[0, 1], [0, 2]], [[0, 1], [0, 0]], [1]) == [[1, 2]], "With the pivot in the second column, the basis is the second column of the original, [1, 2]"
+          assert column_basis([[2, 1], [1, 1]], [[2, 1], [0, 0.5]], [0, 1]) == [[2, 1], [1, 1]], "With a pivot in every column, the basis is all the original columns"
+          assert column_basis([[1, 1], [1, 1], [1, 1]], [[1, 1], [0, 0], [0, 0]], [0]) == [[1, 1, 1]], "A tall matrix of rank 1 has a basis of one vector with three components"
+          assert output.strip() == "[[1, 2]]", "The program should print [[1, 2]]"
+        wrong:
+          - |
+            def column_basis(A, U, pivots):
+                return [[row[j] for row in U] for j in pivots]
+
+            print([[1, 2]])
+          - |
+            def column_basis(A, U, pivots):
+                return [A[j] for j in pivots]
+
+            print([[1, 2]])
+          - |
+            def column_basis(A, U, pivots):
+                return [[row[j] for row in A] for j in range(len(pivots))]
+
+            print([[1, 2]])
+          - |
+            def column_basis(A, U, pivots):
+                return [[row[j] for row in A] for j in range(len(A[0]))]
+
+            print([[1, 2]])
+        explanation: |
+          The starter took the pivot columns from the reduced matrix `U`. Those columns are not in the column space of `A` at all: for the example, $(1, 0)$ is not on the line through $(1, 2)$. Row operations mix the rows, which means they act on each column as a vector and move it. What they preserve is every linear relation **among** the columns, so `U` tells you correctly **which** columns are independent, here the first, and that is all it should be used for. The vectors themselves have to be read from `A`. For the row space the situation is the opposite. Row operations keep the span of the rows, so the non-zero rows of `U` are a perfectly good basis for the row space of `A`.
+        hints:
+          - Is the vector [1, 0] in the column space of the original matrix?
+          - What do row operations preserve about the columns, and what do they change?
+          - Use the pivot positions to choose columns of A.
+    - question:
+        id: work-derivative
+        type: choice
+        system: s2
+        prompt: |
+          On polynomials of degree at most 3, with basis $1, x, x^2, x^3$, differentiation is a linear map from a space of dimension 4 to itself. What are the dimensions of its column space and its null space?
+        options:
+          - "4 and 0. Differentiation loses nothing."
+          - "3 and 1. The derivatives are the polynomials of degree at most 2, and the polynomials with zero derivative are the constants."
+          - "1 and 3. Only constants survive."
+          - "3 and 3."
+        answer: 1
+        explanation: |
+          The derivative of $a + bx + cx^2 + dx^3$ is $b + 2cx + 3dx^2$. As $b$, $c$, $d$ vary this gives every polynomial of degree at most 2, a space with basis $1, x, x^2$ and dimension 3. The derivative is zero exactly when $b = c = d = 0$, leaving the constants, a space with basis $1$ and dimension 1. And $3 + 1 = 4$, the dimension of the space the map starts from. The two answers cannot be 3 and 3, since they must add up to 4. The one lost dimension is why an antiderivative is determined only up to a constant.
+        hints:
+          - Differentiate a general polynomial of degree 3. Which polynomials can result?
+          - Which polynomials have derivative zero?
+          - The two dimensions must add up to 4.
+    - question:
+        id: work-blind
+        type: numeric
+        system: s2
+        prompt: |
+          A layer multiplies its input by a matrix $W$ of shape $10 \times 1000$ and rank 10. What is the dimension of the space of input directions that the layer cannot see, its null space?
+        answer: "990"
+        explanation: |
+          Inputs live in $\mathbb{R}^{1000}$. The rank, 10, is the number of dimensions that survive as output, and the rest are sent to zero: $1000 - 10$. Out of a thousand independent directions in which the input could change, the layer responds to ten combinations and is blind to everything else. That is not a defect. A layer that narrows is a decision about which ten things are worth knowing. But it does mean that the input can never be rebuilt from the output, and that vast changes to the input are invisible downstream.
+        hints:
+          - The dimensions of the column space and the null space add up to the number of columns.
+          - How many columns has W?
+          - Subtract the rank.
+    - question:
+        id: work-other-basis
+        type: choice
+        system: s2
+        prompt: |
+          The null space of a matrix has basis $\mathbf{s}_1 = (-2, 1, 0, 0)$ and $\mathbf{s}_2 = (-2, 0, -2, 1)$. A colleague describes the same null space with $\mathbf{p} = \mathbf{s}_1 + \mathbf{s}_2$ and $\mathbf{q} = \mathbf{s}_1 - \mathbf{s}_2$. Is that a basis of it?
+        options:
+          - "No. Only the special solutions are a basis."
+          - "Yes. Both lie in the null space, and they are independent, since neither is a multiple of the other. Two independent vectors in a space of dimension 2 are a basis."
+          - "No, because they are not perpendicular."
+          - "It cannot be told without the matrix."
+        answer: 1
+        explanation: |
+          A subspace is closed under adding and scaling, so $\mathbf{p}$ and $\mathbf{q}$ are in the null space. If $\mathbf{p}$ were a multiple of $\mathbf{q}$, say $\mathbf{s}_1 + \mathbf{s}_2 = c\,(\mathbf{s}_1 - \mathbf{s}_2)$, then $(1 - c)\,\mathbf{s}_1 + (1 + c)\,\mathbf{s}_2 = \mathbf{0}$, and independence of the special solutions would need $1 - c = 0$ and $1 + c = 0$ at once, which is impossible. So they are independent, and since the dimension is 2, they span without further checking. A subspace has infinitely many bases. The special solutions are simply the one that elimination happens to produce. What all the bases share is their size.
+        hints:
+          - Are p and q in the null space?
+          - Could one be a multiple of the other?
+          - How many independent vectors does a space of dimension 2 need for a basis?
+    - question:
+        id: work-square
+        type: choice
+        system: s2
+        prompt: |
+          $A$ is a square $n \times n$ matrix, and $A\mathbf{x} = \mathbf{0}$ only for $\mathbf{x} = \mathbf{0}$. Why must $A\mathbf{x} = \mathbf{b}$ have a solution for **every** $\mathbf{b}$?
+        options:
+          - "Because every system has a solution."
+          - "The null space has dimension 0, so by the count the column space has dimension $n - 0 = n$. A subspace of $\\mathbb{R}^n$ of dimension $n$ is all of $\\mathbb{R}^n$, so every $\\mathbf{b}$ is reached."
+          - "Because $\\mathbf{b}$ can be chosen to be zero."
+          - "It need not. A square matrix can lose nothing and still fail to reach some vectors."
+        answer: 1
+        explanation: |
+          The dimensions of the column space and the null space add up to the number of columns, $n$. With the null space reduced to the zero vector, the column space has dimension $n$. It has a basis of $n$ independent vectors of $\mathbb{R}^n$, and $n$ independent vectors in a space of dimension $n$ span it. So the column space is everything. The argument uses squareness at one point only: the number of columns equals the number of components of an output. For a tall matrix, with $m > n$, the null space can be zero while the column space, of dimension $n$, is a thin sheet inside $\mathbb{R}^m$.
+        hints:
+          - What is the dimension of the null space here?
+          - What does the count give for the dimension of the column space?
+          - What is a subspace of n-dimensional space that itself has dimension n?
+  connections:
+    - text: |
+        A town needed an addressing system, and two street directions gave every place exactly one address, while three made addresses ambiguous and one left places out. A list of vectors that reaches everything in a subspace and repeats nothing is a basis, and the question was whether the number two belonged to the plain or to the choice of streets.
+
+        It belongs to the plain. If $k$ vectors span a subspace, no more than $k$ vectors in it can be independent, because the coefficients form a wide matrix, and a wide matrix has a non-zero null vector. So all bases of a subspace have the same size, and that size is its dimension. The proof was a count of pivots, the same count that [[m5.elimination-and-linear-systems]] used for more than $n$ vectors in $\mathbb{R}^n$ and that [[m5.rank]] named.
+
+        With dimension in hand, the loose words of [[m5.column-space-and-null-space]] become exact. The column space has dimension $r$, with the pivot columns as a basis. The null space has dimension $n - r$, with the special solutions as a basis. And $r + (n - r) = n$: what goes in is what comes out plus what is destroyed. In the wider setting where vectors need not be lists of numbers, as with the polynomials you differentiated, the same statement is [[m6.rank-nullity-theorem]].
+
+        One thread is still loose. The town had two surveyors with two valid systems, and every place had an address in each. A basis is a choice, and a subspace has infinitely many. Given a place's address in one system, how do you compute its address in the other? You did it once today, for the plane, by applying an inverse. More interesting still: a linear map has a matrix, and that matrix was built from where the map sends the **standard** unit vectors. Describe the same map to the second surveyor, in her coordinates, and the matrix will be a different table of numbers. For some choices of basis that table becomes strikingly simple, even diagonal, and choosing the basis that makes a problem simple is one of the main strategies of the subject. Bases whose vectors are perpendicular unit vectors are the easiest of all to work in, and they are [[m7.orthonormal-bases]].
+
+        Translating vectors and matrices from one basis to another is the next lesson, [[m5.change-of-basis]].

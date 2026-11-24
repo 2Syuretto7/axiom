@@ -1,0 +1,775 @@
+concept: m5.matrices-as-linear-maps
+minutes: 90
+claim: You can say what makes a function from vectors to vectors linear, show that a linear map is completely fixed by where it sends the unit vectors, write those images as the columns of a matrix and read a matrix back as a movement of space, tell linear maps from ones that are not, and store a matrix in Python as a list of rows.
+recalls: [e3.shortest-paths-and-beam-search, m4.linear-independence]
+uses: [m4.linear-combinations-and-span, m4.vector-addition-and-scaling, m4.vectors-as-arrows-and-as-lists, m4.dot-product, m4.projection-onto-a-vector, m4.lines-planes-and-hyperplanes, m2.functions-as-machines, m2.composition-and-inverses, m2.trigonometric-functions-on-the-unit-circle, m10.differentiation-rules, m3.cases-and-counterexamples, e3.dynamic-programming, e3.arrays-and-linked-lists, e0.functions, e0.loops, e0.lists-and-tuples, e1.comprehensions-and-iterators]
+leads: [m5.matrix-vector-product, m5.matrix-multiplication-as-composition, m5.identity-and-inverse, m5.change-of-basis, m5.determinant]
+starter: |
+  # Scratch space. A machine that takes a vector of two numbers and gives one back.
+  # Run it, then cover the last line and predict its result from the first.
+  def f(v):
+      return [2 * v[0] - v[1], v[0] + v[1]]
+
+  print(f([1, 0]), f([0, 1]))
+  print(f([3, 2]))
+parts:
+  recall:
+    - text: |
+        [[e3.shortest-paths-and-beam-search]] closed the cluster on data structures with a promise: a grid of numbers, a list of lists, would turn out to be a machine that takes a vector in and gives a vector out. [[m4.linear-independence]] closed the cluster on vectors with a need: a way to handle many vectors at once. Both are met today. Three quick pulls first.
+    - question:
+        id: recall-grid
+        type: predict
+        system: s1
+        concepts: [e3.dynamic-programming]
+        prompt: You filled tables like this one, a list of rows, in dynamic programming. What does this show?
+        code: |
+          grid = [[1, 2, 3], [4, 5, 6]]
+
+          print(grid[1][0], len(grid), len(grid[0]))
+        output: "4 2 3"
+        explanation: The first index chooses the row and the second the place within it. Row 1 is [4, 5, 6] and its item 0 is 4. There are 2 rows, each of 3 items.
+        hints:
+          - grid[1] is the second row.
+          - len(grid) counts rows. len(grid[0]) counts the items in one row.
+    - question:
+        id: recall-combination
+        type: choice
+        system: s1
+        concepts: [m4.linear-combinations-and-span]
+        prompt: |
+          Which combination of $(1, 0)$ and $(0, 1)$ equals $(3, 2)$?
+        options: ['$2\,(1, 0) + 3\,(0, 1)$', '$3\,(1, 0) + 2\,(0, 1)$', '$5\,(1, 0)$', '$(1, 0) + (0, 1)$']
+        answer: 1
+        explanation: The components of a vector are its coefficients along the two axis directions.
+        hints:
+          - The first component is the amount of (1, 0).
+          - The second component is the amount of (0, 1).
+    - question:
+        id: recall-unique
+        type: choice
+        system: s1
+        concepts: [m4.linear-independence]
+        prompt: |
+          $(1, 0)$ and $(0, 1)$ are linearly independent and span the plane. In how many ways can a given vector of the plane be written as a combination of them?
+        options: ["None", "Exactly one", "Two", "Infinitely many"]
+        answer: 1
+        explanation: Spanning the plane gives at least one way. Independence gives at most one. Such a list is a basis.
+        hints:
+          - Spanning says every vector can be reached.
+          - Independence says coefficients are unique.
+  puzzle:
+    - text: |
+        Someone hands you a machine. A vector of two numbers goes in and a vector of two numbers comes out. You may not look inside. You are allowed two test runs, and you are told one thing about how the machine was built: **it respects adding and scaling**. If you feed it the sum of two vectors, out comes the sum of what it would have given for each. If you feed it three times a vector, out comes three times what it would have given.
+
+        You spend your two tests on the simplest inputs there are.
+
+        $$f(1, 0) = (2, 1), \qquad f(0, 1) = (-1, 1).$$
+
+        Now the question that matters. **What is $f(3, 2)$?** You have never tested it. You have no more tests left.
+
+        Run the starter. Its first line performs your two tests. Before you look at the second line of output, commit to an answer.
+
+        The machine gives $(4, 5)$. And if you reasoned it out, you did not need the machine at all. That is strange when you think about it. A function on the plane has an output for each of infinitely many inputs, and in general knowing two of them tells you nothing about the rest. Knowing $\sin 0$ and $\sin 1$ does not give you $\sin 2$.
+
+        **What is it about this machine that lets two tests settle everything? And if the machine took a thousand numbers in and gave a thousand out, as one layer of a neural network does, how many tests would you need?**
+  intuition:
+    - text: |
+        The input $(3, 2)$ is not a new thing. It is built from the two inputs you tested:
+
+        $$(3, 2) = 3\,(1, 0) + 2\,(0, 1).$$
+
+        The machine respects scaling, so it sends $3\,(1, 0)$ to 3 times what it gave for $(1, 0)$, and likewise for the other. It respects adding, so it sends the sum to the sum:
+
+        $$f(3, 2) = 3\,f(1, 0) + 2\,f(0, 1) = 3\,(2, 1) + 2\,(-1, 1) = (6 - 2,\; 3 + 2) = (4, 5).$$
+
+        Nothing in that argument was special to $(3, 2)$. **Every** vector of the plane is some amount of $(1, 0)$ plus some amount of $(0, 1)$, and the amounts are simply its components. So the machine's answer to everything is fixed by its answers to those two. The whole machine is four numbers: the two outputs, written down.
+
+        It helps to see what such a machine does to the entire plane at once. The figure shows a different one, called a shear. Step it from nothing to its full effect, and watch three things: the two arrows, the grid, and the marked point that starts at $(2, 1)$.
+    - figure: linear-map
+      props: { map: shear, amount: 0 }
+    - text: |
+        The arrow for $(1, 0)$ stays where it is. The arrow for $(0, 1)$ tips over to $(1, 1)$. And the grid goes with them: every line stays straight, lines that were parallel stay parallel, their spacing stays even, and the origin does not move. The marked point was 2 of the first arrow and 1 of the second before, and it is 2 of the first and 1 of the second after, $2\,(1, 0) + 1\,(1, 1) = (3, 1)$. The point keeps its recipe. Only the ingredients moved.
+
+        Press "Next matrix" and step through the others: a stretch, a quarter turn, a reflection, and one that crushes the plane onto a line. In each, the two arrows tell you everything, and the grid follows them rigidly.
+
+        That is the picture to hold. **A machine that respects adding and scaling moves the whole of space by moving the unit vectors and letting the grid follow.** Writing down where the unit vectors land, side by side, gives a small table of numbers. That table is called a matrix.
+  derivation:
+    - text: |
+        **The definition.** Write $\mathbb{R}^n$ for the set of vectors with $n$ components. A function $f$ that takes vectors of $\mathbb{R}^n$ to vectors of $\mathbb{R}^m$ is a **linear map** if, for all vectors $\mathbf{u}$ and $\mathbf{v}$ and every number $c$,
+
+        $$f(\mathbf{u} + \mathbf{v}) = f(\mathbf{u}) + f(\mathbf{v}) \qquad \text{and} \qquad f(c\,\mathbf{v}) = c\,f(\mathbf{v}).$$
+
+        The first rule is called additivity and the second scaling. Notice that $n$ and $m$ need not be equal: a linear map may take three numbers in and give two out.
+
+        Two consequences follow at once. Put $c = 0$ in the scaling rule: $f(\mathbf{0}) = 0\,f(\mathbf{v}) = \mathbf{0}$. **A linear map sends the zero vector to the zero vector.** And using the two rules together, again and again,
+
+        $$f(c_1\mathbf{v}_1 + c_2\mathbf{v}_2 + \dots + c_k\mathbf{v}_k) = c_1 f(\mathbf{v}_1) + c_2 f(\mathbf{v}_2) + \dots + c_k f(\mathbf{v}_k).$$
+
+        **A linear map carries a linear combination to the same combination of the outputs.** Vectors were given exactly two operations, adding and scaling, and everything in the last cluster was built from them. Linear maps are the functions that leave both operations undisturbed. That is why they are the natural functions between spaces of vectors, and it is the whole reason they are easy.
+
+        **A linear map is fixed by $n$ outputs.** In $\mathbb{R}^n$ write $\mathbf{e}_1, \dots, \mathbf{e}_n$ for the **standard unit vectors**: $\mathbf{e}_j$ has a 1 in place $j$ and 0 everywhere else. In the plane they are $(1, 0)$ and $(0, 1)$. Any vector is a combination of them, with its own components as coefficients:
+
+        $$\mathbf{x} = (x_1, x_2, \dots, x_n) = x_1\mathbf{e}_1 + x_2\mathbf{e}_2 + \dots + x_n\mathbf{e}_n.$$
+
+        Apply a linear map $f$ to both sides and use the rule for combinations:
+
+        $$f(\mathbf{x}) = x_1 f(\mathbf{e}_1) + x_2 f(\mathbf{e}_2) + \dots + x_n f(\mathbf{e}_n).$$
+
+        This one line is the centre of the lesson. The left side is the output for an arbitrary input. The right side uses only the $n$ vectors $f(\mathbf{e}_1), \dots, f(\mathbf{e}_n)$, combined with the input's own components as coefficients. So $n$ test runs determine the machine on every input. Two for the plane. A thousand for a machine that takes a thousand numbers.
+
+        **The matrix.** Give those $n$ outputs names, $\mathbf{a}_j = f(\mathbf{e}_j)$. Each is a vector of $\mathbb{R}^m$. Write them side by side as columns, and you have a rectangle of numbers with $m$ rows and $n$ columns. For the machine of the puzzle, $\mathbf{a}_1 = (2, 1)$ and $\mathbf{a}_2 = (-1, 1)$, and the rectangle is
+
+        $$A = \begin{pmatrix} 2 & -1 \\ 1 & 1 \end{pmatrix}.$$
+
+        A **matrix** is a rectangular table of numbers. One with $m$ rows and $n$ columns is called an $m \times n$ matrix, said "$m$ by $n$", rows always first. The number in row $i$ and column $j$ is its **entry** $a_{ij}$, again row first. The matrix of a linear map $f$ is the one whose column $j$ is $f(\mathbf{e}_j)$.
+
+        The shape tells you what the map takes and gives. **The number of columns is the number of inputs, and the number of rows is the number of outputs.** A $2 \times 3$ matrix has three columns, one for each of $\mathbf{e}_1, \mathbf{e}_2, \mathbf{e}_3$, so it takes vectors of $\mathbb{R}^3$. Each column has two entries, so it gives vectors of $\mathbb{R}^2$.
+
+        **Every matrix is a linear map.** You have seen that every linear map gives a matrix. The reverse holds too. Take any $m \times n$ table of numbers, with columns $\mathbf{a}_1, \dots, \mathbf{a}_n$, and **define** a function by
+
+        $$f(\mathbf{x}) = x_1\mathbf{a}_1 + x_2\mathbf{a}_2 + \dots + x_n\mathbf{a}_n.$$
+
+        Is it linear? Check additivity. The vector $\mathbf{x} + \mathbf{y}$ has components $x_j + y_j$, so
+
+        $$f(\mathbf{x} + \mathbf{y}) = \sum_j (x_j + y_j)\,\mathbf{a}_j = \sum_j x_j\mathbf{a}_j + \sum_j y_j\mathbf{a}_j = f(\mathbf{x}) + f(\mathbf{y}).$$
+
+        Scaling goes the same way: $f(c\,\mathbf{x}) = \sum_j c\,x_j\,\mathbf{a}_j = c\,f(\mathbf{x})$. And $f(\mathbf{e}_j) = \mathbf{a}_j$, since $\mathbf{e}_j$ has a single 1 in place $j$. So the function defined by the table is linear, and its matrix is the table you began with.
+
+        The two directions together say: **linear maps from $\mathbb{R}^n$ to $\mathbb{R}^m$ and $m \times n$ matrices are the same things, written two ways.** The map is the behaviour. The matrix is its complete record. From here on the lesson, and the cluster, will pass between them without comment, and will write $A\mathbf{x}$ for the output of the map with matrix $A$ on the input $\mathbf{x}$.
+    - question:
+        id: derivation-zero
+        type: choice
+        system: s2
+        prompt: |
+          A function $g$ on the plane has $g(0, 0) = (1, 0)$. What follows?
+        options:
+          - "$g$ is linear, because its output is a unit vector."
+          - "$g$ is not linear. Scaling any input by 0 must scale the output by 0, so a linear map sends the zero vector to the zero vector."
+          - "Nothing follows. One value says nothing about a function."
+          - "$g$ is linear only if $g(1, 0) = (2, 0)$."
+        answer: 1
+        explanation: |
+          For a linear map, $g(\mathbf{0}) = g(0\,\mathbf{v}) = 0\,g(\mathbf{v}) = \mathbf{0}$. A single value is enough to show that a function is **not** linear, when that value breaks a consequence of the rules. It is never enough to show that one is. The test of the origin is the quickest there is, and it is the first thing to check.
+        hints:
+          - Write the zero vector as 0 times some vector.
+          - What does the scaling rule say about the output?
+          - To disprove a rule that holds for all inputs, one failing input is enough.
+    - text: |
+        **In Python.** Store a matrix as a list of its **rows**, each row a list. The matrix above is `A = [[2, -1], [1, 1]]`. Then `A[i][j]` is the entry in row `i`, column `j`, counting from 0 as Python does, where mathematics counts from 1. The number of rows is `len(A)` and the number of columns is `len(A[0])`.
+
+        A row is easy to get: `A[i]` is already a list. A column has to be collected, one entry from each row: `[row[j] for row in A]`. This asymmetry is an accident of storage and not a fact about matrices, but it is the source of the commonest bug in matrix code: reading `A[j][i]` where `A[i][j]` was meant. For a square matrix the wrong one does not even raise an error. It gives a wrong answer quietly.
+
+        Why store rows, when the columns are what the map does to the unit vectors? Because the rows have a meaning of their own, which the next lesson brings out, and because a table of data naturally comes one row to each record.
+
+        **Matrices you can read at sight.** The columns are where the unit vectors land. Read each of these with that in mind, and compare with the figure.
+
+        | Map | Sends $(1, 0)$ to | Sends $(0, 1)$ to | Matrix rows |
+        | --- | --- | --- | --- |
+        | Stretch sideways by 2 | $(2, 0)$ | $(0, 1)$ | $(2, 0)$ and $(0, 1)$ |
+        | Shear | $(1, 0)$ | $(1, 1)$ | $(1, 1)$ and $(0, 1)$ |
+        | Quarter turn anticlockwise | $(0, 1)$ | $(-1, 0)$ | $(0, -1)$ and $(1, 0)$ |
+        | Reflection in the horizontal axis | $(1, 0)$ | $(0, -1)$ | $(1, 0)$ and $(0, -1)$ |
+        | Do nothing | $(1, 0)$ | $(0, 1)$ | $(1, 0)$ and $(0, 1)$ |
+
+        Take care with the last column. The images of the unit vectors are the **columns**, so the quarter turn, which sends $(1, 0)$ to $(0, 1)$, has first column $(0, 1)$, and reading across it has rows $(0, -1)$ and $(1, 0)$.
+
+        A turn through any angle $\theta$ works the same way. On the unit circle, $(1, 0)$ turns to $(\cos\theta, \sin\theta)$, and $(0, 1)$, a quarter turn ahead of it, goes to $(-\sin\theta, \cos\theta)$. Those are the columns:
+
+        $$R_\theta = \begin{pmatrix} \cos\theta & -\sin\theta \\ \sin\theta & \cos\theta \end{pmatrix}.$$
+
+        You did not have to work out where a general point goes. Is a turn linear? Turning the parallelogram of a vector sum turns the whole parallelogram, and turning a stretched arrow gives the stretched turned arrow. So yes, and the matrix does the rest.
+
+        **Maps you already knew.** Several things from the last cluster were linear maps all along.
+
+        *The dot product with a fixed vector.* Fix $\mathbf{w}$ and let $f(\mathbf{x}) = \mathbf{w} \cdot \mathbf{x}$. The rules of the dot product, $\mathbf{w} \cdot (\mathbf{x} + \mathbf{y}) = \mathbf{w} \cdot \mathbf{x} + \mathbf{w} \cdot \mathbf{y}$ and $\mathbf{w} \cdot (c\,\mathbf{x}) = c\,(\mathbf{w} \cdot \mathbf{x})$, are exactly additivity and scaling. This map takes $n$ numbers and gives one, so its matrix is $1 \times n$, a single row. Its column $j$ is $\mathbf{w} \cdot \mathbf{e}_j = w_j$. **The matrix is $\mathbf{w}$ itself, laid on its side.**
+
+        *Projection onto a vector.* Projecting onto $\mathbf{u} = (1, 1)$ sends $\mathbf{x}$ to $\dfrac{\mathbf{x} \cdot \mathbf{u}}{\mathbf{u} \cdot \mathbf{u}}\,\mathbf{u}$. The dot product is linear in $\mathbf{x}$, so this is too. It sends $(1, 0)$ to $\frac{1}{2}(1, 1)$ and $(0, 1)$ to the same, so its matrix has both columns equal to $(0.5, 0.5)$. Two equal columns: the map crushes the plane onto a line, as a projection should.
+
+        *Differentiation.* A polynomial $a + bx + cx^2$ is settled by its three coefficients $(a, b, c)$. Its derivative is $b + 2cx$, with coefficients $(b, 2c, 0)$. The sum rule and the constant multiple rule say that differentiating respects adding and scaling. So on these coefficient vectors, differentiation is a linear map from $\mathbb{R}^3$ to $\mathbb{R}^3$. It sends $\mathbf{e}_1$, the polynomial 1, to $(0, 0, 0)$; $\mathbf{e}_2$, the polynomial $x$, to $(1, 0, 0)$; and $\mathbf{e}_3$, the polynomial $x^2$, to $(0, 2, 0)$. Its matrix is
+
+        $$D = \begin{pmatrix} 0 & 1 & 0 \\ 0 & 0 & 2 \\ 0 & 0 & 0 \end{pmatrix}.$$
+
+        The word linear has nothing to do with arrows on paper. It is about the two rules, wherever they hold.
+
+        **What is not linear.** Three near misses, each of which you will meet constantly.
+
+        *A shift.* $g(\mathbf{x}) = \mathbf{x} + (1, 0)$ moves every point one step right. It sends the origin to $(1, 0)$, so it is not linear. This matters for the neuron, which computes $\mathbf{w} \cdot \mathbf{x} + c$: the dot product is linear, and the bias $c$ is a shift that is not. A linear map followed by a shift is called **affine**. In everyday speech such things are called linear, as with the "linear" function $y = mx + c$, whose graph is a straight line. In this subject the word is reserved for maps that fix the origin.
+
+        *Squaring.* $g(x) = x^2$ on single numbers has $g(2) = 4$, and $2\,g(1) = 2$. Scaling fails.
+
+        *The rectifier.* $\operatorname{relu}(x) = \max(0, x)$ passes positive numbers and replaces negative ones by 0. It respects scaling by positive numbers, and its graph is made of two straight pieces, yet $\operatorname{relu}(1) + \operatorname{relu}(-1) = 1$ while $\operatorname{relu}(1 + (-1)) = 0$. Additivity fails. Hold on to this one. A neural network is made of linear maps with functions like this placed between them, and without those functions in between, the whole network would collapse into something far simpler, as you will see when maps are chained.
+
+        **How much a matrix holds.** A linear map from $\mathbb{R}^n$ to $\mathbb{R}^m$ is $m \times n$ numbers and nothing else. One layer of a network that takes a thousand numbers and gives a thousand is a million entries. When people say a model has billions of parameters, almost all of them are the entries of matrices.
+    - question:
+        id: order-determined
+        type: order
+        system: s2
+        prompt: Put the steps in order to prove that two linear maps $f$ and $g$ on the plane which agree on $(1, 0)$ and on $(0, 1)$ agree on every vector.
+        steps:
+          - 'Take any vector $\mathbf{x} = (x_1, x_2)$ of the plane.'
+          - 'Write it as a combination of the unit vectors: $\mathbf{x} = x_1\,(1, 0) + x_2\,(0, 1)$.'
+          - 'Because $f$ is linear, $f(\mathbf{x}) = x_1 f(1, 0) + x_2 f(0, 1)$.'
+          - 'Because $f$ and $g$ agree on the unit vectors, this equals $x_1 g(1, 0) + x_2 g(0, 1)$.'
+          - 'Because $g$ is linear, that is $g(\mathbf{x})$, so $f(\mathbf{x}) = g(\mathbf{x})$.'
+        explanation: The proof takes an arbitrary vector, breaks it into unit vectors, carries $f$ inside the combination by linearity, swaps $f$ for $g$ where they are known to agree, and reassembles by the linearity of $g$. Linearity is used twice, once for each map. This is the precise sense in which a matrix is a complete record. Two linear maps with the same matrix are the same map.
+        hints:
+          - A proof about every vector begins by taking one, without choosing which.
+          - The vector must be split before linearity can be used.
+          - Linearity of g is what puts the pieces back together at the end.
+  formal:
+    - text: |
+        **Linear map.** $f : \mathbb{R}^n \to \mathbb{R}^m$ is linear if $f(\mathbf{u} + \mathbf{v}) = f(\mathbf{u}) + f(\mathbf{v})$ and $f(c\,\mathbf{v}) = c\,f(\mathbf{v})$ for all vectors $\mathbf{u}, \mathbf{v}$ and numbers $c$. Then $f(\mathbf{0}) = \mathbf{0}$ and $f\!\left(\sum c_i\mathbf{v}_i\right) = \sum c_i f(\mathbf{v}_i)$.
+
+        **Matrix.** An $m \times n$ matrix is a table of numbers with $m$ rows and $n$ columns. Its entry in row $i$, column $j$ is $a_{ij}$.
+
+        **The matrix of a linear map.** Column $j$ of the matrix of $f$ is $f(\mathbf{e}_j)$, where $\mathbf{e}_j$ is the $j$-th standard unit vector. Then $f(\mathbf{x}) = x_1\mathbf{a}_1 + \dots + x_n\mathbf{a}_n$, written $A\mathbf{x}$.
+
+        **Correspondence.** Every linear map from $\mathbb{R}^n$ to $\mathbb{R}^m$ has exactly one $m \times n$ matrix, and every $m \times n$ matrix is the matrix of exactly one linear map.
+
+        **Rotation.** The turn through $\theta$ anticlockwise has columns $(\cos\theta, \sin\theta)$ and $(-\sin\theta, \cos\theta)$.
+
+        **Affine.** A linear map followed by a shift, $\mathbf{x} \mapsto A\mathbf{x} + \mathbf{b}$, is affine. It is linear only when $\mathbf{b} = \mathbf{0}$.
+  drill:
+    - text: Seconds each. Columns are where the unit vectors land. Rows first, columns second.
+    - question:
+        id: drill-puzzle
+        type: numeric
+        system: s1
+        prompt: |
+          $f$ is linear with $f(1, 0) = (2, 1)$ and $f(0, 1) = (-1, 1)$. What is the first component of $f(1, 1)$?
+        answer: "1"
+        explanation: f(1, 1) = f(1, 0) + f(0, 1) = (2, 1) + (−1, 1) = (1, 2).
+        hints:
+          - (1, 1) is the sum of the two unit vectors.
+          - Add the two outputs.
+    - question:
+        id: drill-rows
+        type: numeric
+        system: s1
+        prompt: |
+          How many rows has the matrix $\begin{pmatrix} 1 & 2 & 3 \\ 4 & 5 & 6 \end{pmatrix}$?
+        answer: "2"
+        explanation: Rows run across. There are two of them, each with three entries. The matrix is 2 by 3.
+        hints:
+          - Rows run across the page.
+          - Count the horizontal lines of numbers.
+    - question:
+        id: drill-entry
+        type: numeric
+        system: s1
+        prompt: |
+          In the matrix $\begin{pmatrix} 1 & 2 & 3 \\ 4 & 5 & 6 \end{pmatrix}$, what is the entry $a_{23}$?
+        answer: "6"
+        explanation: Row 2, column 3. In Python, with counting from 0, it is A[1][2].
+        hints:
+          - The first index is the row.
+          - Go to the second row, then to its third entry.
+    - question:
+        id: drill-inputs
+        type: numeric
+        system: s1
+        prompt: |
+          A matrix has 2 rows and 3 columns. How many components has a vector that its map accepts as input?
+        answer: "3"
+        explanation: There is one column for each unit vector of the input space, so the input has as many components as there are columns.
+        hints:
+          - Each column is the image of one unit vector.
+          - How many unit vectors are there, then?
+    - question:
+        id: drill-outputs
+        type: numeric
+        system: s1
+        prompt: |
+          A linear map takes vectors of $\mathbb{R}^5$ to vectors of $\mathbb{R}^2$. How many rows has its matrix?
+        answer: "2"
+        explanation: Each column is an output, a vector with 2 components, so there are 2 rows. The matrix is 2 by 5.
+        hints:
+          - Each column is one output vector.
+          - How many components has an output?
+    - question:
+        id: drill-entries
+        type: numeric
+        system: s1
+        prompt: |
+          How many numbers does it take to describe a linear map from $\mathbb{R}^4$ to $\mathbb{R}^3$ completely?
+        answer: "12"
+        explanation: Its matrix is 3 by 4, one column of 3 numbers for each of the 4 unit vectors.
+        hints:
+          - How many unit vectors must be tested?
+          - Each test gives a vector of 3 numbers.
+    - question:
+        id: drill-shear-column
+        type: choice
+        system: s1
+        prompt: |
+          The shear has matrix $\begin{pmatrix} 1 & 1 \\ 0 & 1 \end{pmatrix}$. Where does it send $(0, 1)$?
+        options: ['$(1, 0)$', '$(1, 1)$', '$(0, 1)$', '$(1, 2)$']
+        answer: 1
+        explanation: (0, 1) is the second unit vector, and its image is the second column, read downwards.
+        hints:
+          - Which unit vector is (0, 1)?
+          - Read the matching column from top to bottom.
+    - question:
+        id: drill-shift
+        type: choice
+        system: s1
+        prompt: |
+          Is $g(\mathbf{x}) = \mathbf{x} + (0, 3)$ a linear map?
+        options: ["Yes, because it moves every point the same way", "No, because it does not send the zero vector to the zero vector", "Yes, because lines stay straight", "Only for inputs on the vertical axis"]
+        answer: 1
+        explanation: g(0, 0) = (0, 3). A linear map must fix the origin. A shift is affine, not linear.
+        hints:
+          - Where does the origin go?
+          - Where must a linear map send it?
+    - question:
+        id: drill-scaling
+        type: numeric
+        system: s1
+        prompt: |
+          $f$ is linear and $f(\mathbf{v}) = (2, 6)$. What is the second component of $f(3\mathbf{v})$?
+        answer: "18"
+        explanation: f(3v) = 3 f(v) = (6, 18).
+        hints:
+          - Use the scaling rule.
+          - Multiply the whole output by 3.
+    - question:
+        id: drill-additivity
+        type: numeric
+        system: s1
+        prompt: |
+          $f$ is linear, $f(\mathbf{u}) = (1, 2)$ and $f(\mathbf{v}) = (3, -1)$. What is the first component of $f(\mathbf{u} - \mathbf{v})$?
+        answer: "-2"
+        explanation: f(u − v) = f(u) − f(v) = (1 − 3, 2 + 1) = (−2, 3). Subtracting is adding −1 times a vector, so both rules are used.
+        hints:
+          - u − v is u plus (−1) times v.
+          - Subtract the outputs, first component from first component.
+    - question:
+        id: drill-double
+        type: choice
+        system: s1
+        prompt: |
+          Which matrix belongs to the map that doubles every vector of the plane?
+        options: ['Rows $(2, 2)$ and $(2, 2)$', 'Rows $(2, 0)$ and $(0, 2)$', 'Rows $(0, 2)$ and $(2, 0)$', 'Rows $(1, 2)$ and $(2, 1)$']
+        answer: 1
+        explanation: (1, 0) goes to (2, 0) and (0, 1) goes to (0, 2). Those are the columns.
+        hints:
+          - Where does (1, 0) go?
+          - Where does (0, 1) go?
+    - question:
+        id: drill-square
+        type: choice
+        system: s1
+        prompt: |
+          Is $g(x) = x^2$, on single numbers, linear?
+        options: ["Yes, because g(0) = 0", "No, because g(2) is 4 and 2 g(1) is 2", "Yes, because it is a polynomial", "Only for positive x"]
+        answer: 1
+        explanation: Scaling the input by 2 scales the output by 4. Sending 0 to 0 is necessary for linearity and far from enough.
+        hints:
+          - Compare g(2) with twice g(1).
+          - Passing the test of the origin does not prove linearity.
+    - question:
+        id: drill-row-matrix
+        type: choice
+        system: s1
+        prompt: |
+          The map $f(\mathbf{x}) = (3, -1, 2) \cdot \mathbf{x}$ takes vectors of $\mathbb{R}^3$ to single numbers. What is the shape of its matrix?
+        options: ["3 by 1", "1 by 3", "3 by 3", "1 by 1"]
+        answer: 1
+        explanation: Three inputs, so three columns. One output, so one row. The matrix is the single row (3, −1, 2).
+        hints:
+          - Columns count inputs.
+          - Rows count outputs.
+    - question:
+        id: predict-column
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          A = [[1, 2, 3], [4, 5, 6]]
+
+          print(len(A), len(A[0]))
+          print([row[1] for row in A])
+        output: |
+          2 3
+          [2, 5]
+        explanation: The matrix is a list of 2 rows, each of 3 entries. The comprehension takes the entry at position 1 of each row, which collects the second column, the image of the second unit vector.
+        hints:
+          - len(A) counts rows.
+          - row[1] is the second entry of a row. One is taken from each row.
+    - question:
+        id: predict-apply
+        type: predict
+        system: s1
+        prompt: The shear, applied to the marked point of the figure. What does this show?
+        code: |
+          A = [[1, 1], [0, 1]]
+          x = [2, 1]
+          out = [0, 0]
+
+          for j in range(2):
+              for i in range(2):
+                  out[i] += x[j] * A[i][j]
+
+          print(out)
+        output: "[3, 1]"
+        explanation: For each j the loop adds x[j] times column j to the output. Column 0 is (1, 0), taken 2 times, and column 1 is (1, 1), taken once. 2 (1, 0) + 1 (1, 1) = (3, 1), as in the figure.
+        hints:
+          - The inner loop walks down column j.
+          - Add 2 times the first column to 1 times the second.
+  work:
+    - text: Slower now. To show that a map is linear, the two rules must hold for all inputs. To show that it is not, one failing input is enough.
+    - question:
+        id: work-which-linear
+        type: choice
+        system: s2
+        prompt: |
+          Which of these functions of $\mathbf{x} = (x_1, x_2)$ is a linear map?
+        options:
+          - '$f(\mathbf{x}) = (x_1 + 1,\; x_2)$'
+          - '$f(\mathbf{x}) = (x_1 x_2,\; x_2)$'
+          - '$f(\mathbf{x}) = (3x_2 - x_1,\; 0,\; 2x_1)$'
+          - '$f(\mathbf{x}) = (\max(0, x_1),\; x_2)$'
+        answer: 2
+        explanation: |
+          Each output of the third function is a sum of fixed multiples of the inputs, with nothing added and nothing multiplied together. That is the form $x_1\mathbf{a}_1 + x_2\mathbf{a}_2$ with $\mathbf{a}_1 = (-1, 0, 2)$ and $\mathbf{a}_2 = (3, 0, 0)$, which was shown to be linear. Its matrix is $3 \times 2$, and an output of zero in the middle is perfectly allowed. The first function moves the origin to $(1, 0)$. The second multiplies two inputs: $f(2, 2) = (4, 2)$, while $2 f(1, 1) = (2, 2)$. The fourth fails additivity on $(1, 0)$ and $(-1, 0)$.
+        hints:
+          - Try the origin first.
+          - A product of two inputs does not scale correctly. Test it on (1, 1) and (2, 2).
+          - A linear map has outputs that are fixed multiples of the inputs, added.
+    - question:
+        id: write-matrix-of
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `matrix_of(f, n)`. `f` is a linear map given as a Python function: it takes a list of `n` numbers and returns a list of numbers. Return the matrix of `f` as a list of rows.
+
+          Run the tests the puzzle allowed: feed `f` each standard unit vector in turn. Each output is a **column** of the matrix.
+        starter: |
+          def matrix_of(f, n):
+              # Replace the next line with your own.
+              return []
+
+          print(matrix_of(lambda v: [2 * v[0] - v[1], v[0] + v[1]], 2))
+        solution: |
+          def matrix_of(f, n):
+              columns = []
+              for j in range(n):
+                  e = [0] * n
+                  e[j] = 1
+                  columns.append(f(e))
+              m = len(columns[0])
+              return [[columns[j][i] for j in range(n)] for i in range(m)]
+
+          print(matrix_of(lambda v: [2 * v[0] - v[1], v[0] + v[1]], 2))
+        tests: |
+          assert matrix_of(lambda v: [2 * v[0] - v[1], v[0] + v[1]], 2) == [[2, -1], [1, 1]], "The machine of the puzzle sends [1, 0] to [2, 1] and [0, 1] to [-1, 1]. Those are the columns, so the rows are [2, -1] and [1, 1]"
+          assert matrix_of(lambda v: [v[0] + v[1], v[1]], 2) == [[1, 1], [0, 1]], "The shear sends [0, 1] to [1, 1], so the rows are [1, 1] and [0, 1]"
+          assert matrix_of(lambda v: [-v[1], v[0]], 2) == [[0, -1], [1, 0]], "The quarter turn sends [1, 0] to [0, 1], so the rows are [0, -1] and [1, 0]"
+          assert matrix_of(lambda v: [v[0], v[1], v[2]], 3) == [[1, 0, 0], [0, 1, 0], [0, 0, 1]], "The map that does nothing in three dimensions has rows [1, 0, 0], [0, 1, 0], [0, 0, 1]"
+          assert matrix_of(lambda v: [3 * v[0] - v[1] + 2 * v[2]], 3) == [[3, -1, 2]], "A dot product with [3, -1, 2] has one output, so its matrix is the single row [3, -1, 2]"
+          assert matrix_of(lambda v: [v[1], 2 * v[2], 0], 3) == [[0, 1, 0], [0, 0, 2], [0, 0, 0]], "Differentiation on coefficients has rows [0, 1, 0], [0, 0, 2], [0, 0, 0]"
+          assert matrix_of(lambda v: [v[0], v[0] + v[1], 5 * v[1]], 2) == [[1, 0], [1, 1], [0, 5]], "A map from two numbers to three has three rows of two entries: [1, 0], [1, 1], [0, 5]"
+          assert matrix_of(lambda v: [v[0] + 2 * v[1] + 3 * v[2], 4 * v[0] + 5 * v[1] + 6 * v[2]], 3) == [[1, 2, 3], [4, 5, 6]], "A map from three numbers to two has two rows of three entries: [1, 2, 3] and [4, 5, 6]"
+          assert output.strip() == "[[2, -1], [1, 1]]", "The program should print [[2, -1], [1, 1]]"
+        wrong:
+          - |
+            def matrix_of(f, n):
+                columns = []
+                for j in range(n):
+                    e = [0] * n
+                    e[j] = 1
+                    columns.append(f(e))
+                return columns
+
+            print([[2, -1], [1, 1]])
+          - |
+            def matrix_of(f, n):
+                columns = []
+                for j in range(n):
+                    e = [0] * n
+                    e[j] = 1
+                    columns.append(f(e))
+                return [[columns[j][i] for j in range(n)] for i in range(n)]
+
+            print([[2, -1], [1, 1]])
+          - |
+            def matrix_of(f, n):
+                columns = []
+                for j in range(n):
+                    e = [1] * n
+                    e[j] = 0
+                    columns.append(f(e))
+                m = len(columns[0])
+                return [[columns[j][i] for j in range(n)] for i in range(m)]
+
+            print([[2, -1], [1, 1]])
+          - |
+            def matrix_of(f, n):
+                out = f([1] * n)
+                return [[x] * n for x in out]
+
+            print([[2, -1], [1, 1]])
+          - |
+            def matrix_of(f, n):
+                columns = []
+                for j in range(n):
+                    e = [0] * n
+                    e[j] = 1
+                    columns.append(f(e))
+                m = len(columns[0])
+                return [[columns[n - 1 - j][i] for j in range(n)] for i in range(m)]
+
+            print([[2, -1], [1, 1]])
+        explanation: |
+          The function is the lesson's main result turned into a procedure. A linear map is fixed by its values on the standard unit vectors, so `n` calls of `f` are all that is ever needed. Each call returns a column. Since a matrix is stored as rows, the columns have to be turned: row `i` of the matrix collects entry `i` from every column. Returning the list of outputs as it stands gives the right matrix only when the matrix happens to equal its own flip, as it does for the map that does nothing. The number of rows is the length of an output, which may differ from `n`. Notice what you have built: a way to open any black box that is known to be linear and read out everything it can do.
+        hints:
+          - Build the unit vector with a 1 in place j and call f on it. Do that for each j.
+          - Keep the outputs in a list. Each is a column, not a row.
+          - Row i of the answer is entry i of every column, in order.
+    - question:
+        id: write-respects
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `respects(f, u, v, c)`. `f` takes a list of numbers and returns a list of numbers, `u` and `v` are vectors of the same dimension, and `c` is a number. Return `True` exactly when `f` obeys **both** rules on these particular inputs: `f` of `u + v` equals `f(u)` plus `f(v)`, and `f` of `c` times `u` equals `c` times `f(u)`. Treat two numbers that differ by less than `1e-9` as equal.
+
+          A result of `False` proves that `f` is not linear. A result of `True` proves nothing by itself.
+        starter: |
+          def respects(f, u, v, c):
+              # Replace the next line with your own.
+              return True
+
+          print(respects(lambda x: [x[0] + 1, x[1]], [1, 2], [3, 4], 2))
+        solution: |
+          def respects(f, u, v, c):
+              both = f([a + b for a, b in zip(u, v)])
+              apart = [a + b for a, b in zip(f(u), f(v))]
+              scaled = f([c * a for a in u])
+              after = [c * a for a in f(u)]
+              adds = all([abs(a - b) < 1e-9 for a, b in zip(both, apart)])
+              scales = all([abs(a - b) < 1e-9 for a, b in zip(scaled, after)])
+              return adds and scales
+
+          print(respects(lambda x: [x[0] + 1, x[1]], [1, 2], [3, 4], 2))
+        tests: |
+          _shear = lambda x: [x[0] + x[1], x[1]]
+          assert respects(_shear, [1, 2], [3, 4], 2) is True, "The shear obeys both rules on these inputs"
+          assert respects(lambda x: [x[0] + 1, x[1]], [1, 2], [3, 4], 2) is False, "A shift breaks additivity: f([4, 6]) is [5, 6], and f([1, 2]) plus f([3, 4]) is [6, 6]"
+          assert respects(lambda x: [x[0] * x[0]], [1], [0], 2) is False, "Squaring obeys additivity on [1] and [0] and breaks scaling: f([2]) is [4], and 2 times f([1]) is [2]"
+          assert respects(lambda x: [max(0, x[0])], [1], [-1], 2) is False, "The rectifier obeys scaling by 2 and breaks additivity on [1] and [-1]"
+          assert respects(lambda x: [max(0, x[0])], [1], [2], 3) is True, "On positive inputs the rectifier cannot be told from a linear map"
+          assert respects(lambda x: [x[0], x[1] + abs(x[0])], [1, 0], [2, 0], -1) is False, "Scaling by -1 fails here: f([-1, 0]) is [-1, 1], and -1 times f([1, 0]) is [-1, -1]"
+          assert respects(lambda x: [3 * x[0] - x[1] + 2 * x[2]], [1, 2, 3], [0, -1, 4], 0.5) is True, "A dot product with a fixed vector obeys both rules"
+          assert respects(lambda x: [x[0], x[1], x[0] * x[1]], [1, 0], [0, 1], 1) is False, "The third output breaks additivity: f([1, 1]) ends in 1, and the two separate outputs end in 0"
+          assert respects(lambda x: [0.1 * x[0], 0.7 * x[0]], [1], [5], 3) is True, "Tiny rounding differences should not count as a failure"
+          assert output.strip() == "False", "The program should print False"
+        wrong:
+          - |
+            def respects(f, u, v, c):
+                both = f([a + b for a, b in zip(u, v)])
+                apart = [a + b for a, b in zip(f(u), f(v))]
+                return all([abs(a - b) < 1e-9 for a, b in zip(both, apart)])
+
+            print(False)
+          - |
+            def respects(f, u, v, c):
+                scaled = f([c * a for a in u])
+                after = [c * a for a in f(u)]
+                return all([abs(a - b) < 1e-9 for a, b in zip(scaled, after)])
+
+            print(False)
+          - |
+            def respects(f, u, v, c):
+                both = f([a + b for a, b in zip(u, v)])
+                apart = [a + b for a, b in zip(f(u), f(v))]
+                scaled = f([c * a for a in u])
+                after = [c * a for a in f(u)]
+                adds = all([abs(a - b) < 1e-9 for a, b in zip(both, apart)])
+                scales = all([abs(a - b) < 1e-9 for a, b in zip(scaled, after)])
+                return adds or scales
+
+            print(False)
+          - |
+            def respects(f, u, v, c):
+                both = f([a + b for a, b in zip(u, v)])
+                apart = [a + b for a, b in zip(f(u), f(v))]
+                scaled = f([c * a for a in u])
+                after = [c * a for a in f(u)]
+                return both == apart and scaled == after
+
+            print(False)
+          - |
+            def respects(f, u, v, c):
+                both = f([a + b for a, b in zip(u, v)])
+                apart = [a + b for a, b in zip(f(u), f(v))]
+                scaled = f([c * a for a in u])
+                after = [c * a for a in f(u)]
+                adds = abs(both[0] - apart[0]) < 1e-9
+                scales = abs(scaled[0] - after[0]) < 1e-9
+                return adds and scales
+
+            print(False)
+        explanation: |
+          The function computes each side of each rule and compares them, component by component, with a tolerance, since `0.1 * 3` and `3 * 0.1` need not be the same float. Both rules must be checked: squaring passes additivity on the inputs $1$ and $0$ and fails scaling, and the rectifier passes scaling by 2 and fails additivity on $1$ and $-1$. The more important lesson is in what `True` means. The rectifier passes on the inputs $1$ and $2$, where it cannot be told from a linear map. The definition says "for all vectors", and no amount of testing covers all of them. Testing can **refute** linearity. Only an argument, like the one that every map of the form $x_1\mathbf{a}_1 + \dots + x_n\mathbf{a}_n$ is linear, can establish it.
+        hints:
+          - Build u + v as a list and call f on it. Separately add f(u) and f(v).
+          - Do the same for scaling. Compare c times f(u) with f of c times u.
+          - Compare lists one component at a time with a tolerance, and require both rules.
+    - question:
+        id: fix-apply
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `apply(A, x)` should return the output of the map with matrix `A` on the input `x`: the sum of `x[j]` times column `j`. For the shear and the point $(2, 1)$ it should print `[3, 1]`, as in the figure. It prints `[2, 3]`. Fix it.
+        starter: |
+          def apply(A, x):
+              out = [0] * len(A)
+              for j in range(len(x)):
+                  for i in range(len(A)):
+                      out[i] += x[j] * A[j][i]
+              return out
+
+          print(apply([[1, 1], [0, 1]], [2, 1]))
+        solution: |
+          def apply(A, x):
+              out = [0] * len(A)
+              for j in range(len(x)):
+                  for i in range(len(A)):
+                      out[i] += x[j] * A[i][j]
+              return out
+
+          print(apply([[1, 1], [0, 1]], [2, 1]))
+        tests: |
+          assert apply([[1, 1], [0, 1]], [2, 1]) == [3, 1], "The shear sends [2, 1] to 2 times [1, 0] plus 1 times [1, 1], which is [3, 1]"
+          assert apply([[2, -1], [1, 1]], [3, 2]) == [4, 5], "The machine of the puzzle sends [3, 2] to [4, 5]"
+          assert apply([[0, -1], [1, 0]], [1, 0]) == [0, 1], "The quarter turn sends [1, 0] to its first column, [0, 1]"
+          assert apply([[1, 0], [0, 1]], [7, -2]) == [7, -2], "The map that does nothing returns its input"
+          assert apply([[1, 2, 3], [4, 5, 6]], [1, 0, 1]) == [4, 10], "A 2 by 3 matrix sends [1, 0, 1] to the first column plus the third, [4, 10]"
+          assert apply([[1, 0], [1, 1], [0, 5]], [2, 3]) == [2, 5, 15], "A 3 by 2 matrix sends [2, 3] to 2 times [1, 1, 0] plus 3 times [0, 1, 5]"
+          assert apply([[3, -1, 2]], [1, 1, 1]) == [4], "A single row gives a single number: 3 - 1 + 2"
+          assert output.strip() == "[3, 1]", "The program should print [3, 1]"
+        wrong:
+          - |
+            def apply(A, x):
+                out = [0] * len(A)
+                for j in range(len(A)):
+                    for i in range(len(A)):
+                        out[i] += x[j] * A[j][i]
+                return out
+
+            print([3, 1])
+          - |
+            def apply(A, x):
+                out = [0] * len(A)
+                for j in range(len(A)):
+                    for i in range(len(A)):
+                        out[i] += x[j] * A[i][j]
+                return out
+
+            print([3, 1])
+          - |
+            def apply(A, x):
+                out = [0] * len(x)
+                for j in range(len(x)):
+                    for i in range(len(x)):
+                        if i < len(A):
+                            out[i] += x[j] * A[i][j]
+                return out
+
+            print([3, 1])
+          - |
+            def apply(A, x):
+                out = [0] * len(A)
+                for j in range(len(x)):
+                    for i in range(len(A)):
+                        out[i] = x[j] * A[i][j]
+                return out
+
+            print([3, 1])
+        explanation: |
+          The starter read `A[j][i]`, the entry in row `j` and column `i`, where the entry in row `i` and column `j` was wanted. Column `j` runs **down** the matrix, so walking along it means holding the second index fixed and moving the first. With the indices exchanged the function combined the rows of the matrix where it should have combined the columns. For a square matrix that raises no error, and for a matrix equal to its own flip it even gives the right answer, which is how this bug survives testing. The cure is a test with a matrix that is not square, where the wrong indexing falls off the end of a row. You will see in the next lesson that the same result can be computed one output at a time, as a dot product of each row with the input.
+        hints:
+          - Which index of A[i][j] chooses the row?
+          - Column j keeps its second index fixed while the first moves down the rows.
+          - Exchange the two indices in the one place where A is read.
+    - question:
+        id: work-other-tests
+        type: numeric
+        system: s2
+        prompt: |
+          A linear map $f$ on the plane was tested on two inputs that are not the unit vectors: $f(1, 1) = (3, 1)$ and $f(1, -1) = (1, 3)$. What is the first component of $f(1, 0)$?
+        answer: "2"
+        explanation: |
+          The tested inputs are independent, so they span the plane and every vector is a combination of them. In particular $(1, 0) = \frac{1}{2}(1, 1) + \frac{1}{2}(1, -1)$, so $f(1, 0) = \frac{1}{2}(3, 1) + \frac{1}{2}(1, 3) = (2, 2)$. Likewise $(0, 1) = \frac{1}{2}(1, 1) - \frac{1}{2}(1, -1)$ gives $f(0, 1) = (1, -1)$. The matrix has columns $(2, 2)$ and $(1, -1)$. The unit vectors are the most convenient tests, since the answers are the columns directly, but **any basis will do**. What fixes a linear map is its values on a list of vectors that reaches everything in exactly one way.
+        hints:
+          - Write (1, 0) as a combination of (1, 1) and (1, −1).
+          - Half of each, added, gives (1, 0).
+          - Apply the same combination to the two known outputs.
+    - question:
+        id: work-derivative
+        type: choice
+        system: s2
+        prompt: |
+          Coefficient vectors $(a, b, c)$ stand for polynomials $a + bx + cx^2$, and differentiation has matrix $D$ with rows $(0, 1, 0)$, $(0, 0, 2)$, $(0, 0, 0)$. What does the third column, $(0, 2, 0)$, say?
+        options:
+          - "That the derivative of a constant is 0."
+          - "That the derivative of $x^2$ is $2x$: the unit vector $(0, 0, 1)$ stands for $x^2$, and its image $(0, 2, 0)$ stands for $0 + 2x + 0x^2$."
+          - "That the derivative of $2x$ is 2."
+          - "That $x^2$ has no derivative."
+        answer: 1
+        explanation: |
+          Column $j$ is the image of the $j$-th unit vector. The third unit vector has $c = 1$ and $a = b = 0$, the polynomial $x^2$. Its image $(0, 2, 0)$ has $b = 2$, the polynomial $2x$. The first column, all zeros, says the derivative of the constant 1 is 0. The bottom row, all zeros, says no derivative of these polynomials contains $x^2$. The whole table of derivatives of powers, together with the sum rule and the constant multiple rule, is stored in nine numbers. Differentiation was linear before you had the word for it.
+        hints:
+          - Which polynomial does the unit vector (0, 0, 1) stand for?
+          - Which polynomial does the vector (0, 2, 0) stand for?
+          - A column is the image of one unit vector.
+    - question:
+        id: work-neuron
+        type: choice
+        system: s2
+        prompt: |
+          A neuron computes $z = \mathbf{w} \cdot \mathbf{x} + c$ with $\mathbf{w} = (1, 1)$ and $c = -1.5$. Which statement about the map $\mathbf{x} \mapsto z$ is right?
+        options:
+          - "It is linear, with matrix the single row $(1, 1)$."
+          - "It is not linear, since it sends the origin to $-1.5$. It is affine: the linear map with the single row $(1, 1)$, followed by a shift."
+          - "It is not linear, because it has two inputs and one output."
+          - "It is linear, because its graph is flat."
+        answer: 1
+        explanation: |
+          At $\mathbf{x} = \mathbf{0}$ the neuron gives $c = -1.5$, not 0, so the map is not linear. Remove the bias and what remains, $\mathbf{x} \mapsto \mathbf{w} \cdot \mathbf{x}$, is linear, with the $1 \times 2$ matrix whose only row is $\mathbf{w}$. The bias then shifts every output by the same amount. The bias is not a nuisance: without it the boundary $\mathbf{w} \cdot \mathbf{x} = 0$ where the neuron switches would be forced through the origin, and you saw that the neuron for "and" needs its line elsewhere. Having different numbers of inputs and outputs is no obstacle to linearity. A matrix need not be square.
+        hints:
+          - What does the neuron give for the input (0, 0)?
+          - Which part of the formula obeys both rules?
+          - A linear map followed by a shift has a name.
+    - question:
+        id: work-thousand
+        type: choice
+        system: s2
+        prompt: |
+          A layer of a network is a linear map from $\mathbb{R}^{1000}$ to $\mathbb{R}^{1000}$, hidden in a black box. Which statement is right?
+        options:
+          - "No number of tests can determine it, since it has infinitely many inputs."
+          - "A thousand tests, one for each unit vector, determine it completely, and the results are the thousand columns of a matrix with a million entries."
+          - "Two tests suffice, as in the puzzle."
+          - "A million tests are needed, one for each entry."
+        answer: 1
+        explanation: |
+          Every input is a combination of the thousand unit vectors, and a linear map carries combinations to combinations, so its outputs on those thousand vectors settle its output on everything. Each test returns a whole column of a thousand numbers, which is why a thousand tests, and not a million, yield all million entries. Two tests settled the puzzle only because the plane has two unit vectors. This is the answer to the question the puzzle ended on, and it is the reason a linear layer can be stored at all: its behaviour on an infinity of inputs is a finite table.
+        hints:
+          - How many unit vectors are there in a space of a thousand dimensions?
+          - How many numbers does each test return?
+          - Count columns, not entries.
+  connections:
+    - text: |
+        The puzzle gave you a sealed machine, two test runs, and the knowledge that it respects adding and scaling. That was enough to predict its output on an input you had never tried, because every input is a combination of the two unit vectors and the machine carries combinations to combinations. A function with that property is a linear map. The outputs for the unit vectors, written side by side as columns, are its matrix, and the matrix is the complete record of the map: $n$ tests, $m$ numbers each, and nothing more to know.
+
+        This is where [[m4.linear-independence]] pays off. The unit vectors are a basis, so each vector has exactly one recipe in terms of them, and a linear map preserves the recipe while changing the ingredients. You saw that any other basis serves as well for testing. Describing one map with respect to different bases is the business of [[m5.change-of-basis]].
+
+        You also saw that the idea is wider than arrows. The dot product with a fixed vector is a linear map with a matrix of one row. Projection is one. Differentiation of polynomials is one, with the derivatives of the powers as its columns. And a neuron is one, followed by a shift and then by a function that is deliberately not linear.
+
+        Several questions are now waiting. If one matrix is one map, what single matrix does the work of two maps applied in turn? That is [[m5.matrix-multiplication-as-composition]], and it is where the collapse of a network without rectifiers will be proved. Which maps can be undone, and what goes wrong for the one that crushes the plane onto a line? That is [[m5.identity-and-inverse]]. The shear leaned the unit square over without changing its area, the stretch doubled it and the crushing map sent it to zero: one number records that, and it is [[m5.determinant]].
+
+        First, though, the computation itself. Today the output $A\mathbf{x}$ was assembled from the columns: $x_1$ of the first, $x_2$ of the second, and so on. That is the right way to think about what the map does. It is not the only way to compute it, and it hides half of what a matrix is. Read **across** the matrix, and each row turns out to be a vector you take the dot product with, a neuron of its own, and a system of simultaneous equations appears, written as the single line $A\mathbf{x} = \mathbf{b}$. Both readings, and the passage between them, are the next lesson, [[m5.matrix-vector-product]].

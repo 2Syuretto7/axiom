@@ -1,0 +1,769 @@
+concept: m5.identity-and-inverse
+minutes: 90
+claim: You can say what the identity matrix does, define the inverse of a square matrix and prove that it is unique, derive the formula for the inverse of a two by two matrix and the condition under which it exists, explain why a matrix that sends a non-zero vector to zero cannot be undone, invert a product, and say why solving a system does not call for computing an inverse.
+recalls: [m5.transpose]
+uses: [m5.matrix-multiplication-as-composition, m5.matrix-vector-product, m5.matrices-as-linear-maps, m4.linear-independence, m4.linear-combinations-and-span, m4.dot-product, m2.composition-and-inverses, m2.injective-surjective-and-bijective-maps, m1.simultaneous-equations, e1.exceptions, e1.comprehensions-and-iterators, e0.functions, e0.loops, e0.lists-and-tuples]
+leads: [m5.elimination-and-linear-systems, m5.rank, m5.change-of-basis, m5.determinant]
+starter: |
+  # Scratch space. Two scramblers. Each turns a pair of numbers into another pair.
+  def mv(A, x):
+      return [sum([a * b for a, b in zip(row, x)]) for row in A]
+
+  good = [[2, 1], [1, 1]]
+  bad = [[1, 2], [0.5, 1]]
+
+  print(mv(good, [3, 4]), mv(good, [5, 0]))
+  print(mv(bad, [3, 4]), mv(bad, [5, 3]))
+parts:
+  recall:
+    - text: |
+        [[m5.transpose]] ran a matrix backwards, carrying blame from outputs to inputs, and ended by noting that for a turn the transpose actually undoes the map, while in general it does not. Today asks which maps can be undone at all. Three quick pulls first.
+    - question:
+        id: recall-transpose
+        type: choice
+        system: s1
+        concepts: [m5.transpose]
+        prompt: |
+          What is $(AB)^{\mathsf{T}}$?
+        options: ['$A^{\mathsf{T}}B^{\mathsf{T}}$', '$B^{\mathsf{T}}A^{\mathsf{T}}$', '$AB$', '$BA$']
+        answer: 1
+        explanation: The order reverses, as it does whenever a sequence of steps is retraced.
+        hints:
+          - Socks and shoes.
+          - The factor applied last is dealt with first.
+    - question:
+        id: recall-d
+        type: numeric
+        system: s1
+        concepts: [m4.linear-independence]
+        prompt: |
+          For $\mathbf{a} = (1, 0.5)$ and $\mathbf{b} = (2, 1)$, what is $D = a_1 b_2 - a_2 b_1$?
+        answer: "0"
+        explanation: 1 × 1 − 0.5 × 2 = 0. The second vector is twice the first, so the two are dependent.
+        hints:
+          - Multiply the first component of a by the second of b.
+          - Subtract the second of a times the first of b.
+    - question:
+        id: recall-inverse-function
+        type: choice
+        system: s1
+        concepts: [m2.composition-and-inverses]
+        prompt: |
+          A function has an inverse exactly when
+        options: ["it is linear", "each output comes from exactly one input", "its graph is a straight line", "it is defined for every number"]
+        answer: 1
+        explanation: To run a function backwards, every output must be reached, and reached from only one input. Such a function is a bijection.
+        hints:
+          - Running backwards must give one definite answer.
+          - What goes wrong if two inputs share an output?
+  puzzle:
+    - text: |
+        You and a friend agree to scramble your messages. A message is a pair of numbers, and to scramble it you multiply by a matrix that you both know. Two matrices are on offer.
+
+        $$\text{good} = \begin{pmatrix} 2 & 1 \\ 1 & 1 \end{pmatrix}, \qquad \text{bad} = \begin{pmatrix} 1 & 2 \\ 0.5 & 1 \end{pmatrix}.$$
+
+        Run the starter. The good scrambler turns the message $(3, 4)$ into $(10, 7)$, and the message $(5, 0)$ into $(10, 5)$. Different messages, different scrambled forms.
+
+        The bad scrambler turns $(3, 4)$ into $(11, 5.5)$. It also turns $(5, 3)$ into $(11, 5.5)$.
+
+        Your friend receives $(11, 5.5)$ from the bad scrambler. Which message did you send? There is no way to tell. It is not that the unscrambling is difficult. The information is gone: two different messages have become the same thing, and nothing done afterwards can separate them again.
+
+        Your friend receives $(10, 7)$ from the good scrambler. Can the message always be recovered? If so, there is an unscrambling machine, and since everything in sight is linear, it ought to be a matrix.
+
+        **What is that matrix for the good scrambler, and how could you have found it? What, exactly, is wrong with the bad one? And can you tell the two kinds apart without trying messages?**
+  intuition:
+    - text: |
+        Start with a map that can obviously be undone. The shear slides each point sideways by its own height. To undo it, slide each point back by its own height. The figure applies the shear and then the opposite shear. Step through both.
+    - figure: compose-maps
+      props: { pair: undo }
+    - text: |
+        After both, the flag is back where it began, and so is every other point of the plane. The product of the two matrices is the matrix that moves nothing, with rows $(1, 0)$ and $(0, 1)$. That is what "undoing" means for matrices: **two matrices whose product is the matrix that does nothing.**
+
+        Now look at the bad scrambler as a movement of the plane. Step it to its full effect.
+    - figure: linear-map
+      props: { map: squash, amount: 0 }
+    - text: |
+        Its two columns, $(1, 0.5)$ and $(2, 1)$, point the same way. So every output, being a combination of the columns, lies along that one line. The whole plane has been pressed onto a line. A plane's worth of messages has been packed into a line's worth of scrambled forms, and many messages must share each one.
+
+        You can find exactly which ones share. The second column is twice the first, so $2$ of the first column minus $1$ of the second is zero: the bad scrambler sends $(2, -1)$ to $(0, 0)$. Then adding $(2, -1)$ to any message changes nothing in the output. And $(5, 3) = (3, 4) + (2, -1)$. That is why those two collided.
+
+        The good scrambler's columns, $(2, 1)$ and $(1, 1)$, point in different directions. They span the plane, so every pair of numbers is the scrambled form of some message, and they are independent, so of only one.
+
+        **A matrix can be undone when its columns are independent and reach everything. It cannot when it sends some non-zero vector to zero.** The derivation defines the undoing matrix, finds it for the $2 \times 2$ case, and proves the second statement outright.
+  derivation:
+    - text: |
+        **The identity.** The $n \times n$ matrix with 1 in every diagonal place and 0 elsewhere is the **identity matrix**, written $I$, or $I_n$ when the size matters. Its columns are the unit vectors $\mathbf{e}_1, \dots, \mathbf{e}_n$, so it is the matrix of the map that sends each unit vector to itself, the map that does nothing:
+
+        $$I\mathbf{x} = \mathbf{x} \quad \text{for every } \mathbf{x}.$$
+
+        Doing nothing before or after another map changes nothing, so $AI = A$ and $IA = A$ for any matrix $A$, with the identity of the size that fits on each side. Among matrices, $I$ plays the part that 1 plays among numbers.
+
+        **The inverse.** A square matrix $A$ is **invertible** if there is a matrix $B$ with
+
+        $$BA = I \qquad \text{and} \qquad AB = I.$$
+
+        Then $B$ is called the **inverse** of $A$ and written $A^{-1}$. The first equation says that $B$ undoes $A$: $B(A\mathbf{x}) = \mathbf{x}$. The second says that $A$ undoes $B$. A matrix that is not invertible is called **singular**.
+
+        **There is at most one.** Suppose $B$ and $C$ are both inverses of $A$. Then
+
+        $$B = BI = B(AC) = (BA)C = IC = C.$$
+
+        Every step uses a rule you have: $AC = I$, brackets may be moved, $BA = I$. So it is right to speak of **the** inverse.
+
+        A fact that will be proved once you can count independent directions: **for square matrices, either one of the two equations implies the other.** If $BA = I$ for square $A$ and $B$, then $AB = I$ as well. So in practice one product is enough to check. For matrices that are not square it fails, and such matrices never have an inverse in this two-sided sense. A map from the plane into space cannot reach everything, and a map from space onto the plane must make collisions.
+
+        **What an inverse gives.** If $A$ is invertible, the system $A\mathbf{x} = \mathbf{b}$ has **exactly one** solution for every right side $\mathbf{b}$, namely
+
+        $$\mathbf{x} = A^{-1}\mathbf{b}.$$
+
+        It is a solution, since $A(A^{-1}\mathbf{b}) = I\mathbf{b} = \mathbf{b}$. It is the only one, since $A\mathbf{x} = \mathbf{b}$ gives $A^{-1}A\mathbf{x} = A^{-1}\mathbf{b}$, that is, $\mathbf{x} = A^{-1}\mathbf{b}$. In the language of functions the map is a bijection: every output is reached, and from one input only. The unscrambling machine exists, and it is the matrix $A^{-1}$.
+
+        **Finding the inverse of a $2 \times 2$ matrix.** Let
+
+        $$A = \begin{pmatrix} a & b \\ c & d \end{pmatrix}.$$
+
+        The columns of $A^{-1}$ are what it does to the unit vectors. Column 1 is $A^{-1}\mathbf{e}_1$, which is the vector $\mathbf{x}$ that $A$ sends **to** $\mathbf{e}_1$. So solve $A\mathbf{x} = \mathbf{e}_1$:
+
+        $$ax_1 + bx_2 = 1, \qquad cx_1 + dx_2 = 0.$$
+
+        Multiply the first equation by $d$ and the second by $b$ and subtract: $(ad - bc)\,x_1 = d$. Multiply the first by $c$ and the second by $a$ and subtract: $(bc - ad)\,x_2 = c$. Provided $ad - bc \ne 0$,
+
+        $$x_1 = \frac{d}{ad - bc}, \qquad x_2 = \frac{-c}{ad - bc}.$$
+
+        Solving $A\mathbf{x} = \mathbf{e}_2$ in the same way gives the second column, $\left(\dfrac{-b}{ad - bc}, \dfrac{a}{ad - bc}\right)$. So
+
+        $$A^{-1} = \frac{1}{ad - bc}\begin{pmatrix} d & -b \\ -c & a \end{pmatrix}.$$
+
+        **Exchange the two diagonal entries, change the sign of the other two, and divide by $ad - bc$.** Multiply it by $A$ to check: the diagonal entries come out as $\frac{ad - bc}{ad - bc} = 1$ and the others as $\frac{ab - ba}{ad - bc} = 0$.
+
+        For the good scrambler, $ad - bc = 2 \times 1 - 1 \times 1 = 1$, and the inverse has rows $(1, -1)$ and $(-1, 2)$. Apply it to $(10, 7)$: $(10 - 7,\; -10 + 14) = (3, 4)$. The message is recovered.
+
+        **The number $ad - bc$.** You have met it. The columns of $A$ are $(a, c)$ and $(b, d)$, and for two vectors in the plane the quantity $D$ that told you whether they were independent was first component times second, minus second times first: $ad - cb$. The same number. So for a $2 \times 2$ matrix:
+
+        $$A \text{ is invertible} \iff ad - bc \ne 0 \iff \text{the columns of } A \text{ are independent}.$$
+
+        For the bad scrambler, $1 \times 1 - 2 \times 0.5 = 0$. The formula would divide by zero, and no other formula will rescue it, as the next paragraph shows.
+
+        **Why a matrix that sends something to zero cannot be undone.** Suppose $A\mathbf{c} = \mathbf{0}$ for some $\mathbf{c} \ne \mathbf{0}$, which is to say that the columns of $A$ are dependent. If $A$ had an inverse $B$, then
+
+        $$\mathbf{c} = I\mathbf{c} = (BA)\mathbf{c} = B(A\mathbf{c}) = B\mathbf{0} = \mathbf{0},$$
+
+        which contradicts $\mathbf{c} \ne \mathbf{0}$. So **a matrix with dependent columns is singular**, in any size. The collision in the puzzle is this argument seen from outside: $A(\mathbf{x} + \mathbf{c}) = A\mathbf{x}$, two inputs with one output, and no machine can return both.
+
+        The converse is true as well: a square matrix with independent columns is invertible. For $2 \times 2$ matrices the formula has just shown it. In general it needs a method that produces the inverse, or at least the solution of every system, and that method is elimination.
+    - question:
+        id: derivation-collide
+        type: choice
+        system: s2
+        prompt: |
+          The bad scrambler has rows $(1, 2)$ and $(0.5, 1)$, and it sends $(2, -1)$ to $(0, 0)$. Which other message has the same scrambled form as $(1, 1)$?
+        options:
+          - '$(2, 2)$'
+          - '$(3, 0)$'
+          - '$(1, -1)$'
+          - '$(0, 0)$'
+        answer: 1
+        explanation: |
+          Adding any multiple of $(2, -1)$ to a message leaves the output unchanged, because $A(\mathbf{x} + s\,\mathbf{c}) = A\mathbf{x} + s\,A\mathbf{c} = A\mathbf{x}$. $(1, 1) + (2, -1) = (3, 0)$. Check directly: $(1, 1)$ goes to $(3, 1.5)$, and $(3, 0)$ goes to $(3, 1.5)$. A whole line of messages, $(1, 1) + s\,(2, -1)$ for every $s$, shares that one output. $(2, 2)$ is a multiple of $(1, 1)$ and goes to twice its output.
+        hints:
+          - What happens to the output when (2, −1) is added to the input?
+          - Add (2, −1) to (1, 1).
+          - Confirm by applying the matrix to both.
+    - text: |
+        **Inverses of familiar maps.** Several can be written down from the meaning alone.
+
+        | Map | Matrix rows | Inverse rows | Why |
+        | --- | --- | --- | --- |
+        | Stretch sideways by 2 | $(2, 0)$, $(0, 1)$ | $(0.5, 0)$, $(0, 1)$ | shrink by the same factor |
+        | Shear | $(1, 1)$, $(0, 1)$ | $(1, -1)$, $(0, 1)$ | slide back |
+        | Quarter turn | $(0, -1)$, $(1, 0)$ | $(0, 1)$, $(-1, 0)$ | turn back |
+        | Reflection | $(1, 0)$, $(0, -1)$ | $(1, 0)$, $(0, -1)$ | reflect again |
+        | Projection onto a line | $(0.5, 0.5)$, $(0.5, 0.5)$ | none | the plane is crushed |
+
+        A **diagonal** matrix with entries $d_1, \dots, d_n$ is inverted by taking reciprocals, $1/d_1, \dots, 1/d_n$, and is singular exactly when some $d_i$ is 0. A reflection is its own inverse. And the inverse of a turn through $\theta$ is the turn through $-\theta$, which the last lesson showed to be its transpose.
+
+        That last case is part of something larger. Recall that $Q^{\mathsf{T}}Q$ is the table of dot products between the columns of $Q$. So $Q^{\mathsf{T}}Q = I$ says precisely that the columns have length 1 and are perpendicular in pairs. **For a square matrix whose columns are perpendicular unit vectors, the inverse is the transpose**, with no arithmetic at all. Turns and reflections are of this kind.
+
+        **The inverse of a product.** If $A$ and $B$ are invertible and of the same size, so is $AB$, and
+
+        $$(AB)^{-1} = B^{-1}A^{-1}.$$
+
+        The order reverses once more: $AB$ applies $B$ first and $A$ second, so to undo it, undo $A$ first and $B$ second. Check: $(B^{-1}A^{-1})(AB) = B^{-1}(A^{-1}A)B = B^{-1}IB = B^{-1}B = I$. Two more rules of the same flavour: $(A^{-1})^{-1} = A$, and $(A^{\mathsf{T}})^{-1} = (A^{-1})^{\mathsf{T}}$, which follows by transposing $AA^{-1} = I$.
+
+        **Nearly singular.** Take $A$ with rows $(1, 1)$ and $(1, 1.01)$. Its columns are almost parallel and $ad - bc = 0.01$. The inverse has rows $(101, -100)$ and $(-100, 100)$. Entries of size 1 have an inverse with entries of size 100, and a change of $0.01$ in a scrambled message becomes a change of about 1 in the recovered one. You saw this instability before, when two nearly parallel vectors needed coefficients of $-100$ and $100$ to reach a nearby target. It was this matrix being inverted. Being invertible is a yes-or-no matter in theory. In computation with rounded numbers, a matrix can be invertible and still useless to invert.
+
+        **Do not compute the inverse to solve one system.** The formula $\mathbf{x} = A^{-1}\mathbf{b}$ describes the solution. It is a poor recipe for finding it. For matrices larger than $2 \times 2$ there is no short formula for $A^{-1}$, computing it amounts to solving $n$ systems, one for each column, and each extra step lets rounding errors grow. To solve $A\mathbf{x} = \mathbf{b}$, solve it directly. Keep $A^{-1}$ for thinking, and for the cases where the matrix itself is what you want.
+    - question:
+        id: order-unique
+        type: order
+        system: s2
+        prompt: Put the steps in order to prove that if $A\mathbf{c} = \mathbf{0}$ for some $\mathbf{c} \ne \mathbf{0}$, then $A$ has no inverse.
+        steps:
+          - 'Suppose, for a contradiction, that $A$ has an inverse $B$, so that $BA = I$.'
+          - 'Multiply both sides of $A\mathbf{c} = \mathbf{0}$ on the left by $B$: $B(A\mathbf{c}) = B\mathbf{0}$.'
+          - 'The right side is $\mathbf{0}$, because every matrix sends the zero vector to the zero vector.'
+          - 'The left side is $(BA)\mathbf{c} = I\mathbf{c} = \mathbf{c}$.'
+          - 'So $\mathbf{c} = \mathbf{0}$, which contradicts $\mathbf{c} \ne \mathbf{0}$. Hence no inverse exists.'
+        explanation: The proof supposes an inverse and applies it to the equation that shows the fault. The inverse would have to bring back $\mathbf{c}$ from $\mathbf{0}$, and it would also have to bring back $\mathbf{0}$ from $\mathbf{0}$, and one output cannot be returned to two inputs. The algebra says the same thing in two lines.
+        hints:
+          - A proof by contradiction starts by supposing what is to be refuted.
+          - The inverse must be applied before either side can be simplified.
+          - The contradiction is the last line.
+  formal:
+    - text: |
+        **Identity.** $I_n$ is the $n \times n$ matrix with columns $\mathbf{e}_1, \dots, \mathbf{e}_n$. $I\mathbf{x} = \mathbf{x}$, $AI = A$ and $IA = A$.
+
+        **Inverse.** A square matrix $A$ is invertible if some $B$ has $BA = I$ and $AB = I$. Such a $B$ is unique and is written $A^{-1}$. For square matrices each of the two equations implies the other. A matrix with no inverse is singular.
+
+        **Solving.** If $A$ is invertible, $A\mathbf{x} = \mathbf{b}$ has the single solution $\mathbf{x} = A^{-1}\mathbf{b}$.
+
+        **Two by two.** With rows $(a, b)$ and $(c, d)$, $A$ is invertible exactly when $ad - bc \ne 0$, and then $A^{-1}$ has rows $\dfrac{1}{ad - bc}(d, -b)$ and $\dfrac{1}{ad - bc}(-c, a)$.
+
+        **Singular.** If $A\mathbf{c} = \mathbf{0}$ for some $\mathbf{c} \ne \mathbf{0}$, then $A$ is singular. A square matrix is invertible exactly when its columns are independent.
+
+        **Rules.** $(AB)^{-1} = B^{-1}A^{-1}$. $(A^{-1})^{-1} = A$. $(A^{\mathsf{T}})^{-1} = (A^{-1})^{\mathsf{T}}$. If $Q$ is square with $Q^{\mathsf{T}}Q = I$, then $Q^{-1} = Q^{\mathsf{T}}$.
+  drill:
+    - text: Seconds each. Exchange the diagonal, change the signs of the others, divide by ad − bc.
+    - question:
+        id: drill-identity
+        type: choice
+        system: s1
+        prompt: |
+          What is $I\,(7, -2)$?
+        options: ['$(7, -2)$', '$(-2, 7)$', '$(0, 0)$', '$(1, 1)$']
+        answer: 0
+        explanation: The identity matrix does nothing to any vector.
+        hints:
+          - What map does the identity stand for?
+          - Its rows are the unit vectors.
+    - question:
+        id: drill-det-good
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has rows $(2, 1)$ and $(1, 1)$. What is $ad - bc$?
+        answer: "1"
+        explanation: 2 × 1 − 1 × 1.
+        hints:
+          - a and d are the diagonal entries.
+          - Subtract the product of the other two.
+    - question:
+        id: drill-singular
+        type: choice
+        system: s1
+        prompt: |
+          Is the matrix with rows $(1, 2)$ and $(2, 4)$ invertible?
+        options: ["Yes", "No, because ad − bc is 0", "No, because it is symmetric", "Yes, because no entry is 0"]
+        answer: 1
+        explanation: 1 × 4 − 2 × 2 = 0. The second column is twice the first.
+        hints:
+          - Compute ad − bc.
+          - Compare the two columns.
+    - question:
+        id: drill-diagonal
+        type: choice
+        system: s1
+        prompt: |
+          What is the inverse of the matrix with rows $(2, 0)$ and $(0, 4)$?
+        options: ['Rows $(-2, 0)$ and $(0, -4)$', 'Rows $(0.5, 0)$ and $(0, 0.25)$', 'Rows $(4, 0)$ and $(0, 2)$', 'Rows $(0, 0.5)$ and $(0.25, 0)$']
+        answer: 1
+        explanation: A diagonal matrix scales each component, and is undone by dividing each component by its factor.
+        hints:
+          - The matrix doubles the first component and quadruples the second.
+          - Undo each of those.
+    - question:
+        id: drill-undo
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ is invertible and $\mathbf{x} = (5, 3)$. What is the first component of $A^{-1}(A\mathbf{x})$?
+        answer: "5"
+        explanation: The inverse undoes A, so the result is x itself.
+        hints:
+          - What is the inverse of A times A?
+          - The identity leaves x alone.
+    - question:
+        id: drill-product
+        type: choice
+        system: s1
+        prompt: |
+          What is $(AB)^{-1}$, for invertible $A$ and $B$ of the same size?
+        options: ['$A^{-1}B^{-1}$', '$B^{-1}A^{-1}$', '$AB$', '$BA$']
+        answer: 1
+        explanation: AB applies B first. To undo, undo A first and then B.
+        hints:
+          - Which factor acted last?
+          - Undo the last thing first.
+    - question:
+        id: drill-turn
+        type: choice
+        system: s1
+        prompt: |
+          The quarter turn anticlockwise has rows $(0, -1)$ and $(1, 0)$. What is its inverse?
+        options: ['Rows $(0, -1)$ and $(1, 0)$', 'Rows $(0, 1)$ and $(-1, 0)$', 'Rows $(1, 0)$ and $(0, 1)$', 'Rows $(-1, 0)$ and $(0, -1)$']
+        answer: 1
+        explanation: The quarter turn clockwise, which is also the transpose.
+        hints:
+          - What undoes a quarter turn anticlockwise?
+          - For a turn the inverse is the transpose.
+    - question:
+        id: drill-top-left
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has rows $(3, 1)$ and $(5, 2)$, so $ad - bc = 1$. What is the entry of $A^{-1}$ in row 1, column 1?
+        answer: "2"
+        explanation: The diagonal entries exchange places, so d = 2 moves to the top left, and dividing by 1 leaves it.
+        hints:
+          - The two diagonal entries change places.
+          - Divide by ad − bc, which is 1.
+    - question:
+        id: drill-top-right
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has rows $(3, 1)$ and $(5, 2)$, so $ad - bc = 1$. What is the entry of $A^{-1}$ in row 1, column 2?
+        answer: "-1"
+        explanation: The entry b = 1 keeps its place and changes sign.
+        hints:
+          - The entries off the diagonal stay where they are.
+          - Their signs change.
+    - question:
+        id: drill-shear
+        type: choice
+        system: s1
+        prompt: |
+          The shear has rows $(1, 1)$ and $(0, 1)$. What is its inverse?
+        options: ['Rows $(1, 0)$ and $(1, 1)$', 'Rows $(1, -1)$ and $(0, 1)$', 'Rows $(-1, -1)$ and $(0, -1)$', 'Rows $(1, 1)$ and $(0, 1)$']
+        answer: 1
+        explanation: The shear slides each point sideways by its height. The inverse slides it back.
+        hints:
+          - ad − bc is 1.
+          - Change the sign of the entry off the diagonal.
+    - question:
+        id: drill-twice
+        type: choice
+        system: s1
+        prompt: |
+          What is $(A^{-1})^{-1}$?
+        options: ['$A$', '$A^{-1}$', '$I$', '$A^{\mathsf{T}}$']
+        answer: 0
+        explanation: The matrix that undoes the undoing is the original.
+        hints:
+          - What does the inverse of A undo?
+          - What undoes that?
+    - question:
+        id: drill-zero
+        type: choice
+        system: s1
+        prompt: |
+          $A$ is square and $A\,(2, -1, 3) = (0, 0, 0)$. Then $A$ is
+        options: ["invertible", "singular", "the identity", "symmetric"]
+        answer: 1
+        explanation: A non-zero vector is sent to zero, where the zero vector also goes. Two inputs with one output cannot be undone.
+        hints:
+          - Where does A send the zero vector?
+          - Can two inputs with one output be told apart afterwards?
+    - question:
+        id: drill-solve
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has rows $(2, 0)$ and $(0, 5)$, and $A\mathbf{x} = (6, 10)$. What is the second component of $\mathbf{x}$?
+        answer: "2"
+        explanation: The inverse divides the first component by 2 and the second by 5. 10 ÷ 5 = 2.
+        hints:
+          - The matrix multiplies the second component by 5.
+          - Undo that on the 10.
+    - question:
+        id: predict-check
+        type: predict
+        system: s1
+        prompt: The good scrambler times its claimed inverse. What does this show?
+        code: |
+          A = [[2, 1], [1, 1]]
+          B = [[1, -1], [-1, 2]]
+
+          print([[sum([A[i][k] * B[k][j] for k in range(2)]) for j in range(2)] for i in range(2)])
+        output: "[[1, 0], [0, 1]]"
+        explanation: Row (2, 1) against column (1, −1) gives 1, and against column (−1, 2) gives 0. Row (1, 1) gives 0 and then 1. The product is the identity, so B is the inverse.
+        hints:
+          - Each entry is a row of A dotted with a column of B.
+          - The columns of B are (1, −1) and (−1, 2).
+    - question:
+        id: predict-decode
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          B = [[1, -1], [-1, 2]]
+          code = [10, 7]
+          print([sum([a * b for a, b in zip(row, code)]) for row in B])
+
+          a, b, c, d = 1, 2, 0.5, 1
+          print(a * d - b * c)
+        output: |
+          [3, 4]
+          0.0
+        explanation: The inverse of the good scrambler recovers the message, 10 − 7 = 3 and −10 + 14 = 4. For the bad scrambler ad − bc is 1 − 1.0, which Python prints as 0.0, so its inverse does not exist.
+        hints:
+          - Dot each row of B with the code.
+          - The last line computes ad − bc for the bad scrambler, and one of the numbers is a float.
+  work:
+    - text: Slower now. Before inverting anything, ask whether the columns are independent.
+    - question:
+        id: write-inverse2
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `inverse2(A)` for a $2 \times 2$ matrix stored as a list of two rows. Return its inverse as a list of two rows. If $ad - bc$ is 0, the matrix has no inverse: raise a `ValueError`.
+        starter: |
+          def inverse2(A):
+              # Replace the next line with your own.
+              return A
+
+          print(inverse2([[1, 2], [3, 4]]))
+        solution: |
+          def inverse2(A):
+              a, b = A[0]
+              c, d = A[1]
+              det = a * d - b * c
+              if det == 0:
+                  raise ValueError("the matrix is singular")
+              return [[d / det, -b / det], [-c / det, a / det]]
+
+          print(inverse2([[1, 2], [3, 4]]))
+        tests: |
+          assert inverse2([[1, 2], [3, 4]]) == [[-2, 1], [1.5, -0.5]], "For rows [1, 2] and [3, 4], ad - bc is -2, and the inverse has rows [-2, 1] and [1.5, -0.5]"
+          assert inverse2([[2, 1], [1, 1]]) == [[1, -1], [-1, 2]], "The good scrambler has inverse rows [1, -1] and [-1, 2]"
+          assert inverse2([[3, 1], [5, 2]]) == [[2, -1], [-5, 3]], "For rows [3, 1] and [5, 2] the inverse has rows [2, -1] and [-5, 3]"
+          assert inverse2([[2, 0], [0, 4]]) == [[0.5, 0], [0, 0.25]], "A diagonal matrix is inverted by taking reciprocals"
+          assert inverse2([[1, 1], [0, 1]]) == [[1, -1], [0, 1]], "The inverse of the shear is the opposite shear"
+          assert inverse2([[0, -1], [1, 0]]) == [[0, 1], [-1, 0]], "The inverse of the quarter turn is the turn the other way"
+          assert inverse2([[1, 0], [0, 1]]) == [[1, 0], [0, 1]], "The identity is its own inverse"
+          assert inverse2([[0, 2], [4, 0]]) == [[0, 0.25], [0.5, 0]], "For rows [0, 2] and [4, 0], ad - bc is -8, and the inverse has rows [0, 0.25] and [0.5, 0]"
+          _raised = False
+          try:
+              inverse2([[1, 2], [0.5, 1]])
+          except ValueError:
+              _raised = True
+          assert _raised, "The bad scrambler has ad - bc equal to 0. Raise ValueError"
+          _raised = False
+          try:
+              inverse2([[0, 0], [0, 0]])
+          except ValueError:
+              _raised = True
+          assert _raised, "The zero matrix has no inverse. Raise ValueError"
+          assert output.strip() == "[[-2.0, 1.0], [1.5, -0.5]]", "The program should print [[-2.0, 1.0], [1.5, -0.5]]"
+        wrong:
+          - |
+            def inverse2(A):
+                a, b = A[0]
+                c, d = A[1]
+                det = a * d - b * c
+                if det == 0:
+                    raise ValueError("the matrix is singular")
+                return [[d / det, -c / det], [-b / det, a / det]]
+
+            print([[-2.0, 1.0], [1.5, -0.5]])
+          - |
+            def inverse2(A):
+                a, b = A[0]
+                c, d = A[1]
+                det = a * d - b * c
+                if det == 0:
+                    raise ValueError("the matrix is singular")
+                return [[a / det, -b / det], [-c / det, d / det]]
+
+            print([[-2.0, 1.0], [1.5, -0.5]])
+          - |
+            def inverse2(A):
+                a, b = A[0]
+                c, d = A[1]
+                if a * d - b * c == 0:
+                    raise ValueError("the matrix is singular")
+                return [[d, -b], [-c, a]]
+
+            print([[-2.0, 1.0], [1.5, -0.5]])
+          - |
+            def inverse2(A):
+                a, b = A[0]
+                c, d = A[1]
+                det = a * d + b * c
+                if det == 0:
+                    raise ValueError("the matrix is singular")
+                return [[d / det, -b / det], [-c / det, a / det]]
+
+            print([[-2.0, 1.0], [1.5, -0.5]])
+          - |
+            def inverse2(A):
+                a, b = A[0]
+                c, d = A[1]
+                if a == 0 or d == 0:
+                    raise ValueError("the matrix is singular")
+                det = a * d - b * c
+                if det == 0:
+                    raise ValueError("the matrix is singular")
+                return [[d / det, -b / det], [-c / det, a / det]]
+
+            print([[-2.0, 1.0], [1.5, -0.5]])
+        explanation: |
+          The function is the derived formula: exchange $a$ and $d$, change the signs of $b$ and $c$ **without moving them**, divide everything by $ad - bc$. The entries off the diagonal are where it goes wrong most often. Exchanging them as well gives the right answer for every symmetric matrix and the wrong one otherwise, so the tests use matrices whose two off-diagonal entries differ. The check for singularity is on $ad - bc$ and on nothing else. A matrix may have zeros on its diagonal and be perfectly invertible, as the quarter turn is. With floats, a test for exactly 0 is too strict a notion of trouble, as the nearly singular example showed, and real code compares the size of $ad - bc$ with the sizes of the entries.
+        hints:
+          - Unpack the four entries as a, b, c, d and compute ad − bc.
+          - If it is 0, raise ValueError.
+          - The diagonal entries change places. The other two keep their places and change sign. Divide each by ad − bc.
+    - question:
+        id: write-is-inverse
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `is_inverse(A, B)` for two square matrices of the same size, stored as lists of rows. Return `True` exactly when `B` is the inverse of `A`: the product $AB$ must be the identity matrix. Treat two numbers that differ by less than `1e-9` as equal.
+        starter: |
+          def is_inverse(A, B):
+              # Replace the next line with your own.
+              return True
+
+          print(is_inverse([[2, 1], [1, 1]], [[1, -1], [-1, 2]]), is_inverse([[2, 1], [1, 1]], [[1, 0], [0, 1]]))
+        solution: |
+          def is_inverse(A, B):
+              n = len(A)
+              for i in range(n):
+                  for j in range(n):
+                      entry = sum([A[i][k] * B[k][j] for k in range(n)])
+                      wanted = 1 if i == j else 0
+                      if abs(entry - wanted) >= 1e-9:
+                          return False
+              return True
+
+          print(is_inverse([[2, 1], [1, 1]], [[1, -1], [-1, 2]]), is_inverse([[2, 1], [1, 1]], [[1, 0], [0, 1]]))
+        tests: |
+          assert is_inverse([[2, 1], [1, 1]], [[1, -1], [-1, 2]]) is True, "Rows [1, -1] and [-1, 2] are the inverse of the good scrambler"
+          assert is_inverse([[2, 1], [1, 1]], [[1, 0], [0, 1]]) is False, "The identity is not the inverse of the good scrambler"
+          assert is_inverse([[3, 1], [5, 2]], [[2, -1], [-5, 3]]) is True, "Rows [2, -1] and [-5, 3] are the inverse of rows [3, 1] and [5, 2]"
+          assert is_inverse([[3, 1], [5, 2]], [[2, -5], [-1, 3]]) is False, "With the off-diagonal entries exchanged the product is not the identity"
+          assert is_inverse([[2, 0], [0, 4]], [[0.5, 0], [0, 0.25]]) is True, "Reciprocals invert a diagonal matrix"
+          assert is_inverse([[2, 0], [0, 4]], [[0.5, 0], [0, 0.5]]) is False, "The product has 2 in its second diagonal place"
+          assert is_inverse([[0, 1], [1, 0]], [[1, 0], [0, 1]]) is False, "The product has 0 on its diagonal and 1 off it"
+          assert is_inverse([[1, 1], [0, 1]], [[1, 0], [0, 1]]) is False, "The product has 1 on its diagonal and also a 1 off it"
+          assert is_inverse([[1, 0, 0], [0, 2, 0], [0, 0, 4]], [[1, 0, 0], [0, 0.5, 0], [0, 0, 0.25]]) is True, "A 3 by 3 diagonal matrix and its reciprocals"
+          assert is_inverse([[1, 1, 0], [0, 1, 1], [0, 0, 1]], [[1, -1, 1], [0, 1, -1], [0, 0, 1]]) is True, "This 3 by 3 pair multiplies to the identity"
+          assert is_inverse([[1, 1, 0], [0, 1, 1], [0, 0, 1]], [[1, -1, 0], [0, 1, -1], [0, 0, 1]]) is False, "The product has -1 in row 1, column 3"
+          _det = 0.1 * 0.2 - 0.1 * 0.1
+          assert is_inverse([[0.1, 0.1], [0.1, 0.2]], [[0.2 / _det, -0.1 / _det], [-0.1 / _det, 0.1 / _det]]) is True, "Tiny rounding differences should not count as a failure"
+          assert output.strip() == "True False", "The program should print True False"
+        wrong:
+          - |
+            def is_inverse(A, B):
+                n = len(A)
+                for i in range(n):
+                    entry = sum([A[i][k] * B[k][i] for k in range(n)])
+                    if abs(entry - 1) >= 1e-9:
+                        return False
+                return True
+
+            print(True, False)
+          - |
+            def is_inverse(A, B):
+                n = len(A)
+                for i in range(n):
+                    for j in range(n):
+                        if i != j:
+                            entry = sum([A[i][k] * B[k][j] for k in range(n)])
+                            if abs(entry) >= 1e-9:
+                                return False
+                return True
+
+            print(True, False)
+          - |
+            def is_inverse(A, B):
+                n = len(A)
+                for i in range(n):
+                    for j in range(n):
+                        entry = A[i][j] * B[i][j]
+                        wanted = 1 if i == j else 0
+                        if abs(entry - wanted) >= 1e-9:
+                            return False
+                return True
+
+            print(True, False)
+          - |
+            def is_inverse(A, B):
+                n = len(A)
+                product = [[sum([A[i][k] * B[k][j] for k in range(n)]) for j in range(n)] for i in range(n)]
+                return product == [[1 if i == j else 0 for j in range(n)] for i in range(n)]
+
+            print(True, False)
+          - |
+            def is_inverse(A, B):
+                n = len(A)
+                for i in range(n):
+                    for j in range(n):
+                        entry = sum([A[i][k] * B[j][k] for k in range(n)])
+                        wanted = 1 if i == j else 0
+                        if abs(entry - wanted) >= 1e-9:
+                            return False
+                return True
+
+            print(True, False)
+        explanation: |
+          The definition is checked entry by entry: each entry of the product is a row of `A` against a column of `B`, and it must be 1 on the diagonal and 0 everywhere else. Both halves are needed. A product with the right diagonal and something off it is not the identity, and neither is one that is zero off the diagonal with a 2 on it. Since the matrices are square, checking $AB = I$ is enough, and $BA = I$ follows. Notice again the difference in cost between checking and finding. Verifying a claimed inverse is one matrix product. Producing the inverse of a large matrix is far more work, and it is the next lesson's method that does it.
+        hints:
+          - Compute each entry of AB as a sum over k of A[i][k] * B[k][j].
+          - Compare it with 1 when i equals j and with 0 otherwise.
+          - Return False at the first entry that is wrong, and True after all have passed.
+    - question:
+        id: fix-decode
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `decode(A, code)` should recover a message from its scrambled form, by applying the inverse of the $2 \times 2$ scrambling matrix `A`. The message $(3, 4)$ was scrambled with rows $(3, 1)$ and $(5, 2)$ into $(13, 23)$, so the program should print `[3.0, 4.0]`. It prints `[-89.0, 56.0]`. Fix it.
+        starter: |
+          def decode(A, code):
+              a, b = A[0]
+              c, d = A[1]
+              det = a * d - b * c
+              inverse = [[d / det, -c / det], [-b / det, a / det]]
+              return [sum([p * q for p, q in zip(row, code)]) for row in inverse]
+
+          print(decode([[3, 1], [5, 2]], [13, 23]))
+        solution: |
+          def decode(A, code):
+              a, b = A[0]
+              c, d = A[1]
+              det = a * d - b * c
+              inverse = [[d / det, -b / det], [-c / det, a / det]]
+              return [sum([p * q for p, q in zip(row, code)]) for row in inverse]
+
+          print(decode([[3, 1], [5, 2]], [13, 23]))
+        tests: |
+          assert decode([[3, 1], [5, 2]], [13, 23]) == [3, 4], "Rows [3, 1] and [5, 2] scramble [3, 4] into [13, 23]"
+          assert decode([[2, 1], [1, 1]], [10, 7]) == [3, 4], "The good scrambler turns [3, 4] into [10, 7]"
+          assert decode([[2, 1], [1, 1]], [10, 5]) == [5, 0], "The good scrambler turns [5, 0] into [10, 5]"
+          assert decode([[1, 1], [0, 1]], [3, 1]) == [2, 1], "The shear turns [2, 1] into [3, 1]"
+          assert decode([[1, 0], [1, 1]], [2, 3]) == [2, 1], "Rows [1, 0] and [1, 1] turn [2, 1] into [2, 3]"
+          assert decode([[0, -1], [1, 0]], [-1, 1]) == [1, 1], "The quarter turn sends [1, 1] to [-1, 1]"
+          assert decode([[1, 2], [3, 4]], [5, 11]) == [1, 2], "Rows [1, 2] and [3, 4] turn [1, 2] into [5, 11]"
+          assert decode([[2, 0], [0, 4]], [6, 4]) == [3, 1], "A diagonal matrix is undone by dividing each component"
+          assert output.strip() == "[3.0, 4.0]", "The program should print [3.0, 4.0]"
+        wrong:
+          - |
+            def decode(A, code):
+                a, b = A[0]
+                c, d = A[1]
+                det = a * d - b * c
+                inverse = [[d / det, -c / det], [-b / det, a / det]]
+                return [sum([p * q for p, q in zip(row, code)]) for row in inverse]
+
+            print([3.0, 4.0])
+          - |
+            def decode(A, code):
+                a, b = A[0]
+                c, d = A[1]
+                det = a * d - b * c
+                inverse = [[a / det, -b / det], [-c / det, d / det]]
+                return [sum([p * q for p, q in zip(row, code)]) for row in inverse]
+
+            print([3.0, 4.0])
+          - |
+            def decode(A, code):
+                a, b = A[0]
+                c, d = A[1]
+                det = a * d - b * c
+                inverse = [[d / det, b / det], [c / det, a / det]]
+                return [sum([p * q for p, q in zip(row, code)]) for row in inverse]
+
+            print([3.0, 4.0])
+          - |
+            def decode(A, code):
+                a, b = A[0]
+                c, d = A[1]
+                inverse = [[d, -b], [-c, a]]
+                return [sum([p * q for p, q in zip(row, code)]) for row in inverse]
+
+            print([3.0, 4.0])
+        explanation: |
+          The starter built the inverse with $-c$ in the top right and $-b$ in the bottom left: the two off-diagonal entries had been exchanged as well as negated. In the formula only the **diagonal** entries change places. The other two stay where they are and change sign. What the starter computed was the transpose of the inverse, which happens to be the inverse whenever the matrix is symmetric. That is why the good scrambler of the puzzle, with rows $(2, 1)$ and $(1, 1)$, would never have exposed the fault, and a matrix with different off-diagonal entries does at once. A dependable habit: after writing an inverse, multiply it by the original and look for the identity.
+        hints:
+          - Write the formula for the inverse of a 2 by 2 matrix beside the code.
+          - Which two entries are supposed to change places?
+          - In the top right belongs −b, and in the bottom left −c.
+    - question:
+        id: work-nearly
+        type: numeric
+        system: s2
+        prompt: |
+          $A$ has rows $(1, 1)$ and $(1, 1.01)$. What is the entry of $A^{-1}$ in row 1, column 1?
+        answer: "101"
+        explanation: |
+          $ad - bc = 1.01 - 1 = 0.01$. The top-left entry of the inverse is $d$ divided by that, $1.01 / 0.01$. The full inverse has rows $(101, -100)$ and $(-100, 100)$. The matrix has entries of about 1, and its inverse has entries of about 100, of opposite signs. Scramble the message $(1, 1)$ and you get $(2, 2.01)$. Change the second number to $2.02$, a difference of one part in two hundred, and the recovered message becomes $(0, 2)$. The columns of $A$ are nearly parallel, the plane is nearly crushed, and undoing a near-crush magnifies every small error.
+        hints:
+          - Compute ad − bc first.
+          - The top-left entry of the inverse is d divided by that.
+          - Dividing by a hundredth multiplies by a hundred.
+    - question:
+        id: work-order
+        type: choice
+        system: s2
+        prompt: |
+          A message is scrambled twice: first by $B$, then by $A$, so the result is $AB\mathbf{x}$. Both matrices are invertible. How is the message recovered?
+        options:
+          - "Apply $B^{-1}$ and then $A^{-1}$, which is the matrix $A^{-1}B^{-1}$."
+          - "Apply $A^{-1}$ and then $B^{-1}$, which is the matrix $B^{-1}A^{-1}$."
+          - "Apply $A^{-1}$ twice."
+          - "It cannot be recovered, since products of invertible matrices need not be invertible."
+        answer: 1
+        explanation: |
+          The last scrambler applied was $A$, so it is the first to be undone: $A^{-1}(AB\mathbf{x}) = B\mathbf{x}$, and then $B^{-1}(B\mathbf{x}) = \mathbf{x}$. As a single matrix, "first $A^{-1}$, then $B^{-1}$" is written $B^{-1}A^{-1}$, with the first to act on the right. In the other order, $B^{-1}$ would be applied to something scrambled by $A$ on the outside, and since matrices do not commute it would not meet the $B$ it was meant to cancel. A product of invertible matrices is always invertible, and this formula is its inverse.
+        hints:
+          - Which scrambler acted last?
+          - The last one on is the first one off.
+          - In a product, the matrix that acts first is written on the right.
+    - question:
+        id: work-wide
+        type: choice
+        system: s2
+        prompt: |
+          A layer multiplies by a matrix $W$ of shape $2 \times 3$: three numbers in, two out. Can its input always be recovered from its output?
+        options:
+          - "Yes, by $W^{\\mathsf{T}}$, which is $3 \\times 2$."
+          - "No. The three columns of $W$ are vectors in the plane, and more than two vectors in the plane are always dependent, so $W\\mathbf{c} = \\mathbf{0}$ for some $\\mathbf{c} \\ne \\mathbf{0}$ and different inputs collide."
+          - "Yes, whenever no entry of $W$ is 0."
+          - "No, because only symmetric matrices have inverses."
+        answer: 1
+        explanation: |
+          Each column of $W$ has two components. You know that any list of more than $n$ vectors in $\mathbb{R}^n$ is dependent, so the three columns satisfy $c_1\mathbf{w}_1 + c_2\mathbf{w}_2 + c_3\mathbf{w}_3 = \mathbf{0}$ with coefficients not all zero. That is $W\mathbf{c} = \mathbf{0}$, and then $\mathbf{x}$ and $\mathbf{x} + \mathbf{c}$ have the same output. A map from more dimensions to fewer must lose information, whatever its entries. The transpose has the right shape to go back, and carries blame back, but it does not recover the input. Layers that narrow, from many numbers to few, throw information away on purpose. Choosing what to throw away is much of what a model learns.
+        hints:
+          - In what space do the columns of W live?
+          - How many independent vectors can that space hold?
+          - What does a dependency among the columns say about W times some vector?
+    - question:
+        id: work-orthogonal
+        type: choice
+        system: s2
+        prompt: |
+          $Q$ has columns $(0.6, 0.8)$ and $(-0.8, 0.6)$. What is the quickest correct way to find $Q^{-1}$?
+        options:
+          - "Use the $2 \\times 2$ formula. Nothing quicker is possible."
+          - "Take the transpose. The columns are perpendicular unit vectors, so $Q^{\\mathsf{T}}Q = I$, and the inverse has rows $(0.6, 0.8)$ and $(-0.8, 0.6)$."
+          - "Take the reciprocal of every entry."
+          - "It has no inverse."
+        answer: 1
+        explanation: |
+          The entries of $Q^{\mathsf{T}}Q$ are the dot products between the columns of $Q$. Each column has squared length $0.36 + 0.64 = 1$, and their dot product is $-0.48 + 0.48 = 0$. So $Q^{\mathsf{T}}Q = I$, and for a square matrix that makes $Q^{\mathsf{T}}$ the inverse. Its rows are the columns of $Q$. The formula agrees, with $ad - bc = 0.36 + 0.64 = 1$, but nothing needed computing. Matrices with perpendicular unit columns are the best-behaved of all: they preserve lengths, they are inverted by transposing, and inverting them magnifies no errors. A good deal of numerical work consists of arranging to meet only such matrices.
+        hints:
+          - Compute the dot products between the columns.
+          - What does that say about the transpose of Q times Q?
+          - For a square matrix, one product equal to the identity is enough.
+  connections:
+    - text: |
+        Two scramblers were offered. One could be unscrambled, by a matrix found from a short formula. The other could not be unscrambled by anything, because it sent two different messages to the same place. The difference was visible in the columns: independent for the first, parallel for the second, so that some non-zero vector was sent to zero and could be added to any message unnoticed.
+
+        The identity matrix does nothing, and the inverse of $A$ is the matrix whose product with $A$ is the identity. There is at most one. For a $2 \times 2$ matrix it exists exactly when $ad - bc \ne 0$, the old test for two independent vectors in the plane from [[m4.linear-independence]]. The inverse of a product reverses the order, as the transpose of a product did in [[m5.transpose]], and for matrices whose columns are perpendicular unit vectors the inverse **is** the transpose.
+
+        Three things were left as promises. That a square matrix with independent columns always has an inverse, in every size. That for square matrices $BA = I$ forces $AB = I$. And that a number like $ad - bc$ exists for larger matrices too. The third is [[m5.determinant]]. The first two wait on a way of counting the independent directions a matrix has, in [[m5.rank]]. And once you can invert, you can translate between descriptions of the same vector in different coordinates, in [[m5.change-of-basis]].
+
+        All three depend on one missing tool. For two equations in two unknowns you solved by hand, multiplying one equation and subtracting it from the other, as you have since simultaneous equations first appeared. For three unknowns the same moves work, if you are organised. For a hundred they must be a procedure: an algorithm with a fixed order of steps, a cost you can state, and a clear report when no solution exists or when there are too many. That procedure solves $A\mathbf{x} = \mathbf{b}$ without ever forming $A^{-1}$, finds $A^{-1}$ when it is wanted, and exposes every dependency among the columns. It is the oldest algorithm in the subject and still the one that runs. That is the next lesson, [[m5.elimination-and-linear-systems]].
