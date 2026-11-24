@@ -2030,6 +2030,841 @@ function Hyperplane(props: Props) {
   );
 }
 
+/* Figures for data structures and algorithms share three small parts: a row of cells, a node and a link. */
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** A row of boxed values, drawn as the cells of an array. */
+function Cells({
+  values,
+  x = 12,
+  y,
+  w = 44,
+  h = 34,
+  hot = [],
+  faint = [],
+  under,
+}: {
+  values: (string | number)[];
+  x?: number;
+  y: number;
+  w?: number;
+  h?: number;
+  hot?: number[];
+  faint?: number[];
+  under?: (i: number) => string;
+}) {
+  return (
+    <>
+      {values.map((value, i) => {
+        const on = hot.includes(i);
+        const middle = x + i * w + (w - 4) / 2;
+        return (
+          <g key={i}>
+            <rect x={x + i * w} y={y} width={w - 4} height={h} className={on ? "fig-accent" : faint.includes(i) ? "fig-ghost" : "fig-fill"} />
+            <text x={middle} y={y + h / 2 + 6} textAnchor="middle" className="fig-mono" style={on ? { fill: "var(--bg)" } : undefined}>
+              {value}
+            </text>
+            {under ? (
+              <text x={middle} y={y + h + 14} textAnchor="middle" className="fig-small">
+                {under(i)}
+              </text>
+            ) : null}
+          </g>
+        );
+      })}
+    </>
+  );
+}
+
+type Spot = [number, number];
+type Mark = "now" | "done" | "wait";
+
+/** A named node of a graph or a tree. A wide node is a box, for names longer than a letter. */
+function Dot({ at, name, mark, wide = false, note, above = false }: { at: Spot; name: string | number; mark: Mark; wide?: boolean; note?: string; above?: boolean }) {
+  const style = mark === "now" ? "fig-accent" : mark === "done" ? "fig-fill" : "fig-ghost";
+  return (
+    <g>
+      {wide ? <rect x={at[0] - 32} y={at[1] - 14} width="64" height="28" className={style} /> : <circle cx={at[0]} cy={at[1]} r="16" className={style} />}
+      <text x={at[0]} y={at[1] + 4} textAnchor="middle" className="fig-small" style={{ fill: mark === "now" ? "var(--bg)" : "var(--text)" }}>
+        {name}
+      </text>
+      {note ? (
+        <text x={at[0]} y={at[1] + (above ? -22 : 32)} textAnchor="middle" className="fig-small">
+          {note}
+        </text>
+      ) : null}
+    </g>
+  );
+}
+
+/** A line between two nodes, stopping short of each, with an optional arrowhead and label. */
+function Link({ from, to, arrow = false, hot = false, faint = false, gap = 18, label }: { from: Spot; to: Spot; arrow?: boolean; hot?: boolean; faint?: boolean; gap?: number; label?: string | number }) {
+  const length = Math.hypot(to[0] - from[0], to[1] - from[1]) || 1;
+  const [ux, uy] = [(to[0] - from[0]) / length, (to[1] - from[1]) / length];
+  const [x0, y0, x1, y1] = [from[0] + gap * ux, from[1] + gap * uy, to[0] - gap * ux, to[1] - gap * uy];
+  const stroke = hot ? "fig-accent-line" : faint ? "fig-guide" : "fig-axis";
+  const head = `${(x1 - 8 * ux + 4 * uy).toFixed(1)},${(y1 - 8 * uy - 4 * ux).toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)} ${(x1 - 8 * ux - 4 * uy).toFixed(1)},${(y1 - 8 * uy + 4 * ux).toFixed(1)}`;
+  return (
+    <>
+      <line x1={x0} y1={y0} x2={x1} y2={y1} className={stroke} />
+      {arrow ? <polyline points={head} className={stroke} fill="none" /> : null}
+      {label === undefined ? null : (
+        <text x={(x0 + x1) / 2 + 9 * uy} y={(y0 + y1) / 2 - 9 * ux + 4} textAnchor="middle" className="fig-small">
+          {label}
+        </text>
+      )}
+    </>
+  );
+}
+
+const SHELF = [3, 8, 1, 9, 4, 7];
+
+/** The same insertion into an array, where later items must move, and into a linked list, where links must be followed. */
+function ArrayList(props: Props) {
+  const n = SHELF.length;
+  const [at, setAt] = useState(clamp(Math.round(num(props.index, 2)), 0, n));
+  const moved = n - at;
+  const after = [...SHELF.slice(0, at), 5, ...SHELF.slice(at)];
+  const before = Array.from({ length: at }, (_, i) => i);
+  const later = Array.from({ length: moved }, (_, i) => at + 1 + i);
+  const step = 60;
+  const spot = (i: number): Spot => [34 + i * step, 196];
+  return (
+    <Frame
+      title="Inserting into an array and into a linked list"
+      summary={`Inserting 5 at index ${at} of a list of ${n} items. Array: ${
+        moved === 0 ? "the new item goes after the last one, so nothing has to move" : `the ${plural(moved, "item")} from index ${at} onwards each move one place to the right, ${plural(moved, "move")}`
+      }. Linked list: ${at === 0 ? "the place is at the head, so no links are followed" : `${plural(at, "link is", "links are")} followed from the head to reach the place`}, then 2 links are changed and no item moves.`}
+      controls={<Stepper label="index" value={at} onChange={setAt} min={0} max={n} />}
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`The value 5 inserted at index ${at} of an array and of a linked list`}>
+        <text x="12" y="22" className="fig-small">
+          array: the filled cells had to move
+        </text>
+        <Cells values={after} y={34} w={60} hot={[at]} faint={before} under={(i) => String(i)} />
+        <text x="12" y="156" className="fig-small">
+          linked list: the filled nodes were walked past
+        </text>
+        {after.map((value, i) => (
+          <g key={i}>
+            {i < after.length - 1 ? <Link from={spot(i)} to={spot(i + 1)} arrow hot={i === at - 1 || i === at} /> : null}
+            <Dot at={spot(i)} name={value} mark={i === at ? "now" : later.includes(i) ? "wait" : "done"} />
+          </g>
+        ))}
+      </svg>
+    </Frame>
+  );
+}
+
+const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
+
+/** One line of items with two rules for who leaves next: the last one in, or the first one in. */
+function StackQueue(props: Props) {
+  const [queue, setQueue] = useState(props.mode === "queue");
+  const start = clamp(Math.round(num(props.items, 3)), 0, 6);
+  const [state, setState] = useState({ items: LETTERS.slice(0, start), next: start, out: [] as string[] });
+  const { items, next, out } = state;
+  const leaving = items.length === 0 ? -1 : queue ? 0 : items.length - 1;
+  const kind = queue ? "queue" : "stack";
+  return (
+    <Frame
+      title="Last in or first in"
+      summary={`A ${kind} holding ${items.length === 0 ? "nothing" : items.join(", ")}${items.length > 1 ? ", in the order they were added" : ""}. ${
+        leaving < 0 ? "There is nothing to remove." : `The next to leave is ${items[leaving]}, the ${queue ? "first" : "last"} one in.`
+      }${out.length > 0 ? ` Removed so far, in order: ${out.join(", ")}.` : ""}`}
+      controls={
+        <>
+          <button type="button" className="btn btn-secondary btn-small" disabled={items.length >= 6 || next >= LETTERS.length} onClick={() => setState({ items: [...items, LETTERS[next]], next: next + 1, out })}>
+            Add an item
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary btn-small"
+            disabled={leaving < 0}
+            onClick={() => setState({ items: queue ? items.slice(1) : items.slice(0, -1), next, out: [...out, items[leaving]] })}
+          >
+            Remove an item
+          </button>
+          <button type="button" className="btn btn-secondary btn-small" onClick={() => setQueue(!queue)}>
+            {queue ? "Switch to stack" : "Switch to queue"}
+          </button>
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 200" role="img" aria-label={`A ${kind} holding ${items.length === 0 ? "nothing" : items.join(", ")}`}>
+        <text x="12" y="40" className="fig-small">
+          {queue ? "queue: leaves from the front, joins at the back" : "stack: joins and leaves at the same end"}
+        </text>
+        <line x1="12" x2="428" y1="148" y2="148" className="fig-axis" />
+        <Cells values={items} x={40} y={78} w={60} h={44} hot={leaving < 0 ? [] : [leaving]} under={(i) => (i === leaving ? "leaves next" : "")} />
+        {out.length > 0 ? (
+          <text x="12" y="180" className="fig-small">
+            removed: {out.join(" ")}
+          </text>
+        ) : null}
+      </svg>
+    </Frame>
+  );
+}
+
+const KEYS = [12, 25, 7, 33, 18, 41, 4, 26];
+
+/** Keys dropped into numbered buckets by their remainder, with the chains that form when two keys share a bucket. */
+function HashTable(props: Props) {
+  const [m, setM] = useState(clamp(Math.round(num(props.buckets, 5)), 2, 11));
+  const [count, setCount] = useState(clamp(Math.round(num(props.keys, 8)), 1, KEYS.length));
+  const keys = KEYS.slice(0, count);
+  const buckets = Array.from({ length: m }, (_, b) => keys.filter((key) => key % m === b));
+  const longest = Math.max(...buckets.map((bucket) => bucket.length));
+  const worst = buckets.findIndex((bucket) => bucket.length === longest);
+  const empty = buckets.filter((bucket) => bucket.length === 0).length;
+  const row = 23;
+  return (
+    <Frame
+      title="Keys in buckets"
+      summary={`${plural(count, "key")} in ${m} buckets, each placed in bucket number key mod ${m}. The load factor is ${count} ÷ ${m} = ${dp(count / m, 2)}. The fullest bucket is number ${worst}, holding ${buckets[worst].join(", ")}, so a lookup compares at most ${plural(longest, "key")}. ${plural(empty, "bucket is", "buckets are")} empty.`}
+      controls={
+        <>
+          <Slider label="number of buckets" value={m} onChange={setM} min={2} max={11} />
+          <Stepper label="keys" value={count} onChange={setCount} min={1} max={KEYS.length} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`${count} keys spread over ${m} buckets, the fullest holding ${longest}`}>
+        {buckets.map((bucket, b) => (
+          <g key={b}>
+            <text x="30" y={24 + b * row} textAnchor="end" className="fig-small">
+              {b}
+            </text>
+            <rect x="40" y={10 + b * row} width="20" height={row - 4} className="fig-ghost" />
+            {bucket.map((key, i) => (
+              <g key={key}>
+                <line x1={60 + i * 56} x2={76 + i * 56} y1={20 + b * row} y2={20 + b * row} className="fig-axis" />
+                <rect x={76 + i * 56} y={10 + b * row} width="40" height={row - 4} className={b === worst ? "fig-accent" : "fig-fill"} />
+                <text x={96 + i * 56} y={24 + b * row} textAnchor="middle" className="fig-small" style={{ fill: b === worst ? "var(--bg)" : "var(--text)" }}>
+                  {key}
+                </text>
+              </g>
+            ))}
+          </g>
+        ))}
+      </svg>
+    </Frame>
+  );
+}
+
+const HEAP_START = [2, 5, 3, 9, 6, 8];
+const HEAP_NEXT = [1, 7, 4, 10];
+
+/** A binary min-heap drawn as a tree and as the list that stores it, with insertion and removal of the smallest. */
+function Heap() {
+  const [state, setState] = useState({ items: HEAP_START, fed: 0, note: "Every parent is no larger than its children." });
+  const { items, fed, note } = state;
+  const insert = () => {
+    const next = [...items, HEAP_NEXT[fed]];
+    let i = next.length - 1;
+    let swaps = 0;
+    while (i > 0 && next[Math.floor((i - 1) / 2)] > next[i]) {
+      const parent = Math.floor((i - 1) / 2);
+      [next[parent], next[i]] = [next[i], next[parent]];
+      i = parent;
+      swaps += 1;
+    }
+    setState({
+      items: next,
+      fed: fed + 1,
+      note: `Inserted ${HEAP_NEXT[fed]} at the end and swapped it with its parent ${plural(swaps, "time")}, ${i === 0 && swaps > 0 ? "which took it to the top" : "until its parent was no larger"}.`,
+    });
+  };
+  const remove = () => {
+    const smallest = items[0];
+    const last = items[items.length - 1];
+    const next = items.slice(0, -1);
+    let swaps = 0;
+    if (next.length > 0) {
+      next[0] = last;
+      let i = 0;
+      for (;;) {
+        const [left, right] = [2 * i + 1, 2 * i + 2];
+        let least = i;
+        if (left < next.length && next[left] < next[least]) least = left;
+        if (right < next.length && next[right] < next[least]) least = right;
+        if (least === i) break;
+        [next[least], next[i]] = [next[i], next[least]];
+        i = least;
+        swaps += 1;
+      }
+    }
+    setState({
+      items: next,
+      fed,
+      note: next.length === 0 ? `Removed the smallest, ${smallest}. The heap is empty.` : `Removed the smallest, ${smallest}. The last item, ${last}, took its place at the top and was swapped with its smaller child ${plural(swaps, "time")}.`,
+    });
+  };
+  const spot = (i: number): Spot => {
+    const level = Math.floor(Math.log2(i + 1));
+    const across = i + 1 - 2 ** level;
+    return [(across + 0.5) * (440 / 2 ** level), 26 + level * 50];
+  };
+  return (
+    <Frame
+      title="A heap as a tree and as a list"
+      summary={`The heap as a list: [${items.join(", ")}]. ${items.length > 0 ? `The smallest item, ${items[0]}, is at index 0. ` : ""}The item at index i has its children at indices 2i + 1 and 2i + 2. ${note}`}
+      controls={
+        <>
+          <button type="button" className="btn btn-secondary btn-small" disabled={fed >= HEAP_NEXT.length} onClick={insert}>
+            Insert an item
+          </button>
+          <button type="button" className="btn btn-secondary btn-small" disabled={items.length === 0} onClick={remove}>
+            Remove the smallest
+          </button>
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`A heap of ${plural(items.length, "item")} with ${items.length > 0 ? items[0] : "nothing"} at the top`}>
+        {items.map((value, i) => (
+          <g key={i}>
+            {i > 0 ? <Link from={spot(Math.floor((i - 1) / 2))} to={spot(i)} /> : null}
+            <Dot at={spot(i)} name={value} mark={i === 0 ? "now" : "done"} />
+          </g>
+        ))}
+        <Cells values={items} x={12} y={226} w={42} h={28} hot={items.length > 0 ? [0] : []} under={(i) => String(i)} />
+      </svg>
+    </Frame>
+  );
+}
+
+const WALK_NODES: Record<string, Spot> = { A: [60, 130], B: [160, 56], C: [160, 204], D: [270, 30], E: [270, 112], F: [290, 204], G: [394, 204] };
+const WALK_EDGES = ["AB", "AC", "BD", "BE", "CF", "EF", "FG"];
+const nextTo = (node: string) =>
+  WALK_EDGES.filter((edge) => edge.includes(node))
+    .map((edge) => edge.replace(node, ""))
+    .sort();
+
+type WalkStep = { order: string[]; waiting: string[] };
+function walkSteps(depth: boolean): WalkStep[] {
+  const steps: WalkStep[] = [{ order: [], waiting: depth ? [] : ["A"] }];
+  const order: string[] = [];
+  if (depth) {
+    const visit = (node: string, path: string[]) => {
+      order.push(node);
+      steps.push({ order: [...order], waiting: [...path, node] });
+      for (const other of nextTo(node)) if (!order.includes(other)) visit(other, [...path, node]);
+    };
+    visit("A", []);
+  } else {
+    const queue = ["A"];
+    const seen = new Set(["A"]);
+    while (queue.length > 0) {
+      const node = queue.shift()!;
+      order.push(node);
+      for (const other of nextTo(node)) {
+        if (!seen.has(other)) {
+          seen.add(other);
+          queue.push(other);
+        }
+      }
+      steps.push({ order: [...order], waiting: [...queue] });
+    }
+  }
+  return steps;
+}
+
+/** One small graph explored two ways: nearest first with a queue, or as deep as possible with a stack. */
+function GraphWalk(props: Props) {
+  const [depth, setDepth] = useState(props.mode === "depth");
+  const steps = walkSteps(depth);
+  const [step, setStep] = useState(clamp(Math.round(num(props.step, 0)), 0, steps.length - 1));
+  const { order, waiting } = steps[step];
+  const current = order[order.length - 1];
+  const all = step === steps.length - 1;
+  return (
+    <Frame
+      title="Two ways to explore a graph"
+      summary={
+        depth
+          ? `Depth-first search from A, after ${plural(step, "step")}. Visited in order: ${order.join(", ") || "nothing yet"}. ${
+              step === 0 ? "The stack is empty." : `The path back to the start, held on the stack: ${waiting.join(", ")}.`
+            }${all ? " Every node has been visited, going as deep as possible before turning back." : ""}`
+          : `Breadth-first search from A, after ${plural(step, "step")}. Visited in order: ${order.join(", ") || "nothing yet"}. Waiting in the queue: ${waiting.join(", ") || "nothing"}.${
+              all ? " Every node has been visited, nearest first." : ""
+            }`
+      }
+      controls={
+        <>
+          <Stepper label="step" value={step} onChange={setStep} min={0} max={steps.length - 1} />
+          <button
+            type="button"
+            className="btn btn-secondary btn-small"
+            onClick={() => {
+              setDepth(!depth);
+              setStep(0);
+            }}
+          >
+            {depth ? "Switch to breadth-first" : "Switch to depth-first"}
+          </button>
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 240" role="img" aria-label={`A graph of seven nodes with ${order.length} visited`}>
+        {WALK_EDGES.map((edge) => (
+          <Link key={edge} from={WALK_NODES[edge[0]]} to={WALK_NODES[edge[1]]} />
+        ))}
+        {Object.entries(WALK_NODES).map(([name, at]) => (
+          <Dot key={name} at={at} name={name} mark={name === current ? "now" : order.includes(name) ? "done" : "wait"} note={order.includes(name) ? String(order.indexOf(name) + 1) : undefined} />
+        ))}
+      </svg>
+    </Frame>
+  );
+}
+
+const UNSORTED = [5, 2, 8, 1, 9, 3, 7, 4];
+type SortStep = { items: number[]; comparisons: number };
+function insertionSteps(): SortStep[] {
+  const items = [...UNSORTED];
+  let comparisons = 0;
+  const steps: SortStep[] = [{ items: [...items], comparisons }];
+  for (let pass = 1; pass < items.length; pass++) {
+    const key = items[pass];
+    let j = pass;
+    while (j > 0) {
+      comparisons += 1;
+      if (items[j - 1] <= key) break;
+      items[j] = items[j - 1];
+      j -= 1;
+    }
+    items[j] = key;
+    steps.push({ items: [...items], comparisons });
+  }
+  return steps;
+}
+function mergeSteps(): SortStep[] {
+  let items = [...UNSORTED];
+  let comparisons = 0;
+  const steps: SortStep[] = [{ items: [...items], comparisons }];
+  for (let width = 1; width < items.length; width *= 2) {
+    const merged: number[] = [];
+    for (let start = 0; start < items.length; start += 2 * width) {
+      const left = items.slice(start, start + width);
+      const right = items.slice(start + width, start + 2 * width);
+      while (left.length > 0 && right.length > 0) {
+        comparisons += 1;
+        merged.push(left[0] <= right[0] ? left.shift()! : right.shift()!);
+      }
+      merged.push(...left, ...right);
+    }
+    items = merged;
+    steps.push({ items: [...items], comparisons });
+  }
+  return steps;
+}
+
+/** The same eight numbers sorted by insertion, one item at a time, and by merging, one doubling at a time. */
+function SortSteps(props: Props) {
+  const [merge, setMerge] = useState(props.method === "merge");
+  const steps = merge ? mergeSteps() : insertionSteps();
+  const [step, setStep] = useState(clamp(Math.round(num(props.step, 0)), 0, steps.length - 1));
+  const { items, comparisons } = steps[step];
+  const last = step === steps.length - 1;
+  const run = 2 ** step;
+  const runs = Array.from({ length: Math.ceil(items.length / run) }, (_, i) => items.slice(i * run, (i + 1) * run));
+  const w = 52;
+  return (
+    <Frame
+      title="Sorting step by step"
+      summary={
+        merge
+          ? `Merge sort, after ${plural(step, "round")} of merging. The list is made of sorted runs of length ${run}: ${runs.map((part) => `[${part.join(", ")}]`).join(" ")}. ${
+              last ? "The list is sorted." : "Next, neighbouring runs are merged in pairs."
+            } Comparisons so far: ${comparisons}.`
+          : `Insertion sort, after ${plural(step, "pass", "passes")}. The first ${plural(step + 1, "item is", "items are")} in order: ${items.slice(0, step + 1).join(", ")}. ${
+              last ? "The list is sorted." : `Next, ${items[step + 1]} is moved left past every larger item.`
+            } Comparisons so far: ${comparisons}.`
+      }
+      controls={
+        <>
+          <Stepper label="step" value={step} onChange={setStep} min={0} max={steps.length - 1} />
+          <button
+            type="button"
+            className="btn btn-secondary btn-small"
+            onClick={() => {
+              setMerge(!merge);
+              setStep(0);
+            }}
+          >
+            {merge ? "Switch to insertion sort" : "Switch to merge sort"}
+          </button>
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 150" role="img" aria-label={`${merge ? "Merge" : "Insertion"} sort of eight numbers at step ${step}: ${items.join(", ")}`}>
+        <Cells
+          values={items}
+          y={40}
+          w={w}
+          h={44}
+          hot={merge || last ? [] : [step + 1]}
+          faint={merge ? [] : items.map((_, i) => i).filter((i) => i > step + 1)}
+        />
+        {(merge ? runs : [items.slice(0, step + 1)]).map((part, i) => (
+          <line key={i} x1={12 + i * run * w} x2={12 + (i * run + part.length) * w - 4} y1={98} y2={98} className="fig-accent-line" />
+        ))}
+        <text x="12" y="124" className="fig-small">
+          the marked stretches are already in order
+        </text>
+      </svg>
+    </Frame>
+  );
+}
+
+const SORTED = [2, 5, 8, 12, 16, 23, 38, 42, 56, 61, 72, 80, 91, 95, 99];
+type Halving = { low: number; high: number; middle: number; left: number };
+function halvings(target: number): Halving[] {
+  const steps: Halving[] = [];
+  let [low, high] = [0, SORTED.length - 1];
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    const step = { low, high, middle, left: 0 };
+    if (SORTED[middle] === target) {
+      steps.push(step);
+      break;
+    }
+    if (target < SORTED[middle]) high = middle - 1;
+    else low = middle + 1;
+    step.left = high - low + 1;
+    steps.push(step);
+  }
+  return steps;
+}
+
+/** Binary search on fifteen sorted numbers: each comparison with the middle rules out half of what remains. */
+function BinarySearch(props: Props) {
+  const [pick, setPick] = useState(clamp(Math.round(num(props.target, 5)), 0, SORTED.length - 1));
+  const [missing, setMissing] = useState(props.missing === true);
+  const target = missing ? 50 : SORTED[pick];
+  const steps = halvings(target);
+  const [at, setAt] = useState(0);
+  const step = Math.min(at, steps.length);
+  const now = step === 0 ? null : steps[step - 1];
+  const value = now ? SORTED[now.middle] : 0;
+  const [low, high] = !now ? [0, SORTED.length - 1] : value === target ? [now.middle, now.middle] : target < value ? [now.low, now.middle - 1] : [now.middle + 1, now.high];
+  let summary = `Looking for ${target} among ${SORTED.length} sorted items. `;
+  if (!now) summary += `Nothing has been compared yet, and all ${SORTED.length} positions are possible.`;
+  else if (value === target) summary += `Step ${step}: the middle of positions ${now.low} to ${now.high} is position ${now.middle}, holding ${value}. That is the target, found after ${plural(step, "comparison")}.`;
+  else {
+    summary += `Step ${step}: the middle of positions ${now.low} to ${now.high} is position ${now.middle}, holding ${value}. ${target} is ${target < value ? "smaller" : "larger"}, so positions ${
+      target < value ? `${now.middle} to ${now.high}` : `${now.low} to ${now.middle}`
+    } are ruled out. ${now.left === 0 ? `No positions remain, so ${target} is not in the list.` : `${plural(now.left, "position remains", "positions remain")}.`}`;
+  }
+  return (
+    <Frame
+      title="Halving the search"
+      summary={summary}
+      controls={
+        <>
+          <Stepper label="step" value={step} onChange={setAt} min={0} max={steps.length} />
+          <Slider
+            label="position of the target"
+            value={pick}
+            onChange={(v) => {
+              setPick(v);
+              setMissing(false);
+              setAt(0);
+            }}
+            min={0}
+            max={SORTED.length - 1}
+          />
+          <button
+            type="button"
+            className="btn btn-secondary btn-small"
+            onClick={() => {
+              setMissing(!missing);
+              setAt(0);
+            }}
+          >
+            {missing ? "Look for an item in the list" : "Look for 50, which is missing"}
+          </button>
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 130" role="img" aria-label={`Fifteen sorted numbers with positions ${low} to ${high} still possible for ${target}`}>
+        <Cells
+          values={SORTED}
+          x={10}
+          y={36}
+          w={28}
+          h={36}
+          hot={now ? [now.middle] : []}
+          faint={SORTED.map((_, i) => i).filter((i) => (i < low || i > high) && i !== now?.middle)}
+          under={(i) => String(i)}
+        />
+        <text x="10" y="112" className="fig-small">
+          outlined cells are ruled out
+        </text>
+      </svg>
+    </Frame>
+  );
+}
+
+/** A table filled cell by cell, each cell from the two already known beside it: the number of routes across a grid. */
+function DpGrid(props: Props) {
+  const rows = clamp(Math.round(num(props.rows, 4)), 2, 4);
+  const cols = clamp(Math.round(num(props.cols, 5)), 2, 6);
+  const total = rows * cols;
+  const [filled, setFilled] = useState(clamp(Math.round(num(props.filled, 0)), 0, total));
+  const routes: number[][] = [];
+  for (let r = 0; r < rows; r++) {
+    routes.push([]);
+    for (let c = 0; c < cols; c++) routes[r].push(r === 0 || c === 0 ? 1 : routes[r - 1][c] + routes[r][c - 1]);
+  }
+  const [r, c] = [Math.floor((filled - 1) / cols), (filled - 1) % cols];
+  let summary = `A grid of ${rows} rows and ${cols} columns. Each cell holds the number of routes to it from the top-left corner, moving only right or down. `;
+  if (filled === 0) summary += "Nothing is filled in yet.";
+  else {
+    summary += `Filled ${filled} of ${total} cells. The cell in row ${r + 1}, column ${c + 1} `;
+    if (r === 0 && c === 0) summary += "is the starting corner, with 1 route, which is to stay put.";
+    else if (r === 0 || c === 0) summary += `is on the ${r === 0 ? "top" : "left"} edge, so there is only 1 route to it.`;
+    else summary += `can be entered from above, ${plural(routes[r - 1][c], "route")}, or from the left, ${plural(routes[r][c - 1], "route")}, so it has ${routes[r - 1][c]} + ${routes[r][c - 1]} = ${routes[r][c]}.`;
+    if (filled === total) summary += ` The far corner has ${routes[rows - 1][cols - 1]} routes.`;
+  }
+  const [w, h] = [64, 52];
+  return (
+    <Frame title="Filling a table of routes" summary={summary} controls={<Stepper label="cells filled" value={filled} onChange={setFilled} min={0} max={total} />}>
+      <svg viewBox={`0 0 440 ${rows * h + 30}`} role="img" aria-label={`A ${rows} by ${cols} table of route counts with ${filled} cells filled`}>
+        {routes.map((line, i) =>
+          line.map((value, j) => {
+            const index = i * cols + j;
+            const on = index === filled - 1;
+            const from = filled > 0 && r > 0 && c > 0 && ((i === r - 1 && j === c) || (i === r && j === c - 1));
+            return (
+              <g key={index}>
+                <rect x={24 + j * w} y={14 + i * h} width={w - 4} height={h - 4} className={on ? "fig-accent" : index < filled ? (from ? "fig-fill" : "fig-cell") : "fig-ghost"} />
+                {index < filled ? (
+                  <text x={24 + j * w + (w - 4) / 2} y={14 + i * h + h / 2 + 4} textAnchor="middle" className="fig-mono" style={on ? { fill: "var(--bg)" } : undefined}>
+                    {value}
+                  </text>
+                ) : null}
+              </g>
+            );
+          }),
+        )}
+      </svg>
+    </Frame>
+  );
+}
+
+/** Appending to a list that doubles its room when full: most appends cost one write, a few cost a whole copy. */
+function DoublingArray(props: Props) {
+  const most = 17;
+  const [n, setN] = useState(clamp(Math.round(num(props.appends, 9)), 1, most));
+  const grew = (i: number) => i > 1 && Number.isInteger(Math.log2(i - 1)); // the i-th append finds the block full
+  const resizes = Array.from({ length: n }, (_, i) => i + 1)
+    .filter(grew)
+    .map((i) => i - 1);
+  const copies = resizes.reduce((sum, size) => sum + size, 0);
+  const room = 2 ** Math.ceil(Math.log2(n));
+  return (
+    <Frame
+      title="The cost of each append"
+      summary={`After ${plural(n, "append")} the list has room for ${room}. ${
+        resizes.length === 0
+          ? "It has not needed to grow yet."
+          : `It ran out of room ${plural(resizes.length, "time")}, and copied ${resizes.length > 1 ? `${resizes.join(" + ")} = ` : ""}${plural(copies, "item")} in all while moving to blocks twice the size.`
+      } Total work: ${plural(n, "write")} + ${plural(copies, "copy", "copies")} = ${n + copies}, which is ${dp((n + copies) / n, 2)} per append.`}
+      controls={<Stepper label="appends" value={n} onChange={setN} min={1} max={most} />}
+    >
+      <svg viewBox="0 0 440 260" role="img" aria-label={`The cost of each of ${n} appends to a list that doubles when full`}>
+        <line x1="20" x2="430" y1="232" y2="232" className="fig-axis" />
+        {Array.from({ length: most }, (_, k) => {
+          const i = k + 1;
+          const cost = grew(i) ? i : 1;
+          return (
+            <g key={i}>
+              <rect x={24 + k * 24} y={232 - cost * 12} width="18" height={cost * 12} className={i > n ? "fig-ghost" : grew(i) ? "fig-accent" : "fig-fill"} />
+              <text x={33 + k * 24} y="248" textAnchor="middle" className="fig-small">
+                {i}
+              </text>
+            </g>
+          );
+        })}
+        <text x="24" y="20" className="fig-small">
+          height: work done by that append
+        </text>
+      </svg>
+    </Frame>
+  );
+}
+
+const TASKS: Record<string, Spot> = { data: [56, 60], clean: [168, 60], split: [280, 60], model: [168, 190], train: [280, 190], test: [388, 125] };
+const NEEDS: [string, string][] = [
+  ["data", "clean"],
+  ["clean", "split"],
+  ["split", "train"],
+  ["model", "train"],
+  ["train", "test"],
+  ["split", "test"],
+];
+const needsOf = (task: string) => NEEDS.filter(([, after]) => after === task).map(([before]) => before);
+
+/** Tasks with prerequisites, put in an order in which nothing comes before what it needs. */
+function TopoOrder(props: Props) {
+  const names = Object.keys(TASKS);
+  const [step, setStep] = useState(clamp(Math.round(num(props.step, 0)), 0, names.length));
+  const done: string[] = [];
+  const readyAfter = () =>
+    names
+      .filter((task) => !done.includes(task) && needsOf(task).every((need) => done.includes(need)))
+      .sort();
+  for (let i = 0; i < step; i++) done.push(readyAfter()[0]);
+  const ready = readyAfter();
+  const blocked = names.filter((task) => !done.includes(task) && !ready.includes(task));
+  return (
+    <Frame
+      title="An order that respects every arrow"
+      summary={`After ${plural(step, "step")}. Done, in order: ${done.join(", ") || "nothing yet"}. Ready now, with every prerequisite done: ${ready.join(", ") || "nothing"}. ${
+        blocked.length > 0
+          ? `Still blocked: ${blocked.map((task) => `${task} (needs ${needsOf(task).filter((need) => !done.includes(need)).join(" and ")})`).join(", ")}.`
+          : step === names.length
+            ? "Every task is done, and each came after everything it needs."
+            : "Nothing is blocked."
+      }`}
+      controls={<Stepper label="step" value={step} onChange={setStep} min={0} max={names.length} />}
+    >
+      <svg viewBox="0 0 440 240" role="img" aria-label={`Six tasks joined by arrows, with ${done.length} done and ${ready.length} ready`}>
+        {NEEDS.map(([before, after]) => (
+          <Link key={before + after} from={TASKS[before]} to={TASKS[after]} arrow gap={before === "split" && after === "train" ? 20 : 38} faint={done.includes(before)} />
+        ))}
+        {names.map((task) => (
+          <Dot key={task} at={TASKS[task]} name={task} wide mark={done.includes(task) ? "done" : ready.includes(task) ? "now" : "wait"} note={done.includes(task) ? String(done.indexOf(task) + 1) : undefined} />
+        ))}
+      </svg>
+    </Frame>
+  );
+}
+
+const TOWNS: Record<string, Spot> = { A: [44, 130], B: [150, 44], C: [150, 216], D: [272, 84], E: [296, 216], F: [400, 130] };
+const ROADS: [string, string, number][] = [
+  ["A", "B", 4],
+  ["A", "C", 1],
+  ["C", "B", 2],
+  ["B", "D", 5],
+  ["C", "D", 8],
+  ["C", "E", 10],
+  ["D", "E", 2],
+  ["D", "F", 6],
+  ["E", "F", 3],
+];
+
+/** Dijkstra's algorithm on six towns: settle the nearest unsettled town, then improve its neighbours. */
+function ShortestPath(props: Props) {
+  const names = Object.keys(TOWNS);
+  const [step, setStep] = useState(clamp(Math.round(num(props.step, 0)), 0, names.length));
+  const best: Record<string, number> = Object.fromEntries(names.map((name) => [name, name === "A" ? 0 : Infinity]));
+  const settled: string[] = [];
+  const nearest = () => names.filter((name) => !settled.includes(name)).sort((a, b) => (best[a] === best[b] ? 0 : best[a] < best[b] ? -1 : 1))[0];
+  for (let i = 0; i < step; i++) {
+    const town = nearest();
+    settled.push(town);
+    for (const [a, b, length] of ROADS) {
+      const other = a === town ? b : b === town ? a : null;
+      if (other && !settled.includes(other)) best[other] = Math.min(best[other], best[town] + length);
+    }
+  }
+  const rest = names.filter((name) => !settled.includes(name));
+  const next = rest.length > 0 ? nearest() : null;
+  const shown = (name: string) => (best[name] === Infinity ? "not reached" : String(best[name]));
+  return (
+    <Frame
+      title="Shortest distances from A"
+      summary={`After ${plural(step, "step")}. Settled, with their final distances from A: ${settled.map((name) => `${name} ${best[name]}`).join(", ") || "none yet"}. ${
+        next ? `Best found so far for the rest: ${rest.map((name) => `${name} ${shown(name)}`).join(", ")}. The nearest unsettled town is ${next}, so it is settled next.` : "Every town is settled."
+      }`}
+      controls={<Stepper label="step" value={step} onChange={setStep} min={0} max={names.length} />}
+    >
+      <svg viewBox="0 0 440 260" role="img" aria-label={`Six towns joined by roads with lengths, ${settled.length} of them settled`}>
+        {ROADS.map(([a, b, length]) => (
+          <Link key={a + b} from={TOWNS[a]} to={TOWNS[b]} label={length} hot={settled.includes(a) && settled.includes(b) && Math.abs(best[a] - best[b]) === length} />
+        ))}
+        {names.map((name) => (
+          <Dot key={name} at={TOWNS[name]} name={name} mark={settled.includes(name) ? "done" : name === next ? "now" : "wait"} note={best[name] === Infinity ? "∞" : String(best[name])} above={name === "B" || name === "D"} />
+        ))}
+      </svg>
+    </Frame>
+  );
+}
+
+const FIRST_WORDS: [string, number][] = [
+  ["the", 0.5],
+  ["a", 0.4],
+  ["one", 0.1],
+];
+const SECOND_WORDS: Record<string, [string, number][]> = {
+  the: [
+    ["cat", 0.4],
+    ["dog", 0.35],
+    ["end", 0.25],
+  ],
+  a: [
+    ["cat", 0.9],
+    ["dog", 0.06],
+    ["end", 0.04],
+  ],
+  one: [
+    ["cat", 0.5],
+    ["dog", 0.3],
+    ["end", 0.2],
+  ],
+};
+
+/** Beam search over two-word sentences: keep only the best few after each word, and see what that can miss. */
+function BeamSearch(props: Props) {
+  const [width, setWidth] = useState(clamp(Math.round(num(props.width, 1)), 1, 3));
+  const kept = FIRST_WORDS.slice(0, width).map(([word]) => word);
+  const all = FIRST_WORDS.flatMap(([first, p]) => SECOND_WORDS[first].map(([second, q]) => ({ first, second, p: p * q })));
+  const candidates = all.filter((sentence) => kept.includes(sentence.first)).sort((a, b) => b.p - a.p);
+  const finals = candidates.slice(0, width);
+  const best = [...all].sort((a, b) => b.p - a.p)[0];
+  const found = finals.some((sentence) => sentence.first === best.first && sentence.second === best.second);
+  const isFinal = (first: string, second: string) => finals.some((sentence) => sentence.first === first && sentence.second === second);
+  return (
+    <Frame
+      title="Keeping only the best few"
+      summary={`Beam width ${width}. After the first word the beam keeps ${FIRST_WORDS.slice(0, width)
+        .map(([word, p]) => `"${word}" (${dp(p, 3)})`)
+        .join(" and ")}. Each is extended by every second word, ${plural(candidates.length, "candidate")}, and the best ${width === 1 ? "one is" : `${width} are`} kept: ${finals
+        .map((sentence) => `"${sentence.first} ${sentence.second}" (${dp(sentence.p, 3)})`)
+        .join(", ")}. The most probable sentence of all is "${best.first} ${best.second}" at ${dp(best.p, 3)}, which this beam ${found ? "found" : `missed, because it dropped "${best.first}" after the first word`}.`}
+      controls={<Stepper label="beam width" value={width} onChange={setWidth} min={1} max={3} />}
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`A tree of two-word sentences searched with beam width ${width}`}>
+        {FIRST_WORDS.map(([first, p], i) => {
+          const at: Spot = [150, 50 + i * 90];
+          const on = kept.includes(first);
+          return (
+            <g key={first}>
+              <Link from={[44, 140]} to={at} gap={36} faint={!on} />
+              {SECOND_WORDS[first].map(([second, q], j) => {
+                const end: Spot = [330, 22 + i * 90 + j * 28];
+                const final = isFinal(first, second);
+                return (
+                  <g key={second}>
+                    <Link from={at} to={end} gap={36} faint={!on} hot={final} />
+                    <text x={end[0] - 26} y={end[1] + 4} className="fig-small" style={on ? { fill: final ? "var(--focus)" : "var(--text)" } : undefined}>
+                      {second} {dp(q, 3)} → {dp(p * q, 3)}
+                    </text>
+                  </g>
+                );
+              })}
+              <Dot at={at} name={`${first} ${dp(p, 3)}`} wide mark={on ? "now" : "wait"} />
+            </g>
+          );
+        })}
+        <Dot at={[44, 140]} name="start" wide mark="done" />
+      </svg>
+    </Frame>
+  );
+}
+
 const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "place-value": PlaceValue,
   "number-line": NumberLine,
@@ -2071,6 +2906,18 @@ const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "norm-balls": NormBalls,
   projection: Projection,
   hyperplane: Hyperplane,
+  "array-list": ArrayList,
+  "stack-queue": StackQueue,
+  "hash-table": HashTable,
+  heap: Heap,
+  "graph-walk": GraphWalk,
+  "sort-steps": SortSteps,
+  "binary-search": BinarySearch,
+  "dp-grid": DpGrid,
+  "doubling-array": DoublingArray,
+  "topo-order": TopoOrder,
+  "shortest-path": ShortestPath,
+  "beam-search": BeamSearch,
 };
 
 export function Figure({ name, props }: { name: string; props?: Props }) {
