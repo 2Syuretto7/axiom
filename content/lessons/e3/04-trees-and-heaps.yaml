@@ -1,0 +1,677 @@
+concept: e3.trees-and-heaps
+minutes: 90
+claim: You can describe a tree by its root, children, leaves and height, show that a full binary tree of n nodes is only about log n levels deep, store a complete tree in an array with no links, and build a heap that gives its smallest item and accepts a new one in logarithmic time, using it as a priority queue.
+recalls: [e3.hash-tables]
+uses: [e3.stacks-and-queues, e3.arrays-and-linked-lists, e1.recursion, e1.complexity-and-big-o, e1.classes-and-objects, e1.modules-and-imports, e0.lists-and-tuples, e0.loops, e0.functions, e0.expressions, m1.logarithms, m1.exponent-laws, m2.sequences-and-series, m3.induction-and-strong-induction]
+leads: [e3.graphs-and-traversal, e3.sorting, e3.binary-search, e3.shortest-paths-and-beam-search]
+starter: |
+  # Scratch space. Jobs arrive with a priority, and the smallest number is the most urgent.
+  # This keeps them in a plain list. How much work is each "take the most urgent"?
+  jobs = []
+  looks = 0
+
+  for priority in [5, 9, 7, 2, 10, 3, 8, 1]:
+      jobs.append(priority)
+
+  while len(jobs) > 0:
+      looks += len(jobs)
+      urgent = min(jobs)
+      jobs.remove(urgent)
+      print(urgent, end=" ")
+  print()
+  print("items looked at:", looks)
+parts:
+  recall:
+    - text: |
+        [[e3.hash-tables]] found any key in a step by scattering keys across an array, and paid for it by losing all sense of order: it cannot tell you its smallest key without looking everywhere. Today's structure keeps just enough order to answer that one question fast. Three quick pulls first.
+    - question:
+        id: recall-order
+        type: choice
+        system: s1
+        concepts: [e3.hash-tables]
+        prompt: |
+          A hash table holds $n$ keys. What does it cost to find the smallest key?
+        options: ["$O(1)$", "$O(\\log n)$", "$O(n)$", "It cannot be done"]
+        answer: 2
+        explanation: Hashing scatters keys with no regard to order, so every bucket must be examined.
+        hints:
+          - Does a key's bucket say anything about its size?
+          - How many keys must be looked at?
+    - question:
+        id: recall-log
+        type: numeric
+        system: s1
+        concepts: [m1.logarithms]
+        prompt: |
+          What is $\log_2 1024$?
+        answer: "10"
+        explanation: 2 multiplied by itself ten times gives 1024.
+        hints:
+          - Which power of 2 is 1024?
+          - 2, 4, 8, 16, and so on.
+    - question:
+        id: recall-geometric
+        type: numeric
+        system: s1
+        concepts: [m2.sequences-and-series]
+        prompt: |
+          What is $1 + 2 + 4 + 8$?
+        answer: "15"
+        explanation: One less than the next power of 2, which is 16.
+        hints:
+          - Add them, or use the pattern for powers of 2.
+          - The sum is one less than the next power.
+  puzzle:
+    - text: |
+        A machine that trains models receives jobs all day. Each job has a priority, and whenever the machine falls idle it must take the **most urgent** job waiting. Jobs keep arriving in between. So two operations alternate, over and over: **add a job**, and **remove the most urgent**.
+
+        A stack would give you the newest job and a queue the oldest. Neither is wanted. Here are the two plans a list allows.
+
+        | Plan | Add a job | Remove the most urgent |
+        | --- | --- | --- |
+        | keep the list in any order | append, $O(1)$ | search the whole list, $O(n)$ |
+        | keep the list sorted | find the place and shift the rest, $O(n)$ | take it from the end, $O(1)$ |
+
+        Run the starter. It follows the first plan with eight jobs and looks at 36 items to serve them all, $8 + 7 + \dots + 1$. With a million jobs that sum is five hundred thousand million. The second plan moves the cost to the other operation and does no better overall. Either way, one of the two operations is $O(n)$, and $n$ jobs cost $O(n^2)$.
+
+        Each plan does more than it was asked. The first keeps no order at all, and pays when the smallest is wanted. The second keeps **complete** order, which nobody requested: you never asked which job is seventeenth.
+
+        **Is there an arrangement that keeps only as much order as is needed to find the smallest, so that both operations are fast?**
+  intuition:
+    - text: |
+        Think of a knockout tournament with eight players. The champion is known after seven matches, and to become champion she played only three, one in each round. She never met most of the field. Their defeats by others stood in for it.
+
+        Draw the tournament as a diagram with the champion at the top, the two finalists beneath, and so on down. The shape is a **tree**: one item at the top, each item having up to two beneath it. In such a shape the number of rounds grows very slowly. Doubling the players adds one round. A million players need only twenty.
+
+        Now arrange jobs the same way, with one rule: **every job is at least as urgent as the two beneath it**. The most urgent job is then at the top, since nothing above it could be less urgent. And little else is promised. Two jobs side by side may be in either order. This is far less than sorting, and it is all the puzzle needs.
+
+        The reward comes when the arrangement is disturbed. Put a new job at the bottom. The rule can be broken only between it and the job above it, so swap those two if need be, and look again one level up. The repair climbs a single path to the top, one swap for each level, about twenty for a million jobs. Removing the top is repaired the same way, downwards.
+
+        The figure shows such an arrangement, called a **heap**, as a tree and as the list that stores it. Insert an item and remove the smallest.
+    - figure: heap
+    - text: |
+        Inserting 1 placed it at the bottom, and two swaps carried it to the top. Removing the smallest moved the last item to the top, and one swap with its smaller child restored the rule. Each repair touched one path and left the rest of the heap alone.
+  derivation:
+    - text: |
+        **Trees.** A **tree** is a set of nodes in which one node, the **root**, is at the top, and every other node hangs from exactly one node above it, its **parent**. The nodes hanging from a node are its **children**. A node with no children is a **leaf**. In a **binary** tree no node has more than two children, a left and a right.
+
+        A tree is the linked list of an earlier lesson with more than one link to a node. Where a list node has `next`, a binary tree node has `left` and `right`:
+
+        ```python
+        class Tree:
+            def __init__(self, value, left, right):
+                self.value = value
+                self.left = left
+                self.right = right
+        ```
+
+        The **depth** of a node is the number of links from the root down to it, so the root has depth 0. The **height** of a tree is the greatest depth of any node. Trees are recursive by nature: each child of a node is the root of a smaller tree. So functions on trees are naturally recursive, with the empty tree, `None`, as the base case. The height is one more than the taller of the two subtrees.
+
+        **How many nodes fit.** In a binary tree, depth 0 holds at most 1 node, depth 1 at most 2, depth 2 at most 4, and depth $d$ at most $2^d$, each level doubling the last. A tree of height $h$ with every level full therefore holds
+
+        $$1 + 2 + 4 + \dots + 2^h = 2^{h + 1} - 1$$
+
+        nodes, by the formula for a geometric series. Turn that round. If the levels are filled in order, a tree of $n$ nodes has height
+
+        $$h = \lfloor \log_2 n \rfloor.$$
+
+        Seven nodes fill a tree of height 2. A million nodes fit in a tree of height 19, since $2^{19} \le 10^6 < 2^{20}$. This is the fact everything rests on. **A path from the root to a leaf in a full tree is logarithmically short.** Any operation that works along one such path is $O(\log n)$.
+
+        **A complete tree needs no links.** Call a binary tree **complete** if every level is full except perhaps the last, which is filled from the left. Number its nodes level by level, left to right, from 0. The numbering has a pattern:
+
+        | Node | Position |
+        | --- | --- |
+        | the root | 0 |
+        | the children of the node at $i$ | $2i + 1$ and $2i + 2$ |
+        | the parent of the node at $i$ | $\lfloor (i - 1) / 2 \rfloor$ |
+
+        So a complete tree can be stored in a plain array, the node numbered $i$ in slot $i$, with **no links at all**. Moving to a child or a parent is arithmetic on the index, in the spirit of the address formula. In Python the parent of `i` is `(i - 1) // 2`.
+
+        **The heap.** A **min-heap** is a complete binary tree in which every node's value is at most the values of its children. That rule is the **heap property**.
+
+        *The smallest value is at the root.* Take any node and walk up to the root. Each step goes to a parent whose value is no larger. So the root's value is no larger than that of any node.
+
+        The list `[2, 5, 3, 9, 6, 8]` is a heap. The root 2 has children 5 and 3. The node 5, at index 1, has children 9 and 6, at indices 3 and 4. The node 3, at index 2, has one child, 8, at index 5. Notice that the list is **not sorted**: 5 comes before 3. A heap orders each parent against its children and leaves siblings alone.
+
+        **Inserting.** To add a value, keep the tree complete by putting it in the next free slot, the end of the array. Then repair the heap property, which can be broken only between the new value and its parent.
+
+        ```python
+        def push(heap, value):
+            heap.append(value)
+            i = len(heap) - 1
+            while i > 0 and heap[(i - 1) // 2] > heap[i]:
+                parent = (i - 1) // 2
+                heap[parent], heap[i] = heap[i], heap[parent]
+                i = parent
+        ```
+
+        While the value is smaller than its parent, swap them and continue from the parent's position. This is called **sifting up**. A swap puts a smaller value above the parent's other child, which can only help the rule there. The loop stops at the root or when the parent is no larger. It makes at most one swap for each level, so at most $\lfloor \log_2 n \rfloor$: inserting is $O(\log n)$.
+
+        **Removing the smallest.** The smallest is at index 0, but the root cannot simply be deleted, as that would leave two separate trees. Keep the tree complete instead: move the **last** value into the root and shorten the array. The shape is right and the root is probably wrong. Repair downwards.
+
+        ```python
+        def pop(heap):
+            smallest = heap[0]
+            last = heap.pop()
+            if len(heap) > 0:
+                heap[0] = last
+                i = 0
+                while True:
+                    least = i
+                    for child in [2 * i + 1, 2 * i + 2]:
+                        if child < len(heap) and heap[child] < heap[least]:
+                            least = child
+                    if least == i:
+                        break
+                    heap[least], heap[i] = heap[i], heap[least]
+                    i = least
+            return smallest
+        ```
+
+        At each step, find the least among the node and its children. If the node itself is least, stop. Otherwise swap it with that **smaller child** and continue from there. This is **sifting down**. It follows one path towards a leaf, so it too is $O(\log n)$.
+
+        Why the smaller child and not either? After the swap, the child that moved up becomes the parent of the other child. It must be no larger than that other child, and only the smaller of the two is sure to be.
+    - question:
+        id: derivation-smaller-child
+        type: choice
+        system: s2
+        prompt: |
+          While sifting down, a node holding 7 has children holding 4 and 2. The node must be swapped with one of them. Which, and why?
+        options:
+          - "Either, since both are smaller than 7."
+          - "The 2. After the swap the value that moved up is the parent of the other child, and 2 is at most 4. Swapping with the 4 would leave 4 above 2, breaking the heap property."
+          - "The 4, because it is on the left."
+          - "Neither, since the heap is already valid."
+        answer: 1
+        explanation: |
+          The value brought up becomes the parent of two nodes: the value sent down, and the sibling that stayed. It is smaller than the value sent down, since that was the reason for swapping. It must also be no larger than the sibling. The smaller child passes that test by definition and the larger one fails it. An implementation that always swaps with the left child, or with the first smaller child it finds, gives a tree that looks plausible and is not a heap. It is the most common error in writing one.
+        hints:
+          - After the swap, which value sits above the child that did not move?
+          - Must it be at most that child?
+          - Which of 4 and 2 is at most the other?
+    - text: |
+        **The priority queue.** A collection that supports "add an item" and "remove the smallest" is called a **priority queue**, and the heap is the standard way to build one. Here is the answer to the puzzle, with the two plans it began with.
+
+        | Structure | Add | Remove the smallest | $n$ of each |
+        | --- | --- | --- | --- |
+        | unordered list | $O(1)$ | $O(n)$ | $O(n^2)$ |
+        | sorted list | $O(n)$ | $O(1)$ | $O(n^2)$ |
+        | heap | $O(\log n)$ | $O(\log n)$ | $O(n \log n)$ |
+
+        Neither operation is as cheap as the best of the list plans, and neither is ever as costly as the worst. For a million jobs that is the difference between five hundred thousand million steps and about forty million.
+
+        Python provides a heap in the module `heapq`. It has no heap type of its own. Its functions work on an ordinary list, kept in heap order.
+
+        ```python
+        import heapq
+
+        jobs = []
+        heapq.heappush(jobs, 5)
+        heapq.heappush(jobs, 2)
+        heapq.heappush(jobs, 8)
+        print(heapq.heappop(jobs), jobs[0])
+        ```
+
+        This shows `2 5`: the smallest is removed, and the next smallest is now at index 0, where it can be looked at without removing it. To attach a job to a priority, push a tuple such as `(2, "retrain")`. Tuples compare by their first items first, so the heap orders them by priority. For the **largest** first, push the negated priorities.
+
+        **Keeping the best few.** Suppose you scan a million stored vectors and want the 5 most similar to a query. Sorting all the similarities is more than is needed. Keep a min-heap of at most 5 scores. For each new score, push it, and if the heap now holds 6, pop the smallest. At the end the heap holds the 5 largest. Its root is the weakest of the best, which is the one a newcomer has to beat. Each step costs $O(\log 5)$, a constant, so the whole scan is $O(n)$.
+
+        **A second way to order a tree.** The heap property is one rule a tree can obey. Another is the **search tree** rule: every value in a node's left subtree is smaller than the node's value, and every value in its right subtree is larger. Now the tree can be searched for a particular value. Compare with the root and go left or right, discarding the other half, as you would look up a word in a dictionary. The work is one path, $O(\text{height})$. A search tree answers questions of order that a hash table cannot, such as the nearest key below a given one. Its difficulty is that nothing forces it to stay full. Insert keys in increasing order and each goes to the right of the last, giving a tree of height $n - 1$ that is a linked list in all but name. Keeping search trees shallow takes extra machinery. The heap never has this difficulty, because its shape is fixed in advance and only the values move.
+    - question:
+        id: order-push
+        type: order
+        system: s2
+        prompt: The heap `[2, 5, 3, 9, 6, 8]` receives the new value 1. Put the states of the list in order as it is inserted and sifted up.
+        steps:
+          - "`[2, 5, 3, 9, 6, 8, 1]`, with 1 appended at index 6."
+          - "Its parent is at index 2 and holds 3, which is larger, so they swap."
+          - "`[2, 5, 1, 9, 6, 8, 3]`, with 1 now at index 2."
+          - "Its parent is at index 0 and holds 2, which is larger, so they swap."
+          - "`[1, 5, 2, 9, 6, 8, 3]`, with 1 at the root, where sifting stops."
+        explanation: The value goes into the next free slot, index 6, whose parent is at (6 − 1) // 2 = 2. It is smaller than its parent, so they swap, and the same test is made from index 2, whose parent is index 0. After the second swap the value is at the root and has no parent to compare with.
+        hints:
+          - A new value is always appended first.
+          - The parent of index i is at (i − 1) // 2.
+          - Each comparison comes before the swap it causes.
+  formal:
+    - text: |
+        **Tree.** Nodes with one root, every other node having exactly one parent. Depth of a node: the number of links from the root. Height: the greatest depth. A binary tree of height $h$ has at most $2^{h + 1} - 1$ nodes.
+
+        **Complete binary tree.** Every level full except possibly the last, which is filled from the left. With $n$ nodes its height is $\lfloor \log_2 n \rfloor$. Stored in an array level by level: the children of index $i$ are at $2i + 1$ and $2i + 2$, and its parent at $\lfloor (i - 1) / 2 \rfloor$.
+
+        **Min-heap.** A complete binary tree with each value at most the values of its children. The minimum is at index 0.
+
+        **Operations.** Insert: append, then swap with the parent while smaller. Remove the minimum: move the last value to the root, then swap with the smaller child while larger than it. Each is $O(\log n)$. Reading the minimum is $O(1)$.
+
+        **Priority queue.** A collection with "add" and "remove the smallest". In Python, `heapq.heappush(xs, x)` and `heapq.heappop(xs)` on a list.
+
+        **Binary search tree.** A binary tree in which each node's value is greater than all values in its left subtree and less than all in its right. Searching costs $O(\text{height})$, which is $O(\log n)$ only if the tree is kept shallow.
+  drill:
+    - text: Seconds each. Children at 2i + 1 and 2i + 2. Parent at (i − 1) // 2.
+    - question:
+        id: drill-left-child
+        type: numeric
+        system: s1
+        prompt: |
+          In a heap stored in a list, at which index is the left child of the node at index 3?
+        answer: "7"
+        explanation: 2 × 3 + 1.
+        hints:
+          - The left child of i is at 2i + 1.
+          - Double 3 and add 1.
+    - question:
+        id: drill-right-child
+        type: numeric
+        system: s1
+        prompt: |
+          At which index is the right child of the node at index 3?
+        answer: "8"
+        explanation: 2 × 3 + 2.
+        hints:
+          - The right child of i is at 2i + 2.
+          - One more than the left child.
+    - question:
+        id: drill-parent
+        type: numeric
+        system: s1
+        prompt: |
+          At which index is the parent of the node at index 8?
+        answer: "3"
+        explanation: (8 − 1) // 2, which is 7 // 2.
+        hints:
+          - The parent of i is at (i − 1) // 2.
+          - Divide 7 by 2 and round down.
+    - question:
+        id: drill-parent-two
+        type: numeric
+        system: s1
+        prompt: |
+          At which index is the parent of the node at index 5?
+        answer: "2"
+        explanation: (5 − 1) // 2.
+        hints:
+          - Subtract 1, then halve, rounding down.
+          - 4 // 2.
+    - question:
+        id: drill-level
+        type: numeric
+        system: s1
+        prompt: |
+          At most how many nodes can a binary tree have at depth 3?
+        answer: "8"
+        explanation: Each level can hold twice as many as the one above, 1, 2, 4, 8.
+        hints:
+          - The root's level holds 1.
+          - Double three times.
+    - question:
+        id: drill-full
+        type: numeric
+        system: s1
+        prompt: |
+          How many nodes has a binary tree of height 3 with every level full?
+        answer: "15"
+        explanation: 1 + 2 + 4 + 8, one less than the next power of 2.
+        hints:
+          - Add the sizes of levels 0 to 3.
+          - One less than 16.
+    - question:
+        id: drill-height
+        type: numeric
+        system: s1
+        prompt: |
+          What is the height of a complete binary tree with 15 nodes?
+        answer: "3"
+        explanation: The 15 nodes fill depths 0 to 3 exactly.
+        hints:
+          - How many nodes fill depths 0, 1, 2 and 3?
+          - The height is the greatest depth.
+    - question:
+        id: drill-is-heap
+        type: choice
+        system: s1
+        prompt: |
+          Which of these lists is a min-heap?
+        options: ["`[1, 5, 2, 4]`", "`[1, 3, 2, 7, 4]`", "`[2, 1, 3]`", "`[3, 4, 5, 1]`"]
+        answer: 1
+        explanation: In the second, 1 is above 3 and 2, and 3 is above 7 and 4. In the first, 5 at index 1 is above 4 at index 3.
+        hints:
+          - Check each parent against its children at 2i + 1 and 2i + 2.
+          - The root must be the smallest.
+    - question:
+        id: drill-min
+        type: choice
+        system: s1
+        prompt: |
+          Where is the smallest value of a min-heap?
+        options: ["At index 0", "At the last index", "In the middle", "Anywhere"]
+        answer: 0
+        explanation: The root is no larger than anything beneath it.
+        hints:
+          - Every parent is at most its children.
+          - Which node has no parent?
+    - question:
+        id: drill-max-leaf
+        type: choice
+        system: s1
+        prompt: |
+          Where can the **largest** value of a min-heap be?
+        options: ["Only at index 0", "Only at the last index", "At any leaf", "At any index"]
+        answer: 2
+        explanation: A node with a child is at most that child, so the largest value has no children. Which leaf holds it is not determined.
+        hints:
+          - Can a node with children be the largest?
+          - A node without children is a leaf.
+    - question:
+        id: drill-swaps
+        type: numeric
+        system: s1
+        prompt: |
+          A heap holds 15 values. A sixteenth is inserted. At most how many swaps can sifting up need?
+        answer: "4"
+        explanation: The new value starts at index 15, at depth 4, and can rise at most to the root.
+        hints:
+          - At what depth is index 15?
+          - One swap for each level climbed.
+    - question:
+        id: drill-cost
+        type: choice
+        system: s1
+        prompt: |
+          What does it cost to remove the smallest of $n$ values from a heap?
+        options: ["$O(1)$", "$O(\\log n)$", "$O(n)$", "$O(n \\log n)$"]
+        answer: 1
+        explanation: Sifting down follows one path from the root towards a leaf.
+        hints:
+          - How many levels does a complete tree of n nodes have?
+          - The repair makes at most one swap for each level.
+    - question:
+        id: predict-index
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          i = 4
+          print((i - 1) // 2, 2 * i + 1, 2 * i + 2)
+        output: "1 9 10"
+        explanation: The parent of index 4 is at 3 // 2 = 1, and its children are at 9 and 10.
+        hints:
+          - The parent is at (i − 1) // 2.
+          - The children are at 2i + 1 and 2i + 2.
+    - question:
+        id: predict-heapq
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          import heapq
+
+          jobs = []
+          for priority in [5, 2, 8, 1]:
+              heapq.heappush(jobs, priority)
+          print(heapq.heappop(jobs), heapq.heappop(jobs), len(jobs))
+        output: "1 2 2"
+        explanation: Whatever order the values were pushed in, each pop removes the smallest remaining, 1 and then 2. Two values are left.
+        hints:
+          - heappop always returns the smallest value in the heap.
+          - Four were pushed and two popped.
+  work:
+    - text: Slower now. After every change, ask where the heap property could have been broken, and nowhere else.
+    - question:
+        id: write-push
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `push(heap, value)`. `heap` is a list in min-heap order. Add `value` to it and restore the heap property by sifting up, changing the list in place. Do not sort the list and do not use `heapq`.
+        starter: |
+          def push(heap, value):
+              # Replace the next line with your own.
+              heap.append(value)
+
+          heap = [2, 5, 3, 9, 6, 8]
+          push(heap, 1)
+          print(heap)
+        solution: |
+          def push(heap, value):
+              heap.append(value)
+              i = len(heap) - 1
+              while i > 0 and heap[(i - 1) // 2] > heap[i]:
+                  parent = (i - 1) // 2
+                  heap[parent], heap[i] = heap[i], heap[parent]
+                  i = parent
+
+          heap = [2, 5, 3, 9, 6, 8]
+          push(heap, 1)
+          print(heap)
+        tests: |
+          def _is_heap(xs):
+              return all([xs[(i - 1) // 2] <= xs[i] for i in range(1, len(xs))])
+          _h = [2, 5, 3, 9, 6, 8]
+          push(_h, 1)
+          assert _h == [1, 5, 2, 9, 6, 8, 3], "Pushing 1 onto [2, 5, 3, 9, 6, 8] should give [1, 5, 2, 9, 6, 8, 3]. You got " + repr(_h)
+          _h = [2, 5, 3, 9, 6, 8]
+          push(_h, 7)
+          assert _h == [2, 5, 3, 9, 6, 8, 7], "Pushing 7 needs no swaps, since its parent 3 is smaller. You got " + repr(_h)
+          _h = [2, 5, 3, 9, 6, 8]
+          push(_h, 4)
+          assert _h == [2, 5, 3, 9, 6, 8, 4], "Pushing 4 needs no swaps, since its parent 3 is smaller. You got " + repr(_h)
+          _h = [1, 5, 2, 9, 6, 8, 3]
+          push(_h, 4)
+          assert _h == [1, 4, 2, 5, 6, 8, 3, 9], "Pushing 4 onto [1, 5, 2, 9, 6, 8, 3] should swap it past 9 and 5. You got " + repr(_h)
+          _h = []
+          push(_h, 3)
+          assert _h == [3], "Pushing onto an empty heap gives a heap of one. You got " + repr(_h)
+          _h = []
+          for _v in [5, 9, 7, 2, 10, 3, 8, 1, 6, 4, 4, 0]:
+              push(_h, _v)
+              assert _is_heap(_h), "After pushing " + str(_v) + " the list is not a heap: " + repr(_h)
+          assert sorted(_h) == [0, 1, 2, 3, 4, 4, 5, 6, 7, 8, 9, 10], "No value may be lost or repeated. You have " + repr(sorted(_h))
+          assert _h != sorted(_h), "The list should be in heap order, which is weaker than sorted order. Do not sort it"
+          assert output.strip() == "[1, 5, 2, 9, 6, 8, 3]", "The program should print [1, 5, 2, 9, 6, 8, 3]"
+        wrong:
+          - "def push(heap, value):\n    heap.append(value)\n\nprint([1, 5, 2, 9, 6, 8, 3])\n"
+          - "def push(heap, value):\n    heap.append(value)\n    i = len(heap) - 1\n    if i > 0 and heap[(i - 1) // 2] > heap[i]:\n        parent = (i - 1) // 2\n        heap[parent], heap[i] = heap[i], heap[parent]\n\nprint([1, 5, 2, 9, 6, 8, 3])\n"
+          - "def push(heap, value):\n    heap.append(value)\n    i = len(heap) - 1\n    while i > 0 and heap[i // 2] > heap[i]:\n        parent = i // 2\n        heap[parent], heap[i] = heap[i], heap[parent]\n        i = parent\n\nprint([1, 5, 2, 9, 6, 8, 3])\n"
+          - "def push(heap, value):\n    heap.append(value)\n    xs = sorted(heap)\n    for i in range(len(xs)):\n        heap[i] = xs[i]\n\nprint([1, 5, 2, 9, 6, 8, 3])\n"
+          - "def push(heap, value):\n    heap.insert(0, value)\n\nprint([1, 5, 2, 9, 6, 8, 3])\n"
+        explanation: |
+          The new value goes at the end, which keeps the tree complete, and is then compared with its parent at `(i - 1) // 2`. While the parent is larger, the two are swapped and the index moves up. A single swap is not enough: the value 1 had to rise two levels to reach the top. The parent's index must be computed exactly. With `i // 2`, the node at index 2 is taken to have its parent at index 1, when its parent is the root, and the repair goes up the wrong path. Sorting the whole list also gives a valid heap, since a sorted list satisfies the heap property, but it costs $O(n \log n)$ for each insertion where sifting costs $O(\log n)$, which throws away the reason for having a heap.
+        hints:
+          - Append the value and set i to the last index.
+          - While i is not 0 and the value at (i − 1) // 2 is larger than the value at i, swap them.
+          - After each swap, set i to the parent's index.
+    - question:
+        id: fix-pop
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `pop(heap)` should remove and return the smallest value of a min-heap, leaving a valid heap. Popping three times from the heap below should print `1 2 3`. It prints `1 3 2`. Fix it.
+        starter: |
+          def pop(heap):
+              smallest = heap[0]
+              last = heap.pop()
+              if len(heap) > 0:
+                  heap[0] = last
+                  i = 0
+                  while 2 * i + 1 < len(heap) and heap[2 * i + 1] < heap[i]:
+                      child = 2 * i + 1
+                      heap[child], heap[i] = heap[i], heap[child]
+                      i = child
+              return smallest
+
+          heap = [1, 5, 2, 9, 6, 8, 3]
+          print(pop(heap), pop(heap), pop(heap))
+        solution: |
+          def pop(heap):
+              smallest = heap[0]
+              last = heap.pop()
+              if len(heap) > 0:
+                  heap[0] = last
+                  i = 0
+                  while True:
+                      least = i
+                      for child in [2 * i + 1, 2 * i + 2]:
+                          if child < len(heap) and heap[child] < heap[least]:
+                              least = child
+                      if least == i:
+                          break
+                      heap[least], heap[i] = heap[i], heap[least]
+                      i = least
+              return smallest
+
+          heap = [1, 5, 2, 9, 6, 8, 3]
+          print(pop(heap), pop(heap), pop(heap))
+        tests: |
+          def _is_heap(xs):
+              return all([xs[(i - 1) // 2] <= xs[i] for i in range(1, len(xs))])
+          _h = [1, 5, 2, 9, 6, 8, 3]
+          assert pop(_h) == 1, "The smallest of [1, 5, 2, 9, 6, 8, 3] is 1"
+          assert _h == [2, 5, 3, 9, 6, 8], "After popping 1, the last value 3 goes to the root and swaps with its smaller child 2, giving [2, 5, 3, 9, 6, 8]. You have " + repr(_h)
+          assert pop(_h) == 2, "The next smallest is 2. You returned something else, so the heap was not repaired correctly"
+          assert _is_heap(_h), "After two pops the list is not a heap: " + repr(_h)
+          _h = [1, 2, 3]
+          assert pop(_h) == 1 and _h == [2, 3], "Popping from [1, 2, 3] should leave [2, 3]. You have " + repr(_h)
+          _h = [4]
+          assert pop(_h) == 4 and _h == [], "Popping the only value should leave an empty list. You have " + repr(_h)
+          _h = [1, 9, 2, 10, 11, 3, 4]
+          assert pop(_h) == 1 and _is_heap(_h), "After popping from [1, 9, 2, 10, 11, 3, 4] the list is not a heap: " + repr(_h)
+          _h = [0, 1, 2, 3, 4, 4, 5, 6, 7, 8, 9, 10]
+          _out = []
+          while len(_h) > 0:
+              _out.append(pop(_h))
+              assert _is_heap(_h), "The list stopped being a heap: " + repr(_h)
+          assert _out == [0, 1, 2, 3, 4, 4, 5, 6, 7, 8, 9, 10], "Popping until empty should give the values in increasing order. You got " + repr(_out)
+          assert output.strip() == "1 2 3", "The program should print 1 2 3"
+        wrong:
+          - "def pop(heap):\n    smallest = heap[0]\n    last = heap.pop()\n    if len(heap) > 0:\n        heap[0] = last\n        i = 0\n        while 2 * i + 1 < len(heap) and heap[2 * i + 1] < heap[i]:\n            child = 2 * i + 1\n            heap[child], heap[i] = heap[i], heap[child]\n            i = child\n    return smallest\n\nprint(1, 2, 3)\n"
+          - "def pop(heap):\n    smallest = heap[0]\n    last = heap.pop()\n    if len(heap) > 0:\n        heap[0] = last\n    return smallest\n\nprint(1, 2, 3)\n"
+          - "def pop(heap):\n    smallest = heap[0]\n    last = heap.pop()\n    if len(heap) > 0:\n        heap[0] = last\n        i = 0\n        while True:\n            least = i\n            for child in [2 * i + 1, 2 * i + 2]:\n                if child < len(heap) and heap[child] > heap[least]:\n                    least = child\n            if least == i:\n                break\n            heap[least], heap[i] = heap[i], heap[least]\n            i = least\n    return smallest\n\nprint(1, 2, 3)\n"
+          - "def pop(heap):\n    return heap.pop(0)\n\nprint(1, 2, 3)\n"
+          - "def pop(heap):\n    smallest = heap[0]\n    last = heap.pop()\n    if len(heap) > 0:\n        heap[0] = last\n        i = 0\n        while 2 * i + 2 < len(heap):\n            child = 2 * i + 1\n            if heap[child + 1] < heap[child]:\n                child = child + 1\n            heap[child], heap[i] = heap[i], heap[child]\n            i = child\n    return smallest\n\nprint(1, 2, 3)\n"
+        explanation: |
+          The starter looked only at the left child. After the first pop the value 3 sat at the root with children 5 and 2. The left child, 5, is not smaller than 3, so the loop stopped at once and left 3 above 2. The next pop then returned 3. Sifting down must find the least of three values, the node and **both** children, and swap with the smaller child when the node is not the least. The right child may not exist, so its index is checked against the length before it is read. Removing index 0 with `pop(0)` returns the right value the first time, but it shifts every item left, which breaks the positions the heap property depends on and costs $O(n)$ besides.
+        hints:
+          - After the first pop, what are the root and its two children?
+          - Which child should the root be compared with?
+          - Find the least among the node and both children, and swap with that child if it is not the node itself.
+    - question:
+        id: write-height
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `height(tree)` for a binary tree made of `Tree` nodes, where a missing child is `None`. The height of a single node is 0, and the height of the empty tree `None` is $-1$.
+        starter: |
+          class Tree:
+              def __init__(self, value, left, right):
+                  self.value = value
+                  self.left = left
+                  self.right = right
+
+          def height(tree):
+              # Replace the next line with your own.
+              return 0
+
+          leaf = Tree(9, None, None)
+          print(height(Tree(2, Tree(5, leaf, None), Tree(3, None, None))))
+        solution: |
+          class Tree:
+              def __init__(self, value, left, right):
+                  self.value = value
+                  self.left = left
+                  self.right = right
+
+          def height(tree):
+              if tree is None:
+                  return -1
+              return 1 + max(height(tree.left), height(tree.right))
+
+          leaf = Tree(9, None, None)
+          print(height(Tree(2, Tree(5, leaf, None), Tree(3, None, None))))
+        tests: |
+          def _leaf(v):
+              return Tree(v, None, None)
+          assert height(None) == -1, "The empty tree has height -1. You returned " + repr(height(None))
+          assert height(_leaf(1)) == 0, "A single node has height 0. You returned " + repr(height(_leaf(1)))
+          assert height(Tree(2, Tree(5, _leaf(9), None), _leaf(3))) == 2, "The longest path from the root goes down two links. You returned " + repr(height(Tree(2, Tree(5, _leaf(9), None), _leaf(3))))
+          assert height(Tree(1, _leaf(2), _leaf(3))) == 1, "A root with two leaves has height 1. You returned " + repr(height(Tree(1, _leaf(2), _leaf(3))))
+          assert height(Tree(1, None, Tree(2, None, Tree(3, None, _leaf(4))))) == 3, "A chain of four nodes going right has height 3. You returned " + repr(height(Tree(1, None, Tree(2, None, Tree(3, None, _leaf(4))))))
+          assert height(Tree(1, Tree(2, Tree(3, _leaf(4), None), None), _leaf(5))) == 3, "The left side is deeper, with height 3. You returned " + repr(height(Tree(1, Tree(2, Tree(3, _leaf(4), None), None), _leaf(5))))
+          _full = _leaf(0)
+          for _ in range(5):
+              _full = Tree(0, _full, _full)
+          assert height(_full) == 5, "A full tree built in five doublings has height 5. You returned " + repr(height(_full))
+          assert output.strip() == "2", "The program should print 2"
+        wrong:
+          - "class Tree:\n    def __init__(self, value, left, right):\n        self.value = value\n        self.left = left\n        self.right = right\n\ndef height(tree):\n    if tree is None:\n        return 0\n    return 1 + max(height(tree.left), height(tree.right))\n\nprint(2)\n"
+          - "class Tree:\n    def __init__(self, value, left, right):\n        self.value = value\n        self.left = left\n        self.right = right\n\ndef height(tree):\n    if tree is None:\n        return -1\n    return 1 + height(tree.left)\n\nprint(2)\n"
+          - "class Tree:\n    def __init__(self, value, left, right):\n        self.value = value\n        self.left = left\n        self.right = right\n\ndef height(tree):\n    if tree is None:\n        return -1\n    return 1 + height(tree.left) + height(tree.right)\n\nprint(2)\n"
+          - "class Tree:\n    def __init__(self, value, left, right):\n        self.value = value\n        self.left = left\n        self.right = right\n\ndef height(tree):\n    if tree is None:\n        return -1\n    return 1 + min(height(tree.left), height(tree.right))\n\nprint(2)\n"
+          - "class Tree:\n    def __init__(self, value, left, right):\n        self.value = value\n        self.left = left\n        self.right = right\n\ndef height(tree):\n    if tree is None:\n        return -1\n    return max(height(tree.left), height(tree.right))\n\nprint(2)\n"
+        explanation: |
+          A tree is a root with two smaller trees beneath it, so its height is one link more than the height of the taller of the two. The empty tree is the base case, and giving it height $-1$ is what makes a single node come out as $1 + \max(-1, -1) = 0$. Taking only the left subtree measures one path and misses a deeper right side. Adding the two heights counts something else, and taking the smaller finds the shortest way to a gap. The function visits every node once, so it is $O(n)$. Its shape, a base case for `None` and a combination of the answers for the two children, is the pattern of nearly every function on trees.
+        hints:
+          - What should the function return for None?
+          - Find the heights of the left and right subtrees by calling the function itself.
+          - Return 1 plus the larger of the two.
+    - question:
+        id: work-million
+        type: numeric
+        system: s2
+        prompt: |
+          A heap holds a million values, and $2^{19} = 524288$ while $2^{20} = 1048576$. What is the height of its tree, and so the greatest number of swaps one insertion or removal can need?
+        answer: "19"
+        explanation: |
+          A complete tree of height $h$ holds between $2^h$ and $2^{h + 1} - 1$ nodes. A million lies between $2^{19}$ and $2^{20}$, so the height is 19. An insertion climbs at most 19 levels and a removal descends at most 19. Had the million values been kept in a sorted list, an insertion would move half a million of them on average. Doubling the heap to two million values raises the height to 20, one more swap.
+        hints:
+          - A complete tree of height h has at least 2 to the power h nodes.
+          - Between which two powers of 2 does a million lie?
+          - The height is the smaller of the two exponents.
+    - question:
+        id: work-top-k
+        type: choice
+        system: s2
+        prompt: |
+          To find the 5 **largest** of a million scores, a program keeps a **min**-heap of at most 5 scores. For each score it pushes, and if the heap then holds 6 it pops. Why a min-heap, when the largest are wanted?
+        options:
+          - "It is a mistake, and a max-heap should be used."
+          - "The heap holds the best 5 seen so far, and the one that must be found quickly is the weakest of them, which is the one to throw out when a better score arrives. A min-heap keeps exactly that one at its root."
+          - "Because a min-heap is faster than a max-heap."
+          - "Because the scores are negative."
+        answer: 1
+        explanation: |
+          At every moment the heap holds the 5 largest scores so far. A new score either displaces the smallest of those 5 or is itself the smallest of the 6 and leaves at once. In both cases the item removed is the minimum of the heap, so the minimum is what needs to be at hand. Each step works on a heap of at most 6 items, a constant amount, so the whole scan is $O(n)$ and uses memory for 6 scores. Sorting all million scores to read off the top 5 would cost $O(n \log n)$ and hold them all. The same device keeps the best few candidates at each step of a search, which you will meet at the end of this cluster.
+        hints:
+          - Which of the 5 kept scores is in danger when a new score arrives?
+          - Which kind of heap has that score at its root?
+          - How large does the heap ever get?
+    - question:
+        id: work-search-tree
+        type: choice
+        system: s2
+        prompt: |
+          The keys 1, 2, 3, …, 1000 are inserted in that order into a binary search tree with no balancing. What shape results, and what does a search for 1000 cost?
+        options:
+          - "A full tree of height about 10, and about 10 comparisons."
+          - "A chain. Each key is larger than all before it, so it becomes the right child of the previous one. The tree has height 999 and the search makes 1000 comparisons, as a linked list would."
+          - "A heap, with 1 at the root."
+          - "The insertions fail, because the keys are already sorted."
+        answer: 1
+        explanation: |
+          The search tree rule fixes where each new key goes: to the right of every smaller key. Arriving in increasing order, each key ends up as the right child of the one before, and no node has a left child. The height is $n - 1$, where a full tree would have $\lfloor \log_2 n \rfloor = 9$. The $O(\text{height})$ cost of searching is then $O(n)$. A search tree's shape depends on the order of insertion, and sorted input, which is common, is the worst case. Practical search trees rearrange themselves as they grow to stay shallow. A heap needs none of that: its shape is always the complete tree, and only its values move.
+        hints:
+          - Where does a key go that is larger than every key in the tree?
+          - Does any node get a left child?
+          - How many links lie between the root and the last key?
+  connections:
+    - text: |
+        The puzzle asked for a way to add jobs and repeatedly remove the most urgent, without one of the two operations costing $O(n)$. A list that keeps no order is slow to search, and one that keeps full order is slow to insert into. The heap keeps a partial order. Each value is at most the values of its two children, which puts the smallest at the root and promises nothing about the rest.
+
+        That is enough because of the shape. A complete binary tree of $n$ nodes is about $\log_2 n$ levels deep, since each level holds twice as many nodes as the one above. Adding at the bottom or replacing the top can break the rule only along one path, and the repair climbs or descends that path with one swap for each level. Both operations are $O(\log n)$. And because the shape is always the same, the tree needs no links: it lives in an array, with children at $2i + 1$ and $2i + 2$.
+
+        A [[e3.hash-tables]] table finds any key and knows nothing of order. A heap knows the minimum and cannot find anything else quickly. Each structure is fast at the question it was arranged for.
+
+        The heap returns at once. Pushing $n$ values and popping them all yields them in increasing order in $O(n \log n)$ steps, which is a way of sorting, taken up in [[e3.sorting]]. The search tree's habit of discarding half at each comparison is the subject of [[e3.binary-search]]. And a priority queue is the engine of the shortest-path method in [[e3.shortest-paths-and-beam-search]].
+
+        First, the tree itself needs widening. In a tree every node but the root has exactly one parent, so there is one path between any two nodes and no way of going round in a circle. Most networks are not like that. Roads form loops, pages link back to one another, and a lesson in this course can have two prerequisites. Drop the rule of one parent and you have a **graph**. Exploring a graph without getting lost or going round for ever takes the stack and the queue from two lessons ago, and a set of places already seen. That is the next lesson, [[e3.graphs-and-traversal]].

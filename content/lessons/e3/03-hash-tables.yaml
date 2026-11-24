@@ -1,0 +1,626 @@
+concept: e3.hash-tables
+minutes: 90
+claim: You can explain how a dictionary finds a key without searching, by turning the key into a position in an array, deal with two keys that land in the same place, relate the cost of a lookup to the load factor and say why tables must grow, build a working hash table, and say what may and may not be used as a key.
+recalls: [e3.stacks-and-queues]
+uses: [e3.arrays-and-linked-lists, e1.complexity-and-big-o, e1.special-methods-and-operator-overloading, e1.comprehensions-and-iterators, e1.modules-and-imports, e0.dictionaries-and-sets, e0.lists-and-tuples, e0.strings, e0.loops, e0.functions, e0.expressions, m2.injective-surjective-and-bijective-maps, m3.equivalence-relations-and-partitions]
+leads: [e3.trees-and-heaps, e3.graphs-and-traversal, e3.dynamic-programming, e3.amortised-analysis]
+starter: |
+  # Scratch space. 20000 names. Ask 200 times whether one of the last names is present.
+  import time
+
+  names = ["word" + str(i) for i in range(20000)]
+  as_list = list(names)
+  as_set = set(names)
+
+  start = time.perf_counter()
+  for i in range(200):
+      found = "word19999" in as_list
+  print("list", round((time.perf_counter() - start) * 1000, 2), "ms")
+
+  start = time.perf_counter()
+  for i in range(200):
+      found = "word19999" in as_set
+  print("set ", round((time.perf_counter() - start) * 1000, 2), "ms")
+parts:
+  recall:
+    - text: |
+        [[e3.stacks-and-queues]] built two containers that hand you an item of their own choosing, the newest or the oldest. Today's container hands you the one you ask for. It is built from the two structures you already have. Three quick pulls first.
+    - question:
+        id: recall-queue
+        type: numeric
+        system: s1
+        concepts: [e3.stacks-and-queues]
+        prompt: |
+          5, 6 and 7 are enqueued in that order. What does the first dequeue return?
+        answer: "5"
+        explanation: First in, first out.
+        hints:
+          - Which item has waited longest?
+          - The front of the line.
+    - question:
+        id: recall-jump
+        type: choice
+        system: s1
+        concepts: [e3.arrays-and-linked-lists]
+        prompt: |
+          Why can an array read its item at position $i$ in $O(1)$?
+        options: ["It searches very quickly", "The address of slot $i$ is computed as start + size × $i$", "The items are sorted", "It remembers recent lookups"]
+        answer: 1
+        explanation: Equal slots packed side by side make the address a matter of arithmetic.
+        hints:
+          - Nothing is searched.
+          - What formula gives the address of slot i?
+    - question:
+        id: recall-remainder
+        type: numeric
+        system: s1
+        concepts: [m3.equivalence-relations-and-partitions]
+        prompt: |
+          What is the remainder when 37 is divided by 10?
+        answer: "7"
+        explanation: 37 = 3 × 10 + 7.
+        hints:
+          - Take away as many tens as you can.
+          - What is left?
+  puzzle:
+    - text: |
+        A language model reads text as numbers. Before training, every word is replaced by its number in a fixed vocabulary of, say, 50000 words. A text of a million words needs a million lookups of the form "what is the number of this word?".
+
+        Keep the vocabulary in a list and each lookup must scan for the word, comparing it with 25000 entries on average. A million lookups is 25 thousand million comparisons. Keep it in a dictionary and each lookup takes a handful of steps, whatever the size of the vocabulary. Run the starter to feel the difference on a small scale: asking a list of 20000 names whether one is present, 200 times, takes tens of milliseconds. Asking a set takes a few thousandths of one.
+
+        You have used dictionaries and sets since your first lessons in programming, and the lesson on complexity told you their lookups are $O(1)$. Stop and consider how strange that is. The dictionary holds 50000 words in no order you chose. You hand it a word it may never have seen. It tells you at once whether the word is there, **without looking through the others**.
+
+        **How can anything be found without searching? What must be true of the place where each word is kept?**
+  intuition:
+    - text: |
+        You already own one structure that finds things without searching. An array reaches position $i$ in one step, by arithmetic. So if the keys **were** positions, there would be nothing to do. To store facts about the numbers 0 to 99, make an array of 100 slots and keep the fact about $k$ in slot $k$.
+
+        Words are not positions. But a word can be **turned into** a number by some fixed recipe, and a number can be turned into a position. If the array has 8 slots, take the number's remainder on division by 8, which is always one of 0 to 7. The recipe that turns a key into a number is called a **hash function**, and the slots are called **buckets**.
+
+        Here is the idea in full. **The key itself tells you where to look.** To store a word, compute its bucket and put it there. To find it later, compute its bucket again, and you arrive at the same place, since the recipe gives the same answer every time. Nothing is searched, because the place was never chosen freely. It was computed from the key.
+
+        One thing can go wrong, and it is certain to. Two different keys can land in the same bucket: 12 and 7 both leave remainder 2 on division by 5. This is a **collision**. The simplest remedy is to let each bucket hold a short list of everything that landed there. A lookup then computes the bucket and searches only that short list.
+
+        The figure drops eight keys into buckets by remainder. Change the number of buckets and watch the lists.
+    - figure: hash-table
+      props: { buckets: 5, keys: 8 }
+    - text: |
+        With 5 buckets the eight keys are spread thinly and no list is longer than 2. With 4 buckets, three keys pile into bucket 1. With 2 buckets the lists are four long, and looking up a key is half-way back to scanning. The more buckets for the same keys, the shorter the lists, and the nearer a lookup comes to a single step.
+  derivation:
+    - text: |
+        **From key to bucket.** A hash table is an array of $m$ buckets together with a **hash function** $h$ that sends every possible key to a whole number. The key $k$ belongs in bucket
+
+        $$h(k) \bmod m,$$
+
+        the remainder of $h(k)$ on division by $m$, written `h(k) % m` in Python. A hash function must satisfy one requirement and should satisfy a second.
+
+        1. **Equal keys must get equal numbers**, every time. Otherwise a key stored today could not be found tomorrow.
+        2. **Different keys should be scattered** as evenly as possible over the buckets.
+
+        For whole numbers the number itself will do. For a string, the characters must be combined. Every character has a number, which `ord` gives: `ord("a")` is 97. Adding these up is the first idea and a poor one, because "listen" and "silent" have the same letters and so the same sum. The order must count. A standard recipe multiplies the running total by a fixed number before adding each character:
+
+        ```python
+        def text_hash(word, m):
+            h = 0
+            for c in word:
+                h = (h * 31 + ord(c)) % m
+            return h
+        ```
+
+        Now each character's contribution depends on its position, as each digit's value depends on its place in a numeral. Taking the remainder at every step keeps the numbers small and gives the same final answer as taking it once at the end.
+
+        Python has a built-in `hash` that does this job for numbers, strings, tuples and more. For small whole numbers `hash(k)` is $k$. For strings the recipe is deliberately varied from one run of Python to the next, so you must never depend on the particular numbers, only on their being consistent within a run.
+
+        **Collisions cannot be avoided.** There are endlessly many possible strings and only $m$ buckets. A function from a larger set to a smaller one cannot be injective, as you saw when you studied maps: some two keys must share a bucket. With $n$ keys in $m$ buckets and $n > m$, some bucket holds at least two. In practice collisions appear long before the table is full. So a hash table is not a way of avoiding collisions. It is a way of keeping them few and dealing with them cheaply.
+
+        **Chaining.** Let each bucket hold a list, its **chain**, of the pairs (key, value) that belong there. This is the method of the figure. The three operations of a dictionary all begin the same way, by computing the bucket.
+
+        ```python
+        def put(buckets, key, value):
+            bucket = buckets[hash(key) % len(buckets)]
+            for i in range(len(bucket)):
+                if bucket[i][0] == key:
+                    bucket[i] = (key, value)
+                    return
+            bucket.append((key, value))
+
+        def get(buckets, key, default):
+            bucket = buckets[hash(key) % len(buckets)]
+            for k, v in bucket:
+                if k == key:
+                    return v
+            return default
+        ```
+
+        `put` looks along the chain for the key. If it is there, its value is replaced, since a dictionary holds each key once. If not, the pair is added. `get` looks along the same chain and returns the value, or a default if the key is absent. A table is made as a list of empty lists, `[[] for _ in range(m)]`.
+
+        Notice that the chain is searched with `==`, comparing whole keys. The hash only chooses the bucket. Two different keys in one bucket are told apart by comparing them.
+
+        **What a lookup costs.** The work is one hash, one jump to a bucket, and a scan of one chain. So everything depends on how long the chains are. With $n$ keys in $m$ buckets, the **average** chain has length
+
+        $$\alpha = \frac{n}{m},$$
+
+        called the **load factor**. If the hash function scatters keys evenly, a lookup costs about $1 + \alpha$ steps. Keep $\alpha$ below some fixed bound, such as 1, and that is a constant: $O(1)$, however many keys the table holds.
+
+        That is the answer to the puzzle, and it comes with two conditions.
+
+        *The table must grow.* As keys are added with $m$ fixed, $\alpha$ rises without limit and the chains lengthen. So when $\alpha$ passes its bound, a table is made with twice as many buckets and every pair is put into it afresh. The pairs cannot simply be copied across bucket by bucket. A key's bucket is $h(k) \bmod m$, and $m$ has changed: the key 13 lives in bucket 5 of 8 buckets and in bucket 13 of 16. Moving everything costs $O(n)$, and it happens rarely. Why rare, expensive steps still leave the average cost constant is the subject of a later lesson in this cluster.
+
+        *The hash must scatter.* The bound of $1 + \alpha$ is an average over well-spread keys. In the worst case every key lands in one bucket, the single chain has length $n$, and the table is a linked list with extra steps: $O(n)$ a lookup. A careless hash function produces exactly this. Hash words by their length, and fifty thousand words fall into about twenty buckets.
+    - question:
+        id: derivation-load
+        type: choice
+        system: s2
+        prompt: |
+          A hash table with chaining holds $n$ keys in $m$ buckets, and its hash function scatters keys evenly. Why is a lookup $O(1)$ only if the table grows as keys are added?
+        options:
+          - "Because the hash function becomes slower as the table fills."
+          - "Because a lookup scans one chain, whose average length is the load factor $n / m$. If $m$ stays fixed while $n$ grows, the chains grow in proportion to $n$. Growing $m$ along with $n$ keeps $n / m$ bounded."
+          - "Because arrays cannot hold more than a fixed number of items."
+          - "Because collisions only occur in small tables."
+        answer: 1
+        explanation: |
+          Hashing and jumping to the bucket take a fixed number of steps. The remaining work is the scan of the chain, and an average chain holds $\frac{n}{m}$ pairs. With a thousand buckets and a million keys the chains average a thousand, and each lookup is a thousand comparisons: still a thousand times better than scanning everything, but growing in step with $n$, which is $O(n)$. Doubling the number of buckets whenever the load factor passes a bound keeps the average chain short for ever.
+        hints:
+          - Which part of a lookup depends on how full the table is?
+          - What is the average length of a chain?
+          - What happens to that average if m is fixed and n grows?
+    - text: |
+        **What may be a key.** The first requirement, that equal keys get equal numbers every time, has a consequence you have met as a rule without a reason. A list cannot be a key of a dictionary or a member of a set. A list can be changed after it is stored. Its hash would have to be computed from its contents, and if the contents changed, its bucket would change, while the list itself sat in the old bucket, never to be found again. Python refuses at the door: lists, dictionaries and sets are not hashable. Numbers, strings and tuples of these cannot change, and are.
+
+        The same requirement binds your own classes. If you define when two objects are equal, their hashes must agree whenever they are equal, as you were warned when you met `__eq__`.
+
+        **Sets, and what hash tables are for.** A set is a hash table that stores keys with no values. A dictionary stores a value beside each key. Their uses are the same idea in several forms.
+
+        | Task | How a hash table does it |
+        | --- | --- |
+        | turn each word into its number | a dictionary from word to number |
+        | count how often each word occurs | a dictionary from word to count, `counts[w] = counts.get(w, 0) + 1` |
+        | remove repeated examples from a data set | a set of those already seen |
+        | avoid repeating a costly computation | a dictionary from input to result |
+
+        The last is what you did to the slow Fibonacci function when you studied recursion: remember each answer under its input, and look before computing.
+
+        **What a hash table cannot do.** Scattering is its strength and its limit. Keys that are close together are flung to unrelated buckets, so the table knows nothing of order. It cannot tell you the smallest key, or the keys between two bounds, or the key nearest to a given one, without examining every bucket. For questions about order you need structures that keep order, and the next lessons build them.
+
+        **A use that welcomes collisions.** Sometimes there are too many possible keys to keep a vocabulary at all, as with every pair of words that might occur together. One trick is to keep **no** table of keys, only an array of $m$ weights, and to send each feature to the weight at position $h(\text{feature}) \bmod m$. Features that collide share a weight. With $m$ large the collisions are few enough that a model hardly notices, and the memory needed is fixed in advance. This is called feature hashing, and it works for the reason hash tables do: a good hash function spreads keys evenly.
+    - question:
+        id: order-put
+        type: order
+        system: s2
+        prompt: Put in order the steps by which a hash table with chaining stores the value 40000 under the key `"cat"`, when the table already holds `"cat"` with an older value.
+        steps:
+          - "Compute the hash of the key `\"cat\"`, a whole number."
+          - "Take its remainder on division by the number of buckets, to get a bucket number."
+          - "Jump to that bucket of the array in one step."
+          - "Walk along the bucket's chain, comparing each stored key with `\"cat\"`."
+          - "On finding the pair with an equal key, replace its value by 40000 and stop."
+        explanation: The hash comes first and is reduced to a bucket number. The array reaches that bucket by its address formula. Only then is anything compared, and only within one chain. Because the key is already present, its pair is updated in place. A new pair is added to the chain only when the walk reaches the end without finding the key.
+        hints:
+          - The bucket cannot be chosen before the hash is known.
+          - Whole keys are compared only inside one bucket.
+          - A dictionary holds each key once.
+  formal:
+    - text: |
+        **Hash function.** A function $h$ from keys to whole numbers with $k_1 = k_2 \Rightarrow h(k_1) = h(k_2)$. A good one spreads keys evenly.
+
+        **Hash table with chaining.** An array of $m$ buckets, each a list of (key, value) pairs. A key $k$ belongs in bucket $h(k) \bmod m$. To look up, insert or remove a key, compute its bucket and scan that bucket's chain, comparing keys with equality.
+
+        **Collision.** Two different keys with the same bucket. With more possible keys than buckets, collisions are unavoidable.
+
+        **Load factor.** $\alpha = n / m$ for $n$ keys in $m$ buckets, the average length of a chain. With evenly spread keys an operation costs $O(1 + \alpha)$ on average. In the worst case, with all keys in one bucket, it costs $O(n)$.
+
+        **Resizing.** When $\alpha$ exceeds a fixed bound, every pair is re-inserted into a table of $2m$ buckets, at cost $O(n)$, each key going to $h(k) \bmod 2m$.
+
+        **Hashable.** A key must not change in a way that changes its hash while it is stored. In Python, numbers, strings and tuples of hashable items are hashable. Lists, dictionaries and sets are not.
+  drill:
+    - text: Seconds each. Hash, take the remainder, then look in one bucket only.
+    - question:
+        id: drill-bucket
+        type: numeric
+        system: s1
+        prompt: |
+          A table has 10 buckets and a whole number is its own hash. In which bucket does the key 37 belong?
+        answer: "7"
+        explanation: 37 mod 10.
+        hints:
+          - Take the remainder on division by the number of buckets.
+          - 37 is 30 + 7.
+    - question:
+        id: drill-bucket-two
+        type: numeric
+        system: s1
+        prompt: |
+          A table has 8 buckets and a whole number is its own hash. In which bucket does the key 13 belong?
+        answer: "5"
+        explanation: 13 = 8 + 5.
+        hints:
+          - Take the remainder on division by 8.
+          - 13 minus 8.
+    - question:
+        id: drill-rehash
+        type: numeric
+        system: s1
+        prompt: |
+          The table of 8 buckets is replaced by one of 16. In which bucket does the key 13 belong now?
+        answer: "13"
+        explanation: 13 is less than 16, so it is its own remainder. The bucket changed when the number of buckets did.
+        hints:
+          - Take the remainder on division by the new number of buckets.
+          - The key is smaller than that number, so nothing is taken away.
+    - question:
+        id: drill-collide
+        type: choice
+        system: s1
+        prompt: |
+          With 10 buckets and each number its own hash, which pair of keys collides?
+        options: ["14 and 41", "14 and 24", "14 and 15", "10 and 11"]
+        answer: 1
+        explanation: Both leave remainder 4 on division by 10.
+        hints:
+          - Keys collide when their remainders are equal.
+          - Compare the last digits.
+    - question:
+        id: drill-load
+        type: numeric
+        system: s1
+        prompt: |
+          A table holds 12 keys in 8 buckets. What is its load factor?
+        answer: "3/2"
+        explanation: The number of keys over the number of buckets.
+        hints:
+          - Divide the number of keys by the number of buckets.
+          - Simplify 12 over 8.
+    - question:
+        id: drill-load-after
+        type: numeric
+        system: s1
+        prompt: |
+          That table of 12 keys is rebuilt with 16 buckets. What is its load factor now?
+        answer: "3/4"
+        explanation: Doubling the buckets halves the load factor.
+        hints:
+          - The number of keys has not changed.
+          - 12 over 16.
+    - question:
+        id: drill-pigeon
+        type: numeric
+        system: s1
+        prompt: |
+          11 keys are placed in 10 buckets. At least how many keys does the fullest bucket hold?
+        answer: "2"
+        explanation: If every bucket held at most one, there would be room for only 10.
+        hints:
+          - Could every bucket hold at most one key?
+          - There is one key too many for that.
+    - question:
+        id: drill-worst
+        type: choice
+        system: s1
+        prompt: |
+          Every one of $n$ keys has landed in the same bucket. What does a lookup cost?
+        options: ["$O(1)$", "$O(\\log n)$", "$O(n)$", "$O(n^2)$"]
+        answer: 2
+        explanation: The one chain holds every key and must be scanned.
+        hints:
+          - How long is the chain?
+          - A chain is searched item by item.
+    - question:
+        id: drill-average
+        type: choice
+        system: s1
+        prompt: |
+          A table spreads its keys evenly and keeps its load factor at most 1. What does a lookup cost on average?
+        options: ["$O(1)$", "$O(\\log n)$", "$O(n)$", "$O(n \\log n)$"]
+        answer: 0
+        explanation: One hash, one jump, and a chain of bounded average length.
+        hints:
+          - How long is an average chain?
+          - Does that length grow with n?
+    - question:
+        id: drill-key
+        type: choice
+        system: s1
+        prompt: |
+          Which of these can be used as a key of a Python dictionary?
+        options: ["`[1, 2]`", "`(1, 2)`", "`{1, 2}`", "`{1: 2}`"]
+        answer: 1
+        explanation: A tuple of numbers cannot change, so its hash is stable. Lists, sets and dictionaries can change and are refused.
+        hints:
+          - A key must never change while it is stored.
+          - Which of the four cannot be changed after it is made?
+    - question:
+        id: drill-same
+        type: choice
+        system: s1
+        prompt: |
+          Two keys are equal. What must be true of their hashes?
+        options: ["They must be equal", "They must be different", "They may be either", "They must both be 0"]
+        answer: 0
+        explanation: Otherwise a key could be stored in one bucket and looked for in another.
+        hints:
+          - Where is a key looked for?
+          - Where must it have been stored?
+    - question:
+        id: predict-buckets
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          print([k % 5 for k in [12, 25, 7, 33]])
+        output: "[2, 0, 2, 3]"
+        explanation: The remainders on division by 5. The keys 12 and 7 collide in bucket 2.
+        hints:
+          - Take each remainder on division by 5.
+          - 25 is a multiple of 5.
+    - question:
+        id: predict-chains
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          buckets = [[] for _ in range(4)]
+          for k in [12, 25, 7, 33, 18]:
+              buckets[k % 4].append(k)
+          print(buckets)
+        output: "[[12], [25, 33], [18], [7]]"
+        explanation: The remainders on division by 4 are 0, 1, 3, 1 and 2. The keys 25 and 33 share bucket 1, in the order they arrived.
+        hints:
+          - Find the remainder of each key on division by 4.
+          - Each key is appended to the chain of its bucket.
+  work:
+    - text: Slower now. For each table, say what the buckets are, what goes into them, and how long the chains can become.
+    - question:
+        id: write-text-hash
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `text_hash(word, m)`, the hash of a string reduced to a bucket number from 0 to `m - 1`. Start with `h = 0`. For each character `c` in turn, replace `h` by the remainder of `h * 31 + ord(c)` on division by `m`. Return the final `h`.
+        starter: |
+          def text_hash(word, m):
+              # Replace the next line with your own.
+              return 0
+
+          print(text_hash("ab", 1000), text_hash("ba", 1000))
+        solution: |
+          def text_hash(word, m):
+              h = 0
+              for c in word:
+                  h = (h * 31 + ord(c)) % m
+              return h
+
+          print(text_hash("ab", 1000), text_hash("ba", 1000))
+        tests: |
+          def _ref(word, m):
+              h = 0
+              for c in word:
+                  h = (h * 31 + ord(c)) % m
+              return h
+          assert text_hash("a", 1000) == 97, "The hash of 'a' is ord('a') = 97. You returned " + repr(text_hash("a", 1000))
+          assert text_hash("ab", 1000) == 105, "For 'ab': 97, then 97 * 31 + 98 = 3105, whose remainder on division by 1000 is 105. You returned " + repr(text_hash("ab", 1000))
+          assert text_hash("ba", 1000) == 135, "For 'ba': 98, then 98 * 31 + 97 = 3135, whose remainder is 135. You returned " + repr(text_hash("ba", 1000))
+          assert text_hash("", 1000) == 0, "The empty string hashes to 0"
+          assert text_hash("listen", 1000003) != text_hash("silent", 1000003), "Words with the same letters in a different order should get different hashes"
+          for _w in ["cat", "dog", "vector", "gradient descent", "Z"]:
+              for _m in [7, 64, 1000, 1000003]:
+                  _got = text_hash(_w, _m)
+                  assert 0 <= _got < _m, "The result must be a bucket number from 0 to m - 1. For " + repr(_w) + " and m = " + str(_m) + " you returned " + repr(_got)
+                  assert _got == _ref(_w, _m), "text_hash(" + repr(_w) + ", " + str(_m) + ") should be " + str(_ref(_w, _m)) + " and you returned " + repr(_got)
+          assert output.strip() == "105 135", "The program should print 105 135"
+        wrong:
+          - "def text_hash(word, m):\n    h = 0\n    for c in word:\n        h = (h + ord(c)) % m\n    return h\n\nprint(105, 135)\n"
+          - "def text_hash(word, m):\n    h = 0\n    for c in word:\n        h = h * 31 + ord(c)\n    return h\n\nprint(105, 135)\n"
+          - "def text_hash(word, m):\n    return len(word) % m\n\nprint(105, 135)\n"
+          - "def text_hash(word, m):\n    h = 0\n    for c in word:\n        h = (h * 31) % m + ord(c)\n    return h\n\nprint(105, 135)\n"
+          - "def text_hash(word, m):\n    h = 0\n    for c in word:\n        h = (h + 31 * ord(c)) % m\n    return h\n\nprint(105, 135)\n"
+        explanation: |
+          Multiplying the running total by 31 before each new character makes the position of every character count, so that "ab" and "ba" part company. A plain sum of the character numbers cannot tell them apart, nor "listen" from "silent", and words built from the same letters would always collide. The remainder is taken inside the loop so that the result is a valid bucket number and the intermediate values stay small. Left out, the function returns numbers far beyond the last bucket. The multiplier 31 is a convention. What matters is that it is an odd number larger than 1, so that the contributions of different positions do not simply cancel.
+        hints:
+          - Start with h = 0 and loop over the characters.
+          - Inside the loop, compute h * 31 + ord(c) and take its remainder on division by m.
+          - Return h after the loop.
+    - question:
+        id: write-put-get
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A hash table is a list of buckets, and each bucket is a list of `(key, value)` tuples. Write two functions.
+
+          `put(buckets, key, value)` stores the value under the key, in bucket `hash(key) % len(buckets)`. If the key is already in that bucket, its pair is replaced. A key must never appear twice.
+
+          `get(buckets, key, default)` returns the value stored under the key, or `default` if the key is absent.
+        starter: |
+          def put(buckets, key, value):
+              # Write this function.
+              return
+
+          def get(buckets, key, default):
+              # Replace the next line with your own.
+              return default
+
+          table = [[] for _ in range(4)]
+          put(table, "cat", 7)
+          put(table, "dog", 3)
+          put(table, "cat", 8)
+          print(get(table, "cat", 0), get(table, "dog", 0), get(table, "owl", 0))
+        solution: |
+          def put(buckets, key, value):
+              bucket = buckets[hash(key) % len(buckets)]
+              for i in range(len(bucket)):
+                  if bucket[i][0] == key:
+                      bucket[i] = (key, value)
+                      return
+              bucket.append((key, value))
+
+          def get(buckets, key, default):
+              bucket = buckets[hash(key) % len(buckets)]
+              for k, v in bucket:
+                  if k == key:
+                      return v
+              return default
+
+          table = [[] for _ in range(4)]
+          put(table, "cat", 7)
+          put(table, "dog", 3)
+          put(table, "cat", 8)
+          print(get(table, "cat", 0), get(table, "dog", 0), get(table, "owl", 0))
+        tests: |
+          _t = [[] for _ in range(4)]
+          put(_t, "cat", 7)
+          assert get(_t, "cat", 0) == 7, "After put(table, 'cat', 7), get(table, 'cat', 0) should be 7. You returned " + repr(get(_t, "cat", 0))
+          assert get(_t, "owl", -1) == -1, "A key that was never stored should give the default"
+          put(_t, "cat", 8)
+          assert get(_t, "cat", 0) == 8, "Storing under a key again should replace its value. You returned " + repr(get(_t, "cat", 0))
+          assert sum([len(b) for b in _t]) == 1, "A key stored twice must still appear only once in the table. Your table holds " + str(sum([len(b) for b in _t])) + " pairs"
+          _t = [[] for _ in range(5)]
+          for _k in [12, 25, 7, 33, 18, 41, 4, 26]:
+              put(_t, _k, _k * 10)
+          assert [len(b) for b in _t] == [1, 2, 2, 2, 1], "With 5 buckets the keys 12, 25, 7, 33, 18, 41, 4, 26 should give chains of lengths 1, 2, 2, 2, 1. Yours are " + repr([len(b) for b in _t])
+          assert _t[2] == [(12, 120), (7, 70)], "Bucket 2 should hold (12, 120) and then (7, 70). Yours holds " + repr(_t[2])
+          for _k in [12, 25, 7, 33, 18, 41, 4, 26]:
+              assert get(_t, _k, None) == _k * 10, "get should find every key that was put. For " + str(_k) + " you returned " + repr(get(_t, _k, None))
+          assert get(_t, 17, "absent") == "absent", "17 was never stored, though it shares bucket 2 with 12 and 7"
+          put(_t, 7, 0)
+          assert get(_t, 7, None) == 0 and get(_t, 12, None) == 120, "Replacing the value of 7 must not disturb 12, which shares its bucket"
+          _t = [[]]
+          put(_t, (1, 2), "pair")
+          put(_t, (2, 1), "other")
+          assert get(_t, (1, 2), None) == "pair" and get(_t, (2, 1), None) == "other", "With a single bucket every key collides, and both must still be found"
+          assert output.strip() == "8 3 0", "The program should print 8 3 0"
+        wrong:
+          - "def put(buckets, key, value):\n    buckets[hash(key) % len(buckets)].append((key, value))\n\ndef get(buckets, key, default):\n    bucket = buckets[hash(key) % len(buckets)]\n    for k, v in bucket:\n        if k == key:\n            return v\n    return default\n\nprint(8, 3, 0)\n"
+          - "def put(buckets, key, value):\n    buckets[hash(key) % len(buckets)] = [(key, value)]\n\ndef get(buckets, key, default):\n    bucket = buckets[hash(key) % len(buckets)]\n    for k, v in bucket:\n        if k == key:\n            return v\n    return default\n\nprint(8, 3, 0)\n"
+          - "def put(buckets, key, value):\n    bucket = buckets[hash(key) % len(buckets)]\n    for i in range(len(bucket)):\n        if bucket[i][0] == key:\n            bucket[i] = (key, value)\n            return\n    bucket.append((key, value))\n\ndef get(buckets, key, default):\n    bucket = buckets[hash(key) % len(buckets)]\n    if len(bucket) > 0:\n        return bucket[0][1]\n    return default\n\nprint(8, 3, 0)\n"
+          - "def put(buckets, key, value):\n    bucket = buckets[0]\n    for i in range(len(bucket)):\n        if bucket[i][0] == key:\n            bucket[i] = (key, value)\n            return\n    bucket.append((key, value))\n\ndef get(buckets, key, default):\n    for k, v in buckets[0]:\n        if k == key:\n            return v\n    return default\n\nprint(8, 3, 0)\n"
+          - "def put(buckets, key, value):\n    bucket = buckets[hash(key) % len(buckets)]\n    for i in range(len(bucket)):\n        if bucket[i][0] == key:\n            return\n    bucket.append((key, value))\n\ndef get(buckets, key, default):\n    bucket = buckets[hash(key) % len(buckets)]\n    for k, v in bucket:\n        if k == key:\n            return v\n    return default\n\nprint(8, 3, 0)\n"
+        explanation: |
+          Both functions start by computing the bucket, and from then on they touch only that one chain. `put` must look before it adds. If it simply appended, a key stored twice would sit in the chain twice, the table would hold stale values and its chains would lengthen with every update. If it replaced the whole bucket, it would throw away every other key that had collided there. `get` must compare keys and not just take the first pair in the bucket, since a bucket is shared. A table that put everything into bucket 0 would give right answers and be a slow list. The tests check the lengths of the chains as well as the answers, because a hash table that is correct and slow has failed at its only job.
+        hints:
+          - In both functions, start with bucket = buckets[hash(key) % len(buckets)].
+          - In put, look through the bucket for a pair whose key equals the key. Replace it if found, and append otherwise.
+          - In get, return the value of the pair whose key matches, or the default after the loop.
+    - question:
+        id: fix-resize
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `resize(buckets)` should return a table with twice as many buckets holding the same pairs, so that `get` still finds every key. Here the keys are whole numbers, which are their own hashes. The program should print `seven`. It prints `None`. Fix `resize`.
+        starter: |
+          def get(buckets, key, default):
+              for k, v in buckets[hash(key) % len(buckets)]:
+                  if k == key:
+                      return v
+              return default
+
+          def resize(buckets):
+              bigger = [[] for _ in range(2 * len(buckets))]
+              for i in range(len(buckets)):
+                  bigger[i] = buckets[i]
+              return bigger
+
+          table = [[], [(5, "five")], [(6, "six")], [(7, "seven")]]
+          print(get(resize(table), 7, None))
+        solution: |
+          def get(buckets, key, default):
+              for k, v in buckets[hash(key) % len(buckets)]:
+                  if k == key:
+                      return v
+              return default
+
+          def resize(buckets):
+              bigger = [[] for _ in range(2 * len(buckets))]
+              for bucket in buckets:
+                  for key, value in bucket:
+                      bigger[hash(key) % len(bigger)].append((key, value))
+              return bigger
+
+          table = [[], [(5, "five")], [(6, "six")], [(7, "seven")]]
+          print(get(resize(table), 7, None))
+        tests: |
+          _small = [[], [(5, "five")], [(6, "six")], [(7, "seven")]]
+          _big = resize(_small)
+          assert len(_big) == 8, "The new table should have twice as many buckets, 8. Yours has " + str(len(_big))
+          assert _big[5] == [(5, "five")] and _big[6] == [(6, "six")] and _big[7] == [(7, "seven")], "With 8 buckets the keys 5, 6 and 7 belong in buckets 5, 6 and 7. Your table is " + repr(_big)
+          assert _big[1] == [] and _big[2] == [] and _big[3] == [], "Buckets 1, 2 and 3 of the new table should be empty. Your table is " + repr(_big)
+          for _k, _v in [(5, "five"), (6, "six"), (7, "seven")]:
+              assert get(_big, _k, None) == _v, "Every key should still be found after resizing. For " + str(_k) + " you returned " + repr(get(_big, _k, None))
+          _crowded = [[(4, "a"), (2, "b"), (6, "c"), (8, "d")], [(1, "e"), (3, "f")]]
+          _wide = resize(_crowded)
+          assert [len(b) for b in _wide] == [2, 1, 2, 1], "Four buckets should split the chains of two: the keys 4, 8 then 1 then 2, 6 then 3. Your chain lengths are " + repr([len(b) for b in _wide])
+          assert sum([len(b) for b in _wide]) == 6, "No pair may be lost or repeated"
+          assert _crowded == [[(4, "a"), (2, "b"), (6, "c"), (8, "d")], [(1, "e"), (3, "f")]], "resize should leave the old table as it was"
+          assert resize([[]]) == [[], []], "An empty table of one bucket becomes an empty table of two"
+          assert output.strip() == "seven", "The program should print seven"
+        wrong:
+          - "def get(buckets, key, default):\n    for k, v in buckets[hash(key) % len(buckets)]:\n        if k == key:\n            return v\n    return default\n\ndef resize(buckets):\n    bigger = [[] for _ in range(2 * len(buckets))]\n    for i in range(len(buckets)):\n        bigger[i] = buckets[i]\n    return bigger\n\nprint('seven')\n"
+          - "def get(buckets, key, default):\n    for k, v in buckets[hash(key) % len(buckets)]:\n        if k == key:\n            return v\n    return default\n\ndef resize(buckets):\n    bigger = [[] for _ in range(2 * len(buckets))]\n    for bucket in buckets:\n        for key, value in bucket:\n            bigger[hash(key) % len(buckets)].append((key, value))\n    return bigger\n\nprint('seven')\n"
+          - "def get(buckets, key, default):\n    for k, v in buckets[hash(key) % len(buckets)]:\n        if k == key:\n            return v\n    return default\n\ndef resize(buckets):\n    return buckets + [[] for _ in range(len(buckets))]\n\nprint('seven')\n"
+          - "def get(buckets, key, default):\n    for k, v in buckets[hash(key) % len(buckets)]:\n        if k == key:\n            return v\n    return default\n\ndef resize(buckets):\n    bigger = [[] for _ in range(2 * len(buckets))]\n    for i in range(len(buckets)):\n        bigger[2 * i] = buckets[i]\n    return bigger\n\nprint('seven')\n"
+          - "def get(buckets, key, default):\n    for k, v in buckets[hash(key) % len(buckets)]:\n        if k == key:\n            return v\n    return default\n\ndef resize(buckets):\n    bigger = [[] for _ in range(2 * len(buckets))]\n    for bucket in buckets:\n        for key, value in bucket:\n            bigger[hash(key) % len(bigger)] = [(key, value)]\n    return bigger\n\nprint('seven')\n"
+        explanation: |
+          The starter carried each chain across to the bucket with the same number. But a key's bucket is its hash reduced by the number of buckets, and that number has just doubled. The key 7 sat in bucket 3 of 4, since 7 mod 4 is 3. Among 8 buckets it belongs in bucket 7, and that is where `get` now looks. Every pair has to be placed afresh, using the size of the **new** table. Doing so is what makes resizing worthwhile: the keys 4, 2, 6 and 8, which all shared one bucket of two, split into two chains among four buckets, and the chains shorten. Reducing by the old size, or copying buckets whole, moves nothing apart.
+        hints:
+          - In which bucket of 8 does get look for the key 7?
+          - In which bucket did resize leave it?
+          - Go through every pair of every old bucket, and append it to the bucket hash(key) % len(bigger).
+    - question:
+        id: work-bad-hash
+        type: choice
+        system: s2
+        prompt: |
+          A vocabulary of 50000 English words is stored in a hash table with 65536 buckets, using the hash function "the number of letters in the word". What happens?
+        options:
+          - "Lookups are $O(1)$, since there are more buckets than words."
+          - "Almost all the buckets stay empty. Word lengths run from 1 to about 20, so the words fall into about 20 buckets, with chains thousands long. Each lookup scans thousands of words, and the table is little better than a list."
+          - "The table cannot be built, because two words have the same hash."
+          - "The table works, but uses less memory."
+        answer: 1
+        explanation: |
+          The load factor, $\frac{50000}{65536}$, is under 1 and looks healthy. It is an average over all buckets, and it promises short chains only if the hash function spreads the keys over them. This one sends every word to a bucket numbered at most about 20. Fifty thousand words in twenty buckets is 2500 to a chain on average, and far more for common lengths. Collisions as such are no fault, since every hash table has them. The fault is a function whose values crowd into a small part of the range. It satisfies the requirement that equal keys get equal hashes, and fails completely at scattering.
+        hints:
+          - How many different values can this hash function take?
+          - How many buckets are ever used?
+          - How long are the chains in the buckets that are used?
+    - question:
+        id: work-saving
+        type: numeric
+        system: s2
+        prompt: |
+          A vocabulary holds 50000 words. Looking a word up in a list compares it with 25000 entries on average. Looking it up in a well-kept hash table compares it with about 2. For a text of a million words, how many times more comparisons does the list need than the hash table?
+        answer: "12500"
+        explanation: |
+          The list makes $10^6 \times 25000$ comparisons and the table $10^6 \times 2$. The ratio is $\frac{25000}{2} = 12500$, and the length of the text cancels out. The ratio is fixed by the size of the vocabulary: double the vocabulary and the list's cost doubles while the table's stays where it was. That is the meaning of $O(n)$ against $O(1)$. Work that would take the list three and a half hours takes the table one second.
+        hints:
+          - Write the total comparisons for each method.
+          - The million lookups appear in both and cancel.
+          - Divide 25000 by 2.
+    - question:
+        id: work-mutable-key
+        type: choice
+        system: s2
+        prompt: |
+          Suppose Python allowed a list as a dictionary key, hashing it by its contents. A program stores a value under the list `[1, 2]`, then appends 3 to that same list. What would go wrong?
+        options:
+          - "Nothing. The dictionary would follow the change."
+          - "The pair would still sit in the bucket chosen for `[1, 2]`. A lookup with the list, now `[1, 2, 3]`, would hash to a different bucket and miss it, and a lookup with a fresh `[1, 2]` would reach the right bucket and find a stored key that no longer equals it. The value could not be reached either way."
+          - "The dictionary would hold two copies of the value."
+          - "Only the speed of lookups would suffer."
+        answer: 1
+        explanation: |
+          A hash table's one promise is that a key can be found by recomputing where it was put. That works only if the computation gives the same result each time. A key whose contents change after it is stored has, in effect, moved without telling the table. The pair is stranded in a bucket that no lookup for its present contents will ever visit. So the rule is not an arbitrary restriction. Anything used as a key must be unable to change in a way that affects its hash, and Python enforces this by refusing to hash lists, sets and dictionaries at all. A tuple holding the same numbers is accepted.
+        hints:
+          - In which bucket was the pair placed?
+          - What bucket does the changed list hash to?
+          - What does a lookup compare once it reaches a bucket?
+  connections:
+    - text: |
+        The puzzle asked how a dictionary can find a word among fifty thousand without looking through them. It never chose where to keep the word. It computed the place from the word itself, by a hash function and a remainder, and it computes the same place again when asked. An array then reaches that bucket in one step, by the address formula of [[e3.arrays-and-linked-lists]]. What remains is a short chain to scan, for the keys that happened to collide.
+
+        Collisions cannot be avoided, since there are more possible keys than buckets. They can be kept few. The average chain has length $n / m$, the load factor, so a table that doubles its buckets as it fills keeps every operation at $O(1)$ on average, provided the hash function scatters its keys. A poor one sends everything to a few buckets and gives back the cost of a list. And because a key is found by recomputing its place, it must never change while it is stored, which is why a list cannot be a key.
+
+        You will use this structure constantly without building it again: for vocabularies, for counts, for sets of things already seen, and for remembering the results of work already done. That last use is half of [[e3.dynamic-programming]], and a set of visited places is what keeps a search from going in circles in [[e3.graphs-and-traversal]]. The doubling of the table, expensive when it happens and cheap on average, is examined in [[e3.amortised-analysis]].
+
+        The same scattering that makes a hash table fast makes it blind to order. Ask it for its smallest key and it must look in every bucket. Yet many problems are about order: handle the most urgent job next, find the nearest stored vector, keep the best five candidates. A stack and a queue from [[e3.stacks-and-queues]] gave you the newest and the oldest. To get the **smallest** at each step, without sorting everything again each time, you need a structure whose shape encodes order. It comes from the node with links, given two links instead of one. That is the next lesson, [[e3.trees-and-heaps]].

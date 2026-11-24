@@ -1,0 +1,654 @@
+concept: e3.arrays-and-linked-lists
+minutes: 85
+claim: You can explain how an array finds its item at position i in one step, why inserting or removing anywhere but the end costs time in proportion to the items after it, how a linked list trades that cost for the cost of reaching a position, and choose between the two for a given pattern of use.
+recalls: [e1.generators-and-context-managers, m4.linear-independence]
+uses: [e1.complexity-and-big-o, e1.classes-and-objects, e1.modules-and-imports, e1.comprehensions-and-iterators, e0.lists-and-tuples, e0.loops, e0.functions, e0.values-types-and-variables, m4.vectors-as-arrows-and-as-lists, m4.dot-product, m2.summation-and-product-notation, m1.straight-lines-and-slope]
+leads: [e3.stacks-and-queues, e3.hash-tables, e3.trees-and-heaps, e3.amortised-analysis]
+starter: |
+  # Scratch space. A list of 200000 numbers. Time three things, 200 times each.
+  import time
+
+  def clock(label, action):
+      start = time.perf_counter()
+      for _ in range(200):
+          action()
+      print(label, round((time.perf_counter() - start) * 1000, 2), "ms")
+
+  xs = list(range(200000))
+  clock("read the middle item ", lambda: xs[100000])
+  clock("add at the end       ", lambda: xs.append(0))
+  clock("insert at the front  ", lambda: xs.insert(0, 0))
+parts:
+  recall:
+    - text: |
+        [[m4.linear-independence]] closed the cluster on vectors with a remark: every vector there was a Python list, and no one had asked what a list costs to use. [[e1.generators-and-context-managers]] taught you to produce values one at a time so that they need never all sit in memory. Today is about the opposite case, values that do all sit in memory, and exactly how they sit. Three quick pulls first.
+    - question:
+        id: recall-generator
+        type: choice
+        system: s1
+        concepts: [e1.generators-and-context-managers]
+        prompt: |
+          A generator function contains `yield`. When does its body run?
+        options: ["All at once, when the function is called", "A piece at a time, each time the next value is asked for", "Never, until the program ends", "Once for each item, in parallel"]
+        answer: 1
+        explanation: Calling it only makes a generator object. The body runs up to the next yield each time a value is requested.
+        hints:
+          - What does calling a generator function return?
+          - When does the code up to the first yield run?
+    - question:
+        id: recall-cost-in
+        type: choice
+        system: s1
+        concepts: [e1.complexity-and-big-o]
+        prompt: |
+          `xs` is a list of $n$ items. What is the order of growth of `xs.insert(0, x)`?
+        options: ["$O(1)$", "$O(\\log n)$", "$O(n)$", "$O(n^2)$"]
+        answer: 2
+        explanation: Every item already in the list is moved along by one place.
+        hints:
+          - You met this in the table of hidden costs.
+          - What happens to the items already there?
+    - question:
+        id: recall-unique
+        type: choice
+        system: s1
+        concepts: [m4.linear-independence]
+        prompt: |
+          Three vectors in the plane are
+        options: ["always independent", "always dependent", "independent if no two are parallel", "independent if none is zero"]
+        answer: 1
+        explanation: The plane has room for only two independent directions.
+        hints:
+          - How many independent directions does the plane have?
+          - More vectors than dimensions.
+    - question:
+        id: recall-sum
+        type: numeric
+        system: s1
+        concepts: [m2.summation-and-product-notation]
+        prompt: |
+          What is $1 + 2 + 3 + \dots + 100$?
+        answer: "5050"
+        explanation: Half of 100 × 101.
+        hints:
+          - Use the formula for the sum of the first n whole numbers.
+          - Half of n times n + 1.
+  puzzle:
+    - text: |
+        Run the starter. It makes a list of 200000 numbers and times three operations, each done 200 times. On an ordinary machine the result looks something like this.
+
+        | Operation | Time for 200 |
+        | --- | --- |
+        | read the item in the middle, `xs[100000]` | about 0.01 ms |
+        | add an item at the end, `xs.append(0)` | about 0.01 ms |
+        | insert an item at the front, `xs.insert(0, 0)` | about 20 ms |
+
+        The third is slower than the others by a factor of a thousand or more. You were told this would happen: in the lesson on complexity, a table gave reading by position as $O(1)$ and inserting at the front as $O(n)$. You were not told **why**.
+
+        And the first row ought to puzzle you more than the third. The list has 200000 items. Python went straight to the one in the middle without passing the 100000 before it. Make the list ten times longer and the read is no slower. A person asked for the 100000th name on a list would have to count.
+
+        **How can a list reach any position in one step? And why does the very arrangement that makes this possible make inserting at the front so slow?**
+
+        You will answer both, and then build a second kind of list with the opposite strengths, to see that the cost was a choice.
+  intuition:
+    - text: |
+        A computer's memory is one very long row of small numbered boxes. The number of a box is its **address**. The machine can open any box in one step if it is given the address. That is the only trick it has.
+
+        To store a list, the simplest plan is to take a run of boxes that are **next to each other**, and give every item the same amount of room. This is an **array**. Suppose the run starts at address 1000 and each item takes 8 boxes. Where is item 0? At 1000. Item 1? At 1008. Item 5? At $1000 + 5 \times 8 = 1040$. No counting along is needed. One multiplication and one addition give the address, and the machine opens it. Item 100000 is found exactly as fast as item 5.
+
+        This is the same arithmetic as a straight line, $\text{address} = \text{start} + \text{size} \times i$. It works only because the items are packed together with no gaps and are all the same size.
+
+        And there is the price. With no gaps, there is nowhere to put a new item in the middle. To insert at position 2, every item from position 2 onwards must shuffle one place along to make room. To insert at the front, **every** item moves.
+
+        The other plan gives up the packing. Let the items live anywhere in memory, and let each one carry a note saying where the next one is. This is a **linked list**. Now an insertion disturbs nobody: write the new item wherever there is room, and change two notes. But the formula is gone. To find item 5 you must start at the first and follow five notes.
+
+        Try both in the figure. Move the place of insertion from the front to the back.
+    - figure: array-list
+      props: { index: 2 }
+    - text: |
+        At the front, the array moves all six items and the linked list follows no links. At the back, the array moves nothing and the linked list follows all six. Each structure is quick exactly where the other is slow.
+  derivation:
+    - text: |
+        **The address formula.** An array is a block of memory holding $n$ slots of equal size $s$, starting at address $a$. Slot $i$ is at
+
+        $$\text{address}(i) = a + s \cdot i.$$
+
+        Reading or writing slot $i$ is one computation and one visit to memory, whatever $i$ and $n$ are. This is called **random access**, and it is $O(1)$.
+
+        A Python list is an array. That may seem impossible, since a Python list can hold a number, a string and another list side by side, which are not the same size. The slots do not hold the items themselves. Each slot holds the **address of an item**, and an address is always the same size, 8 bytes on today's machines. The items live elsewhere. You have seen the consequence already: two names, or two slots, can refer to one object.
+
+        **What an array makes cheap and what it makes dear.** Let the array hold $n$ items.
+
+        | Operation | Work | Order |
+        | --- | --- | --- |
+        | read or write position $i$ | one address computed | $O(1)$ |
+        | add at the end, if there is spare room | one write | $O(1)$ |
+        | remove the last item | one step | $O(1)$ |
+        | insert at position $i$ | the $n - i$ items from $i$ onwards move right | $O(n)$ |
+        | remove position $i$ | the $n - i - 1$ items after it move left | $O(n)$ |
+
+        The number of moves depends on where you insert. At the end it is 0, at the front $n$, and on average, over all positions, about $\frac{n}{2}$. Half of $n$ is still of order $n$.
+
+        The phrase "if there is spare room" hides a real question. A block of memory cannot simply be stretched, because the boxes just after it may belong to something else. Python keeps some spare slots at the end, and when they run out it must do something drastic. What it does, and why appending still deserves to be called $O(1)$, has its own lesson later in this cluster.
+
+        Here is why the front is so costly in bulk. Build a list of $n$ items by inserting each new one at the front. The first insertion moves 0 items, the second 1, the third 2, and the last $n - 1$:
+
+        $$0 + 1 + 2 + \dots + (n - 1) = \frac{n(n - 1)}{2}.$$
+
+        That is $O(n^2)$. For $n = 200000$ it is about 20 thousand million moves. Building the same list by appending is $n$ writes.
+
+        **A linked list.** Give each item its own small object, a **node**, holding the item and the address of the next node. The last node holds `None`, meaning there is no next. The list as a whole is known by its first node, the **head**.
+
+        ```python
+        class Node:
+            def __init__(self, value, next):
+                self.value = value
+                self.next = next
+
+        head = Node(3, Node(8, Node(1, None)))
+        ```
+
+        This is the list 3, 8, 1. The nodes may be anywhere in memory. Nothing about their addresses is regular, so there is no formula for the third node. The only way to it is through the first two. Walking the whole list is a loop that follows links until it meets `None`:
+
+        ```python
+        node = head
+        while node is not None:
+            print(node.value)
+            node = node.next
+        ```
+
+        Reaching position $i$ takes $i$ steps of `node = node.next`. That is $O(n)$ in the worst case, where the array took $O(1)$.
+
+        In return, insertion needs no shuffling. To insert a value **after a node you already hold**, make a new node that points where the old one pointed, then point the old one at the new one:
+
+        ```python
+        def insert_after(node, value):
+            node.next = Node(value, node.next)
+        ```
+
+        Two links are set, and the length of the list does not enter into it: $O(1)$. The order of the two actions matters. The new node must take over the old link before the old link is overwritten, or the rest of the list is lost. The single line above does this correctly because the right-hand side, including `node.next`, is worked out before the assignment happens.
+
+        Inserting at the front is simpler still. The new node points at the old head and becomes the head: `head = Node(value, head)`. Removing the node after one you hold is one assignment, `node.next = node.next.next`, which makes the list skip over it.
+    - question:
+        id: derivation-order-of-links
+        type: choice
+        system: s2
+        prompt: |
+          To insert a new node `fresh` after `node` in a linked list, two links must be set. Which order is correct, and what goes wrong with the other?
+        options:
+          - "`node.next = fresh` and then `fresh.next = node.next`. Either order works."
+          - "`fresh.next = node.next` and then `node.next = fresh`. In the other order `node.next` is already `fresh` when it is copied, so `fresh` points at itself and the rest of the list is lost."
+          - "`fresh.next = node` and then `node.next = fresh`."
+          - "Only one link needs to be set."
+        answer: 1
+        explanation: |
+          The old value of `node.next` is the only record of where the rest of the list is. It has to be copied into the new node before it is overwritten. Done the other way round, `node.next` is first set to `fresh`, and then `fresh.next = node.next` copies that same address: the new node points at itself. A loop walking the list would then never reach `None`. With linked structures the usual discipline is to attach the new piece to what follows it first, and only then let the old structure point at it.
+        hints:
+          - What is the only place that remembers where the rest of the list is?
+          - What happens to that record if it is overwritten first?
+          - Follow the links after the wrong order, starting at node.
+    - text: |
+        **The two side by side.** For a list of $n$ items:
+
+        | Operation | Array | Linked list |
+        | --- | --- | --- |
+        | reach position $i$ | $O(1)$ | $O(n)$ |
+        | insert or remove at the front | $O(n)$ | $O(1)$ |
+        | insert or remove at the end | $O(1)$ | $O(n)$, or $O(1)$ if the last node is also remembered |
+        | insert or remove after a node already in hand | $O(n)$ | $O(1)$ |
+        | walk through every item | $O(n)$ | $O(n)$ |
+
+        Neither is better. They answer different questions quickly. An array is right when you mostly read by position or work at the end. A linked list is right when you hold your place in the list and keep inserting and removing there.
+
+        **What the orders of growth leave out.** Walking is $O(n)$ for both, and in practice the array is several times faster. Two things big-O ignores make the difference. A node carries an address beside every item, so the linked list takes more memory. And processors fetch memory in neighbouring chunks, so stepping through an array finds the next items already fetched, while each link of a linked list may lead somewhere far away that has to be fetched afresh. For this reason the array is the default choice, and most programs never need a linked list as such.
+
+        The idea of the linked list is worth more than the structure. Nodes that hold addresses of other nodes are how every branching structure is built. Give each node two links instead of one and you have a tree. Give it any number and you have a graph. You will build both in this cluster.
+
+        **Vectors are arrays.** The vectors of the last cluster were lists, and now you know what that means: a dot product is a walk along two blocks of memory side by side, the cheapest pattern there is. A grid of numbers with $r$ rows and $c$ columns is usually stored as **one** array of $r \cdot c$ numbers, row after row. The entry in row $i$ and column $j$ is then at position
+
+        $$i \cdot c + j,$$
+
+        the address formula again, one level up. A table that looks two-dimensional to you is a single run of boxes to the machine, and arithmetic finds any entry in one step.
+    - question:
+        id: order-insert
+        type: order
+        system: s2
+        prompt: An array holds 6 items in a block with spare room at the end. Put the steps in order to insert a new item at position 2 without losing anything.
+        steps:
+          - "Copy the item at position 5 into position 6."
+          - "Copy the item at position 4 into position 5."
+          - "Copy the item at position 3 into position 4."
+          - "Copy the item at position 2 into position 3."
+          - "Write the new item into position 2."
+        explanation: The shuffling must start from the far end. Position 6 is empty, so the last item can move into it safely, which frees position 5 for the item before it, and so on back to position 2. Starting from position 2 instead would copy its item over position 3 before that one had been saved, and the same value would then be smeared along the whole array.
+        hints:
+          - Which position is empty at the start?
+          - An item may only be copied into a position whose old contents are no longer needed.
+          - The new item is written last, once its place is free.
+  formal:
+    - text: |
+        **Array.** $n$ slots of equal size $s$ in consecutive memory from address $a$. Slot $i$ is at $a + s \cdot i$, so reading and writing by position are $O(1)$. Inserting at position $i$ moves $n - i$ items, and removing position $i$ moves $n - i - 1$: both $O(n)$, except at the end.
+
+        **Python list.** An array of addresses of objects.
+
+        **Linked list.** Nodes, each holding a value and the address of the next node, the last holding `None`. The list is known by its head. Reaching position $i$ follows $i$ links, $O(n)$. Inserting or removing after a node in hand, or at the head, sets a fixed number of links, $O(1)$.
+
+        **Building at the front of an array.** $0 + 1 + \dots + (n - 1) = \frac{n(n - 1)}{2}$ moves, $O(n^2)$.
+
+        **Row-major storage.** A grid with $c$ columns stored row after row has its entry $(i, j)$ at position $i \cdot c + j$.
+  drill:
+    - text: Seconds each. For an array, count the items that move. For a linked list, count the links followed.
+    - question:
+        id: drill-address
+        type: numeric
+        system: s1
+        prompt: |
+          An array starts at address 1000 and each slot takes 8 boxes. At what address is slot 5?
+        answer: "1040"
+        explanation: 1000 + 8 × 5.
+        hints:
+          - Multiply the slot size by the position.
+          - Add the starting address.
+    - question:
+        id: drill-address-zero
+        type: numeric
+        system: s1
+        prompt: |
+          An array starts at address 5000 and each slot takes 4 boxes. At what address is slot 0?
+        answer: "5000"
+        explanation: The first slot is at the start itself, which is why counting from 0 is natural.
+        hints:
+          - Put i = 0 into the formula.
+          - Nothing is added to the start.
+    - question:
+        id: drill-moves-insert
+        type: numeric
+        system: s1
+        prompt: |
+          An array holds 10 items. How many items move when a new one is inserted at position 3?
+        answer: "7"
+        explanation: The items at positions 3 to 9 each move one place right.
+        hints:
+          - Which positions hold the items that must make room?
+          - Count the positions from 3 to 9.
+    - question:
+        id: drill-moves-front
+        type: numeric
+        system: s1
+        prompt: |
+          An array holds 10 items. How many items move when a new one is inserted at position 0?
+        answer: "10"
+        explanation: Every item moves.
+        hints:
+          - Which items are at or after position 0?
+          - All of them.
+    - question:
+        id: drill-moves-end
+        type: numeric
+        system: s1
+        prompt: |
+          An array holds 10 items and has spare room. How many items move when a new one is added at the end?
+        answer: "0"
+        explanation: Nothing is after the new item, so nothing has to make room.
+        hints:
+          - Which items come after position 10?
+          - There are none.
+    - question:
+        id: drill-moves-remove
+        type: numeric
+        system: s1
+        prompt: |
+          An array holds 10 items. How many items move when the item at position 3 is removed?
+        answer: "6"
+        explanation: The items at positions 4 to 9 each move one place left to close the gap.
+        hints:
+          - Which items come after position 3?
+          - Count the positions from 4 to 9.
+    - question:
+        id: drill-links
+        type: numeric
+        system: s1
+        prompt: |
+          Starting with the head of a linked list in hand, how many links are followed to reach the node at position 4?
+        answer: "4"
+        explanation: One link takes you from position 0 to 1, and so on.
+        hints:
+          - The head is position 0.
+          - Each link advances one position.
+    - question:
+        id: drill-order-read
+        type: choice
+        system: s1
+        prompt: |
+          What is the order of growth of reading position $i$ of an array of $n$ items?
+        options: ["$O(1)$", "$O(i)$", "$O(n)$", "$O(\\log n)$"]
+        answer: 0
+        explanation: The address is computed, not searched for.
+        hints:
+          - How is the address of slot i found?
+          - Does the computation depend on i or n?
+    - question:
+        id: drill-order-linked-front
+        type: choice
+        system: s1
+        prompt: |
+          What is the order of growth of inserting at the front of a linked list of $n$ items?
+        options: ["$O(1)$", "$O(\\log n)$", "$O(n)$", "$O(n^2)$"]
+        answer: 0
+        explanation: A new node points at the old head and becomes the head.
+        hints:
+          - How many links are set?
+          - Does any existing node change?
+    - question:
+        id: drill-flat
+        type: numeric
+        system: s1
+        prompt: |
+          A grid with 4 rows and 5 columns is stored row after row in one array. At which position is the entry in row 2, column 3, counting rows and columns from 0?
+        answer: "13"
+        explanation: Two full rows of 5 come first, then 3 more.
+        hints:
+          - How many entries are in the rows before row 2?
+          - Add the column number.
+    - question:
+        id: drill-last-link
+        type: choice
+        system: s1
+        prompt: |
+          What does the last node of a linked list hold as its link?
+        options: ["The address of the head", "`None`", "Its own address", "0"]
+        answer: 1
+        explanation: None marks the end, and it is what a loop over the list tests for.
+        hints:
+          - How does a walk along the list know when to stop?
+          - There is no next node.
+    - question:
+        id: predict-list-ops
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          xs = [3, 8, 1]
+          xs.insert(1, 5)
+          last = xs.pop()
+          print(xs, last)
+        output: "[3, 5, 8] 1"
+        explanation: Inserting 5 at position 1 moves 8 and 1 along, giving [3, 5, 8, 1]. Then pop removes and returns the last item, 1.
+        hints:
+          - insert(1, 5) puts 5 at position 1 and moves the later items right.
+          - pop() with no argument removes the last item and returns it.
+    - question:
+        id: predict-walk
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          class Node:
+              def __init__(self, value, next):
+                  self.value = value
+                  self.next = next
+
+          head = Node(3, Node(8, Node(1, None)))
+          head = Node(5, head)
+          node = head.next
+          total = 0
+          while node is not None:
+              total += node.value
+              node = node.next
+          print(head.value, total)
+        output: "5 12"
+        explanation: A new node holding 5 becomes the head, in front of 3, 8, 1. The walk starts at the second node, so it adds 3 + 8 + 1.
+        hints:
+          - After the second assignment the list is 5, 3, 8, 1.
+          - The walk begins at head.next, not at head.
+  work:
+    - text: Slower now. Before choosing a structure, say which operations will be done most.
+    - question:
+        id: work-front-total
+        type: numeric
+        system: s2
+        prompt: |
+          A program builds an array of 1000 items by inserting each new item at the front. The first insertion moves 0 items, the second moves 1, and so on. How many moves are made in all?
+        answer: "499500"
+        explanation: |
+          The moves are $0 + 1 + 2 + \dots + 999 = \frac{999 \times 1000}{2} = 499500$. Building the same array by appending takes 1000 writes and no moves. The ratio grows with the size: for a million items it would be about 500 thousand million moves against a million writes. If the items are wanted in the reverse order, append them all and reverse once at the end, which is $O(n)$.
+        hints:
+          - Write the total as a sum from 0 to 999.
+          - Use the formula for the sum of the first whole numbers.
+          - Half of 999 times 1000.
+    - question:
+        id: write-to-list
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `to_list(head)`. `head` is the first node of a linked list, or `None` for an empty list. Return an ordinary Python list of the values, in order.
+        starter: |
+          class Node:
+              def __init__(self, value, next):
+                  self.value = value
+                  self.next = next
+
+          def to_list(head):
+              # Replace the next line with your own.
+              return []
+
+          print(to_list(Node(3, Node(8, Node(1, None)))))
+        solution: |
+          class Node:
+              def __init__(self, value, next):
+                  self.value = value
+                  self.next = next
+
+          def to_list(head):
+              values = []
+              node = head
+              while node is not None:
+                  values.append(node.value)
+                  node = node.next
+              return values
+
+          print(to_list(Node(3, Node(8, Node(1, None)))))
+        tests: |
+          assert to_list(Node(3, Node(8, Node(1, None)))) == [3, 8, 1], "The list 3, 8, 1 should give [3, 8, 1]. You returned " + repr(to_list(Node(3, Node(8, Node(1, None)))))
+          assert to_list(None) == [], "An empty list, given as None, should give []"
+          assert to_list(Node(7, None)) == [7], "A single node should give [7]. You returned " + repr(to_list(Node(7, None)))
+          assert to_list(Node(0, Node(0, None))) == [0, 0], "Values of 0 are still values. You returned " + repr(to_list(Node(0, Node(0, None))))
+          assert to_list(Node(None, Node(2, None))) == [None, 2], "A node may hold the value None. Only the link decides where the list ends. You returned " + repr(to_list(Node(None, Node(2, None))))
+          _head = None
+          for _v in range(50):
+              _head = Node(_v, _head)
+          assert to_list(_head) == list(range(49, -1, -1)), "A list of 50 nodes should come back whole and in order"
+          _keep = Node(1, Node(2, None))
+          to_list(_keep)
+          assert _keep.next is not None and _keep.next.value == 2, "to_list should not change the linked list"
+          assert output.strip() == "[3, 8, 1]", "The program should print [3, 8, 1]"
+        wrong:
+          - "class Node:\n    def __init__(self, value, next):\n        self.value = value\n        self.next = next\n\ndef to_list(head):\n    values = []\n    node = head\n    while node.next is not None:\n        values.append(node.value)\n        node = node.next\n    return values\n\nprint([3, 8, 1])\n"
+          - "class Node:\n    def __init__(self, value, next):\n        self.value = value\n        self.next = next\n\ndef to_list(head):\n    values = []\n    node = head\n    while node is not None:\n        values.insert(0, node.value)\n        node = node.next\n    return values\n\nprint([3, 8, 1])\n"
+          - "class Node:\n    def __init__(self, value, next):\n        self.value = value\n        self.next = next\n\ndef to_list(head):\n    values = []\n    node = head\n    while node is not None and node.value:\n        values.append(node.value)\n        node = node.next\n    return values\n\nprint([3, 8, 1])\n"
+          - "class Node:\n    def __init__(self, value, next):\n        self.value = value\n        self.next = next\n\ndef to_list(head):\n    if head is None:\n        return []\n    return [head.value]\n\nprint([3, 8, 1])\n"
+          - "class Node:\n    def __init__(self, value, next):\n        self.value = value\n        self.next = next\n\ndef to_list(head):\n    values = []\n    node = head\n    while node is not None:\n        node = node.next\n        if node is not None:\n            values.append(node.value)\n    return values\n\nprint([3, 8, 1])\n"
+        explanation: |
+          This is the standard walk: hold a node, use it, step to the next, and stop when the node in hand is `None`. The test must be on the node itself. Testing `node.next` stops one node early and misses the last value, and it fails outright on an empty list, where there is no node to ask. Testing the value confuses "the list has ended" with "this item happens to be 0". The walk visits each node once, so it is $O(n)$, and appending to the result keeps it so. Inserting each value at the front of the result would both reverse the order and make the function quadratic.
+        hints:
+          - Start with node = head and an empty list.
+          - While node is not None, append its value and move to node.next.
+          - Return the list after the loop.
+    - question:
+        id: fix-shift
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `insert_shift(cells, count, i, value)` works on an array with spare room: only the first `count` slots of `cells` are in use. It should insert `value` at position `i`, moving the later items one place right. For the call below it should print `[3, 8, 5, 1, 9, None]`. It prints `[3, 8, 5, 1, 1, None]`: the 9 has been lost. Fix it.
+        starter: |
+          def insert_shift(cells, count, i, value):
+              for j in range(i, count):
+                  cells[j + 1] = cells[j]
+              cells[i] = value
+
+          cells = [3, 8, 1, 9, None, None]
+          insert_shift(cells, 4, 2, 5)
+          print(cells)
+        solution: |
+          def insert_shift(cells, count, i, value):
+              for j in range(count - 1, i - 1, -1):
+                  cells[j + 1] = cells[j]
+              cells[i] = value
+
+          cells = [3, 8, 1, 9, None, None]
+          insert_shift(cells, 4, 2, 5)
+          print(cells)
+        tests: |
+          def _run(cells, count, i, value):
+              copy = [c for c in cells]
+              insert_shift(copy, count, i, value)
+              return copy
+          assert _run([3, 8, 1, 9, None, None], 4, 2, 5) == [3, 8, 5, 1, 9, None], "Inserting 5 at position 2 should give [3, 8, 5, 1, 9, None]. You got " + repr(_run([3, 8, 1, 9, None, None], 4, 2, 5))
+          assert _run([3, 8, 1, 9, None], 4, 0, 5) == [5, 3, 8, 1, 9], "Inserting at the front moves every item. You got " + repr(_run([3, 8, 1, 9, None], 4, 0, 5))
+          assert _run([3, 8, 1, 9, None], 4, 4, 5) == [3, 8, 1, 9, 5], "Inserting at the end moves nothing. You got " + repr(_run([3, 8, 1, 9, None], 4, 4, 5))
+          assert _run([3, 8, 1, 9, None], 4, 3, 5) == [3, 8, 1, 5, 9], "Inserting at position 3 moves one item. You got " + repr(_run([3, 8, 1, 9, None], 4, 3, 5))
+          assert _run([None, None], 0, 0, 7) == [7, None], "Inserting into an empty array writes one item. You got " + repr(_run([None, None], 0, 0, 7))
+          assert _run([1, 2, 3, 4, 5, 6, None], 6, 1, 0) == [1, 0, 2, 3, 4, 5, 6], "Inserting 0 at position 1 of six items. You got " + repr(_run([1, 2, 3, 4, 5, 6, None], 6, 1, 0))
+          assert output.strip() == "[3, 8, 5, 1, 9, None]", "The program should print [3, 8, 5, 1, 9, None]"
+        wrong:
+          - "def insert_shift(cells, count, i, value):\n    for j in range(i, count):\n        cells[j + 1] = cells[j]\n    cells[i] = value\n\nprint([3, 8, 5, 1, 9, None])\n"
+          - "def insert_shift(cells, count, i, value):\n    for j in range(count - 1, i, -1):\n        cells[j + 1] = cells[j]\n    cells[i] = value\n\nprint([3, 8, 5, 1, 9, None])\n"
+          - "def insert_shift(cells, count, i, value):\n    for j in range(count - 1, i - 1, -1):\n        cells[j + 1] = cells[j]\n\nprint([3, 8, 5, 1, 9, None])\n"
+          - "def insert_shift(cells, count, i, value):\n    for j in range(count - 1, i - 1, -1):\n        cells[j] = cells[j + 1]\n    cells[i] = value\n\nprint([3, 8, 5, 1, 9, None])\n"
+          - "def insert_shift(cells, count, i, value):\n    for j in range(count - 1, -1, -1):\n        cells[j + 1] = cells[j]\n    cells[i] = value\n\nprint([3, 8, 5, 1, 9, None])\n"
+        explanation: |
+          The starter moved items from the left. It copied position 2 into position 3 before the old contents of position 3 had been saved, then copied that same value into position 4, and so smeared one item over all the rest. The moves must start at the far end, where the next slot is free: the last item first, then the one before it, back to position `i`. `range(count - 1, i - 1, -1)` counts down from the last used position to `i` itself. Stopping one short would leave the item at position `i` unmoved, to be overwritten by the new value. This loop is what `xs.insert(i, x)` does inside Python, and its $n - i$ passes are the cost you measured.
+        hints:
+          - Trace the starter by hand on the example, one copy at a time.
+          - Which slot is safe to copy into first?
+          - Run the loop from the last used position down to i.
+    - question:
+        id: write-insert-at
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `insert_at(head, i, value)` for a linked list. Insert a new node holding `value` so that it ends up at position `i`, and return the head of the list, which is a new node when `i` is 0. You may assume `i` is between 0 and the length of the list.
+        starter: |
+          class Node:
+              def __init__(self, value, next):
+                  self.value = value
+                  self.next = next
+
+          def to_list(head):
+              values = []
+              while head is not None:
+                  values.append(head.value)
+                  head = head.next
+              return values
+
+          def insert_at(head, i, value):
+              # Replace the next line with your own.
+              return head
+
+          print(to_list(insert_at(Node(3, Node(8, Node(1, None))), 2, 5)))
+        solution: |
+          class Node:
+              def __init__(self, value, next):
+                  self.value = value
+                  self.next = next
+
+          def to_list(head):
+              values = []
+              while head is not None:
+                  values.append(head.value)
+                  head = head.next
+              return values
+
+          def insert_at(head, i, value):
+              if i == 0:
+                  return Node(value, head)
+              node = head
+              for _ in range(i - 1):
+                  node = node.next
+              node.next = Node(value, node.next)
+              return head
+
+          print(to_list(insert_at(Node(3, Node(8, Node(1, None))), 2, 5)))
+        tests: |
+          def _make(values):
+              head = None
+              for v in values[::-1]:
+                  head = Node(v, head)
+              return head
+          def _read(head):
+              values = []
+              steps = 0
+              while head is not None and steps < 1000:
+                  values.append(head.value)
+                  head = head.next
+                  steps += 1
+              assert steps < 1000, "The list never ends. A node points back into the list"
+              return values
+          assert _read(insert_at(_make([3, 8, 1]), 2, 5)) == [3, 8, 5, 1], "Inserting 5 at position 2 of 3, 8, 1 should give 3, 8, 5, 1. You got " + repr(_read(insert_at(_make([3, 8, 1]), 2, 5)))
+          assert _read(insert_at(_make([3, 8, 1]), 0, 5)) == [5, 3, 8, 1], "Inserting at position 0 should return a new head. You got " + repr(_read(insert_at(_make([3, 8, 1]), 0, 5)))
+          assert _read(insert_at(_make([3, 8, 1]), 3, 5)) == [3, 8, 1, 5], "Inserting at position 3 puts the node at the end. You got " + repr(_read(insert_at(_make([3, 8, 1]), 3, 5)))
+          assert _read(insert_at(_make([3, 8, 1]), 1, 5)) == [3, 5, 8, 1], "Inserting at position 1 should give 3, 5, 8, 1. You got " + repr(_read(insert_at(_make([3, 8, 1]), 1, 5)))
+          assert _read(insert_at(None, 0, 9)) == [9], "Inserting into an empty list gives a list of one node. You got " + repr(_read(insert_at(None, 0, 9)))
+          _h = _make([1, 2, 3, 4])
+          assert insert_at(_h, 2, 0) is _h, "When i is not 0 the head does not change, so return the same head"
+          assert output.strip() == "[3, 8, 5, 1]", "The program should print [3, 8, 5, 1]"
+        wrong:
+          - "class Node:\n    def __init__(self, value, next):\n        self.value = value\n        self.next = next\n\ndef insert_at(head, i, value):\n    node = head\n    for _ in range(i - 1):\n        node = node.next\n    node.next = Node(value, node.next)\n    return head\n\nprint([3, 8, 5, 1])\n"
+          - "class Node:\n    def __init__(self, value, next):\n        self.value = value\n        self.next = next\n\ndef insert_at(head, i, value):\n    if i == 0:\n        return Node(value, head)\n    node = head\n    for _ in range(i):\n        node = node.next\n    node.next = Node(value, node.next)\n    return head\n\nprint([3, 8, 5, 1])\n"
+          - "class Node:\n    def __init__(self, value, next):\n        self.value = value\n        self.next = next\n\ndef insert_at(head, i, value):\n    if i == 0:\n        return Node(value, head)\n    node = head\n    for _ in range(i - 1):\n        node = node.next\n    node.next = Node(value, None)\n    return head\n\nprint([3, 8, 5, 1])\n"
+          - "class Node:\n    def __init__(self, value, next):\n        self.value = value\n        self.next = next\n\ndef insert_at(head, i, value):\n    if i == 0:\n        return Node(value, head)\n    node = head\n    for _ in range(i - 1):\n        node = node.next\n    fresh = Node(value, None)\n    node.next = fresh\n    fresh.next = node.next\n    return head\n\nprint([3, 8, 5, 1])\n"
+          - "class Node:\n    def __init__(self, value, next):\n        self.value = value\n        self.next = next\n\ndef insert_at(head, i, value):\n    if i == 0:\n        return Node(value, head)\n    node = head\n    for _ in range(i - 1):\n        node = node.next\n    node.next = Node(value, node.next)\n    return node\n\nprint([3, 8, 5, 1])\n"
+        explanation: |
+          To put a node at position $i$ you need the node at position $i - 1$ in hand, because that is the node whose link changes. So the walk follows $i - 1$ links, and one more would overshoot. Position 0 has no node before it and is handled on its own: the new node points at the old head and is returned as the head. The new node must be given the old link at the moment it is made. If it is made with `None` the rest of the list is cut off, and if the old link is overwritten first the new node ends up pointing at itself, which one of the tests detects as a list that never ends. The walk is $O(i)$ and the insertion itself $O(1)$.
+        hints:
+          - If i is 0, return a new node that points at head.
+          - Otherwise walk to the node at position i − 1 by following i − 1 links.
+          - Set its link to a new node that points where it used to point, and return head.
+    - question:
+        id: work-choose
+        type: choice
+        system: s2
+        prompt: |
+          A program stores a million embedding vectors. It looks them up constantly by their position, and now and then adds a new one at the end. It never inserts in the middle. Which structure suits it, and why?
+        options:
+          - "A linked list, because insertion is $O(1)$."
+          - "An array, because reading by position is $O(1)$ and adding at the end moves nothing. A linked list would follow up to a million links for each lookup."
+          - "Either, since walking both is $O(n)$."
+          - "Neither can hold a million items."
+        answer: 1
+        explanation: |
+          The work is almost all reads by position, which is the one thing an array does in a single step and a linked list does worst. Additions happen only at the end, where an array moves nothing. The linked list's strength, cheap insertion at a place you already hold, is never used. Its weaknesses all are: slow lookups, an extra address stored beside every item, and nodes scattered through memory. Choosing a data structure is this kind of bookkeeping. List the operations, weigh them by how often they happen, and read off the costs.
+        hints:
+          - Which operation does the program perform most?
+          - What does that operation cost in each structure?
+          - Is the linked list's cheap insertion ever needed here?
+    - question:
+        id: work-remove-all
+        type: choice
+        system: s2
+        prompt: |
+          A list of $n$ items is emptied by repeatedly removing the **first** item with `xs.pop(0)`. A second copy is emptied by repeatedly removing the **last** item with `xs.pop()`. How do the total costs compare?
+        options:
+          - "Both are $O(n)$."
+          - "Removing from the front is $O(n^2)$ in all, since each removal moves every remaining item, $(n - 1) + (n - 2) + \\dots + 0$ moves. Removing from the end is $O(n)$ in all."
+          - "Both are $O(n^2)$."
+          - "Removing from the end is slower, because the end is further away."
+        answer: 1
+        explanation: |
+          Removing position 0 of an array closes the gap by moving every remaining item one place left. With $k$ items left that is $k - 1$ moves, and the total is $\frac{n(n - 1)}{2}$, of order $n^2$. Removing the last item moves nothing, so $n$ removals cost $n$ steps. "The end is further away" is the intuition of someone who has to walk there. An array does not walk: the last position is $n - 1$, and the address formula reaches it as fast as any other. A loop that takes items from the front of a long Python list is a common and well-hidden cause of slow programs, and the next lesson has the proper tool for it.
+        hints:
+          - What must happen to the other items when position 0 is removed?
+          - Add up the moves over all n removals.
+          - How does an array reach its last position?
+  connections:
+    - text: |
+        The puzzle asked how a list can reach its middle item in one step, and why inserting at the front is a thousand times slower. A list is an array: equal slots packed side by side from a known address, so that the address of slot $i$ is $\text{start} + \text{size} \times i$, found by arithmetic. The same packing leaves no gaps, so inserting anywhere but the end means moving everything after it. Both facts are one fact about the layout.
+
+        A linked list makes the opposite bargain. Its nodes sit anywhere and each points to the next, so an insertion sets two links and moves nothing, but a position can only be reached by following links from the head. Neither structure is better. You weigh the operations you will perform and choose.
+
+        This is the pattern of the whole cluster. A data structure is a way of arranging values in memory, and every arrangement makes some operations cheap by making others dear. The costs you were handed as a table in the lesson on complexity will each be explained by an arrangement: constant-time membership by [[e3.hash-tables]], and the quiet "if there is spare room" behind every append by [[e3.amortised-analysis]]. The node with links, which looked like a poor substitute for an array here, becomes the building block of [[e3.trees-and-heaps]].
+
+        First, notice what the cheap operations had in common. An array is fast at one end. A linked list is fast at its head. A great many programs need nothing more than that: put things in, take things out, always at an end. Restricting yourself on purpose to the ends gives two of the most useful structures there are, and the difference between them, which end things leave from, decides the order in which a whole computation unfolds. That is the next lesson, [[e3.stacks-and-queues]].

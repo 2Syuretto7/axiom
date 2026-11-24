@@ -1,0 +1,933 @@
+concept: e3.amortised-analysis
+minutes: 80
+claim: You can explain how a list grows when its block of memory is full, show that doubling makes $n$ appends cost fewer than $3n$ steps in total though a single append can cost $n$, state what an amortised cost does and does not promise, and apply the same accounting to hash tables, to a queue made of two stacks, and to code that builds things piece by piece.
+recalls: [e3.dynamic-programming]
+uses: [e3.arrays-and-linked-lists, e3.stacks-and-queues, e3.hash-tables, e3.graphs-and-traversal, e3.divide-and-conquer, e1.classes-and-objects, e1.complexity-and-big-o, e1.comprehensions-and-iterators, e0.lists-and-tuples, e0.loops, e0.strings]
+leads: [e3.topological-sort, e3.shortest-paths-and-beam-search]
+starter: |
+  # Scratch space. A list lives in a block of fixed room. When the block is full, a larger block
+  # is found and every item is copied across. copies_made counts the copying for a run of appends.
+  # Two rules for the size of the new block are compared: one more slot, or twice as many.
+  def copies_made(appends, grow):
+      room = 1
+      size = 0
+      copies = 0
+      for _ in range(appends):
+          if size == room:
+              copies += size
+              room = grow(room)
+          size += 1
+      return copies
+
+  for n in [1000, 2000, 4000, 8000]:
+      print(n, copies_made(n, lambda room: room + 1), copies_made(n, lambda room: 2 * room))
+parts:
+  recall:
+    - text: |
+        [[e3.dynamic-programming]] closed on a loose end in the accounts. Appending to a list has been called $O(1)$ since your first lesson on complexity, with a quiet "if there is spare room". Today the qualification is removed, and with it you gain a way of counting that you will need again. Three quick pulls first.
+    - question:
+        id: recall-dp-cost
+        type: choice
+        system: s1
+        concepts: [e3.dynamic-programming]
+        prompt: |
+          The cost of a memoised recursion is the number of different questions multiplied by
+        options:
+          - "the number of calls made"
+          - "the work for one question, not counting its recursive calls"
+          - "the depth of the recursion"
+          - "the size of the answer"
+        answer: 1
+        explanation: Each question is computed once, and every later call for it is a lookup.
+        hints:
+          - How many times is each question actually computed?
+          - What does a later call for the same question cost?
+    - question:
+        id: recall-array-end
+        type: numeric
+        system: s1
+        concepts: [e3.arrays-and-linked-lists]
+        prompt: |
+          An array holds 10 items and has spare room at the end. How many items must move when a new one is added at the end?
+        answer: "0"
+        explanation: Nothing comes after the new item, so nothing has to make way.
+        hints:
+          - Which items come after the new one?
+          - Only items after the new one would need to move.
+    - question:
+        id: recall-doubling-sum
+        type: numeric
+        system: s1
+        concepts: [e3.divide-and-conquer]
+        prompt: |
+          What is $1 + 2 + 4 + 8 + 16$?
+        answer: "31"
+        explanation: One less than the next power of 2. Each term is one more than all the terms before it together.
+        hints:
+          - Add from the left, or notice how the sum compares with the next power of 2.
+          - $1 + 2 + 4 = 7$, which is one less than 8.
+  puzzle:
+    - text: |
+        In [[e3.arrays-and-linked-lists]] you learnt that a Python list is an array: a run of slots side by side in memory, which is why `items[k]` takes one step. You also learnt that the run cannot be stretched, because the slots just beyond it may belong to something else.
+
+        So what happens when the run is full and you append?
+
+        There is only one thing that can happen. A larger run is found somewhere else, **every item is copied across**, and the old run is given up. Appending to a full list of a million items costs a million steps.
+
+        Yet the table of costs says appending is $O(1)$, and you have relied on that in nearly every program you have written.
+
+        **Both statements cannot be the whole truth. What is the honest cost of an append?**
+
+        It depends on a decision: when a list must move, **how much room should the new block have?** Run the starter, which counts the copying for two rules. Making the new block one slot larger, the copies for 1000, 2000, 4000 and 8000 appends are 499500, 1999000, 7998000 and 31996000: four times as many each time the appends double. Making it twice as large, they are 1023, 2047, 4095 and 8191.
+
+        The second rule sometimes copies thousands of items for a single append, and still its total is tiny.
+
+        **Why does doubling make the total so small? And in what sense is an operation $O(1)$ if it sometimes costs $n$?**
+  intuition:
+    - text: |
+        Watch the costs one append at a time. The list starts in a block with room for 1, and doubles the room whenever it is full. Step through seventeen appends.
+    - figure: doubling-array
+      props: { appends: 9 }
+    - text: |
+        Most appends cost one step. A few are tall: the 2nd, 3rd, 5th, 9th and 17th, each of which finds the block full and copies everything before writing.
+
+        Now look at two things together. The tall bars get **taller**, doubling each time. And they get **rarer**, the gaps between them doubling too. After the copy of 8 items there are eight cheap appends before the next copy. After the copy of 16 there are sixteen.
+
+        Those two doublings cancel. Spread each tall bar over the cheap appends that follow it, and it adds about one step to each of them. The figure's running total says it: after 17 appends the work is 17 writes and 31 copies, 48 steps, fewer than 3 per append. It stays below 3 per append for ever.
+
+        Here is a way to see that it must. Imagine each append is charged **three** rupees. One pays for writing the item. The other two are put in a savings box. When the block is full with $m$ items, the last $m/2$ of them arrived since the previous move, and each put in two rupees: $m$ rupees are in the box, which is exactly the cost of copying $m$ items. The box is never overdrawn. So three rupees an append pays for everything, the expensive moves included.
+
+        The rule of one more slot has no such balance. Every append finds the block full, and every one pays for a complete copy.
+  derivation:
+    - text: |
+        **The total, added up.** Do $n$ appends, starting with room for 1 and doubling when full. Each append writes one item: $n$ writes. Copies happen when the size is 1, 2, 4, 8 and so on, and each copies as many items as there are:
+
+        $$1 + 2 + 4 + \dots + 2^k,$$
+
+        where $2^k$ is the largest power of 2 below $n$. You know this sum. Each term is one more than all the terms before it, so the whole is one less than the next power of 2:
+
+        $$1 + 2 + 4 + \dots + 2^k = 2^{k+1} - 1 < 2n.$$
+
+        So
+
+        $$\text{total work} < n + 2n = 3n.$$
+
+        **The definition.** When any sequence of $n$ operations costs at most $c \cdot n$ steps in total, the operation is said to have an **amortised cost** of $c$. The word is the accountant's word for spreading the price of something expensive over the period in which it is used.
+
+        Appending to a doubling list has an amortised cost of less than 3. In the usual notation, it is $O(1)$ **amortised**.
+
+        Be exact about what this promises. It is not an average over lucky and unlucky inputs. There is no luck in it. It is a guarantee about the **total** for every possible sequence: $n$ appends never cost more than $3n$, whatever is appended. What it does not promise is that any one append is cheap. The worst single append still costs $n$.
+
+        For a loop that appends a million items, the total is all that matters, and the amortised cost is the honest one. That is why every count you have made so far, with appends inside loops, stands.
+
+        **Why doubling, and not adding.** Try growing by a fixed amount, say 100 more slots each time. The copies are then of 100, 200, 300 items and so on up to $n$:
+
+        $$100 + 200 + \dots + n = 100\left(1 + 2 + \dots + \frac{n}{100}\right) \approx \frac{n^2}{200}.$$
+
+        That is $O(n^2)$ in total, so $O(n)$ amortised. The 100 delays the trouble and does not cure it. However large the fixed step, the moves come at a steady rate while their cost keeps rising.
+
+        What cures it is growing by a **factor**, so that the gaps between moves grow in step with their cost. The factor need not be 2. With a factor of $g$, the copies are a sum in which each term is $g$ times the one before, and such a sum is less than $\frac{g}{g - 1}$ times its last term. A factor of 2 gives copies below $2n$. A factor of $1.5$ gives $3n$. Python grows its lists by about one eighth, a factor of $1.125$, giving about $9n$.
+
+        The choice trades two things. A large factor copies less and wastes more: just after doubling, half of the block is empty. A small factor wastes little and copies more often. Every factor above 1 gives $O(1)$ amortised.
+    - question:
+        id: derive-total
+        type: numeric
+        system: s2
+        prompt: |
+          A list starts with room for 1 and doubles when full. 1000 items are appended. How many item copies are made in all?
+        answer: "1023"
+        explanation: |
+          A move happens whenever an append finds the block full, which is when the size is 1, 2, 4, and so on up to 512. The next would be at size 1024, which is not reached. The copies are $1 + 2 + 4 + \dots + 512 = 2 \times 512 - 1$. With the 1000 writes that is 2023 steps, about 2 per append, and the starter printed the same number of copies.
+        hints:
+          - At which sizes is the block full?
+          - The largest of those sizes below 1000 is 512.
+          - The sum of the powers of 2 up to 512 is one less than the next power.
+    - text: |
+        **Three ways to count.** You have now seen two arguments for the same fact, and there is a third. All three are worth owning, since each is the easy one for some problem.
+
+        *Add up the total.* Count the whole sequence at once, as with the sum of powers of 2.
+
+        *Charge in advance.* Give each operation a fixed charge larger than its real cost, bank the difference, and show the bank is never overdrawn. That was the three rupees.
+
+        *Follow one item.* Ask how many times any single item can be handled in its whole life.
+
+        The third is the natural one for the queue made of two stacks from [[e3.stacks-and-queues]]. Enqueue pushes onto `inbox`. Dequeue pops from `outbox`, and when `outbox` is empty it first moves the whole of `inbox` across. One dequeue can move a million items. But follow an item: it is pushed onto `inbox` once, moved once, and popped from `outbox` once. Three steps in its life, whatever happens around it. So $n$ operations cost at most $3n$ steps, and both operations are $O(1)$ amortised.
+
+        You have used this argument before without its name. In [[e3.graphs-and-traversal]], one trip round the loop of breadth-first search can be long, since a node may have many neighbours. Nobody tried to bound a single trip. The count was that each edge is looked at twice **over the whole run**, giving $O(\lvert V \rvert + \lvert E \rvert)$. That was charging the work to the edges.
+
+        **Hash tables.** The same doubling keeps a hash table fast. In [[e3.hash-tables]] the average chain had length $n/m$, the load factor, and you wrote a `resize` that doubles the buckets and puts every pair in its new place. A table resizes when the load factor passes some limit. Each resize handles every pair, exactly as a list's move copies every item, and by the same sum the total is below $2n$ over $n$ insertions.
+
+        So the cost of inserting into a dictionary carries two qualifications, and they are different in kind. It is $O(1)$ **on average**, over how the hash function scatters the keys. And it is $O(1)$ **amortised**, over the occasional resize. The first is a statement about luck. The second is not.
+
+        **Where the promise is not enough.** An amortised bound is about totals. Sometimes one slow operation is the thing that matters. A program that must answer within a millisecond, to keep sound playing or to serve a request before a deadline, cannot shrug off the one append in a million that copies everything. There the worst case of a single operation is the right measure, and structures are chosen that never have a bad moment, such as the linked list, whose every append is one step. Know which of the two questions you are being asked.
+
+        **Shrinking.** One more trap. If lists grow by doubling, it seems natural to halve the block when the list falls to half full. Consider a list sitting exactly at the boundary, and a program that pops one item and appends one, over and over. The pop takes it to half full: halve, copying everything. The append fills the smaller block: double, copying everything. Every operation costs $n$. The savings-box argument has collapsed, because after a move there is no longer a long run of cheap operations before the next.
+
+        The cure is to leave a gap between the two thresholds: double when full, and halve only when the list is a **quarter** full. After either kind of move the block is half full, and at least a quarter of its room must be filled or emptied before the next move. The run of cheap operations is back, and so is the $O(1)$.
+    - question:
+        id: derive-move-order
+        type: order
+        system: s2
+        prompt: An item is appended to a list whose block is full. Put what happens in order.
+        steps:
+          - "The list finds that its size equals its room"
+          - "A new block with a multiple of the old room is obtained"
+          - "Each item is copied from the old block to the same position in the new one"
+          - "The old block is given up"
+          - "The new item is written in the first free slot, and the size goes up by one"
+        explanation: The costly part is the copying, one step for each item already present. After it the list is in a block with spare room, and the write is the ordinary one-step append. The many cheap appends that can now follow before the room runs out are what pay for the copy.
+        hints:
+          - The new block must exist before anything can be copied into it.
+          - The old block cannot be given up while it still holds the only copy of the items.
+          - The new item is written last, into the room the move has made.
+  formal:
+    - text: |
+        **Amortised cost.** An operation has amortised cost $c$ if every sequence of $n$ operations, starting from an empty structure, costs at most $c \cdot n$ in total. It bounds the total for every sequence, involves no probability, and does not bound any single operation.
+
+        **Dynamic array.** A list in a block that is replaced by one $g$ times as large, $g > 1$, when full. Starting from room 1 with $g = 2$, $n$ appends make fewer than $2n$ copies and cost fewer than $3n$ steps: $O(1)$ amortised, $O(n)$ in the worst single case. Growing by a fixed number of slots gives $O(n)$ amortised.
+
+        **Three methods.** Add up the total over the sequence. Or charge each operation a fixed amount, and show that the amounts banked always cover the real costs. Or bound the number of times any one item is handled.
+
+        **Hash table.** Doubling the buckets when the load factor passes a limit makes insertion $O(1)$ amortised, in addition to $O(1)$ on average over the hash.
+
+        **Shrinking.** Doubling when full and halving when a quarter full keeps appending and popping $O(1)$ amortised. Halving when half full does not.
+  drill:
+    - text: Seconds each. Unless told otherwise, a list starts with room for 1 and doubles its room when an append finds it full.
+    - question:
+        id: drill-room
+        type: numeric
+        system: s1
+        prompt: |
+          After 9 appends, how much room has the block?
+        answer: "16"
+        explanation: The room goes 1, 2, 4, 8, and the ninth item does not fit in 8.
+        hints:
+          - The room doubles each time it is not enough.
+          - What is the smallest power of 2 that holds 9 items?
+    - question:
+        id: drill-fifth
+        type: numeric
+        system: s1
+        prompt: |
+          How many steps does the 5th append cost, counting each copy and the write?
+        answer: "5"
+        explanation: The block of 4 is full, so 4 items are copied and then the new one is written.
+        hints:
+          - How much room is there when the 5th item arrives?
+          - Every item present is copied, and then the new item is written.
+    - question:
+        id: drill-sixth
+        type: numeric
+        system: s1
+        prompt: |
+          How many steps does the 6th append cost?
+        answer: "1"
+        explanation: The block has room for 8 and holds 5, so the item is simply written.
+        hints:
+          - What happened at the 5th append?
+          - Is there spare room now?
+    - question:
+        id: drill-copies-nine
+        type: numeric
+        system: s1
+        prompt: |
+          How many item copies are made in all during the first 9 appends?
+        answer: "15"
+        explanation: $1 + 2 + 4 + 8$, at the 2nd, 3rd, 5th and 9th appends.
+        hints:
+          - Copies are made when the size is 1, 2, 4 and 8.
+          - Add those four sizes.
+    - question:
+        id: drill-total-nine
+        type: numeric
+        system: s1
+        prompt: |
+          What is the total work for the first 9 appends, writes and copies together?
+        answer: "24"
+        explanation: 9 writes and 15 copies. That is under 3 per append.
+        hints:
+          - There is one write for each append.
+          - Add the copies, which are 1 + 2 + 4 + 8.
+    - question:
+        id: drill-plus-one
+        type: numeric
+        system: s1
+        prompt: |
+          A list starts with room for 1 and grows by **one slot** when full. How many copies are made in all during 5 appends?
+        answer: "10"
+        explanation: Every append after the first finds the block full and copies everything, $1 + 2 + 3 + 4$.
+        hints:
+          - The 2nd append copies 1 item and the 3rd copies 2.
+          - Add the whole numbers from 1 to 4.
+    - question:
+        id: drill-amortised
+        type: numeric
+        system: s1
+        prompt: |
+          A sequence of 1000 operations costs 3000 steps in total. What is the cost per operation, spread evenly?
+        answer: "3"
+        explanation: The total divided by the number of operations.
+        hints:
+          - Spreading evenly means dividing.
+          - Divide the total by the number of operations.
+    - question:
+        id: drill-two-stack-life
+        type: numeric
+        system: s1
+        prompt: |
+          In the queue made of two stacks, how many times in its whole life is one item pushed onto a stack?
+        answer: "2"
+        explanation: Once onto `inbox` when it is enqueued, and once onto `outbox` when it is moved.
+        hints:
+          - It is pushed when it arrives.
+          - It is pushed once more when it changes stack. Can it ever change back?
+    - question:
+        id: drill-which-appends
+        type: choice
+        system: s1
+        prompt: |
+          Which of the first twenty appends find the block full and cause a copy?
+        options:
+          - "The 2nd, 4th, 8th and 16th"
+          - "The 2nd, 3rd, 5th, 9th and 17th"
+          - "Every second append"
+          - "The 10th and the 20th"
+        answer: 1
+        explanation: The block is full when the size is a power of 2, and the append that finds it so is the next one.
+        hints:
+          - The block is full when it holds 1, 2, 4, 8 or 16 items.
+          - Which append arrives to find 4 items in a block of 4?
+    - question:
+        id: drill-promise
+        type: choice
+        system: s1
+        prompt: |
+          "Appending is $O(1)$ amortised" promises that
+        options:
+          - "every append takes a constant number of steps"
+          - "any $n$ appends together take at most a constant times $n$ steps"
+          - "appends are fast unless you are unlucky"
+          - "an append is fast on average over random lists"
+        answer: 1
+        explanation: The promise is about the total over a sequence, and it holds for every sequence. Luck and randomness have no part in it, and a single append may still be slow.
+        hints:
+          - Is any single append guaranteed to be cheap?
+          - Does the bound depend on chance?
+    - question:
+        id: drill-fixed-step
+        type: choice
+        system: s1
+        prompt: |
+          A list grows by 1000 slots whenever it is full. For a very long run of appends, the amortised cost of an append is
+        options: ["$O(1)$", "$O(\\log n)$", "$O(n)$", "$O(n^2)$"]
+        answer: 2
+        explanation: The moves come every 1000 appends for ever, and each copies everything present, so the copies total about $n^2 / 2000$, which is of order $n$ for each append.
+        hints:
+          - How often does a move happen once the list is long?
+          - How much does each of those moves copy?
+    - question:
+        id: predict-doubling
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          room = 1
+          size = 0
+          copies = 0
+          for _ in range(20):
+              if size == room:
+                  copies += size
+                  room = 2 * room
+              size += 1
+          print(room, copies)
+        output: "32 31"
+        explanation: The block is found full at sizes 1, 2, 4, 8 and 16, and those five moves copy $1 + 2 + 4 + 8 + 16$ items and leave room for 32. Twenty appends, 31 copies.
+        hints:
+          - At which sizes does the test size == room succeed?
+          - The room ends as the smallest power of 2 that holds 20 items.
+    - question:
+        id: predict-two-stacks
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          inbox = [1, 2, 3]
+          outbox = []
+          moves = 0
+          while len(inbox) > 0:
+              outbox.append(inbox.pop())
+              moves += 1
+          first = outbox.pop()
+          inbox.append(4)
+          second = outbox.pop()
+          print(first, second, moves, inbox, outbox)
+        output: "1 2 3 [4] [3]"
+        explanation: Moving the three items reverses them, so `outbox` is `[3, 2, 1]` with the oldest, 1, on top. It leaves first and 2 leaves second. The 4 that arrived meanwhile waits in `inbox` and is not moved, since `outbox` is not empty.
+        hints:
+          - pop takes the last item of a list. What is outbox after the loop?
+          - The item on top of outbox is the one that arrived first.
+  work:
+    - text: Slower now. For each structure, say which operations are dear, how often they can happen, and who pays for them.
+    - question:
+        id: write-growable
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          `Growable` is a list built on a block of fixed room. The block is the Python list `self.block`, whose length is the room and never changes: you may assign to its slots, and you may **not** call `append` on it. `self.size` is the number of slots in use and `self.copies` counts every item copied between blocks. Write the method `append`. When the block is full, make a new block of twice the room, copy the items across one by one, counting each, and use it from then on.
+        starter: |
+          class Growable:
+              def __init__(self):
+                  self.block = [None]
+                  self.size = 0
+                  self.copies = 0
+
+              def get(self, k):
+                  return self.block[k]
+
+              def append(self, value):
+                  # Replace the next line with your own.
+                  self.block[0] = value
+
+          items = Growable()
+          for k in range(9):
+              items.append(k * k)
+          print(items.size, len(items.block), items.copies, items.get(8))
+        solution: |
+          class Growable:
+              def __init__(self):
+                  self.block = [None]
+                  self.size = 0
+                  self.copies = 0
+
+              def get(self, k):
+                  return self.block[k]
+
+              def append(self, value):
+                  if self.size == len(self.block):
+                      bigger = [None] * (2 * len(self.block))
+                      for k in range(self.size):
+                          bigger[k] = self.block[k]
+                          self.copies += 1
+                      self.block = bigger
+                  self.block[self.size] = value
+                  self.size += 1
+
+          items = Growable()
+          for k in range(9):
+              items.append(k * k)
+          print(items.size, len(items.block), items.copies, items.get(8))
+        tests: |
+          _g = Growable()
+          _rooms = []
+          for _k in range(40):
+              _g.append(_k * 3)
+              _rooms.append(len(_g.block))
+              assert _g.size == _k + 1, "After " + str(_k + 1) + " appends the size should be " + str(_k + 1) + ". It is " + repr(_g.size)
+          assert [_g.get(_k) for _k in range(40)] == [_k * 3 for _k in range(40)], "Every item appended should still be there, in order. The first ten are " + repr([_g.get(_k) for _k in range(10)])
+          assert _rooms[:9] == [1, 2, 4, 4, 8, 8, 8, 8, 16], "The room after each of the first nine appends should be 1, 2, 4, 4, 8, 8, 8, 8, 16. Yours was " + repr(_rooms[:9])
+          assert _rooms[39] == 64, "After 40 appends the room should be 64. It is " + repr(_rooms[39])
+          assert _g.copies == 63, "Forty appends should copy 1 + 2 + 4 + 8 + 16 + 32 = 63 items. Yours counted " + repr(_g.copies)
+          _h = Growable()
+          _h.append("a")
+          assert _h.copies == 0 and len(_h.block) == 1 and _h.get(0) == "a", "The first append fits in the first block, with no copying"
+          _i = Growable()
+          for _k in range(1000):
+              _i.append(_k)
+          assert _i.copies == 1023, "A thousand appends should copy 1023 items in all. Yours counted " + repr(_i.copies)
+          assert output.strip() == "9 16 15 64", "The program should print 9 16 15 64"
+        wrong:
+          - |
+            class Growable:
+                def __init__(self):
+                    self.block = [None]
+                    self.size = 0
+                    self.copies = 0
+
+                def get(self, k):
+                    return self.block[k]
+
+                def append(self, value):
+                    if self.size == len(self.block):
+                        bigger = [None] * (len(self.block) + 1)
+                        for k in range(self.size):
+                            bigger[k] = self.block[k]
+                            self.copies += 1
+                        self.block = bigger
+                    self.block[self.size] = value
+                    self.size += 1
+
+            print(9, 16, 15, 64)
+          - |
+            class Growable:
+                def __init__(self):
+                    self.block = [None]
+                    self.size = 0
+                    self.copies = 0
+
+                def get(self, k):
+                    return self.block[k]
+
+                def append(self, value):
+                    if self.size == len(self.block):
+                        self.block = [None] * (2 * len(self.block))
+                        self.copies += self.size
+                    self.block[self.size] = value
+                    self.size += 1
+
+            print(9, 16, 15, 64)
+          - |
+            class Growable:
+                def __init__(self):
+                    self.block = [None]
+                    self.size = 0
+                    self.copies = 0
+
+                def get(self, k):
+                    return self.block[k]
+
+                def append(self, value):
+                    if self.size == 0:
+                        self.block[0] = value
+                    else:
+                        self.block.append(value)
+                    self.size += 1
+
+            print(9, 16, 15, 64)
+          - |
+            class Growable:
+                def __init__(self):
+                    self.block = [None]
+                    self.size = 0
+                    self.copies = 0
+
+                def get(self, k):
+                    return self.block[k]
+
+                def append(self, value):
+                    if self.size == len(self.block):
+                        bigger = [None] * (2 * len(self.block))
+                        for k in range(self.size):
+                            bigger[k] = self.block[k]
+                            self.copies += 1
+                        self.block = bigger
+                    self.size += 1
+                    self.block[self.size] = value
+
+            print(9, 16, 15, 64)
+        explanation: |
+          The method has two parts. If the size equals the room, a block of twice the room is made, each item is copied to the same position in it, and the list switches to it. Then, in every case, the value is written at position `self.size`, the first free slot, and the size goes up. The order of those last two lines matters: the slots in use are 0 to `size - 1`, so the next free one is `size` itself, before it is increased. Making a new block without copying loses everything stored so far. Growing by one slot is correct and costs a full copy at every append: 780 copies for forty appends where doubling makes 63. This is, in outline, what Python does inside every list, with a smaller factor.
+        hints:
+          - The block is full when self.size equals len(self.block).
+          - "When it is full, make bigger = [None] * (2 * len(self.block)), copy each of the self.size items into the same position, add 1 to self.copies for each, and set self.block = bigger."
+          - In every case, finish by writing the value at position self.size and then adding 1 to self.size.
+    - question:
+        id: write-two-stack-queue
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          `TwoStackQueue` is a queue built from two Python lists used as stacks, with `append` and `pop` only. `enqueue` is written. Write `dequeue`, which removes and returns the item that has waited longest. When `outbox` is empty it moves every item from `inbox` to `outbox`, adding 1 to `self.moves` for each item moved. It must move items at no other time. You may assume the queue is not empty when `dequeue` is called.
+        starter: |
+          class TwoStackQueue:
+              def __init__(self):
+                  self.inbox = []
+                  self.outbox = []
+                  self.moves = 0
+
+              def enqueue(self, value):
+                  self.inbox.append(value)
+
+              def dequeue(self):
+                  # Replace the next line with your own.
+                  return self.inbox.pop()
+
+          q = TwoStackQueue()
+          for word in ["to", "be", "or"]:
+              q.enqueue(word)
+          first = q.dequeue()
+          q.enqueue("not")
+          print(first, q.dequeue(), q.dequeue(), q.dequeue(), q.moves)
+        solution: |
+          class TwoStackQueue:
+              def __init__(self):
+                  self.inbox = []
+                  self.outbox = []
+                  self.moves = 0
+
+              def enqueue(self, value):
+                  self.inbox.append(value)
+
+              def dequeue(self):
+                  if len(self.outbox) == 0:
+                      while len(self.inbox) > 0:
+                          self.outbox.append(self.inbox.pop())
+                          self.moves += 1
+                  return self.outbox.pop()
+
+          q = TwoStackQueue()
+          for word in ["to", "be", "or"]:
+              q.enqueue(word)
+          first = q.dequeue()
+          q.enqueue("not")
+          print(first, q.dequeue(), q.dequeue(), q.dequeue(), q.moves)
+        tests: |
+          _q = TwoStackQueue()
+          for _w in ["to", "be", "or"]:
+              _q.enqueue(_w)
+          _first = _q.dequeue()
+          assert _first == "to", "After to, be, or are enqueued, the first to leave is 'to'. You returned " + repr(_first)
+          assert _q.outbox == ["or", "be"] and _q.inbox == [], "After the first dequeue, outbox should hold or, be with be on top, and inbox should be empty. They are " + repr(_q.outbox) + " and " + repr(_q.inbox)
+          _q.enqueue("not")
+          _rest = [_q.dequeue(), _q.dequeue(), _q.dequeue()]
+          assert _rest == ["be", "or", "not"], "The rest should leave as be, or, not. Yours left as " + repr(_rest)
+          assert _q.moves == 4, "Four items passed through, and each is moved once, so moves should be 4. It is " + repr(_q.moves)
+          _r = TwoStackQueue()
+          _out = []
+          for _k in range(200):
+              _r.enqueue(_k)
+              _r.enqueue(_k + 1000)
+              _out.append(_r.dequeue())
+          for _k in range(200):
+              _out.append(_r.dequeue())
+          _want = []
+          for _k in range(200):
+              _want.append(_k)
+              _want.append(_k + 1000)
+          assert _out == _want, "Items should leave in exactly the order they arrived. The first six to leave were " + repr(_out[:6]) + " and should be " + repr(_want[:6])
+          assert _r.moves == 400, "400 items passed through the queue and each should be moved exactly once. Yours made " + repr(_r.moves) + " moves"
+          assert output.strip() == "to be or not 4", "The program should print to be or not 4"
+        wrong:
+          - |
+            class TwoStackQueue:
+                def __init__(self):
+                    self.inbox = []
+                    self.outbox = []
+                    self.moves = 0
+
+                def enqueue(self, value):
+                    self.inbox.append(value)
+
+                def dequeue(self):
+                    while len(self.inbox) > 0:
+                        self.outbox.append(self.inbox.pop())
+                        self.moves += 1
+                    return self.outbox.pop()
+
+            print("to be or not 4")
+          - |
+            class TwoStackQueue:
+                def __init__(self):
+                    self.inbox = []
+                    self.outbox = []
+                    self.moves = 0
+
+                def enqueue(self, value):
+                    self.inbox.append(value)
+
+                def dequeue(self):
+                    while len(self.inbox) > 0:
+                        self.outbox.append(self.inbox.pop())
+                        self.moves += 1
+                    value = self.outbox.pop()
+                    while len(self.outbox) > 0:
+                        self.inbox.append(self.outbox.pop())
+                        self.moves += 1
+                    return value
+
+            print("to be or not 4")
+          - |
+            class TwoStackQueue:
+                def __init__(self):
+                    self.inbox = []
+                    self.outbox = []
+                    self.moves = 0
+
+                def enqueue(self, value):
+                    self.inbox.append(value)
+
+                def dequeue(self):
+                    self.moves += 1
+                    return self.inbox.pop(0)
+
+            print("to be or not 4")
+          - |
+            class TwoStackQueue:
+                def __init__(self):
+                    self.inbox = []
+                    self.outbox = []
+                    self.moves = 0
+
+                def enqueue(self, value):
+                    self.inbox.append(value)
+
+                def dequeue(self):
+                    if len(self.outbox) == 0:
+                        while len(self.inbox) > 1:
+                            self.outbox.append(self.inbox.pop())
+                            self.moves += 1
+                        return self.inbox.pop()
+                    return self.outbox.pop()
+
+            print("to be or not 4")
+        explanation: |
+          `outbox` holds the older items with the oldest on top, and `inbox` the newer ones with the newest on top. A dequeue pops `outbox`. Only when `outbox` is empty is `inbox` poured into it, which reverses it and brings its oldest item to the top. The condition is the whole design. Pour while `outbox` still holds items, and newer items land on top of older ones and leave before them. Pour everything back after each dequeue, and the order is kept but every dequeue moves the entire queue twice, which is $O(n)$ each and $O(n^2)$ for the run. With the condition, an item is moved exactly once in its life, so 400 items cost 400 moves, however the enqueues and dequeues are interleaved. One dequeue may be slow. A sequence of them never is.
+        hints:
+          - Only when outbox is empty, pop every item from inbox and append it to outbox, counting each move.
+          - After that, whether or not anything was moved, the oldest item is on top of outbox.
+          - Return self.outbox.pop().
+    - question:
+        id: fix-shrink
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          This `Growable` also gives room back: `pop` halves the block when the list has shrunk. After 33 appends, the program pops one item and appends one, a hundred times over. The list never changes size by more than one, so no copying should be needed, and the program should print 0. It prints 6400. Change the rule for shrinking so that popping and appending near any size is cheap, while a list that empties still gives its room back.
+        starter: |
+          class Growable:
+              def __init__(self):
+                  self.block = [None]
+                  self.size = 0
+                  self.copies = 0
+
+              def resize(self, room):
+                  fresh = [None] * room
+                  for k in range(self.size):
+                      fresh[k] = self.block[k]
+                      self.copies += 1
+                  self.block = fresh
+
+              def append(self, value):
+                  if self.size == len(self.block):
+                      self.resize(2 * len(self.block))
+                  self.block[self.size] = value
+                  self.size += 1
+
+              def pop(self):
+                  self.size -= 1
+                  value = self.block[self.size]
+                  if len(self.block) > 1 and self.size <= len(self.block) // 2:
+                      self.resize(len(self.block) // 2)
+                  return value
+
+          items = Growable()
+          for k in range(33):
+              items.append(k)
+          before = items.copies
+          for _ in range(100):
+              items.pop()
+              items.append(0)
+          print(items.copies - before)
+        solution: |
+          class Growable:
+              def __init__(self):
+                  self.block = [None]
+                  self.size = 0
+                  self.copies = 0
+
+              def resize(self, room):
+                  fresh = [None] * room
+                  for k in range(self.size):
+                      fresh[k] = self.block[k]
+                      self.copies += 1
+                  self.block = fresh
+
+              def append(self, value):
+                  if self.size == len(self.block):
+                      self.resize(2 * len(self.block))
+                  self.block[self.size] = value
+                  self.size += 1
+
+              def pop(self):
+                  self.size -= 1
+                  value = self.block[self.size]
+                  if len(self.block) > 1 and self.size <= len(self.block) // 4:
+                      self.resize(len(self.block) // 2)
+                  return value
+
+          items = Growable()
+          for k in range(33):
+              items.append(k)
+          before = items.copies
+          for _ in range(100):
+              items.pop()
+              items.append(0)
+          print(items.copies - before)
+        tests: |
+          _g = Growable()
+          for _k in range(50):
+              _g.append(_k)
+          _popped = [_g.pop() for _k in range(50)]
+          assert _popped == list(range(49, -1, -1)), "Items should be popped newest first. The first five popped were " + repr(_popped[:5])
+          assert _g.size == 0, "After popping everything the size should be 0. It is " + repr(_g.size)
+          _g.append("again")
+          assert _g.pop() == "again", "The list should still work after being emptied"
+          for _start in [16, 17, 31, 32, 33, 34, 63, 64, 65]:
+              _t = Growable()
+              for _k in range(_start):
+                  _t.append(_k)
+              _before = _t.copies
+              for _k in range(100):
+                  _t.pop()
+                  _t.append(_k)
+              for _k in range(100):
+                  _t.pop()
+                  _t.pop()
+                  _t.append(_k)
+                  _t.append(_k)
+              assert _t.copies - _before <= 200, "Starting from " + str(_start) + " items, 600 pops and appends that keep the size within 2 of where it began should need hardly any copying. Yours copied " + str(_t.copies - _before) + " items"
+              assert _t.size == _start, "The size should be back to " + str(_start)
+          _s = Growable()
+          for _k in range(1024):
+              _s.append(_k)
+          for _k in range(1020):
+              _s.pop()
+          assert len(_s.block) <= 32, "A list that has shrunk from 1024 items to 4 should have given most of its room back. Its block still has room for " + str(len(_s.block))
+          assert [_s.block[_k] for _k in range(4)] == [0, 1, 2, 3], "The items that remain should be unharmed. They are " + repr([_s.block[_k] for _k in range(4)])
+          assert output.strip() == "0", "The program should print 0"
+        wrong:
+          - |
+            class Growable:
+                def __init__(self):
+                    self.block = [None]
+                    self.size = 0
+                    self.copies = 0
+
+                def resize(self, room):
+                    fresh = [None] * room
+                    for k in range(self.size):
+                        fresh[k] = self.block[k]
+                        self.copies += 1
+                    self.block = fresh
+
+                def append(self, value):
+                    if self.size == len(self.block):
+                        self.resize(2 * len(self.block))
+                    self.block[self.size] = value
+                    self.size += 1
+
+                def pop(self):
+                    self.size -= 1
+                    return self.block[self.size]
+
+            print(0)
+          - |
+            class Growable:
+                def __init__(self):
+                    self.block = [None]
+                    self.size = 0
+                    self.copies = 0
+
+                def resize(self, room):
+                    fresh = [None] * room
+                    for k in range(self.size):
+                        fresh[k] = self.block[k]
+                        self.copies += 1
+                    self.block = fresh
+
+                def append(self, value):
+                    if self.size == len(self.block):
+                        self.resize(2 * len(self.block))
+                    self.block[self.size] = value
+                    self.size += 1
+
+                def pop(self):
+                    self.size -= 1
+                    value = self.block[self.size]
+                    if len(self.block) > 1 and self.size < len(self.block) // 2:
+                        self.resize(len(self.block) // 2)
+                    return value
+
+            print(0)
+          - |
+            class Growable:
+                def __init__(self):
+                    self.block = [None]
+                    self.size = 0
+                    self.copies = 0
+
+                def resize(self, room):
+                    fresh = [None] * room
+                    for k in range(self.size):
+                        fresh[k] = self.block[k]
+                        self.copies += 1
+                    self.block = fresh
+
+                def append(self, value):
+                    if self.size == len(self.block):
+                        self.resize(2 * len(self.block))
+                    self.block[self.size] = value
+                    self.size += 1
+
+                def pop(self):
+                    self.size -= 1
+                    value = self.block[self.size]
+                    if self.size <= len(self.block) // 4:
+                        self.resize(self.size)
+                    return value
+
+            print(0)
+        explanation: |
+          After 33 appends the block has room for 64. A pop leaves 32 items, which is half, so the block is halved to 32 and all 32 items are copied. The block is now exactly full, so the append that follows doubles it and copies 32 again. Each pair of operations costs 64 copies, and a hundred pairs cost 6400. The trouble is that the two thresholds touch: straight after a move in one direction, the list is one step from a move in the other. Halving only when the list is a quarter full separates them. After any move the block is half full, and a quarter of its room must be used up or emptied before the next, so every move is paid for by a long run of cheap operations before it. Changing `<=` to `<` only shifts the boundary by one: the cycle of two pops and two appends then does the same damage. Removing the shrinking cures the copying and keeps the room of the largest size the list ever had.
+        hints:
+          - After the pop that halves the block, how full is the new block? What does the next append do?
+          - The size at which the block shrinks and the size at which it grows must be well apart.
+          - Halve the block only when the list has fallen to a quarter of the room.
+    - question:
+        id: work-odometer
+        type: numeric
+        system: s2
+        prompt: |
+          A car's odometer has wheels for units, tens, hundreds and thousands. Each kilometre turns the units wheel. Whenever a wheel passes from 9 to 0, it also turns the wheel on its left. From 0000, the car drives 1000 km. How many wheel turns are there in all?
+        answer: "1111"
+        explanation: |
+          Add up by wheel, not by kilometre. The units wheel turns every kilometre, 1000 times. The tens wheel turns once every 10 km, 100 times. The hundreds wheel turns 10 times and the thousands wheel once. The total is $1000 + 100 + 10 + 1$, about 1.11 turns per kilometre, though the kilometre from 0999 to 1000 alone turned four wheels. The dear steps are rare in exact proportion to their cost, which is the pattern of the doubling list, and the same sum shows that counting upwards in binary changes fewer than 2 digits per step on average.
+        hints:
+          - Do not count kilometre by kilometre. Count how many times each wheel turns.
+          - The tens wheel turns once for every ten turns of the units wheel.
+          - Add the turns of the four wheels.
+    - question:
+        id: work-building-strings
+        type: choice
+        system: s2
+        prompt: |
+          A language model produces a text one piece at a time, 100000 pieces in all. One program keeps the text in a string and does `text = text + piece` each time. Another appends each piece to a list and calls `"".join(pieces)` once at the end. A string cannot be changed, so `text + piece` builds a new string by copying both. How do the two compare?
+        options:
+          - "They do the same work, since both add one piece at a time."
+          - "The first copies the whole text so far at every step, which is the rule of growing by one slot: about $n^2 / 2$ copies of pieces, five thousand million. The second makes $n$ cheap appends and one pass to join, about $n$ steps in each."
+          - "The first is faster, because it avoids making a list."
+          - "The second is slower, because `join` must copy everything."
+        answer: 1
+        explanation: |
+          Adding to an unchangeable string is an append with no spare room: every step copies everything so far, and the copies add up to $1 + 2 + \dots + n$. The list has spare room, so its appends are $O(1)$ amortised, and `join` measures the total length, makes one string of that size, and copies each piece once. The same trap waits in every structure of fixed size. When you meet NumPy, whose arrays have no spare room, appending to an array inside a loop will be the same quadratic mistake, and the cure will be the same: collect in a list and convert once, or make the array at its final size before the loop.
+        hints:
+          - How much is copied by text + piece when text already holds 50000 pieces?
+          - Which rule of growth from the lesson does that resemble?
+          - How many times is each piece copied by the list and the join?
+    - question:
+        id: work-deadline
+        type: choice
+        system: s2
+        prompt: |
+          A program records sound. Every millisecond it must store one new sample, and if storing ever takes longer than a millisecond, there is a click in the recording. A doubling list makes appends $O(1)$ amortised. Is that good enough?
+        options:
+          - "Yes. $O(1)$ amortised means every append is fast."
+          - "No. The total time is small, but the one append that copies millions of samples may overrun the deadline. Here the worst case of a single operation is what matters, so reserve all the room before recording starts, or use a structure whose every append is one step."
+          - "Yes, provided the list grows by a fixed amount instead of doubling."
+          - "No, because lists cannot hold numbers."
+        answer: 1
+        explanation: |
+          Amortised analysis answers the question "how long does the whole job take?". The recorder is asking a different one: "how long can any single step take?". For that question the doubling list's answer is $n$, however rare the bad step is. The usual remedies are to obtain the full block in advance, so that no move ever happens, or to store the samples in fixed-size chunks linked together, where adding a chunk never touches the old ones. Growing by a fixed amount makes things worse on both counts: the moves become frequent, and each still copies everything. Most programs care about totals, and for them amortised cost is the right measure. Recognise the ones that do not.
+        hints:
+          - Does an amortised bound limit the cost of one particular append?
+          - What does the append cost when the block happens to be full?
+          - How could the program make sure that no append ever moves the list?
+  connections:
+    - text: |
+        The puzzle asked for the honest cost of an append, when a full list must be copied in its entirety. A single append can cost $n$. But if the new block is twice as large, the moves grow rarer exactly as they grow dearer, the copies over $n$ appends total less than $2n$, and the whole costs less than $3n$. Appending is $O(1)$ amortised: a guarantee about the total for every sequence, with no promise about any one step. Grow by a fixed amount and the guarantee is lost.
+
+        This lesson paid three debts. The "if there is spare room" of [[e3.arrays-and-linked-lists]] is now explained. So is the claim in [[e3.hash-tables]] that a table which doubles its buckets stays $O(1)$, and the claim in [[e3.stacks-and-queues]] that a queue of two stacks is cheap because each item moves once. The sum that made it work, $1 + 2 + 4 + \dots$, is the one that decided which level dominates in [[e3.divide-and-conquer]]: when terms double, the last outweighs all the rest.
+
+        The habit to take away is the third way of counting. Do not ask how long one trip round a loop can take. Ask how many times, in the whole run, any one item can be handled, and add up over the items. Breadth-first search was counted that way, by its edges.
+
+        The next method is counted that way too. In [[e3.dynamic-programming]] the order of filling a table was easy, because the entries lay in a grid. In general, the things to be done form a directed graph, with an arrow from each task to the tasks that need it first, and the question is in what order to do them so that nothing is done before what it depends on. The method removes one arrow at a time and never looks at an arrow twice. That is the next lesson, [[e3.topological-sort]].
