@@ -1,0 +1,819 @@
+concept: e3.dynamic-programming
+minutes: 100
+claim: You can recognise a problem whose pieces overlap, turn an exponential recursion into a fast one by remembering each answer, design a table by saying what an entry means, how it follows from earlier entries and in what order to fill it, and use this to count routes, find cheapest paths, make change and measure the distance between two strings.
+recalls: [e3.divide-and-conquer]
+uses: [e3.hash-tables, e3.graphs-and-traversal, e1.recursion, e1.complexity-and-big-o, e1.comprehensions-and-iterators, e1.modules-and-imports, e0.dictionaries-and-sets, e0.lists-and-tuples, e0.loops, e0.strings, m3.induction-and-strong-induction]
+leads: [e3.amortised-analysis, e3.topological-sort, e3.shortest-paths-and-beam-search]
+starter: |
+  # Scratch space. A robot starts in the top-left cell of a grid and may step right or down.
+  # routes(rows, cols) counts its routes to the bottom-right cell, and count[0] counts the calls made.
+  count = [0]
+
+  def routes(rows, cols):
+      count[0] += 1
+      if rows == 1 or cols == 1:
+          return 1
+      return routes(rows - 1, cols) + routes(rows, cols - 1)
+
+  for size in [(4, 5), (8, 8), (12, 12), (13, 13)]:
+      count[0] = 0
+      print(size, routes(size[0], size[1]), "routes,", count[0], "calls")
+parts:
+  recall:
+    - text: |
+        [[e3.divide-and-conquer]] ended with a recursion that fails. `fib(40)` asks only forty-one different questions and takes three hundred million calls to answer them, because its pieces overlap. Today you repair it, and the repair turns out to be one of the most widely used ideas in computing. Three quick pulls first.
+    - question:
+        id: recall-overlap
+        type: choice
+        system: s1
+        concepts: [e3.divide-and-conquer]
+        prompt: |
+          Merge sort is fast and the recursive `fib` is slow, though both make two recursive calls. One reason is that the two halves of a list
+        options:
+          - "are sorted already"
+          - "share no items, so no piece of work is done twice"
+          - "are stored in a hash table"
+          - "are always of equal length"
+        answer: 1
+        explanation: The pieces of merge sort are separate problems. The pieces of `fib` need the same smaller pieces as each other.
+        hints:
+          - What do fib(39) and fib(38) have in common?
+          - Do the two halves of a list have anything in common?
+    - question:
+        id: recall-dict-cost
+        type: choice
+        system: s1
+        concepts: [e3.hash-tables]
+        prompt: |
+          Looking up a key in a dictionary of $n$ entries costs on average
+        options: ["$O(1)$", "$O(\\log n)$", "$O(n)$", "$O(n \\log n)$"]
+        answer: 0
+        explanation: The key is hashed to a bucket, and the bucket holds a constant number of entries on average.
+        hints:
+          - How is the right bucket found?
+          - Does that depend on how many entries there are?
+    - question:
+        id: recall-doubling-levels
+        type: numeric
+        system: s1
+        concepts: [e3.divide-and-conquer]
+        prompt: |
+          A tree of calls has 1 call on its top level, and each call makes 2 more. How many calls are on the level 10 below the top?
+        answer: "1024"
+        explanation: The count doubles at each level, so it is $2^{10}$.
+        hints:
+          - One level down there are 2, and two levels down there are 4.
+          - Double once for each level.
+  puzzle:
+    - text: |
+        A robot stands in the top-left cell of a grid and must reach the bottom-right. At each step it may move one cell **right** or one cell **down**, nothing else.
+
+        **In how many different ways can it cross a grid of 30 rows and 30 columns?**
+
+        Here is a line of thought that looks as if it settles the matter. The robot's last step entered the final cell either from above or from the left. So the routes to the final cell are the routes to the cell above together with the routes to the cell on the left. Each of those is the same question about a smaller grid. A cell on the top edge or the left edge can be reached in only one way. That is a complete recursive definition, and the starter is exactly it.
+
+        Run the starter. A grid of 4 by 5 has 35 routes, found in 69 calls. A grid of 12 by 12 has 705432 routes, found in 1410863 calls, and you can feel the wait for 13 by 13. Look at the two columns: the calls are about twice the routes. The function is in effect counting the routes **one at a time**.
+
+        For 30 by 30 the answer is 30067266499541040. A computer making ten million calls a second would need about two hundred years to count that high.
+
+        And yet the whole grid has only 900 cells, and the reasoning above involved nothing but adding two numbers per cell.
+
+        **Where is all the time going? And how do you get the answer in 900 additions?**
+  intuition:
+    - text: |
+        Ask what questions the recursion poses. Every call is `routes(r, c)` for some number of rows $r$ from 1 to 30 and some number of columns $c$ from 1 to 30. There are $30 \times 30 = 900$ possible questions, and no others can ever arise.
+
+        So $6 \times 10^{16}$ calls are being spent on 900 different questions. On average each question is answered sixty million million times over, and each time from scratch.
+
+        You can see the repetition start at the first step. `routes(30, 30)` asks for `routes(29, 30)` and `routes(30, 29)`. Each of **those** asks for `routes(29, 29)`. It is computed twice, and each of the two computations repeats everything beneath it. One level further down there are questions asked three times, then six, and the repeats multiply.
+
+        The cure is the one you would use yourself. **The first time a question is answered, write the answer down. Ever after, look it up.**
+
+        A person would do it on squared paper. Draw the grid, and write in each cell the number of routes to it. The cells along the top and the left get 1. Every other cell gets the sum of the number above it and the number to its left, both of which are already written if you work along the rows from the top. Step through it.
+    - figure: dp-grid
+    - text: |
+        Twenty cells, twelve additions, and the far corner holds 35, the number the recursion took 69 calls to find. For 30 by 30 the same procedure writes 900 numbers.
+
+        Nothing about the reasoning has changed. The relation between a cell and its two neighbours is the same one the recursion used. All that changed is that each answer is computed **once**. That is the whole of **dynamic programming**: a recursion whose pieces overlap, with a table in which each piece is solved once.
+
+        The name tells you little. It was chosen in the 1950s by Richard Bellman, who said later that he wanted a name impressive enough that no official would object to funding it. "Programming" meant planning, as in a programme of events. Think of it as **filling in a table**.
+  derivation:
+    - text: |
+        **Remembering.** Begin with the function that failed.
+
+        ```python
+        def fib(n):
+            if n < 2:
+                return n
+            return fib(n - 1) + fib(n - 2)
+        ```
+
+        Add a dictionary, and consult it before computing.
+
+        ```python
+        memo = {}
+
+        def fib(n):
+            if n < 2:
+                return n
+            if n not in memo:
+                memo[n] = fib(n - 1) + fib(n - 2)
+            return memo[n]
+        ```
+
+        This is called **memoisation**, from memo, a note to oneself. Count the work now. The line that adds runs **once** for each `n` from 2 upwards, because after that `n` is in the dictionary. Each run makes two calls, so `fib(40)` makes fewer than 80 calls, where before it made over three hundred million. The cost is $O(n)$, and it rests on a dictionary lookup costing $O(1)$, as you showed in [[e3.hash-tables]].
+
+        The general rule for the cost of a memoised recursion is worth stating, since you will use it every time:
+
+        $$\text{cost} = (\text{number of different questions}) \times (\text{work for one question, not counting its calls}).$$
+
+        **Bottom up.** Memoisation starts from the question you want and works down, which is called **top down**. The other way is to start from the smallest questions and work up, so that whatever an entry needs is already there. That is **bottom up**, and it is what you did on squared paper.
+
+        ```python
+        def fib(n):
+            table = [0, 1]
+            for k in range(2, n + 1):
+                table.append(table[k - 1] + table[k - 2])
+            return table[n]
+        ```
+
+        No recursion and no dictionary. The two ways do the same additions. Bottom up is usually a little faster and cannot run out of room for waiting calls, which in Python happens at a depth of about a thousand. Top down is often easier to write, since it is the recursion you first thought of, and it computes only the entries that are needed.
+
+        **The grid.** For the robot, let $R(r, c)$ be the number of routes across a grid of $r$ rows and $c$ columns. Then
+
+        $$R(r, c) = R(r - 1, c) + R(r, c - 1), \qquad R(1, c) = R(r, 1) = 1.$$
+
+        Bottom up, with a list of lists as the table:
+
+        ```python
+        def routes(rows, cols):
+            table = [[1] * cols for _ in range(rows)]
+            for r in range(1, rows):
+                for c in range(1, cols):
+                    table[r][c] = table[r - 1][c] + table[r][c - 1]
+            return table[rows - 1][cols - 1]
+        ```
+
+        The table is made with every entry 1, which is right for the top row and the left column, and the loops fill the rest. Rows are taken from the top and, within a row, cells from the left, so the entry above and the entry to the left are always ready. There are `rows * cols` entries and each costs one addition: `routes(30, 30)` is 841 additions.
+    - question:
+        id: derive-memo-count
+        type: numeric
+        system: s2
+        prompt: |
+          The recursive `routes` is memoised, with a dictionary keyed by the pair `(rows, cols)`. `routes(30, 30)` is called. At most how many entries can the dictionary ever hold?
+        answer: "900"
+        explanation: |
+          Every call has a number of rows from 1 to 30 and a number of columns from 1 to 30, so there are $30 \times 30$ different questions and no more. Each is computed once, at the cost of one addition, and every later call for it is a lookup. The recursion that would have taken two centuries finishes in under a millisecond, and nothing was changed but the addition of a memory.
+        hints:
+          - What values can the first argument take in any call? And the second?
+          - Each different pair is one question.
+          - Multiply the number of possibilities for each argument.
+    - text: |
+        **A recipe.** Every problem of this kind is solved by answering the same questions in the same order. Here they are for the grid.
+
+        1. **What does an entry mean?** `table[r][c]` is the number of routes from the top-left cell to the cell in row `r`, column `c`. State this in a full sentence. Most errors come from being vague here.
+        2. **How does an entry follow from earlier ones?** The last step came from above or from the left, so add those two entries. This is the **recurrence**.
+        3. **Which entries need no others?** Those on the top and left edges, which are 1. These are the **base cases**.
+        4. **In what order?** So that everything an entry needs is filled before it: row by row, left to right.
+        5. **Where is the answer?** In the bottom-right entry.
+
+        The cost is the number of entries times the work per entry.
+
+        **Choosing the best, not counting.** The same recipe finds a best choice among exponentially many. Give each cell of the grid a cost, and ask for the **cheapest route**: the one whose cells add up to the least.
+
+        Entry: `best[r][c]` is the cost of the cheapest route from the top-left to that cell, counting both ends. Recurrence: a route to the cell arrives from above or from the left, and it should use whichever of those is cheaper to reach:
+
+        $$\text{best}(r, c) = \text{cost}(r, c) + \min\bigl(\text{best}(r-1, c), \ \text{best}(r, c-1)\bigr).$$
+
+        One point needs an argument. Why is it right to extend the **cheapest** route to the neighbouring cell? Could the cheapest route to this cell pass through the cell above by some route that is not the cheapest to that cell? No. If it did, you could swap that part for the cheaper one and get a cheaper route overall. So a best route is made of best routes to the cells it passes through. That property has a name, **optimal substructure**, and it is what a problem must have for the recipe to apply.
+
+        Notice what the table does **not** do. It does not walk forward from the start always stepping to the cheaper neighbour. That is called a **greedy** method, and it is wrong here: a cheap first step can lead into an expensive region. The table commits to nothing until every way of arriving has been weighed.
+
+        **Making change.** A second example in one dimension. You have coins of 1, 4 and 5, as many of each as you like. What is the fewest coins that make 8?
+
+        The greedy answer takes the largest coin first: $5 + 1 + 1 + 1$, four coins. The best is $4 + 4$, two.
+
+        Entry: `fewest[a]` is the fewest coins that make the amount `a`. Recurrence: some coin $c$ is the last one added, and before it the amount was $a - c$, which should itself have been made with the fewest coins:
+
+        $$\text{fewest}(a) = 1 + \min_{c \,\le\, a} \ \text{fewest}(a - c), \qquad \text{fewest}(0) = 0.$$
+
+        | amount | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+        | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+        | fewest coins | 0 | 1 | 2 | 3 | 1 | 1 | 2 | 3 | 2 |
+
+        The entry for 8 looks back at the entries for 7, 4 and 3, which hold 3, 1 and 3, takes the least, and adds one. Order: amounts from 0 upwards. Cost: one entry per amount, and one look back per kind of coin.
+
+        If some amount cannot be made at all, its entry needs a value meaning "impossible" that loses every comparison under `min`. Python has one: `math.inf`, a float larger than every number.
+    - question:
+        id: derive-recipe
+        type: order
+        system: s2
+        prompt: Put the steps of designing a table in the order in which they have to be settled.
+        steps:
+          - "Say in a sentence exactly what one entry of the table means"
+          - "Express an entry in terms of entries for smaller problems"
+          - "Fix the entries that depend on no others"
+          - "Choose an order of filling in which whatever an entry needs is already there"
+          - "Say which entry holds the answer, and count entries times work for each"
+        explanation: The meaning of an entry comes first, since the recurrence is a statement about entries and cannot be written, or checked, until you know what they are. The recurrence shows which entries have nothing to refer back to, and which entries each one looks at, and that decides the order.
+        hints:
+          - You cannot relate entries to each other before you know what an entry is.
+          - The order of filling depends on which entries each entry looks at.
+          - Reading off the answer comes last.
+    - text: |
+        **The distance between two strings.** Now a problem with two things varying at once, and one you will use. How different are two strings? A natural measure is the fewest **edits** that turn one into the other, where an edit inserts a character, deletes a character, or replaces one character by another. It is called the **edit distance**. From "flaw" to "lawn" it is 2: delete the f, and add an n at the end.
+
+        Spelling correctors use it to find the dictionary word nearest to what you typed. Biologists use it to compare genes. And a system that turns speech into text is scored by the edit distance, counted in words, between what it wrote and what was said.
+
+        Trying every sequence of edits is hopeless. Apply the recipe to strings `a` and `b`.
+
+        **Entry.** `d[i][j]` is the edit distance between the **first `i` characters of `a`** and the **first `j` characters of `b`**. The pieces are beginnings of the strings.
+
+        **Base cases.** `d[i][0] = i`: to turn $i$ characters into nothing, delete them all. `d[0][j] = j`: to make $j$ characters from nothing, insert them all.
+
+        **Recurrence.** Look at the last character of each beginning, `a[i - 1]` and `b[j - 1]`.
+
+        - If they are **equal**, nothing need be done to them, and the distance is that of the beginnings without them: `d[i - 1][j - 1]`.
+        - If they **differ**, the last edit is one of three, and you take the cheapest:
+          - delete the last character of `a`'s beginning, and then turn the rest into `b`'s beginning: `d[i - 1][j]`,
+          - turn `a`'s beginning into `b`'s beginning without its last character, and then insert that character: `d[i][j - 1]`,
+          - replace one last character by the other, having matched the rest: `d[i - 1][j - 1]`,
+
+          and add 1 for the edit.
+
+        **Order.** Each entry looks up, left, and diagonally up-left, so rows from the top, left to right. **Answer.** `d[len(a)][len(b)]`.
+
+        Here is the table for "flaw" and "lawn". The row labelled with a letter is the row for the beginning of "flaw" that ends with that letter.
+
+        |  | (none) | l | a | w | n |
+        | --- | --- | --- | --- | --- | --- |
+        | (none) | 0 | 1 | 2 | 3 | 4 |
+        | f | 1 | 1 | 2 | 3 | 4 |
+        | l | 2 | 1 | 2 | 3 | 4 |
+        | a | 3 | 2 | 1 | 2 | 3 |
+        | w | 4 | 3 | 2 | 1 | 2 |
+
+        Follow the diagonal of 1s. "fl" to "l" costs 1, the deleted f. Then l, a and w match in turn, and each match copies the entry diagonally above it. The final n costs one insertion, and the corner reads 2.
+
+        The cost is one entry for each pair of beginnings: $(m + 1)(n + 1)$ entries for strings of lengths $m$ and $n$, each needing three looks. Two strings of a thousand characters take a million entries, where the sequences of edits are beyond counting.
+  formal:
+    - text: |
+        **Overlapping sub-problems.** A recursion has them when the same smaller problem is reached along many paths of calls.
+
+        **Memoisation.** Store the answer to each sub-problem the first time it is computed, and return the stored answer on every later call. Its cost is the number of different sub-problems times the work for one, not counting its recursive calls.
+
+        **Dynamic programming.** Solving a problem by computing the answer to each sub-problem once, either top down by memoised recursion or bottom up by filling a table in an order in which each entry's needs are met.
+
+        **Optimal substructure.** A problem has it when a best solution is made of best solutions to its sub-problems.
+
+        **Route count.** $R(r, c) = R(r-1, c) + R(r, c-1)$ with $R(1, c) = R(r, 1) = 1$. Cost $O(rc)$.
+
+        **Fewest coins.** $F(0) = 0$ and $F(a) = 1 + \min_{c \le a} F(a - c)$ over the kinds of coin $c$. Cost $O(\text{amount} \times \text{kinds})$.
+
+        **Edit distance.** $D(i, 0) = i$, $D(0, j) = j$, and for $i, j \ge 1$: $D(i, j) = D(i-1, j-1)$ if the $i$th character of $a$ equals the $j$th of $b$, and otherwise $1 + \min\bigl(D(i-1, j), D(i, j-1), D(i-1, j-1)\bigr)$. Cost $O(mn)$.
+  drill:
+    - text: Seconds each. In the grids, the robot starts in the top-left cell and moves only right or down. Coins are of 1, 4 and 5.
+    - question:
+        id: drill-fib-questions
+        type: numeric
+        system: s1
+        prompt: |
+          `fib(40)` is called. How many different values of `n` are ever asked about, counting 40 and 0?
+        answer: "41"
+        explanation: Every whole number from 0 to 40, and no other.
+        hints:
+          - The arguments only ever go down by 1 or 2.
+          - Count the whole numbers from 0 up to the one asked for, both included.
+    - question:
+        id: drill-cell
+        type: numeric
+        system: s1
+        prompt: |
+          In the table of routes, the entry above a cell is 4 and the entry to its left is 6. What is the cell's entry?
+        answer: "10"
+        explanation: A route arrives from above or from the left, so the two counts are added.
+        hints:
+          - From which cells can the robot step into this one?
+          - Every route to one of those extends to exactly one route here.
+    - question:
+        id: drill-two-by-two
+        type: numeric
+        system: s1
+        prompt: |
+          How many routes cross a grid of 2 rows and 2 columns?
+        answer: "2"
+        explanation: Right then down, or down then right.
+        hints:
+          - The far corner is entered from above or from the left.
+          - Each of those two cells is on an edge.
+    - question:
+        id: drill-three-by-three
+        type: numeric
+        system: s1
+        prompt: |
+          How many routes cross a grid of 3 rows and 3 columns?
+        answer: "6"
+        explanation: The rows of the table are 1 1 1, then 1 2 3, then 1 3 6.
+        hints:
+          - Fill the table. The top row and left column are all 1.
+          - The middle row is 1, 2, 3.
+    - question:
+        id: drill-edge
+        type: numeric
+        system: s1
+        prompt: |
+          How many routes cross a grid of 1 row and 9 columns?
+        answer: "1"
+        explanation: With one row the robot can only keep moving right.
+        hints:
+          - Can the robot ever move down?
+          - How many choices does it have at each step?
+    - question:
+        id: drill-entries
+        type: numeric
+        system: s1
+        prompt: |
+          How many entries has the table of routes for a grid of 20 rows and 50 columns?
+        answer: "1000"
+        explanation: One entry for each cell, $20 \times 50$.
+        hints:
+          - There is one entry for each cell of the grid.
+          - Rows times columns.
+    - question:
+        id: drill-coins-seven
+        type: numeric
+        system: s1
+        prompt: |
+          What is the fewest coins that make 7?
+        answer: "3"
+        explanation: $5 + 1 + 1$. The entries for 6, 3 and 2 are 2, 3 and 2, and the least of them plus one is 3.
+        hints:
+          - The last coin is 1, 4 or 5. What amount was there before it?
+          - Look up the entries for 6, 3 and 2 in the table of the lesson.
+    - question:
+        id: drill-coins-twelve
+        type: numeric
+        system: s1
+        prompt: |
+          What is the fewest coins that make 12?
+        answer: "3"
+        explanation: $4 + 4 + 4$. Taking the largest coin first gives $5 + 5 + 1 + 1$, which is four.
+        hints:
+          - Try not to start with the largest coin.
+          - Can one kind of coin make it exactly?
+    - question:
+        id: drill-edit-cart
+        type: numeric
+        system: s1
+        prompt: |
+          What is the edit distance from "cat" to "cart"?
+        answer: "1"
+        explanation: Insert an r.
+        hints:
+          - Which letters do the two words share, in order?
+          - One of the words has an extra letter.
+    - question:
+        id: drill-edit-dog
+        type: numeric
+        system: s1
+        prompt: |
+          What is the edit distance from "cat" to "dog"?
+        answer: "3"
+        explanation: No letter matches, and the lengths are equal, so each of the three letters is replaced.
+        hints:
+          - Do the words share any letter?
+          - How many letters must be replaced?
+    - question:
+        id: drill-edit-empty
+        type: numeric
+        system: s1
+        prompt: |
+          What is the edit distance from the empty string to "model"?
+        answer: "5"
+        explanation: Each of the five letters must be inserted. This is the base case `d[0][j] = j`.
+        hints:
+          - What must be done to make a word from nothing?
+          - How many letters has the word?
+    - question:
+        id: drill-memo-means
+        type: choice
+        system: s1
+        prompt: |
+          Memoising a function means
+        options:
+          - "rewriting it without recursion"
+          - "storing each answer the first time it is computed, and returning the stored answer on later calls with the same arguments"
+          - "making it call itself fewer times by halving its input"
+          - "running it once in advance on every possible input"
+        answer: 1
+        explanation: The function is unchanged apart from a memory. It still works top down from the question asked, and computes only what that question needs.
+        hints:
+          - Think of a memo as a note to yourself.
+          - What happens on the second call with the same arguments?
+    - question:
+        id: predict-memo
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          memo = {0: 0, 1: 1}
+
+          def fib(n):
+              if n not in memo:
+                  memo[n] = fib(n - 1) + fib(n - 2)
+              return memo[n]
+
+          print(fib(10), len(memo))
+        output: "55 11"
+        explanation: The Fibonacci numbers run 0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55. The dictionary began with the two base cases and gained one entry for each `n` from 2 to 10, so it holds an entry for every whole number from 0 to 10.
+        hints:
+          - Each Fibonacci number is the sum of the two before, starting 0, 1.
+          - The dictionary ends with one entry for each n from 0 up to the one asked for.
+    - question:
+        id: predict-table
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          rows = 3
+          cols = 4
+          table = [[1] * cols for _ in range(rows)]
+          for r in range(1, rows):
+              for c in range(1, cols):
+                  table[r][c] = table[r - 1][c] + table[r][c - 1]
+          print(table[2])
+        output: "[1, 3, 6, 10]"
+        explanation: The top row is 1, 1, 1, 1. The middle row is 1, 2, 3, 4, each entry being the one above plus the one to its left. The bottom row is 1, then $2 + 1$, then $3 + 3$, then $4 + 6$.
+        hints:
+          - Write out the three rows on paper, starting with all 1s.
+          - Fill the middle row first. Each entry is the one above plus the one to its left.
+  work:
+    - text: Slower now. For each table, write down in a sentence what one entry means before you write any code.
+    - question:
+        id: write-coins
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `fewest_coins(coins, amount)`. `coins` is a list of the kinds of coin, each a positive whole number, and any number of each kind may be used. Return the fewest coins that add up to exactly `amount`, or `None` if it cannot be made. An amount of 0 needs 0 coins. Fill a table from 0 upwards, so that an amount of 1000 is no trouble.
+        starter: |
+          import math
+
+          def fewest_coins(coins, amount):
+              # Replace the next line with your own.
+              return amount
+
+          print(fewest_coins([1, 4, 5], 8))
+        solution: |
+          import math
+
+          def fewest_coins(coins, amount):
+              fewest = [0] + [math.inf] * amount
+              for a in range(1, amount + 1):
+                  for coin in coins:
+                      if coin <= a and fewest[a - coin] + 1 < fewest[a]:
+                          fewest[a] = fewest[a - coin] + 1
+              if fewest[amount] == math.inf:
+                  return None
+              return fewest[amount]
+
+          print(fewest_coins([1, 4, 5], 8))
+        tests: |
+          assert fewest_coins([1, 4, 5], 8) == 2, "With coins of 1, 4 and 5, the amount 8 is 4 + 4, two coins. You returned " + repr(fewest_coins([1, 4, 5], 8))
+          assert fewest_coins([1, 4, 5], 7) == 3, "With coins of 1, 4 and 5, the amount 7 needs three coins. You returned " + repr(fewest_coins([1, 4, 5], 7))
+          assert fewest_coins([1, 4, 5], 12) == 3, "With coins of 1, 4 and 5, the amount 12 is 4 + 4 + 4, three coins. You returned " + repr(fewest_coins([1, 4, 5], 12))
+          assert fewest_coins([1, 4, 5], 0) == 0, "An amount of 0 needs 0 coins. You returned " + repr(fewest_coins([1, 4, 5], 0))
+          assert fewest_coins([1, 2, 5, 10], 28) == 5, "With coins of 1, 2, 5 and 10, the amount 28 is 10 + 10 + 5 + 2 + 1, five coins. You returned " + repr(fewest_coins([1, 2, 5, 10], 28))
+          assert fewest_coins([5, 10], 3) is None, "Coins of 5 and 10 cannot make 3, so the answer is None. You returned " + repr(fewest_coins([5, 10], 3))
+          assert fewest_coins([2], 7) is None, "Coins of 2 cannot make 7, so the answer is None. You returned " + repr(fewest_coins([2], 7))
+          assert fewest_coins([3, 7], 15) == 5, "With coins of 3 and 7, the amount 15 is five 3s. You returned " + repr(fewest_coins([3, 7], 15))
+          assert fewest_coins([7, 3], 16) == 4, "With coins of 7 and 3, the amount 16 is 7 + 3 + 3 + 3, four coins. You returned " + repr(fewest_coins([7, 3], 16))
+          assert fewest_coins([1, 4, 5], 1000) == 200, "With coins of 1, 4 and 5, the amount 1000 is two hundred 5s. You returned " + repr(fewest_coins([1, 4, 5], 1000))
+          assert fewest_coins([1, 4, 5], 1003) == 201, "With coins of 1, 4 and 5, the amount 1003 needs 201 coins. You returned " + repr(fewest_coins([1, 4, 5], 1003))
+          assert output.strip() == "2", "The program should print 2"
+        wrong:
+          - |
+            import math
+
+            def fewest_coins(coins, amount):
+                count = 0
+                for coin in sorted(coins, reverse=True):
+                    count += amount // coin
+                    amount = amount % coin
+                if amount != 0:
+                    return None
+                return count
+
+            print(2)
+          - |
+            import math
+
+            def fewest_coins(coins, amount):
+                fewest = [0] + [math.inf] * amount
+                for a in range(1, amount + 1):
+                    for coin in coins:
+                        if coin <= a and fewest[a - coin] + 1 < fewest[a]:
+                            fewest[a] = fewest[a - coin] + 1
+                return fewest[amount]
+
+            print(fewest_coins([1, 4, 5], 8))
+          - |
+            import math
+
+            def fewest_coins(coins, amount):
+                fewest = [0] * (amount + 1)
+                for a in range(1, amount + 1):
+                    for coin in coins:
+                        if coin <= a and fewest[a - coin] + 1 < fewest[a]:
+                            fewest[a] = fewest[a - coin] + 1
+                return fewest[amount]
+
+            print(2)
+          - |
+            import math
+
+            def fewest_coins(coins, amount):
+                fewest = [0] + [math.inf] * amount
+                for a in range(1, amount + 1):
+                    for coin in coins:
+                        if coin <= a:
+                            fewest[a] = fewest[a - coin] + 1
+                if fewest[amount] == math.inf:
+                    return None
+                return fewest[amount]
+
+            print(2)
+        explanation: |
+          `fewest[a]` is the fewest coins that make the amount `a`, or `math.inf` if it cannot be made. The entry for 0 is 0. Every other entry starts at infinity and is lowered by each coin that fits: if the last coin added is `coin`, the amount before it was `a - coin`, and one more coin than its entry is a candidate. An amount that cannot be made keeps infinity, since infinity plus one is still infinity and never wins a comparison, and that is reported as `None`. Starting the table at 0 everywhere makes every entry look already perfect. Assigning without comparing keeps whichever coin was tried last. Taking the largest coin first is the greedy method: it says four coins for 8, and it reports that coins of 3 and 7 cannot make 15 because it commits to two 7s and cannot recover. The cost is one entry per amount and one look per kind of coin.
+        hints:
+          - Make a list with one entry for each amount from 0 up, holding 0 for the amount 0 and math.inf for the rest.
+          - For each amount a from 1 up and each coin no larger than a, the candidate is fewest[a - coin] + 1. Keep it if it is smaller than fewest[a].
+          - At the end, an entry still equal to math.inf means the amount cannot be made, so return None.
+    - question:
+        id: write-edit-distance
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `edit_distance(a, b)`: the fewest insertions, deletions and replacements of single items that turn `a` into `b`. It must work when `a` and `b` are strings, counting characters, and when they are lists of words, counting words, which is how a speech recogniser is scored. Use only `len` and indexing on `a` and `b`, and fill the table `d` of the lesson, in which `d[i][j]` is the distance between the first `i` items of `a` and the first `j` items of `b`.
+        starter: |
+          def edit_distance(a, b):
+              d = [[0] * (len(b) + 1) for _ in range(len(a) + 1)]
+              # Fill in d, and replace the next line with your own.
+              return 0
+
+          print(edit_distance("flaw", "lawn"))
+        solution: |
+          def edit_distance(a, b):
+              d = [[0] * (len(b) + 1) for _ in range(len(a) + 1)]
+              for i in range(len(a) + 1):
+                  d[i][0] = i
+              for j in range(len(b) + 1):
+                  d[0][j] = j
+              for i in range(1, len(a) + 1):
+                  for j in range(1, len(b) + 1):
+                      if a[i - 1] == b[j - 1]:
+                          d[i][j] = d[i - 1][j - 1]
+                      else:
+                          d[i][j] = 1 + min(d[i - 1][j], d[i][j - 1], d[i - 1][j - 1])
+              return d[len(a)][len(b)]
+
+          print(edit_distance("flaw", "lawn"))
+        tests: |
+          for _a, _b, _want in [("flaw", "lawn", 2), ("cat", "cart", 1), ("cart", "cat", 1), ("cat", "dog", 3), ("", "model", 5), ("model", "", 5), ("", "", 0), ("same", "same", 0), ("model", "modal", 1), ("abc", "cab", 2), ("kitten", "sitting", 3), ("sunday", "saturday", 3), ("intention", "execution", 5), ("a", "b", 1), ("ab", "ba", 2)]:
+              assert edit_distance(_a, _b) == _want, "The edit distance from " + repr(_a) + " to " + repr(_b) + " is " + str(_want) + ". You returned " + repr(edit_distance(_a, _b))
+          assert edit_distance(["the", "cat", "sat"], ["the", "cat", "sat", "down"]) == 1, "On lists of words, one extra word is one edit. You returned " + repr(edit_distance(["the", "cat", "sat"], ["the", "cat", "sat", "down"]))
+          assert edit_distance(["the", "cat", "sat", "on", "the", "mat"], ["a", "cat", "sat", "on", "mat"]) == 2, "From 'the cat sat on the mat' to 'a cat sat on mat' is one word replaced and one deleted. You returned " + repr(edit_distance(["the", "cat", "sat", "on", "the", "mat"], ["a", "cat", "sat", "on", "mat"]))
+          assert edit_distance("ab" * 60, "ba" * 60) == 2, "Long strings should be no trouble. 'ab' sixty times and 'ba' sixty times are 2 apart. You returned " + repr(edit_distance("ab" * 60, "ba" * 60))
+          assert output.strip() == "2", "The program should print 2"
+        wrong:
+          - |
+            def edit_distance(a, b):
+                d = [[0] * (len(b) + 1) for _ in range(len(a) + 1)]
+                for i in range(1, len(a) + 1):
+                    for j in range(1, len(b) + 1):
+                        if a[i - 1] == b[j - 1]:
+                            d[i][j] = d[i - 1][j - 1]
+                        else:
+                            d[i][j] = 1 + min(d[i - 1][j], d[i][j - 1], d[i - 1][j - 1])
+                return d[len(a)][len(b)]
+
+            print(2)
+          - |
+            def edit_distance(a, b):
+                shorter = min(len(a), len(b))
+                count = max(len(a), len(b)) - shorter
+                for k in range(shorter):
+                    if a[k] != b[k]:
+                        count += 1
+                return count
+
+            print(2)
+          - |
+            def edit_distance(a, b):
+                d = [[0] * (len(b) + 1) for _ in range(len(a) + 1)]
+                for i in range(len(a) + 1):
+                    d[i][0] = i
+                for j in range(len(b) + 1):
+                    d[0][j] = j
+                for i in range(1, len(a) + 1):
+                    for j in range(1, len(b) + 1):
+                        if a[i - 1] == b[j - 1]:
+                            d[i][j] = d[i - 1][j - 1]
+                        else:
+                            d[i][j] = 1 + min(d[i - 1][j], d[i][j - 1])
+                return d[len(a)][len(b)]
+
+            print(2)
+          - |
+            def edit_distance(a, b):
+                d = [[0] * (len(b) + 1) for _ in range(len(a) + 1)]
+                for i in range(len(a) + 1):
+                    d[i][0] = i
+                for j in range(len(b) + 1):
+                    d[0][j] = j
+                for i in range(1, len(a) + 1):
+                    for j in range(1, len(b) + 1):
+                        d[i][j] = 1 + min(d[i - 1][j], d[i][j - 1], d[i - 1][j - 1])
+                return d[len(a)][len(b)]
+
+            print(2)
+        explanation: |
+          The table has one more row and one more column than the lengths, because the beginnings include the empty one. The first column and first row are the base cases: `i` deletions to reach nothing, `j` insertions to start from nothing. Leave them at 0 and the table claims that any string can be turned into nothing for free, and every distance comes out too small. Inside, an entry copies its diagonal neighbour when the two last items match, and otherwise takes one more than the least of its three neighbours. Leaving out the diagonal in that case forbids replacement, so a change of one letter costs a deletion and an insertion. Comparing the strings position by position fails as soon as something is inserted, since everything after it is shifted: "flaw" and "lawn" differ in every position and are only 2 apart. The indices are the usual trap: `d[i][j]` concerns the first `i` items, and the last of those is `a[i - 1]`.
+        hints:
+          - First fill the base cases. d[i][0] is i for every i, and d[0][j] is j for every j.
+          - "For i and j from 1 up: if a[i - 1] equals b[j - 1], the entry is d[i - 1][j - 1]."
+          - Otherwise it is 1 more than the least of d[i - 1][j], d[i][j - 1] and d[i - 1][j - 1]. Return d[len(a)][len(b)].
+    - question:
+        id: fix-cheapest
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `cheapest(cost)` should return the cost of the cheapest route from the top-left cell of a grid to the bottom-right, moving only right or down and paying for every cell entered, the first included. For the grid below the cheapest route passes 1, 3, 1, 1, 1 and 1, so it should print 8. It prints 4, which no route achieves. Fix it.
+        starter: |
+          def cheapest(cost):
+              rows = len(cost)
+              cols = len(cost[0])
+              best = [[0] * cols for _ in range(rows)]
+              for r in range(rows):
+                  for c in range(cols):
+                      if r == 0 or c == 0:
+                          best[r][c] = cost[r][c]
+                      else:
+                          best[r][c] = cost[r][c] + min(best[r - 1][c], best[r][c - 1])
+              return best[rows - 1][cols - 1]
+
+          grid = [
+              [1, 3, 1, 8],
+              [1, 5, 1, 2],
+              [4, 2, 1, 1],
+          ]
+          print(cheapest(grid))
+        solution: |
+          def cheapest(cost):
+              rows = len(cost)
+              cols = len(cost[0])
+              best = [[0] * cols for _ in range(rows)]
+              for r in range(rows):
+                  for c in range(cols):
+                      if r == 0 and c == 0:
+                          best[r][c] = cost[r][c]
+                      elif r == 0:
+                          best[r][c] = cost[r][c] + best[r][c - 1]
+                      elif c == 0:
+                          best[r][c] = cost[r][c] + best[r - 1][c]
+                      else:
+                          best[r][c] = cost[r][c] + min(best[r - 1][c], best[r][c - 1])
+              return best[rows - 1][cols - 1]
+
+          grid = [
+              [1, 3, 1, 8],
+              [1, 5, 1, 2],
+              [4, 2, 1, 1],
+          ]
+          print(cheapest(grid))
+        tests: |
+          assert cheapest([[1, 3, 1, 8], [1, 5, 1, 2], [4, 2, 1, 1]]) == 8, "For the grid of the question the cheapest route costs 8. You returned " + repr(cheapest([[1, 3, 1, 8], [1, 5, 1, 2], [4, 2, 1, 1]]))
+          assert cheapest([[7]]) == 7, "A grid of one cell costs that cell. cheapest([[7]]) should be 7. You returned " + repr(cheapest([[7]]))
+          assert cheapest([[1, 2, 3, 4]]) == 10, "In a grid of one row every cell is entered. cheapest([[1, 2, 3, 4]]) should be 10. You returned " + repr(cheapest([[1, 2, 3, 4]]))
+          assert cheapest([[1], [2], [3]]) == 6, "In a grid of one column every cell is entered. cheapest([[1], [2], [3]]) should be 6. You returned " + repr(cheapest([[1], [2], [3]]))
+          assert cheapest([[1, 9], [1, 1]]) == 3, "cheapest([[1, 9], [1, 1]]) should be 3, going down and then right. You returned " + repr(cheapest([[1, 9], [1, 1]]))
+          assert cheapest([[1, 1], [9, 1]]) == 3, "cheapest([[1, 1], [9, 1]]) should be 3, going right and then down. You returned " + repr(cheapest([[1, 1], [9, 1]]))
+          assert cheapest([[1, 1, 9, 9], [9, 1, 1, 9], [9, 9, 1, 1]]) == 6, "A staircase of 1s through a grid of 9s costs 6. You returned " + repr(cheapest([[1, 1, 9, 9], [9, 1, 1, 9], [9, 9, 1, 1]]))
+          assert cheapest([[5, 1, 1], [1, 9, 1], [1, 1, 1]]) == 9, "cheapest([[5, 1, 1], [1, 9, 1], [1, 1, 1]]) should be 9. You returned " + repr(cheapest([[5, 1, 1], [1, 9, 1], [1, 1, 1]]))
+          assert output.strip() == "8", "The program should print 8"
+        wrong:
+          - |
+            def cheapest(cost):
+                rows = len(cost)
+                cols = len(cost[0])
+                best = [[0] * cols for _ in range(rows)]
+                for r in range(rows):
+                    for c in range(cols):
+                        best[r][c] = cost[r][c] + min(best[r - 1][c], best[r][c - 1])
+                return best[rows - 1][cols - 1]
+
+            print(8)
+          - |
+            def cheapest(cost):
+                rows = len(cost)
+                cols = len(cost[0])
+                best = [[0] * cols for _ in range(rows)]
+                for r in range(rows):
+                    for c in range(cols):
+                        if r == 0 and c == 0:
+                            best[r][c] = cost[r][c]
+                        elif r == 0:
+                            best[r][c] = cost[r][c] + best[r][c - 1]
+                        elif c == 0:
+                            best[r][c] = cost[r][c]
+                        else:
+                            best[r][c] = cost[r][c] + min(best[r - 1][c], best[r][c - 1])
+                return best[rows - 1][cols - 1]
+
+            print(8)
+          - |
+            def cheapest(cost):
+                rows = len(cost)
+                cols = len(cost[0])
+                total = cost[0][0]
+                r = 0
+                c = 0
+                while r < rows - 1 or c < cols - 1:
+                    if r == rows - 1:
+                        c += 1
+                    elif c == cols - 1:
+                        r += 1
+                    elif cost[r + 1][c] < cost[r][c + 1]:
+                        r += 1
+                    else:
+                        c += 1
+                    total += cost[r][c]
+                return total
+
+            print(8)
+        explanation: |
+          Go back to what an entry means: `best[r][c]` is the cost of the cheapest route **from the top-left corner** to that cell. For a cell on the top edge there is exactly one route, straight along the row, and its cost is the sum of everything passed, not the cell's own cost. The faulty line treats every edge cell as if the robot could begin there for free, and the answer 4 is the cost of a route that starts at the 1 in the top row's third place. An edge cell has only one neighbour to arrive from, so its entry is its own cost plus that neighbour's entry: the left neighbour on the top edge, the upper neighbour on the left edge. Only the corner stands alone. Dropping the special cases altogether is no better: the index $-1$ quietly reads the far end of the list, where a 0 is waiting. And walking forward to the cheaper neighbour is the greedy method, which on this very grid is drawn down the left side by the 1 below the start and ends up paying 10.
+        hints:
+          - What should best[0][2] hold for this grid? What does the code put there?
+          - A cell on the top edge can only be entered from its left, and a cell on the left edge only from above.
+          - Only the top-left cell has no neighbour to arrive from. Give the two edges their own cases.
+    - question:
+        id: work-blocked
+        type: numeric
+        system: s2
+        prompt: |
+          A grid has 3 rows and 3 columns, and the centre cell is blocked: the robot may not enter it. How many routes are there from the top-left cell to the bottom-right?
+        answer: "2"
+        explanation: |
+          Keep the meaning of an entry and change one rule: a blocked cell has 0 routes to it. The rows of the table become 1 1 1, then 1 0 1, then 1 1 2. The two routes go round the outside, one each way. The recurrence did not need rethinking, and that is typical. Once the entries have a clear meaning, a new condition is usually a small change to how one entry is computed. Note that the right-hand cell of the middle row is still 1: it can be entered from above, and the blocked cell on its left contributes nothing.
+        hints:
+          - How many routes lead to a cell that may not be entered?
+          - Fill the table as before, writing 0 in the centre.
+          - The last row is 1, then 1 + 0, then the sum of the entries above and to the left.
+    - question:
+        id: work-greedy
+        type: choice
+        system: s2
+        prompt: |
+          With coins of 1, 4 and 5, taking the largest coin first makes 8 with four coins, where two are enough. With coins of 1, 2, 5 and 10 the same method always gives the fewest. What does the table do that the greedy method does not?
+        options:
+          - "It tries the coins in a better order."
+          - "The greedy method commits to its first choice and never reconsiders. The table computes the best answer for every smaller amount, and so compares every possible last coin, each followed by the best possible remainder."
+          - "It uses more memory, which makes it more accurate."
+          - "Nothing. They are the same method, and 1, 4 and 5 are simply bad coins."
+        answer: 1
+        explanation: |
+          A greedy method makes the choice that looks best now and lives with it. Sometimes that can be proved right, and for coins of 1, 2, 5 and 10 it can. Often it is not, and nothing in the method warns you. The table makes no early commitment. For the amount 8 it weighs a last coin of 1, 4 or 5 against the best that can be done with the 7, 4 or 3 that remain. This costs more, one entry for every amount, and it is always right. When you meet a problem of choosing the best, the first question is whether a greedy choice can be proved safe. If it cannot, a table is the reliable method.
+        hints:
+          - What does the greedy method do after taking the 5?
+          - Which entries does the table's entry for 8 look at?
+          - Does the table ever commit to a coin before seeing what remains?
+    - question:
+        id: work-one-row
+        type: choice
+        system: s2
+        prompt: |
+          The table of routes for a grid of 10000 rows and 10000 columns has a hundred million entries, too many to keep comfortably. How much of the table is needed at any moment?
+        options:
+          - "All of it, since the answer depends on every entry."
+          - "One row. An entry looks only at the entry above it and the entry to its left, so while a row is being filled only the previous row and the row itself are needed, and the new row can overwrite the old one place by place."
+          - "Only the last entry."
+          - "Half of it, since the table is symmetric."
+        answer: 1
+        explanation: |
+          The answer does depend on every entry, and every entry is computed. But an entry is needed only until the row below it has been filled. So keep a single list of 10000 numbers. Moving along it from the left, the old value at a position is the entry above, the value just written to its left is the entry to the left, and their sum replaces the old value. Time is unchanged at a hundred million additions, and space falls from a hundred million numbers to ten thousand. The same saving applies to edit distance, whose entries look one row back and no further. The price is that the full table is gone, and with it the means of tracing back **which** route or which edits gave the answer, so when you need the solution itself and not just its cost, you keep the table.
+        hints:
+          - Which entries does one entry look at?
+          - Once a row has been filled, is the row two above it ever looked at again?
+          - What would be lost by throwing away old rows?
+  connections:
+    - text: |
+        The puzzle asked where the time goes when routes across a grid are counted by recursion, and how to get the answer in 900 additions. The time goes on answering the same 900 questions sixty million million times over. Write each answer down when it is first found, on squared paper or in a dictionary, and each is computed once. The number of routes across a grid of 30 by 30 is 30067266499541040, and a table finds it in 841 additions.
+
+        The repair used things you had. The recurrence is the recursion of [[e1.recursion]] and the failed `fib` of [[e3.divide-and-conquer]], untouched. The memory is the dictionary of [[e3.hash-tables]], whose constant-time lookup is what makes remembering cheaper than recomputing. And the claim that a table is filled correctly is induction: each entry is right because the earlier entries it looks at are right.
+
+        One step of the recipe passed quickly: the **order** of filling. Whatever an entry needs must be there before it. For a grid, row by row is plainly safe. But picture the entries as nodes, with an arrow from each entry to the entries that need it. That is a directed graph, of the kind met in [[e3.graphs-and-traversal]], and a safe order of filling is an order of its nodes in which every arrow points forward. When the dependencies are not a tidy grid, as in the web of operations inside a neural network, finding such an order is a problem in itself, and you will solve it in [[e3.topological-sort]]. When you later compute how a network's output depends on each of its millions of numbers, the method will be this lesson's: each intermediate result is computed once, stored, and reused by everything that needs it.
+
+        Before that, a loose end in the accounting. Three times in this cluster a cost was called $O(1)$ with a quiet qualification: appending to a list, though the array beneath it must sometimes be copied to a larger one, and inserting into a hash table, though the table must sometimes be rebuilt. An operation that is usually cheap and occasionally very dear needs a more careful kind of count, one that spreads the dear cases over the cheap. That is the next lesson, [[e3.amortised-analysis]].
