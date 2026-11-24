@@ -1,0 +1,720 @@
+concept: m10.taylor-approximation
+minutes: 100
+claim: You can build the Taylor polynomial of a function from its derivatives at one point, write down the series for the exponential, sine, cosine, the geometric series and the logarithm, estimate the error from the first term left out, explain the accuracy of finite differences, and find a root by Newton's method.
+recalls: [m10.second-derivative-and-curvature]
+uses: [m10.derivatives-of-exp-log-and-trig, m10.differentiation-rules, m10.derivative-as-slope-and-rate, m10.chain-rule, m10.limits-and-continuity, m2.sequences-and-series, m2.the-exponential-and-e, m2.trigonometric-functions-on-the-unit-circle, m1.polynomials, m1.logarithms, e0.functions, e0.loops, e0.lists-and-tuples, e1.comprehensions-and-iterators, e1.modules-and-imports]
+leads: [m10.maxima-and-minima, m11.taylors-theorem-with-remainder, m11.series-and-convergence-tests, m19.newton-and-quasi-newton-methods]
+starter: |
+  # Scratch space. Add up 1 + x + x^2/2 + x^3/6 + ... one term at a time
+  # and watch the total close in on math.exp(x).
+  import math
+
+  x = 1
+  total = 0
+  term = 1
+  for k in range(8):
+      total = total + term
+      print(k, total, math.exp(x) - total)
+      term = term * x / (k + 1)
+parts:
+  recall:
+    - text: |
+        [[m10.second-derivative-and-curvature]] improved the tangent line by one term. The line matched the value and the slope. The parabola also matched the bending, and its error was far smaller. The lesson ended with a promise that the pattern continues. Three quick pulls first.
+    - question:
+        id: recall-quadratic
+        type: numeric
+        system: s1
+        concepts: [m10.second-derivative-and-curvature]
+        prompt: |
+          $f(0) = 2$, $f'(0) = 1$, $f''(0) = 4$. Estimate $f(0.1)$ with the quadratic approximation.
+        answer: "2.12"
+        explanation: |
+          $2 + 1(0.1) + \frac{1}{2} \cdot 4 \cdot (0.1)^2 = 2 + 0.1 + 0.02$.
+        hints:
+          - Value, plus slope times step, plus half the second derivative times the step squared.
+          - Half of 4 is 2, and the step squared is 0.01.
+    - question:
+        id: recall-half
+        type: choice
+        system: s1
+        concepts: [m10.second-derivative-and-curvature]
+        prompt: |
+          Why does the quadratic approximation carry $\frac{1}{2}f''(a)$ and not $f''(a)$?
+        options:
+          - "It is a convention."
+          - "Differentiating $h^2$ twice gives 2, which must be cancelled."
+          - "The step is split into two halves."
+          - "The tangent has already used half of the bending."
+        answer: 1
+        explanation: The stand-in must have the same second derivative as the function, and the second derivative of c times h squared is 2c.
+        hints:
+          - What is the second derivative of h squared?
+          - The stand-in is built to match the function's second derivative.
+    - question:
+        id: recall-cycle
+        type: choice
+        system: s1
+        concepts: [m10.derivatives-of-exp-log-and-trig]
+        prompt: |
+          What is the third derivative of $\sin x$?
+        options: ["$\\sin x$", "$\\cos x$", "$-\\sin x$", "$-\\cos x$"]
+        answer: 3
+        explanation: The sine goes round a cycle of four. Sine, cosine, minus sine, minus cosine, and back to the sine.
+        hints:
+          - Differentiate three times, one step at a time.
+          - The second derivative is minus the sine.
+  puzzle:
+    - text: |
+        Type `math.sin(0.5)` and the answer comes back at once, correct to sixteen figures: 0.479425538604203.
+
+        Think about what the machine has to work with. Deep inside, a processor can add, subtract, multiply and divide. That is all. It has no circle inside it, no ruler to measure the height of a point at angle 0.5, and no table with an entry for every one of the billions of numbers you might ask about. The same goes for `math.exp`, `math.log` and `math.cos`. Each of these was defined, in earlier lessons, by something a machine cannot do directly: a limit, a height on a circle, the undoing of another function.
+
+        **Using only addition, subtraction, multiplication and division, how can a machine produce the sine of any number, to as many figures as you like?**
+
+        There is exactly one kind of function that the four operations of arithmetic can compute. What is it, and can it be made to imitate the sine?
+  intuition:
+    - text: |
+        The functions that arithmetic can compute are the **polynomials**. $3 - 2x + 5x^2$ is some multiplications and some additions. So the question becomes: is there a polynomial that behaves like the sine?
+
+        You already own two attempts. The tangent line at 0 is a polynomial of degree 1 which matches the sine's value and slope there. Since $\sin 0 = 0$ and the slope is $\cos 0 = 1$, the line is $y = x$. Near 0 it is a fair imitation, and it fails as soon as the sine starts to bend.
+
+        The last lesson's parabola matches the second derivative as well. For the sine that is $-\sin 0 = 0$, so the parabola adds nothing here. Go one further. Ask for a **cubic** that matches the value, the slope, the second derivative and the third derivative at 0. Then a polynomial of degree five that matches five derivatives. Each one agrees with the sine in more respects at the point 0. The hope is that agreeing in more and more respects **at** the point forces agreement over a wider and wider stretch **around** the point.
+
+        It does. Watch it happen. The figure starts with the tangent line. Raise the degree one step at a time.
+    - figure: taylor
+      props: { fn: sin, degree: 1, x: 2 }
+    - text: |
+        At degree 3 the polynomial follows the sine over its first hump. At degree 5 it follows it down the other side. By degree 9 it tracks a full wave in each direction before peeling away. The even degrees change nothing, for a reason you will see in the calculation.
+
+        Here is the idea in one sentence. **A function's derivatives at a single point are a complete set of instructions for building a polynomial imitation of it**, and each further derivative buys one more term and a longer stretch of agreement. The value says where the function is. The slope says where it is going. The second derivative says how the slope is changing, the third says how **that** is changing, and so on. Know all of them at one instant and, for the well-behaved functions of this course, you know the whole future.
+  derivation:
+    - text: |
+        **Finding the coefficients.** Work near a point $a$, and write $h$ for the step away from it. We want a polynomial
+
+        $$p(h) = c_0 + c_1 h + c_2 h^2 + c_3 h^3 + \dots + c_n h^n$$
+
+        whose derivatives at $h = 0$, up to the $n$th, equal those of $f$ at $a$.
+
+        Look at one term, $c_k h^k$, and differentiate it repeatedly. Each differentiation brings down the current exponent and lowers it by one:
+
+        $$c_k h^k \;\to\; k\,c_k h^{k-1} \;\to\; k(k-1)\,c_k h^{k-2} \;\to\; \cdots \;\to\; k(k-1)\cdots 2 \cdot 1 \; c_k.$$
+
+        After exactly $k$ differentiations the term has become the constant $k!\,c_k$. Now set $h = 0$ in the $k$th derivative of the whole polynomial. The terms of degree less than $k$ have been differentiated away to nothing. The terms of degree more than $k$ still carry a factor of $h$, so they vanish at $h = 0$. Only one term survives:
+
+        $$p^{(k)}(0) = k!\,c_k.$$
+
+        Each derivative at the point picks out exactly one coefficient. For the polynomial's $k$th derivative to equal $f^{(k)}(a)$ there is no choice:
+
+        $$c_k = \frac{f^{(k)}(a)}{k!}.$$
+
+        The $\frac{1}{2}$ of the last lesson was $\frac{1}{2!}$. The next coefficient carries $\frac{1}{3!} = \frac{1}{6}$, the one after $\frac{1}{24}$.
+
+        **Definition.** The **Taylor polynomial** of degree $n$ of $f$ about $a$ is
+
+        $$T_n(h) = f(a) + f'(a)\,h + \frac{f''(a)}{2!}h^2 + \frac{f'''(a)}{3!}h^3 + \dots + \frac{f^{(n)}(a)}{n!}h^n, \qquad f(a + h) \approx T_n(h).$$
+
+        $T_1$ is the tangent line and $T_2$ is the quadratic approximation. When $a = 0$ the step $h$ is just $x$.
+
+        **The exponential.** Every derivative of $e^x$ is $e^x$, and $e^0 = 1$. So every $f^{(k)}(0)$ is 1, and
+
+        $$e^x \approx 1 + x + \frac{x^2}{2} + \frac{x^3}{6} + \frac{x^4}{24} + \dots + \frac{x^n}{n!}.$$
+
+        Put $x = 1$ and keep terms up to $\frac{1}{7!}$, as the starter does: $1 + 1 + 0.5 + 0.1667 + 0.0417 + 0.0083 + 0.0014 + 0.0002 = 2.71825$, against $e = 2.71828\ldots$ The machine can do this. It is eight additions and a few multiplications and divisions.
+
+        **The sine.** The derivatives of the sine at 0 run through the cycle $\sin, \cos, -\sin, -\cos$ evaluated at 0: that is $0, 1, 0, -1, 0, 1, 0, -1, \dots$ The even ones are all 0, which is why the even degrees added nothing in the figure. The odd ones alternate in sign.
+
+        $$\sin x \approx x - \frac{x^3}{6} + \frac{x^5}{120} - \frac{x^7}{5040} + \dots$$
+
+        Now the puzzle can be answered in numbers. For $x = 0.5$:
+
+        | Terms kept | Polynomial at 0.5 | Error |
+        | --- | --- | --- |
+        | $x$ | $0.5$ | $0.02$ |
+        | $x - \frac{x^3}{6}$ | $0.4791667$ | $0.00026$ |
+        | $\dots + \frac{x^5}{120}$ | $0.4794271$ | $0.0000015$ |
+        | $\dots - \frac{x^7}{5040}$ | $0.4794255$ | $0.000000005$ |
+
+        Four terms give eight correct figures. A few more give all sixteen. That, with some refinements, is what happens when you type `math.sin(0.5)`.
+
+        **The cosine.** Its derivatives at 0 are $1, 0, -1, 0, 1, \dots$, giving
+
+        $$\cos x \approx 1 - \frac{x^2}{2} + \frac{x^4}{24} - \frac{x^6}{720} + \dots$$
+
+        Differentiate the sine's polynomial term by term and you get the cosine's. Differentiate the exponential's and you get itself back, each term turning into the one before it. The polynomials inherit the calculus of the functions they imitate.
+    - question:
+        id: derivation-coefficient
+        type: choice
+        system: s2
+        prompt: |
+          In the Taylor polynomial, why is the coefficient of $h^3$ equal to $\dfrac{f'''(a)}{6}$?
+        options:
+          - "Because 6 is the next number in the pattern 1, 2, 6."
+          - "Because the third derivative of $c_3 h^3$ is $3 \\cdot 2 \\cdot 1 \\cdot c_3 = 6c_3$, and at $h = 0$ no other term of the polynomial contributes to its third derivative."
+          - "Because the step $h$ is divided into six parts."
+          - "Because the third derivative is six times smaller than the function."
+        answer: 1
+        explanation: |
+          Differentiate $c_3 h^3$ three times: $3c_3h^2$, then $6c_3 h$, then $6c_3$. Lower terms have vanished by then, and higher terms still contain $h$ and are 0 at $h = 0$. So the third derivative of the polynomial at 0 is $6c_3$, and matching it to $f'''(a)$ forces $c_3 = \frac{f'''(a)}{6}$. Check it on $f(x) = x^3$ at 0: $f''' = 6$, so the coefficient is $\frac{6}{6} = 1$, and the Taylor polynomial of $x^3$ is $x^3$, as it must be.
+        hints:
+          - Differentiate c times h cubed three times.
+          - What happens at h = 0 to the terms of higher degree?
+          - Test the formula on the function x cubed.
+    - text: |
+        **Two series by other routes.** In [[m2.sequences-and-series]] you summed the geometric series: for $\lvert x \rvert < 1$,
+
+        $$\frac{1}{1 - x} = 1 + x + x^2 + x^3 + \dots$$
+
+        That is a Taylor series, found without any differentiating. You can check it against the formula. The derivatives of $(1 - x)^{-1}$ at 0 are $1, 1, 2, 6, 24, \dots$, which is $k!$, and $\frac{k!}{k!} = 1$ for every coefficient.
+
+        For the logarithm, take $f(x) = \ln(1 + x)$, so that the point of interest $x = 0$ is where the logarithm is 0. Its derivatives are $\frac{1}{1 + x}$, $-\frac{1}{(1+x)^2}$, $\frac{2}{(1+x)^3}$, $-\frac{6}{(1+x)^4}$, which at 0 are $1, -1, 2, -6$. Dividing by $1!, 2!, 3!, 4!$:
+
+        $$\ln(1 + x) \approx x - \frac{x^2}{2} + \frac{x^3}{3} - \frac{x^4}{4} + \dots$$
+
+        **Where the imitation holds.** Here a warning is due. Change the figure to the logarithm and raise the degree.
+    - figure: taylor
+      props: { fn: ln, degree: 3, x: 0.5 }
+    - text: |
+        Between $-1$ and 1 the polynomials close in on the curve. Beyond 1 they do the opposite: each higher degree swings further away. The terms $\frac{x^k}{k}$ grow without limit when $\lvert x \rvert > 1$, so adding more of them cannot help.
+
+        The geometric series has the same boundary, and there you can see the cause: $\frac{1}{1 - x}$ blows up at $x = 1$. The series about 0 can reach out only as far as the nearest trouble. For the logarithm the trouble is at $x = -1$, where $\ln(1 + x)$ plunges to $-\infty$, and that limits the reach to a distance of 1 in **both** directions.
+
+        The exponential, the sine and the cosine have no trouble anywhere, and their series work for every $x$: the factorials underneath eventually outgrow any power on top. How far a series can be trusted, and what it means for an endless sum to equal a function, are questions for the course on analysis. For today: **a Taylor polynomial is a local imitation**, excellent near its centre, and its range must be checked before it is relied on.
+
+        **How large is the error?** A workable rule: the error of $T_n$ is about the size of the **first term left out**,
+
+        $$\text{error of } T_n \approx \frac{f^{(n+1)}(a)}{(n+1)!}\,h^{n+1}.$$
+
+        The last lesson's "half the second derivative times $h^2$" was the case $n = 1$. Two things can be read off. The error shrinks like a **power** of the distance: halve $h$ and the error of $T_n$ falls by a factor $2^{n+1}$. And the factorial in the denominator grows very fast, which is why a handful of terms is enough. The exact statement, with a proof, is a theorem you will meet in [[m11.taylors-theorem-with-remainder]].
+
+        **Small-step rules.** Keeping only the first one or two terms gives approximations that are used constantly, often without a word of explanation. For small $x$:
+
+        | Function | Approximation | First correction |
+        | --- | --- | --- |
+        | $e^x$ | $1 + x$ | $+\frac{x^2}{2}$ |
+        | $\ln(1 + x)$ | $x$ | $-\frac{x^2}{2}$ |
+        | $\sin x$ | $x$ | $-\frac{x^3}{6}$ |
+        | $\cos x$ | $1 - \frac{x^2}{2}$ | $+\frac{x^4}{24}$ |
+        | $(1 + x)^n$ | $1 + nx$ | $+\frac{n(n-1)}{2}x^2$ |
+        | $\frac{1}{1 - x}$ | $1 + x$ | $+x^2$ |
+
+        A growth of 1 per cent a step for 10 steps is $(1.01)^{10} \approx 1.1$. The logarithm of a number just above 1 is about its excess over 1. For a small angle in radians, the sine is the angle.
+
+        **Why the central difference is so good.** Since the second lesson of this cluster you have been estimating derivatives with $\frac{f(a + h) - f(a - h)}{2h}$ and trusting that it beats the one-sided $\frac{f(a + h) - f(a)}{h}$. Taylor polynomials show why. Write out both neighbours:
+
+        $$f(a + h) \approx f(a) + f'(a)h + \tfrac{1}{2}f''(a)h^2 + \tfrac{1}{6}f'''(a)h^3,$$
+        $$f(a - h) \approx f(a) - f'(a)h + \tfrac{1}{2}f''(a)h^2 - \tfrac{1}{6}f'''(a)h^3.$$
+
+        The one-sided difference gives $f'(a) + \frac{1}{2}f''(a)h$: an error proportional to $h$. Now subtract the second line from the first. The values cancel, and so do the $h^2$ terms, because $h^2$ is the same for a step forward and a step back:
+
+        $$\frac{f(a + h) - f(a - h)}{2h} \approx f'(a) + \tfrac{1}{6}f'''(a)h^2.$$
+
+        The error is proportional to $h^2$. With $h = 10^{-5}$ the one-sided error is of the order of $10^{-5}$ and the central error of the order of $10^{-10}$. The symmetry kills the largest error term. Add the two lines instead of subtracting, and the odd terms cancel, leaving $2f(a) + f''(a)h^2$: rearranged, that is the central second difference of the last lesson.
+
+        **Newton's method.** One more use, and it is the most important. Suppose you want to **solve** $f(x) = 0$ and cannot do it by algebra. You have a guess $a$. Replace $f$ by its tangent line at $a$, which you **can** solve:
+
+        $$f(a) + f'(a)(x - a) = 0 \quad\Longrightarrow\quad x = a - \frac{f(a)}{f'(a)}.$$
+
+        The solution of the stand-in is not the solution of the real equation, but it is usually a far better guess. So use it as the new $a$ and repeat.
+
+        Take $f(x) = x^2 - 2$, whose positive root is $\sqrt{2}$. Then $f'(x) = 2x$, and the step is $x - \frac{x^2 - 2}{2x}$. Starting from 1:
+
+        | Step | $x$ | Correct figures |
+        | --- | --- | --- |
+        | 0 | $1$ | 1 |
+        | 1 | $1.5$ | 1 |
+        | 2 | $1.4166667$ | 3 |
+        | 3 | $1.4142157$ | 6 |
+        | 4 | $1.4142135624$ | 12 |
+
+        The number of correct figures roughly **doubles** at each step. The reason is the error rule above. The tangent's error is proportional to the square of the distance from $a$. So if the guess is off by $10^{-3}$, the tangent's root is off by about $10^{-6}$, and the next by about $10^{-12}$.
+
+        ```python
+        def newton(f, df, x, steps):
+            for step in range(steps):
+                x = x - f(x) / df(x)
+            return x
+        ```
+
+        Newton's method has a weakness, and you can see it in the formula: it divides by $f'(a)$. Where the tangent is nearly level, the step is enormous and may land anywhere. It needs a reasonable first guess.
+
+        The pattern of the method is worth more than the method. **Replace a hard function by a simple local stand-in, solve the problem for the stand-in, move there, and repeat.** Nearly every algorithm that trains a model is built on that pattern.
+    - question:
+        id: order-taylor-cos
+        type: order
+        system: s2
+        prompt: Put the steps in order to build the Taylor polynomial of degree 4 for $\cos x$ about 0.
+        steps:
+          - "List the function and its first four derivatives: $\\cos x$, $-\\sin x$, $-\\cos x$, $\\sin x$, $\\cos x$."
+          - "Evaluate each at 0: $1, 0, -1, 0, 1$."
+          - "Divide the $k$th value by $k!$: $1, 0, -\\frac{1}{2}, 0, \\frac{1}{24}$."
+          - "Attach the powers of $x$: $1 - \\frac{x^2}{2} + \\frac{x^4}{24}$."
+          - "Check at a small value: at $x = 0.2$ it gives $0.98007$, and $\\cos 0.2 = 0.98007$ to five places."
+        explanation: The derivatives come first, as functions. Then they are evaluated at the centre, since only their values there are used. Each value is divided by the factorial of its order to give a coefficient, the powers are attached, and a numerical check comes last.
+        hints:
+          - The derivatives must be found before they can be evaluated.
+          - The factorials divide the values at 0, not the functions.
+          - The check comes at the end.
+  formal:
+    - text: |
+        **Taylor polynomial.** For a function $f$ with $n$ derivatives at $a$,
+
+        $$T_n(h) = \sum_{k=0}^{n} \frac{f^{(k)}(a)}{k!}\,h^k, \qquad f(a + h) \approx T_n(h).$$
+
+        It is the only polynomial of degree at most $n$ whose value and first $n$ derivatives at $h = 0$ equal those of $f$ at $a$. Here $0! = 1$ and $f^{(0)} = f$.
+
+        **Error.** For small $h$ the error is approximately the first omitted term, $\dfrac{f^{(n+1)}(a)}{(n+1)!}h^{n+1}$.
+
+        **Standard series about 0.**
+
+        | Function | Series | Holds for |
+        | --- | --- | --- |
+        | $e^x$ | $1 + x + \frac{x^2}{2!} + \frac{x^3}{3!} + \dots$ | all $x$ |
+        | $\sin x$ | $x - \frac{x^3}{3!} + \frac{x^5}{5!} - \dots$ | all $x$ |
+        | $\cos x$ | $1 - \frac{x^2}{2!} + \frac{x^4}{4!} - \dots$ | all $x$ |
+        | $\frac{1}{1 - x}$ | $1 + x + x^2 + x^3 + \dots$ | $-1 < x < 1$ |
+        | $\ln(1 + x)$ | $x - \frac{x^2}{2} + \frac{x^3}{3} - \dots$ | $-1 < x \le 1$ |
+
+        **Finite differences.** $\dfrac{f(a + h) - f(a)}{h} = f'(a) + \frac{1}{2}f''(a)h + \dots$ and $\dfrac{f(a + h) - f(a - h)}{2h} = f'(a) + \frac{1}{6}f'''(a)h^2 + \dots$
+
+        **Newton's method** for $f(x) = 0$: repeat $x \leftarrow x - \dfrac{f(x)}{f'(x)}$. Near a root where $f' \ne 0$, the error is roughly squared at each step.
+  drill:
+    - text: Seconds each. A coefficient is a derivative at the point divided by a factorial.
+    - question:
+        id: drill-factorial
+        type: numeric
+        system: s1
+        prompt: |
+          What is $4!$?
+        answer: "24"
+        explanation: |
+          $4 \cdot 3 \cdot 2 \cdot 1$.
+        hints:
+          - Multiply the whole numbers from 4 down to 1.
+          - 4 times 3 is 12.
+    - question:
+        id: drill-coefficient-two
+        type: numeric
+        system: s1
+        prompt: |
+          $f''(0) = 10$. What is the coefficient of $x^2$ in the Taylor polynomial of $f$ about 0?
+        answer: "5"
+        explanation: The second derivative is divided by 2 factorial, which is 2.
+        hints:
+          - Divide the derivative by the factorial of its order.
+          - 2 factorial is 2.
+    - question:
+        id: drill-coefficient-three
+        type: numeric
+        system: s1
+        prompt: |
+          $f'''(0) = 12$. What is the coefficient of $x^3$ in the Taylor polynomial of $f$ about 0?
+        answer: "2"
+        explanation: The third derivative is divided by 3 factorial, which is 6.
+        hints:
+          - Divide by 3 factorial.
+          - 3 factorial is 6.
+    - question:
+        id: drill-exp-term
+        type: choice
+        system: s1
+        prompt: |
+          What is the term in $x^3$ in the series for $e^x$?
+        options: ["$x^3$", "$\\dfrac{x^3}{3}$", "$\\dfrac{x^3}{6}$", "$-\\dfrac{x^3}{6}$"]
+        answer: 2
+        explanation: Every derivative of the exponential is 1 at 0, so the coefficient is 1 over 3 factorial.
+        hints:
+          - Every derivative of the exponential at 0 is 1.
+          - Divide by 3 factorial.
+    - question:
+        id: drill-sin-series
+        type: choice
+        system: s1
+        prompt: |
+          Which is the Taylor polynomial of degree 3 for $\sin x$ about 0?
+        options: ["$x + \\dfrac{x^3}{6}$", "$x - \\dfrac{x^3}{6}$", "$1 - \\dfrac{x^2}{2}$", "$x - \\dfrac{x^3}{3}$"]
+        answer: 1
+        explanation: The derivatives of the sine at 0 are 0, 1, 0, −1. Only odd powers appear, and the cubic term is −1 over 3 factorial.
+        hints:
+          - The sine is 0 at 0, so there is no constant term.
+          - The third derivative of the sine at 0 is minus 1.
+    - question:
+        id: drill-cos-estimate
+        type: numeric
+        system: s1
+        prompt: |
+          Estimate $\cos 0.2$ with $1 - \dfrac{x^2}{2}$.
+        answer: "0.98"
+        explanation: |
+          $0.2^2 = 0.04$, and half of that is 0.02. The true value is $0.98007\ldots$
+        hints:
+          - Square 0.2 first.
+          - Halve it and subtract from 1.
+    - question:
+        id: drill-exp-estimate
+        type: numeric
+        system: s1
+        prompt: |
+          Estimate $e^{0.1}$ with $1 + x + \dfrac{x^2}{2}$.
+        answer: "1.105"
+        explanation: |
+          $1 + 0.1 + 0.005$. The true value is $1.10517\ldots$
+        hints:
+          - The square of 0.1 is 0.01.
+          - Halve that for the last term.
+    - question:
+        id: drill-ln-estimate
+        type: numeric
+        system: s1
+        prompt: |
+          Estimate $\ln 1.1$ with $x - \dfrac{x^2}{2}$, where $x = 0.1$.
+        answer: "0.095"
+        explanation: |
+          $0.1 - 0.005$. The true value is $0.09531\ldots$
+        hints:
+          - The series is for the logarithm of 1 + x, so x is 0.1.
+          - Subtract half of 0.01.
+    - question:
+        id: drill-binomial
+        type: numeric
+        system: s1
+        prompt: |
+          Use $(1 + x)^n \approx 1 + nx$ to estimate $(1.02)^5$.
+        answer: "1.1"
+        explanation: |
+          $1 + 5 \cdot 0.02$. The true value is $1.10408\ldots$
+        hints:
+          - Here x is 0.02 and n is 5.
+          - Multiply them and add 1.
+    - question:
+        id: drill-newton-step
+        type: numeric
+        system: s1
+        prompt: |
+          One step of Newton's method for $f(x) = x^2 - 5$, starting from $x = 2$. Here $f(2) = -1$ and $f'(2) = 4$. What is the new $x$?
+        answer: "2.25"
+        explanation: |
+          $2 - \dfrac{-1}{4} = 2 + 0.25$. The root is $\sqrt{5} = 2.236\ldots$
+        hints:
+          - The new x is the old x minus f divided by the derivative.
+          - Subtracting a negative number adds.
+    - question:
+        id: drill-error-order
+        type: choice
+        system: s1
+        prompt: |
+          The error of the tangent line $T_1$ is about $0.004$ at a distance $h$. Roughly what is it at distance $\frac{h}{2}$?
+        options: ["$0.002$", "$0.001$", "$0.0005$", "$0.004$"]
+        answer: 1
+        explanation: The first omitted term contains h squared, so halving the distance divides the error by 4.
+        hints:
+          - Which power of h is in the first term left out of the tangent line?
+          - Halving h divides h squared by 4.
+    - question:
+        id: drill-reach
+        type: choice
+        system: s1
+        prompt: |
+          For which $x$ does the series $x - \frac{x^2}{2} + \frac{x^3}{3} - \dots$ approach $\ln(1 + x)$?
+        options:
+          - "Every $x$"
+          - "Only $-1 < x \\le 1$"
+          - "Only $x > 0$"
+          - "Only $x = 0$"
+        answer: 1
+        explanation: The logarithm of 1 + x breaks down at x = −1, at distance 1 from the centre, and the series cannot reach further than that in either direction.
+        hints:
+          - Where does the logarithm of 1 + x stop being defined?
+          - The series reaches the same distance on both sides of 0.
+    - question:
+        id: predict-partial-sum
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          total = 0
+          term = 1
+          for k in range(5):
+              total = total + term
+              term = term / (k + 1)
+          print(round(total, 3))
+        output: "2.708"
+        explanation: The terms are 1, 1, 1/2, 1/6 and 1/24. Each is the one before divided by the next whole number, which builds the factorials without ever computing one. Their sum is 2.70833, the degree 4 Taylor polynomial of the exponential at 1.
+        hints:
+          - Write down the value of term on each pass.
+          - The five terms are 1, 1, 0.5, about 0.1667 and about 0.0417.
+    - question:
+        id: predict-evaluate
+        type: predict
+        system: s1
+        prompt: The list holds the coefficients of a polynomial, constant term first. What does this show?
+        code: |
+          def evaluate(coeffs, x):
+              total = 0
+              for c in coeffs[::-1]:
+                  total = total * x + c
+              return total
+
+          print(evaluate([1, 1, 0.5], 2), evaluate([0, 1, 0, -1], 2))
+        output: "5.0 -6"
+        explanation: The loop takes the coefficients from the highest power down, multiplying by x and adding the next. The first polynomial is 1 + x + x²/2, which is 5.0 at 2. The second is x − x³, which is 2 − 8. This way of evaluating needs one multiplication per coefficient and no powers.
+        hints:
+          - The slice with a step of minus 1 runs through the list backwards.
+          - For the first call the total goes 0.5, then 2.0, then 5.0.
+  work:
+    - text: Slower now. For each estimate, say which term you stopped at and how large the next one would have been.
+    - question:
+        id: work-sin-half
+        type: numeric
+        system: s2
+        tolerance: "0.0001"
+        prompt: |
+          Estimate $\sin 0.5$ with the Taylor polynomial of degree 3. Give four decimal places.
+        answer: "0.4792"
+        explanation: |
+          $0.5 - \dfrac{0.125}{6} = 0.5 - 0.02083 = 0.47917$. The true value is $0.47943$. The error, $0.00026$, is almost exactly the next term, $\dfrac{0.5^5}{120} = 0.00026$: the first term left out measures the error.
+        hints:
+          - The polynomial is x minus x cubed over 6.
+          - 0.5 cubed is 0.125.
+          - Divide 0.125 by 6 and subtract from 0.5.
+    - question:
+        id: work-terms-needed
+        type: choice
+        system: s2
+        prompt: |
+          You sum $1 + 1 + \frac{1}{2!} + \frac{1}{3!} + \dots$ to compute $e$, and want an error below $0.001$. Using the rule that the error is about the first term left out, what is the last term you must keep? ($5! = 120$, $6! = 720$, $7! = 5040$.)
+        options:
+          - "$\\frac{1}{4!}$"
+          - "$\\frac{1}{5!}$"
+          - "$\\frac{1}{6!}$"
+          - "$\\frac{1}{10!}$"
+        answer: 2
+        explanation: |
+          Stopping after $\frac{1}{5!}$ leaves out $\frac{1}{720} \approx 0.0014$, which is too large. Stopping after $\frac{1}{6!}$ leaves out $\frac{1}{5040} \approx 0.0002$, which is small enough. The starter confirms it: after the term with $k = 6$ the total is $2.71806$, an error of $0.00023$. The terms that follow the first omitted one add a little more, but they shrink so fast that the first one dominates.
+        hints:
+          - Find the first factorial whose reciprocal is below 0.001.
+          - 1 over 720 is about 0.0014.
+          - The last term kept is the one before the first term that is small enough to drop.
+    - question:
+        id: work-sigmoid
+        type: numeric
+        system: s2
+        prompt: |
+          The sigmoid $\sigma(x) = \dfrac{1}{1 + e^{-x}}$ has $\sigma(0) = \frac{1}{2}$, $\sigma'(0) = \frac{1}{4}$ and $\sigma''(0) = 0$. Use the Taylor polynomial of degree 2 to estimate $\sigma(0.4)$.
+        answer: "0.6"
+        explanation: |
+          $\frac{1}{2} + \frac{1}{4}(0.4) + 0 = 0.6$. The true value is $0.5987$. Because the second derivative is 0 at the origin, the sigmoid's point of inflection, the tangent line is already as good as a parabola, and the first correction is the cubic term $-\frac{x^3}{48}$, which is $-0.0013$ here. Near 0 a sigmoid is, to a very good approximation, the straight line $\frac{1}{2} + \frac{x}{4}$. A network whose inputs to its sigmoids all stay small behaves almost like one with no bending in it at all.
+        hints:
+          - Value, plus slope times step, plus half the second derivative times the step squared.
+          - The last term is zero here.
+          - A quarter of 0.4 is 0.1.
+    - question:
+        id: write-exp-series
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `exp_series(x, terms)`. It returns the sum of the first `terms` terms of
+
+          $$1 + x + \frac{x^2}{2!} + \frac{x^3}{3!} + \dots$$
+
+          so `exp_series(x, 1)` is 1 and `exp_series(x, 3)` is $1 + x + \frac{x^2}{2}$. With `terms = 0` it returns 0.
+
+          Do not compute any factorial or power. Build each term from the one before: the term in $x^{k+1}$ is the term in $x^k$ multiplied by $x$ and divided by $k + 1$.
+        starter: |
+          def exp_series(x, terms):
+              # Replace the next line with your own.
+              return 0
+
+          print(round(exp_series(1, 10), 6))
+        solution: |
+          def exp_series(x, terms):
+              total = 0
+              term = 1
+              for k in range(terms):
+                  total = total + term
+                  term = term * x / (k + 1)
+              return total
+
+          print(round(exp_series(1, 10), 6))
+        tests: |
+          import math as _m
+          assert exp_series(3, 0) == 0, "With no terms the sum is 0"
+          assert exp_series(3, 1) == 1, "The first term is 1 whatever x is. You returned " + repr(exp_series(3, 1))
+          assert exp_series(3, 2) == 4, "The first two terms are 1 + x, which is 4 at x = 3. You returned " + repr(exp_series(3, 2))
+          assert abs(exp_series(2, 3) - 5) < 1e-12, "Three terms at x = 2 are 1 + 2 + 2 = 5. You returned " + repr(exp_series(2, 3))
+          assert abs(exp_series(2, 4) - 19 / 3) < 1e-12, "Four terms at x = 2 are 1 + 2 + 2 + 8/6. You returned " + repr(exp_series(2, 4))
+          assert abs(exp_series(1, 20) - _m.e) < 1e-12, "Twenty terms at x = 1 should give e. You returned " + repr(exp_series(1, 20))
+          assert abs(exp_series(-1, 20) - 1 / _m.e) < 1e-12, "Twenty terms at x = -1 should give 1/e. You returned " + repr(exp_series(-1, 20))
+          assert abs(exp_series(0.5, 20) - _m.exp(0.5)) < 1e-12, "Twenty terms at x = 0.5 should give the square root of e"
+          assert "factorial" not in source and "**" not in source, "Build each term from the one before, with no factorial and no power"
+          assert output.strip() == "2.718282", "The program should print 2.718282"
+        wrong:
+          - "def exp_series(x, terms):\n    total = 0\n    term = 1\n    for k in range(terms):\n        total = total + term\n        term = term * x\n    return total\n\nprint(2.718282)\n"
+          - "def exp_series(x, terms):\n    total = 0\n    term = 1\n    for k in range(terms):\n        term = term * x / (k + 1)\n        total = total + term\n    return total\n\nprint(2.718282)\n"
+          - "def exp_series(x, terms):\n    total = 0\n    term = 1\n    for k in range(terms):\n        total = total + term\n        term = term * x / (k + 2)\n    return total\n\nprint(2.718282)\n"
+          - "def exp_series(x, terms):\n    total = 1\n    term = 1\n    for k in range(terms):\n        total = total + term\n        term = term * x / (k + 1)\n    return total\n\nprint(2.718282)\n"
+          - "def exp_series(x, terms):\n    total = 0\n    term = 1\n    for k in range(terms):\n        total = total + term\n        term = term / (k + 1)\n    return total\n\nprint(2.718282)\n"
+        explanation: |
+          The ratio of one term to the one before is $\dfrac{x^{k+1}/(k+1)!}{x^k/k!} = \dfrac{x}{k + 1}$. So a running `term`, multiplied by that ratio after each use, walks through the whole series. This is how such sums are computed in practice: $x^{20}$ and $20!$ are both huge, and dividing one by the other loses accuracy, while the running term stays a modest size throughout. The order of the two lines in the loop matters. The term must be added **before** it is advanced, or the leading 1 is skipped.
+        hints:
+          - Keep two variables, a running total and the current term, which starts at 1.
+          - Inside the loop, add the term to the total first.
+          - Then replace the term by term * x / (k + 1).
+    - question:
+        id: fix-sin-series
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `sin_series(x, terms)` should add up the first `terms` terms of $x - \frac{x^3}{3!} + \frac{x^5}{5!} - \dots$ With six terms at $x = 1$ it should print 0.841471, which is $\sin 1$. It prints 1.175201. Fix it.
+        starter: |
+          def sin_series(x, terms):
+              total = 0
+              term = x
+              for k in range(terms):
+                  total = total + term
+                  term = term * x * x / ((2 * k + 2) * (2 * k + 3))
+              return total
+
+          print(round(sin_series(1, 6), 6))
+        solution: |
+          def sin_series(x, terms):
+              total = 0
+              term = x
+              for k in range(terms):
+                  total = total + term
+                  term = -term * x * x / ((2 * k + 2) * (2 * k + 3))
+              return total
+
+          print(round(sin_series(1, 6), 6))
+        tests: |
+          import math as _m
+          assert sin_series(0.5, 1) == 0.5, "The first term is x itself"
+          assert abs(sin_series(0.5, 2) - (0.5 - 0.125 / 6)) < 1e-12, "Two terms at 0.5 are 0.5 - 0.125/6 = 0.479167. You returned " + repr(sin_series(0.5, 2))
+          assert abs(sin_series(2, 3) - (2 - 8 / 6 + 32 / 120)) < 1e-12, "Three terms at 2 are 2 - 8/6 + 32/120. You returned " + repr(sin_series(2, 3))
+          for _x in [-2, -0.3, 0, 0.5, 1, 3]:
+              assert abs(sin_series(_x, 15) - _m.sin(_x)) < 1e-9, "Fifteen terms at x = " + str(_x) + " should give sin x = " + str(_m.sin(_x)) + " and you returned " + repr(sin_series(_x, 15))
+          assert output.strip() == "0.841471", "The program should print 0.841471"
+        wrong:
+          - "def sin_series(x, terms):\n    total = 0\n    term = x\n    for k in range(terms):\n        total = total + term\n        term = term * x * x / ((2 * k + 2) * (2 * k + 3))\n    return total\n\nprint(0.841471)\n"
+          - "def sin_series(x, terms):\n    total = 0\n    term = x\n    for k in range(terms):\n        total = total - term\n        term = term * x * x / ((2 * k + 2) * (2 * k + 3))\n    return total\n\nprint(0.841471)\n"
+          - "def sin_series(x, terms):\n    total = 0\n    term = x\n    for k in range(terms):\n        total = total + term\n        term = -term * x / ((2 * k + 2) * (2 * k + 3))\n    return total\n\nprint(0.841471)\n"
+          - "def sin_series(x, terms):\n    total = 0\n    term = x\n    for k in range(terms):\n        total = total + term\n        term = -term * x * x / (2 * k + 3)\n    return total\n\nprint(0.841471)\n"
+        explanation: |
+          The signs of the sine's series alternate, because its derivatives at 0 run $1, 0, -1, 0, 1, \dots$ The starter never changed sign, so it added $x + \frac{x^3}{3!} + \frac{x^5}{5!} + \dots$ The fix is one minus sign in the line that advances the term. The rest was right: from the term in $x^{2k+1}$ to the next, the power rises by two, so multiply by $x^2$, and the factorial gains the two factors $(2k + 2)(2k + 3)$. The series with all signs positive is a function in its own right, the hyperbolic sine, which is $\frac{e^x - e^{-x}}{2}$, and that is what 1.175201 was.
+        hints:
+          - Write out the first three terms the loop adds, with their signs.
+          - Compare with x minus x cubed over 6 plus x to the fifth over 120.
+          - Each new term should have the opposite sign to the one before.
+    - question:
+        id: write-newton
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `newton(f, df, x, steps)`. Starting from the guess `x`, it applies Newton's step
+
+          $$x \leftarrow x - \frac{f(x)}{f'(x)}$$
+
+          `steps` times and returns the result. `f` is the function and `df` is its derivative. With `steps = 0` it returns `x` unchanged.
+        starter: |
+          def newton(f, df, x, steps):
+              # Replace the next line with your own.
+              return x
+
+          print(round(newton(lambda x: x * x - 2, lambda x: 2 * x, 1, 5), 10))
+        solution: |
+          def newton(f, df, x, steps):
+              for step in range(steps):
+                  x = x - f(x) / df(x)
+              return x
+
+          print(round(newton(lambda x: x * x - 2, lambda x: 2 * x, 1, 5), 10))
+        tests: |
+          import math as _m
+          _f = lambda x: x * x - 2
+          _df = lambda x: 2 * x
+          assert newton(_f, _df, 1, 0) == 1, "With no steps the guess is returned unchanged"
+          assert newton(_f, _df, 1, 1) == 1.5, "One step from 1 gives 1 - (-1)/2 = 1.5. You returned " + repr(newton(_f, _df, 1, 1))
+          assert abs(newton(_f, _df, 1, 2) - 17 / 12) < 1e-12, "Two steps from 1 give 17/12 = 1.41666... You returned " + repr(newton(_f, _df, 1, 2))
+          assert abs(newton(_f, _df, 1, 6) - _m.sqrt(2)) < 1e-12, "Six steps from 1 should give the square root of 2. You returned " + repr(newton(_f, _df, 1, 6))
+          assert abs(newton(_f, _df, -1, 6) + _m.sqrt(2)) < 1e-12, "Starting from -1 the method finds the negative root"
+          assert abs(newton(lambda x: 3 * x - 12, lambda x: 3, 100, 1) - 4) < 1e-12, "For a straight line the tangent is the function, so one step lands on the root"
+          assert abs(newton(lambda x: x ** 3 - 27, lambda x: 3 * x * x, 5, 8) - 3) < 1e-12, "The cube root of 27 is 3. You returned " + repr(newton(lambda x: x ** 3 - 27, lambda x: 3 * x * x, 5, 8))
+          assert abs(newton(lambda x: _m.exp(x) - 5, _m.exp, 1, 8) - _m.log(5)) < 1e-12, "Solving e^x = 5 should give ln 5"
+          assert output.strip() == "1.4142135624", "The program should print 1.4142135624"
+        wrong:
+          - "def newton(f, df, x, steps):\n    for step in range(steps):\n        x = x + f(x) / df(x)\n    return x\n\nprint(1.4142135624)\n"
+          - "def newton(f, df, x, steps):\n    for step in range(steps):\n        x = x - df(x) / f(x)\n    return x\n\nprint(1.4142135624)\n"
+          - "def newton(f, df, x, steps):\n    if steps == 0:\n        return x\n    return x - f(x) / df(x)\n\nprint(1.4142135624)\n"
+          - "def newton(f, df, x, steps):\n    for step in range(steps):\n        x = x - f(x) * df(x)\n    return x\n\nprint(1.4142135624)\n"
+          - "def newton(f, df, x, steps):\n    start = x\n    for step in range(steps):\n        x = x - f(x) / df(start)\n    return x\n\nprint(1.4142135624)\n"
+        explanation: |
+          Each pass replaces the function by its tangent at the current guess and moves to the place where that tangent crosses zero. The tangent at $x$ is $f(x) + f'(x)(t - x)$, which is 0 at $t = x - \frac{f(x)}{f'(x)}$. For a straight line the tangent **is** the function, so one step solves it from any start, and that makes a good test. Both the value and the derivative must be taken at the **current** $x$ on every pass. Five steps from 1 give $\sqrt{2}$ to ten places. For $x^2 - c$ the step simplifies to $\frac{1}{2}\left(x + \frac{c}{x}\right)$, the average of the guess and $c$ divided by the guess, a rule for square roots that is about four thousand years old.
+        hints:
+          - One step is x = x - f(x) / df(x).
+          - Put it in a loop that runs steps times.
+          - Return x after the loop.
+    - question:
+        id: work-central-error
+        type: choice
+        system: s2
+        prompt: |
+          With step $h$, the one-sided difference has error about $\frac{1}{2}f''(a)h$ and the central difference about $\frac{1}{6}f'''(a)h^2$. For $f(x) = e^x$ at $a = 0$, where every derivative is 1, you reduce $h$ from $10^{-2}$ to $10^{-3}$. What happens to the two errors?
+        options:
+          - "Both become 10 times smaller."
+          - "The one-sided error becomes 10 times smaller and the central error 100 times smaller."
+          - "Both become 100 times smaller."
+          - "The one-sided error becomes 100 times smaller and the central error 10 times smaller."
+        answer: 1
+        explanation: |
+          The one-sided error is proportional to $h$: it goes from about $0.005$ to about $0.0005$. The central error is proportional to $h^2$: from about $1.7 \times 10^{-5}$ to about $1.7 \times 10^{-7}$. The central difference starts more accurate and improves faster. The reason is the cancellation of the $h^2$ terms of the two Taylor polynomials, which have the same sign for a step forward and a step back. This is why every gradient check in this course has used the central form.
+        hints:
+          - Which power of h does each error contain?
+          - Dividing h by 10 divides h squared by 100.
+          - Put the numbers in. Half of 0.01, and a sixth of 0.0001.
+    - question:
+        id: work-newton-digits
+        type: choice
+        system: s2
+        prompt: |
+          Newton's method is closing in on a root. The error after one step is about $10^{-2}$ and after the next about $10^{-4}$. Roughly what will it be after one more step, and why?
+        options:
+          - "$10^{-5}$, since each step adds one correct figure."
+          - "$10^{-6}$, since each step adds two correct figures."
+          - "$10^{-8}$, since the tangent's error is proportional to the square of the distance, so each step roughly squares the error."
+          - "$0$, since the method is exact after three steps."
+        answer: 2
+        explanation: |
+          The new guess is the root of the tangent line, and the tangent departs from the curve by about $\frac{1}{2}f''h^2$ at distance $h$. So a guess that is off by $h$ produces one that is off by something proportional to $h^2$. From $10^{-2}$ to $10^{-4}$ to $10^{-8}$: the number of correct figures doubles each time. A method that only followed the slope downhill by small fixed steps would gain a fixed number of figures per step. Using the local stand-in to jump straight to its solution is what makes Newton's method so fast, and the price is the need for a derivative and a decent starting guess.
+        hints:
+          - How does the error of a tangent line depend on the distance from the point of tangency?
+          - If the error is squared each time, what follows one part in ten thousand?
+          - Compare with the table for the square root of 2.
+    - question:
+        id: work-small-angle
+        type: choice
+        system: s2
+        prompt: |
+          A model's output is $\ln(1 + x)$ where $x$ is a small positive number, about $10^{-3}$. A colleague replaces it by $x$ to save time. Roughly how large is the error they introduce, and in which direction?
+        options:
+          - "About $10^{-3}$, and $x$ is too small."
+          - "About $5 \\times 10^{-7}$, and $x$ is too large."
+          - "About $10^{-9}$, and $x$ is too small."
+          - "There is no error. The two are equal for small $x$."
+        answer: 1
+        explanation: |
+          $\ln(1 + x) = x - \frac{x^2}{2} + \dots$, so replacing it by $x$ leaves out $-\frac{x^2}{2} = -5 \times 10^{-7}$. The logarithm is a little **less** than $x$, so $x$ overestimates. That agrees with the inequality from the last lesson, $\ln x \le x - 1$, which says the same thing with $1 + x$ in place of $x$. The relative error is $\frac{x}{2}$, one part in two thousand. Whether that is acceptable depends on the use, and now you can say what the cost is instead of guessing.
+        hints:
+          - Write down the first two terms of the series for the logarithm of 1 + x.
+          - The error is about the first term left out.
+          - Half of ten to the minus 6.
+  connections:
+    - text: |
+        The puzzle asked how a machine that can only do arithmetic produces a sine. It evaluates a polynomial. The derivatives of the sine at 0 are known exactly, they give the coefficients $1, -\frac{1}{6}, \frac{1}{120}, \dots$, and a few terms of $x - \frac{x^3}{6} + \frac{x^5}{120} - \dots$ agree with the sine to as many figures as are wanted. The exponential, the cosine and the logarithm are handled in the same way. The functions that were defined by limits and circles have become sums you can compute.
+
+        The idea underneath was the one from the last two lessons, carried to the end. A tangent line matches a function's value and slope at a point. Match the second derivative as well and you have a parabola, the third and you have a cubic, and the $k$th derivative divided by $k!$ is always the coefficient. The same expansions explained why the central difference is so accurate, a fact you had been using on trust, and they gave Newton's method: replace the function by its tangent, solve that, and repeat.
+
+        Newton's method found where a function is **zero**. The question asked far more often is where a function is **smallest**: the error of a model, the cost of a plan, the time of a program. At a smallest point the tangent is level, so the derivative is zero there, and finding such a point is a matter of solving $f'(x) = 0$. The quadratic term of the Taylor polynomial then says whether you have found a valley or a hilltop. That is the next lesson, [[m10.maxima-and-minima]], where the two halves of this one, local stand-ins and repeated steps, become a method for training.
+
+        Further on, the rule of thumb that the error is about the first omitted term becomes a theorem with a proof in [[m11.taylors-theorem-with-remainder]], and the question of when an endless sum has a value at all is taken up in [[m11.series-and-convergence-tests]]. Newton's idea, applied to minimising a function of many variables, returns in [[m19.newton-and-quasi-newton-methods]].

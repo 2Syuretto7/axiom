@@ -1,0 +1,688 @@
+concept: m10.integration-techniques
+minutes: 100
+claim: You can integrate by substitution, the chain rule in reverse, and by parts, the product rule in reverse, change the limits of a definite integral correctly, evaluate integrals over an infinite range as limits, recognise when no formula exists and fall back on numerical integration, and check any antiderivative by differentiating it or by comparing with a sum of slices.
+recalls: [m10.fundamental-theorem-of-calculus]
+uses: [m10.integral-as-accumulation, m10.chain-rule, m10.differentiation-rules, m10.derivatives-of-exp-log-and-trig, m10.derivative-as-slope-and-rate, m10.limits-and-continuity, m10.taylor-approximation, m2.composition-and-inverses, m2.sequences-and-series, m2.the-exponential-and-e, m1.logarithms, e0.functions, e0.loops, e1.comprehensions-and-iterators, e1.modules-and-imports]
+leads: [m11.the-riemann-integral, m12.multiple-integrals-and-change-of-variables, m12.functions-of-several-variables]
+starter: |
+  # Scratch space. Is F an antiderivative of f? Differentiate F numerically
+  # and compare with f at a few points.
+  import math
+
+  def f(x):
+      return 2 * x * math.cos(x * x)
+
+  def F(x):
+      return math.sin(x * x)
+
+  h = 1e-5
+  for x in [0, 0.5, 1, 2]:
+      print(x, f(x), (F(x + h) - F(x - h)) / (2 * h))
+parts:
+  recall:
+    - text: |
+        [[m10.fundamental-theorem-of-calculus]] turned integration into a search. To integrate $f$ from $a$ to $b$, find an $F$ whose derivative is $f$, and subtract: $F(b) - F(a)$. For powers, exponentials, sines and cosines the search is a matter of reading the table of derivatives backwards. Three quick pulls first.
+    - question:
+        id: recall-ftc
+        type: numeric
+        system: s1
+        concepts: [m10.fundamental-theorem-of-calculus]
+        prompt: |
+          What is $\displaystyle\int_0^3 x^2\,dx$?
+        answer: "9"
+        explanation: |
+          An antiderivative is $\frac{x^3}{3}$, which is 9 at 3 and 0 at 0.
+        hints:
+          - Raise the exponent by one and divide by the new exponent.
+          - Evaluate at 3.
+    - question:
+        id: recall-chain
+        type: choice
+        system: s1
+        concepts: [m10.chain-rule]
+        prompt: |
+          What is the derivative of $\sin(x^2)$?
+        options: ["$\\cos(x^2)$", "$2x\\cos(x^2)$", "$\\cos(2x)$", "$2x\\sin(x^2)$"]
+        answer: 1
+        explanation: The chain rule multiplies the outer derivative, the cosine of the inside, by the derivative of the inside, 2x.
+        hints:
+          - Outer derivative at the inside, times the derivative of the inside.
+          - The inside is x squared.
+    - question:
+        id: recall-product
+        type: choice
+        system: s1
+        concepts: [m10.differentiation-rules]
+        prompt: |
+          What is the derivative of $x\,e^x$?
+        options: ["$e^x$", "$x\\,e^x$", "$e^x + x\\,e^x$", "$x\\,e^{x-1}$"]
+        answer: 2
+        explanation: The product rule differentiates each factor in turn, keeping the other, and adds.
+        hints:
+          - Use the product rule.
+          - The derivative of x is 1, and the exponential is its own derivative.
+  puzzle:
+    - text: |
+        Here are two integrals. Neither integrand appears in the table of antiderivatives.
+
+        $$\int_0^1 2x\cos(x^2)\,dx \qquad\qquad \int_0^1 x\,e^x\,dx$$
+
+        It is tempting to integrate each factor separately and multiply the results. For the second that would give $\frac{x^2}{2} \cdot e^x$. Differentiate it to check: the product rule gives $x\,e^x + \frac{x^2}{2}e^x$, which is not $x\,e^x$. **The integral of a product is not the product of the integrals**, just as the derivative of a product was not the product of the derivatives.
+
+        Differentiation never needed luck. Whatever function you wrote down, the sum, product and chain rules took it apart piece by piece. Integration has, so far, no such machinery. You can only integrate what you recognise as a derivative.
+
+        But look at the two answers you gave a moment ago in the recall. The derivative of $\sin(x^2)$ was $2x\cos(x^2)$: the first integrand exactly. The derivative of $x\,e^x$ was $e^x + x\,e^x$: the second integrand, plus an extra piece.
+
+        **Each of these integrands is the footprint of a differentiation rule. Can the rules be run backwards, to give methods of integration?**
+  intuition:
+    - text: |
+        The first integrand is what the **chain rule** leaves behind. The chain rule always produces a product of a particular shape: an outer derivative with something inside it, multiplied by the derivative of that inside. In $2x\cos(x^2)$ the inside is $x^2$, and its derivative, $2x$, is standing beside it. When you see an inside function with its own derivative alongside as a factor, a chain rule has been at work, and the antiderivative is the outer antiderivative with the same inside: $\sin(x^2)$. The starter confirms it numerically.
+
+        There is a tidy way to do this without guessing. Give the inside a name, $u = x^2$. A small change $dx$ in $x$ changes $u$ by $du = 2x\,dx$, which is what the derivative means. Then the awkward integrand collapses:
+
+        $$\int \cos(\underbrace{x^2}_{u})\,\underbrace{2x\,dx}_{du} = \int \cos u\,du = \sin u + C = \sin(x^2) + C.$$
+
+        In terms of $u$ the integral is in the table. This is **substitution**. In a picture, it is a change of the scale along the horizontal axis. Where $u$ moves fast as $x$ moves, the slices in $u$ are wider than the slices in $x$, by the factor $\frac{du}{dx}$, and that factor is exactly what the integrand must contain to compensate.
+
+        The second integrand is what the **product rule** leaves behind, in part. Differentiating $x\,e^x$ gave two terms, $e^x + x\,e^x$. We want an antiderivative of the second term alone. So start from $x\,e^x$, whose derivative has one term too many, and remove the surplus: subtract something whose derivative is $e^x$. That something is $e^x$.
+
+        $$\bigl(x\,e^x - e^x\bigr)' = e^x + x\,e^x - e^x = x\,e^x.$$
+
+        This is **integration by parts**. It does not finish the integral in one stroke. It trades the integral you have for a different one, and the art lies in making the trade so that the new one is easier.
+  derivation:
+    - text: |
+        **Substitution.** Suppose $F' = f$. The chain rule says $\bigl(F(g(x))\bigr)' = f(g(x))\,g'(x)$. Read from right to left, that is a statement about antiderivatives:
+
+        $$\int f(g(x))\,g'(x)\,dx = F(g(x)) + C.$$
+
+        In practice: choose $u = g(x)$, write $du = g'(x)\,dx$, replace everything, integrate in $u$, and put $g(x)$ back.
+
+        *Example: a linear inside.* $\int (3x + 1)^4\,dx$. Let $u = 3x + 1$, so $du = 3\,dx$ and $dx = \frac{1}{3}du$.
+
+        $$\int (3x+1)^4\,dx = \int u^4 \cdot \tfrac{1}{3}\,du = \frac{u^5}{15} + C = \frac{(3x+1)^5}{15} + C.$$
+
+        When the inside is $kx + c$, integrating divides by $k$ where differentiating would multiply by it. The same reasoning gives $\int e^{kx}\,dx = \frac{e^{kx}}{k}$ and $\int \cos(kx)\,dx = \frac{\sin(kx)}{k}$.
+
+        *Example: a missing constant.* $\int x\,e^{-x^2/2}\,dx$. Let $u = -\frac{x^2}{2}$, so $du = -x\,dx$. The integrand contains $x\,dx$, which is $-du$.
+
+        $$\int x\,e^{-x^2/2}\,dx = -\int e^u\,du = -e^u + C = -e^{-x^2/2} + C.$$
+
+        A constant factor can always be supplied in this way. A missing factor of $x$ cannot: $\int e^{-x^2/2}\,dx$, with no $x$ in front, is not reached by this substitution. That matters, and the lesson returns to it.
+
+        *Example: a derivative over its function.* $\int \dfrac{2x}{x^2 + 1}\,dx$. Let $u = x^2 + 1$, so $du = 2x\,dx$.
+
+        $$\int \frac{2x}{x^2+1}\,dx = \int \frac{1}{u}\,du = \ln u + C = \ln(x^2 + 1) + C.$$
+
+        Whenever the top is the derivative of the bottom, the integral is the logarithm of the bottom, as long as the bottom is positive.
+
+        **Definite integrals: change the limits.** When there are limits, they are values of $x$. After substituting, the variable is $u$, and the limits must become the corresponding values of $u$:
+
+        $$\int_a^b f(g(x))\,g'(x)\,dx = \int_{g(a)}^{g(b)} f(u)\,du.$$
+
+        For the first integral of the puzzle, $u = x^2$ runs from $0^2 = 0$ to $1^2 = 1$:
+
+        $$\int_0^1 2x\cos(x^2)\,dx = \int_0^1 \cos u\,du = \bigl[\sin u\bigr]_0^1 = \sin 1 \approx 0.841.$$
+
+        Here the limits happened not to change. Usually they do: with $u = x^2 + 1$ and $x$ from 0 to 3, $u$ runs from 1 to 10, and $\int_0^3 \frac{2x}{x^2 + 1}\,dx = \bigl[\ln u\bigr]_1^{10} = \ln 10$. With the new limits in place there is no need to return to $x$ at all.
+
+        **A promise kept.** In the last lesson you used, without deriving it, the fact that softplus is an antiderivative of the sigmoid. Now it can be found. Multiply the top and bottom of the sigmoid by $e^x$:
+
+        $$\sigma(x) = \frac{1}{1 + e^{-x}} = \frac{e^x}{1 + e^x}.$$
+
+        The top is the derivative of the bottom. So $\int \sigma(x)\,dx = \ln(1 + e^x) + C$: softplus.
+    - question:
+        id: derivation-limits
+        type: choice
+        system: s2
+        prompt: |
+          To evaluate $\displaystyle\int_0^2 2x\,(x^2 + 1)^3\,dx$ you substitute $u = x^2 + 1$. Which integral in $u$ is equal to it?
+        options:
+          - "$\\displaystyle\\int_0^2 u^3\\,du$"
+          - "$\\displaystyle\\int_1^5 u^3\\,du$"
+          - "$\\displaystyle\\int_1^5 2x\\,u^3\\,du$"
+          - "$\\displaystyle\\int_0^4 u^3\\,du$"
+        answer: 1
+        explanation: |
+          $du = 2x\,dx$, so the factor $2x\,dx$ becomes $du$ and disappears from the integrand, leaving $u^3$. The limits 0 and 2 are values of $x$. The corresponding values of $u = x^2 + 1$ are $0 + 1 = 1$ and $4 + 1 = 5$. So the integral is $\left[\frac{u^4}{4}\right]_1^5 = \frac{625 - 1}{4} = 156$. Keeping the old limits with the new variable is the commonest error in substitution: it integrates over the wrong stretch of $u$.
+        hints:
+          - What does 2x dx become?
+          - The limits 0 and 2 are values of x. What is u at each?
+          - No x should remain once the substitution is complete.
+    - text: |
+        **Integration by parts.** The product rule says $(uv)' = u'v + uv'$. Integrate both sides. The integral of a derivative is the function itself, so $uv = \int u'v\,dx + \int uv'\,dx$, and rearranging,
+
+        $$\int u\,v'\,dx = u\,v - \int u'\,v\,dx.$$
+
+        To use it, split the integrand into a factor $u$ that you will **differentiate** and a factor $v'$ that you will **integrate**. The formula exchanges $\int u v'$ for $\int u' v$. It helps when $u'$ is simpler than $u$ and $v$ is no worse than $v'$.
+
+        *The puzzle's second integral.* $\int x\,e^x\,dx$. Take $u = x$, which differentiates to 1, and $v' = e^x$, which integrates to $v = e^x$.
+
+        $$\int x\,e^x\,dx = x\,e^x - \int 1 \cdot e^x\,dx = x\,e^x - e^x + C.$$
+
+        With limits, every term takes them: $\int_0^1 x\,e^x\,dx = \bigl[x\,e^x - e^x\bigr]_0^1 = (e - e) - (0 - 1) = 1$.
+
+        Had the split been made the other way, $u = e^x$ and $v' = x$, the new integral would be $\int e^x \cdot \frac{x^2}{2}\,dx$, worse than the one we began with. A good choice of $u$ is something that **simplifies when differentiated**: a power of $x$, or a logarithm.
+
+        *The logarithm.* $\int \ln x\,dx$ does not look like a product. Make it one: $\ln x \cdot 1$. Take $u = \ln x$, with $u' = \frac{1}{x}$, and $v' = 1$, with $v = x$.
+
+        $$\int \ln x\,dx = x\ln x - \int \frac{1}{x} \cdot x\,dx = x\ln x - x + C.$$
+
+        Check by differentiating: $(x\ln x - x)' = \ln x + 1 - 1 = \ln x$.
+
+        *Twice over.* $\int x^2 e^x\,dx$ with $u = x^2$ gives $x^2 e^x - \int 2x\,e^x\,dx$, and the new integral is twice the one already done. Each application lowers the power of $x$ by one.
+
+        **Integrals over an infinite range.** How much area lies under $e^{-x}$ from 0 onwards, for ever? The region is infinitely long, but it thins out fast. Define the integral to infinity as a limit: integrate up to $b$, then let $b$ grow.
+
+        $$\int_0^{\infty} e^{-x}\,dx = \lim_{b \to \infty} \bigl[-e^{-x}\bigr]_0^b = \lim_{b \to \infty} \bigl(1 - e^{-b}\bigr) = 1.$$
+
+        An infinitely long region with a finite area, exactly 1. Such integrals are called **improper**. Whether the limit exists depends on how fast the integrand dies away:
+
+        | Integral | Up to $b$ | As $b \to \infty$ |
+        | --- | --- | --- |
+        | $\int_1^{\infty} \frac{1}{x^2}\,dx$ | $1 - \frac{1}{b}$ | tends to $1$ |
+        | $\int_0^{\infty} e^{-kx}\,dx$, $k > 0$ | $\frac{1}{k}\bigl(1 - e^{-kb}\bigr)$ | tends to $\frac{1}{k}$ |
+        | $\int_1^{\infty} \frac{1}{x}\,dx$ | $\ln b$ | grows without limit |
+
+        The last one **diverges**: $\ln b$ grows slowly, but it passes every bound. This is the continuous twin of the harmonic series $1 + \frac{1}{2} + \frac{1}{3} + \dots$, which you saw grow without limit while its terms shrank to zero.
+
+        These are not curiosities. A quantity that can take any positive value, such as the waiting time until an event, is described by a curve whose total area must be 1, and $k\,e^{-kx}$ is the simplest such curve. Its average is found by parts, with $u = x$ and $v' = k\,e^{-kx}$, so that $v = -e^{-kx}$:
+
+        $$\int_0^{\infty} x\,k\,e^{-kx}\,dx = \bigl[-x\,e^{-kx}\bigr]_0^{\infty} + \int_0^{\infty} e^{-kx}\,dx = 0 + \frac{1}{k}.$$
+
+        The bracket vanishes at both ends: at 0 because of the factor $x$, and at infinity because an exponential outgrows any power, so $x\,e^{-kx} \to 0$.
+
+        **When there is no formula.** Differentiating any formula built from powers, exponentials, logarithms and trigonometric functions gives another such formula. Integration is not like that. The function $e^{-x^2}$, the bell curve at the centre of statistics, is continuous, so by the fundamental theorem it has an antiderivative. But that antiderivative **cannot be written** as any finite combination of the familiar functions. This is a theorem, not a failure of ingenuity. The same is true of $\frac{\sin x}{x}$ and of $\sqrt{1 + x^3}$.
+
+        For such functions the integral is still a perfectly good number, and the methods of two lessons ago compute it: sum the slices.
+    - figure: riemann
+      props: { fn: sin, doublings: 3, rule: 2 }
+    - text: |
+        The figure does this for the sine, where the exact answer, 2, is known, and with the midpoint rule a few dozen slices already agree with it to several figures. For $e^{-x^2}$ there is no exact formula to compare with, and the sum of slices is the answer. The antiderivative of the bell curve is important enough to have been given a name and a place in the library, `math.erf`, and what stands behind that name is a numerical method.
+
+        **Always check.** Integration by formula has more ways to go wrong than differentiation: a lost factor from the inside function, a wrong sign in parts, limits left unchanged. There are two checks, and both are cheap.
+
+        - **Differentiate your answer.** If $F' \ne f$, then $F$ is wrong. Differentiation is mechanical, so this check is reliable.
+        - **Compare with a sum of slices.** $F(b) - F(a)$ must agree with a midpoint sum of $f$.
+
+        ```python
+        def integral_check(f, F, a, b):
+            width = (b - a) / 1000
+            slices = sum([f(a + (i + 0.5) * width) * width for i in range(1000)])
+            return abs(slices - (F(b) - F(a))) < 1e-4
+        ```
+
+        This is the integral's counterpart of the gradient check, and it is used in the same spirit: the slow method that cannot be wrong is the judge of the fast one that can.
+    - question:
+        id: order-sigmoid
+        type: order
+        system: s2
+        prompt: Put the steps in order to find $\displaystyle\int \frac{1}{1 + e^{-x}}\,dx$.
+        steps:
+          - "Multiply top and bottom by $e^x$ to get $\\dfrac{e^x}{1 + e^x}$."
+          - "Notice that the top is the derivative of the bottom, and set $u = 1 + e^x$."
+          - "Then $du = e^x\\,dx$, and the integral becomes $\\displaystyle\\int \\frac{1}{u}\\,du$."
+          - "Integrate: $\\ln u + C$."
+          - "Return to $x$: $\\ln(1 + e^x) + C$."
+          - "Check by differentiating: $\\dfrac{e^x}{1 + e^x}$, the integrand."
+        explanation: The integrand is first rewritten so that a function and its derivative are both visible. That suggests the substitution, which turns the integral into one from the table. After integrating in u the answer is returned to x, and it is checked last by differentiating. The result is softplus.
+        hints:
+          - The substitution cannot be seen until the fraction has been rewritten.
+          - The differential du is found after u is chosen.
+          - The check comes at the end.
+  formal:
+    - text: |
+        **Substitution.** If $F' = f$ and $g$ is differentiable with continuous derivative, then
+
+        $$\int f(g(x))\,g'(x)\,dx = F(g(x)) + C, \qquad \int_a^b f(g(x))\,g'(x)\,dx = \int_{g(a)}^{g(b)} f(u)\,du.$$
+
+        **By parts.** $\displaystyle\int u\,v'\,dx = u\,v - \int u'\,v\,dx$, and with limits $\displaystyle\int_a^b u\,v'\,dx = \bigl[u\,v\bigr]_a^b - \int_a^b u'\,v\,dx$.
+
+        **Improper integral.** $\displaystyle\int_a^{\infty} f(x)\,dx = \lim_{b \to \infty} \int_a^b f(x)\,dx$, when the limit exists. Otherwise the integral diverges.
+
+        | Integrand | Antiderivative | Method |
+        | --- | --- | --- |
+        | $f(kx + c)$ | $\frac{1}{k}F(kx + c)$ | substitution, linear inside |
+        | $\dfrac{g'(x)}{g(x)}$, $g > 0$ | $\ln g(x)$ | substitution, $u = g(x)$ |
+        | $g'(x)\,e^{g(x)}$ | $e^{g(x)}$ | substitution, $u = g(x)$ |
+        | $x\,e^x$ | $x\,e^x - e^x$ | parts, $u = x$ |
+        | $\ln x$ | $x\ln x - x$ | parts, $u = \ln x$, $v' = 1$ |
+        | $x\cos x$ | $x\sin x + \cos x$ | parts, $u = x$ |
+        | $\dfrac{1}{1 + e^{-x}}$ | $\ln(1 + e^x)$ | substitution, $u = 1 + e^x$ |
+
+        **Standard improper integrals.** $\int_0^{\infty} e^{-kx}\,dx = \frac{1}{k}$ for $k > 0$. $\ \int_1^{\infty} x^{-2}\,dx = 1$. $\ \int_1^{\infty} x^{-1}\,dx$ diverges.
+  drill:
+    - text: Seconds each. Look for an inside function with its derivative beside it, or a product in which one factor simplifies when differentiated.
+    - question:
+        id: drill-linear-inside
+        type: choice
+        system: s1
+        prompt: |
+          Which is an antiderivative of $\cos(3x)$?
+        options: ["$\\sin(3x)$", "$3\\sin(3x)$", "$\\dfrac{\\sin(3x)}{3}$", "$-\\dfrac{\\sin(3x)}{3}$"]
+        answer: 2
+        explanation: Differentiating sin(3x) brings out a factor 3 by the chain rule, so a division by 3 is needed to cancel it.
+        hints:
+          - Differentiate sin(3x) and see what factor appears.
+          - Divide by that factor.
+    - question:
+        id: drill-exp-linear
+        type: choice
+        system: s1
+        prompt: |
+          What is $\displaystyle\int_0^1 e^{2x}\,dx$?
+        options: ["$e^2 - 1$", "$\\dfrac{e^2 - 1}{2}$", "$2(e^2 - 1)$", "$\\dfrac{e^2}{2}$"]
+        answer: 1
+        explanation: An antiderivative is e to the 2x divided by 2. At 1 that is e squared over 2, and at 0 it is a half.
+        hints:
+          - The inside is 2x, so divide by 2.
+          - The value at the lower limit is not zero.
+    - question:
+        id: drill-choose-u
+        type: choice
+        system: s1
+        prompt: |
+          Which substitution fits $\displaystyle\int 3x^2\,e^{x^3}\,dx$?
+        options: ["$u = 3x^2$", "$u = x^3$", "$u = e^x$", "$u = x$"]
+        answer: 1
+        explanation: The inside function is x cubed, and its derivative, 3x squared, is standing beside it as a factor.
+        hints:
+          - Which function sits inside another?
+          - Its derivative should be the remaining factor.
+    - question:
+        id: drill-new-limit
+        type: numeric
+        system: s1
+        prompt: |
+          In $\displaystyle\int_0^1 (3x + 1)^4\,dx$ you substitute $u = 3x + 1$. What is the new upper limit?
+        answer: "4"
+        explanation: The upper limit x = 1 corresponds to u = 3 + 1.
+        hints:
+          - The old upper limit is a value of x.
+          - Put x = 1 into the formula for u.
+    - question:
+        id: drill-sub-definite
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\displaystyle\int_0^1 2x\,(x^2 + 1)\,dx$? Use $u = x^2 + 1$, which runs from 1 to 2.
+        answer: "1.5"
+        explanation: |
+          $\int_1^2 u\,du = \left[\frac{u^2}{2}\right]_1^2 = 2 - \frac{1}{2}$.
+        hints:
+          - The integral becomes the integral of u from 1 to 2.
+          - An antiderivative of u is u squared over 2.
+    - question:
+        id: drill-log-form
+        type: choice
+        system: s1
+        prompt: |
+          What is $\displaystyle\int_0^3 \frac{2x}{x^2 + 1}\,dx$?
+        options: ["$\\ln 9$", "$\\ln 10$", "$\\dfrac{1}{10}$", "$\\ln 3$"]
+        answer: 1
+        explanation: The top is the derivative of the bottom, so an antiderivative is the logarithm of the bottom. The bottom is 10 at 3 and 1 at 0, and the logarithm of 1 is 0.
+        hints:
+          - The top is the derivative of the bottom.
+          - Evaluate the bottom at 3 and at 0.
+    - question:
+        id: drill-parts-choice
+        type: choice
+        system: s1
+        prompt: |
+          For $\displaystyle\int x\cos x\,dx$ by parts, which choice makes the new integral simpler?
+        options:
+          - "$u = x$ and $v' = \\cos x$"
+          - "$u = \\cos x$ and $v' = x$"
+          - "$u = x\\cos x$ and $v' = 1$"
+          - "It makes no difference."
+        answer: 0
+        explanation: With u = x the derivative is 1, and the new integral is just the integral of sin x. The other way round raises the power of x.
+        hints:
+          - Choose u to be the factor that becomes simpler when differentiated.
+          - What is the derivative of x?
+    - question:
+        id: drill-parts-value
+        type: numeric
+        system: s1
+        prompt: |
+          An antiderivative of $x\,e^x$ is $x\,e^x - e^x$. What is $\displaystyle\int_0^1 x\,e^x\,dx$?
+        answer: "1"
+        explanation: |
+          At 1 the antiderivative is $e - e = 0$. At 0 it is $0 - 1 = -1$. The difference is $0 - (-1)$.
+        hints:
+          - Evaluate the antiderivative at 1 and at 0.
+          - At 0 it is minus 1, and subtracting that adds.
+    - question:
+        id: drill-ln
+        type: numeric
+        system: s1
+        prompt: |
+          An antiderivative of $\ln x$ is $x\ln x - x$. What is $\displaystyle\int_1^{e} \ln x\,dx$?
+        answer: "1"
+        explanation: |
+          At $e$: $e \cdot 1 - e = 0$. At 1: $0 - 1 = -1$. The difference is 1.
+        hints:
+          - The logarithm of e is 1 and of 1 is 0.
+          - The value at the lower limit is minus 1.
+    - question:
+        id: drill-improper-exp
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\displaystyle\int_0^{\infty} e^{-2x}\,dx$?
+        answer: "0.5"
+        explanation: |
+          An antiderivative is $-\frac{1}{2}e^{-2x}$, which tends to 0 as $x$ grows and is $-\frac{1}{2}$ at 0.
+        hints:
+          - Integrate up to b and let b grow.
+          - The inside is minus 2x, so divide by minus 2.
+    - question:
+        id: drill-improper-power
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\displaystyle\int_1^{\infty} \frac{1}{x^2}\,dx$?
+        answer: "1"
+        explanation: |
+          An antiderivative is $-\frac{1}{x}$, which tends to 0 as $x$ grows and is $-1$ at 1.
+        hints:
+          - An antiderivative of x to the minus 2 is minus x to the minus 1.
+          - What happens to 1 over b as b grows?
+    - question:
+        id: drill-diverge
+        type: choice
+        system: s1
+        prompt: |
+          What happens to $\displaystyle\int_1^{b} \frac{1}{x}\,dx$ as $b \to \infty$?
+        options: ["It tends to 1", "It tends to 0", "It grows without limit", "It tends to $e$"]
+        answer: 2
+        explanation: The integral up to b is the logarithm of b, which grows slowly and passes every bound.
+        hints:
+          - The antiderivative is the natural logarithm.
+          - Is there a largest value of the logarithm?
+    - question:
+        id: predict-new-limits
+        type: predict
+        system: s1
+        prompt: An integral in x from a to b is being changed to one in u, where u = g(x). What does this show?
+        code: |
+          def g(x):
+              return x * x + 1
+
+          a, b = 0, 3
+          print(g(a), g(b))
+        output: "1 10"
+        explanation: The limits of an integral in u are the values of u at the old limits. As x runs from 0 to 3, u runs from 1 to 10.
+        hints:
+          - Put each old limit into the formula for u.
+          - 3 squared plus 1.
+    - question:
+        id: predict-parts
+        type: predict
+        system: s1
+        prompt: F is an antiderivative of x times e to the x. What does this show?
+        code: |
+          import math
+
+          def F(x):
+              return x * math.exp(x) - math.exp(x)
+
+          print(F(1) - F(0))
+        output: "1.0"
+        explanation: At 1 the two terms are both e and cancel, giving 0.0. At 0 the first term is 0 and the second is 1, giving −1.0. The difference is 1.0, the integral of x eˣ from 0 to 1.
+        hints:
+          - At x = 1 both terms are equal to e.
+          - At x = 0 the function is 0 − 1.
+  work:
+    - text: Slower now. Name the method before you use it, and check each answer by differentiating.
+    - question:
+        id: work-power-linear
+        type: numeric
+        system: s2
+        prompt: |
+          Evaluate $\displaystyle\int_0^1 (3x + 1)^4\,dx$.
+        answer: "68.2"
+        explanation: |
+          With $u = 3x + 1$, $dx = \frac{1}{3}du$ and $u$ runs from 1 to 4. The integral is $\frac{1}{3}\left[\frac{u^5}{5}\right]_1^4 = \frac{1024 - 1}{15} = \frac{1023}{15} = 68.2$. Without the $\frac{1}{3}$ the answer would be three times too large: the factor from the inside function is the thing most often lost.
+        hints:
+          - Substitute u = 3x + 1. What is dx in terms of du?
+          - The new limits are 1 and 4.
+          - 4 to the power 5 is 1024.
+    - question:
+        id: work-bell
+        type: numeric
+        system: s2
+        prompt: |
+          Evaluate $\displaystyle\int_0^{\infty} x\,e^{-x^2/2}\,dx$.
+        answer: "1"
+        explanation: |
+          An antiderivative, found by the substitution $u = -\frac{x^2}{2}$, is $-e^{-x^2/2}$. As $x \to \infty$ it tends to 0, and at $x = 0$ it is $-1$. So the integral is $0 - (-1) = 1$. The factor $x$ in front is what made this possible: it is, up to sign, the derivative of the exponent. Without it the integrand is the bell curve itself, which has no antiderivative that can be written down.
+        hints:
+          - The exponent is the inside function. What is its derivative?
+          - An antiderivative is minus e to the minus x squared over 2.
+          - Take the limit at infinity and subtract the value at 0.
+    - question:
+        id: work-waiting
+        type: numeric
+        system: s2
+        prompt: |
+          The waiting time until an event is described by the curve $2e^{-2x}$ for $x \ge 0$, whose total area is 1. Its average is $\displaystyle\int_0^{\infty} x \cdot 2e^{-2x}\,dx$. Evaluate it.
+        answer: "0.5"
+        explanation: |
+          By parts, with $u = x$ and $v' = 2e^{-2x}$, so $u' = 1$ and $v = -e^{-2x}$. Then $\int_0^{\infty} x \cdot 2e^{-2x}\,dx = \bigl[-x\,e^{-2x}\bigr]_0^{\infty} + \int_0^{\infty} e^{-2x}\,dx$. The bracket is 0 at both ends, and the remaining integral is $\frac{1}{2}$. In general the curve $k\,e^{-kx}$ has average $\frac{1}{k}$: events that happen at a rate of 2 per unit time are, on average, half a unit apart.
+        hints:
+          - Use parts with u = x.
+          - An antiderivative of 2 e to the minus 2x is minus e to the minus 2x.
+          - The bracketed term vanishes at 0 and at infinity.
+    - question:
+        id: write-integral-check
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `integral_check(f, F, a, b)`. It returns `True` if `F` behaves like an antiderivative of `f` on the interval from `a` to `b`, and `False` otherwise.
+
+          Compute the midpoint sum of `f` with 1000 slices, and compare it with `F(b) - F(a)`. Return `True` when the two differ by less than `1e-4` in absolute value.
+        starter: |
+          import math
+
+          def integral_check(f, F, a, b):
+              # Replace the next line with your own.
+              return True
+
+          print(integral_check(lambda x: x * math.exp(x), lambda x: x * math.exp(x) - math.exp(x), 0, 1))
+          print(integral_check(lambda x: x * math.exp(x), lambda x: x * x * math.exp(x) / 2, 0, 1))
+        solution: |
+          import math
+
+          def integral_check(f, F, a, b):
+              width = (b - a) / 1000
+              slices = sum([f(a + (i + 0.5) * width) * width for i in range(1000)])
+              return abs(slices - (F(b) - F(a))) < 1e-4
+
+          print(integral_check(lambda x: x * math.exp(x), lambda x: x * math.exp(x) - math.exp(x), 0, 1))
+          print(integral_check(lambda x: x * math.exp(x), lambda x: x * x * math.exp(x) / 2, 0, 1))
+        tests: |
+          import math as _m
+          assert integral_check(lambda x: x * x, lambda x: x ** 3 / 3, 0, 3) is True, "x^3 / 3 is an antiderivative of x^2, so the check should pass"
+          assert integral_check(lambda x: x * x, lambda x: x ** 3 / 3 + 50, 0, 3) is True, "Adding a constant to an antiderivative gives another antiderivative"
+          assert integral_check(lambda x: x * x, lambda x: x ** 3, 0, 3) is False, "x^3 is not an antiderivative of x^2. The check should fail"
+          assert integral_check(_m.cos, _m.sin, 1, 4) is True, "sin is an antiderivative of cos, on [1, 4] as on any interval"
+          assert integral_check(_m.sin, _m.cos, 1, 4) is False, "cos is not an antiderivative of sin. The sign is wrong"
+          assert integral_check(lambda x: 2 * x * _m.cos(x * x), lambda x: _m.sin(x * x), 0, 2) is True, "sin(x^2) is an antiderivative of 2x cos(x^2)"
+          assert integral_check(lambda x: _m.cos(2 * x), lambda x: _m.sin(2 * x), 0, 1) is False, "sin(2x) is not an antiderivative of cos(2x). A factor of 1/2 is missing"
+          assert integral_check(lambda x: 1 / x, _m.log, 2, 5) is True, "ln x is an antiderivative of 1/x on [2, 5]"
+          assert integral_check(lambda x: 2 * x, lambda x: x * x - 0.01 * x, 1, 2) is False, "An F whose difference is off by 0.01 must fail. Compare the absolute difference with 1e-4"
+          assert integral_check(lambda x: 2 * x, lambda x: x * x + 0.01 * x, 1, 2) is False, "An F whose difference is too large by 0.01 must fail as well. Use the absolute value"
+          assert output.split() == ["True", "False"], "The program should print True and then False"
+        wrong:
+          - "import math\n\ndef integral_check(f, F, a, b):\n    width = (b - a) / 1000\n    slices = sum([f(a + (i + 0.5) * width) * width for i in range(1000)])\n    return slices - (F(b) - F(a)) < 1e-4\n\nprint(True)\nprint(False)\n"
+          - "import math\n\ndef integral_check(f, F, a, b):\n    width = (b - a) / 1000\n    slices = sum([f(a + (i + 0.5) * width) * width for i in range(1000)])\n    return abs(slices - F(b)) < 1e-4\n\nprint(True)\nprint(False)\n"
+          - "import math\n\ndef integral_check(f, F, a, b):\n    width = (b - a) / 1000\n    slices = sum([f((i + 0.5) * width) * width for i in range(1000)])\n    return abs(slices - (F(b) - F(a))) < 1e-4\n\nprint(True)\nprint(False)\n"
+          - "import math\n\ndef integral_check(f, F, a, b):\n    width = (b - a) / 1000\n    slices = sum([f(a + (i + 0.5) * width) for i in range(1000)])\n    return abs(slices - (F(b) - F(a))) < 1e-4\n\nprint(True)\nprint(False)\n"
+          - "import math\n\ndef integral_check(f, F, a, b):\n    width = (b - a) / 1000\n    slices = sum([F(a + (i + 0.5) * width) * width for i in range(1000)])\n    return abs(slices - (f(b) - f(a))) < 1e-4\n\nprint(True)\nprint(False)\n"
+        explanation: |
+          The function computes one number in two unrelated ways. The midpoint sum needs no insight: it only evaluates $f$. The difference $F(b) - F(a)$ depends entirely on $F$ being right. If they agree, $F$ has passed a test that a wrong factor or sign cannot survive. The program's second line shows it catching the mistake from the puzzle, the product of the two separate antiderivatives. Three details matter. The comparison uses the absolute value, since $F$ may err in either direction. A constant added to $F$ makes no difference, because it cancels in the subtraction. And the tolerance must be looser than the midpoint rule's own error, which with 1000 slices is far below $10^{-4}$ for functions like these.
+        hints:
+          - Compute the width, (b - a) / 1000, and the midpoint sum of f.
+          - Compute F(b) - F(a).
+          - Return whether the absolute value of their difference is less than 1e-4.
+    - question:
+        id: fix-antiderivative
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `F` should be an antiderivative of `f`, where $f(x) = \cos(2x)$. The program should print $\int_0^1 \cos(2x)\,dx$ to four places, 0.4546. It prints 0.9093. Fix `F`.
+        starter: |
+          import math
+
+          def f(x):
+              return math.cos(2 * x)
+
+          def F(x):
+              return math.sin(2 * x)
+
+          print(round(F(1) - F(0), 4))
+        solution: |
+          import math
+
+          def f(x):
+              return math.cos(2 * x)
+
+          def F(x):
+              return math.sin(2 * x) / 2
+
+          print(round(F(1) - F(0), 4))
+        tests: |
+          import math as _m
+          def _slices(a, b):
+              w = (b - a) / 2000
+              return sum([_m.cos(2 * (a + (i + 0.5) * w)) * w for i in range(2000)])
+          for _a, _b in [(0, 1), (0, 0.5), (-1, 2), (1, 3)]:
+              assert abs((F(_b) - F(_a)) - _slices(_a, _b)) < 1e-5, "F(" + str(_b) + ") - F(" + str(_a) + ") should equal the integral of cos(2x) over that interval, " + str(round(_slices(_a, _b), 5)) + ", and you have " + repr(F(_b) - F(_a))
+          for _x in [0, 0.3, 1, 2.5]:
+              _slope = (F(_x + 1e-5) - F(_x - 1e-5)) / 2e-5
+              assert abs(_slope - _m.cos(2 * _x)) < 1e-6, "The derivative of F at " + str(_x) + " should be cos(2x) = " + str(_m.cos(2 * _x)) + " and it is " + repr(_slope)
+          assert abs(f(0.3) - _m.cos(0.6)) < 1e-12, "Do not change f"
+          assert output.strip() == "0.4546", "The program should print 0.4546"
+        wrong:
+          - "import math\n\ndef f(x):\n    return math.cos(2 * x)\n\ndef F(x):\n    return math.sin(2 * x)\n\nprint(0.4546)\n"
+          - "import math\n\ndef f(x):\n    return math.cos(2 * x)\n\ndef F(x):\n    return 2 * math.sin(2 * x)\n\nprint(0.4546)\n"
+          - "import math\n\ndef f(x):\n    return math.cos(2 * x)\n\ndef F(x):\n    return -math.sin(2 * x) / 2\n\nprint(0.4546)\n"
+          - "import math\n\ndef f(x):\n    return math.cos(2 * x)\n\ndef F(x):\n    return math.sin(x) / 2\n\nprint(0.4546)\n"
+        explanation: |
+          Differentiate the starter's $F$: by the chain rule $\bigl(\sin(2x)\bigr)' = 2\cos(2x)$, twice the integrand. So $F$ was twice too large, and so was the answer. Dividing by 2 repairs it. When the inside function is $kx$, differentiation multiplies by $k$ and integration must divide by $k$. The tests apply both checks from the lesson: the difference $F(b) - F(a)$ is compared with a sum of slices over several intervals, and the numerical derivative of $F$ is compared with $f$. Either would have caught the missing factor.
+        hints:
+          - Differentiate sin(2x) with the chain rule.
+          - Compare the result with cos(2x). By what factor does it differ?
+          - Divide F by that factor.
+    - question:
+        id: write-mean-of-density
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A curve $p(x)$ on an interval from `a` to `b`, with total area 1, describes how a varying quantity is spread out. Its average is
+
+          $$\int_a^b x\,p(x)\,dx.$$
+
+          Write `mean_of_density(p, a, b, n)`, which estimates that integral by the midpoint rule with `n` slices.
+        starter: |
+          def mean_of_density(p, a, b, n):
+              # Replace the next line with your own.
+              return 0
+
+          print(round(mean_of_density(lambda x: 2 * x, 0, 1, 1000), 4))
+        solution: |
+          def mean_of_density(p, a, b, n):
+              width = (b - a) / n
+              total = 0
+              for i in range(n):
+                  x = a + (i + 0.5) * width
+                  total = total + x * p(x) * width
+              return total
+
+          print(round(mean_of_density(lambda x: 2 * x, 0, 1, 1000), 4))
+        tests: |
+          import math as _m
+          assert abs(mean_of_density(lambda x: 0.5, 0, 2, 100) - 1) < 1e-9, "A flat curve of height 0.5 on [0, 2] has average 1, the middle of the interval. You returned " + repr(mean_of_density(lambda x: 0.5, 0, 2, 100))
+          assert abs(mean_of_density(lambda x: 0.25, 3, 7, 100) - 5) < 1e-9, "A flat curve of height 0.25 on [3, 7] has average 5. You returned " + repr(mean_of_density(lambda x: 0.25, 3, 7, 100))
+          assert abs(mean_of_density(lambda x: 2 * x, 0, 1, 1000) - 2 / 3) < 1e-5, "For the curve 2x on [0, 1] the average is the integral of 2x^2, which is 2/3. You returned " + repr(mean_of_density(lambda x: 2 * x, 0, 1, 1000))
+          assert abs(mean_of_density(lambda x: 2 * _m.exp(-2 * x), 0, 20, 4000) - 0.5) < 1e-4, "For 2e^(-2x), cut off at 20, the average is 0.5. You returned " + repr(mean_of_density(lambda x: 2 * _m.exp(-2 * x), 0, 20, 4000))
+          assert abs(mean_of_density(lambda x: 1, 0, 1, 1) - 0.5) < 1e-12, "With one slice on [0, 1] and a flat curve of height 1, the estimate is 0.5 * 1 * 1"
+          assert output.strip() == "0.6667", "The program should print 0.6667"
+        wrong:
+          - "def mean_of_density(p, a, b, n):\n    width = (b - a) / n\n    total = 0\n    for i in range(n):\n        x = a + (i + 0.5) * width\n        total = total + p(x) * width\n    return total\n\nprint(0.6667)\n"
+          - "def mean_of_density(p, a, b, n):\n    width = (b - a) / n\n    total = 0\n    for i in range(n):\n        x = a + i * width\n        total = total + x * p(x) * width\n    return total\n\nprint(0.6667)\n"
+          - "def mean_of_density(p, a, b, n):\n    width = (b - a) / n\n    total = 0\n    for i in range(n):\n        x = (i + 0.5) * width\n        total = total + x * p(x) * width\n    return total\n\nprint(0.6667)\n"
+          - "def mean_of_density(p, a, b, n):\n    width = (b - a) / n\n    total = 0\n    for i in range(n):\n        x = a + (i + 0.5) * width\n        total = total + x * p(x)\n    return total / n\n\nprint(0.6667)\n"
+          - "def mean_of_density(p, a, b, n):\n    width = (b - a) / n\n    total = 0\n    for i in range(n):\n        x = a + (i + 0.5) * width\n        total = total + x * p(x) * width\n    return total / (b - a)\n\nprint(0.6667)\n"
+        explanation: |
+          An ordinary average weights each value by how often it occurs. Here the slice around $x$ carries a share $p(x)\,\Delta x$ of the total, so the value $x$ is weighted by that share, and the weighted values are added: $\sum x\,p(x)\,\Delta x$. That is a midpoint sum of the function $x\,p(x)$. No division by the length of the interval is wanted, because the shares already add up to 1. For the curve $2x$ on $[0, 1]$, which puts more weight on larger values, the average is $\frac{2}{3}$, above the midpoint. For $2e^{-2x}$ the sum reproduces the $\frac{1}{2}$ you found by parts, and it would work equally well for a curve with no antiderivative at all.
+        hints:
+          - The integrand is x times p(x).
+          - Take x at the midpoint of each slice, a + (i + 0.5) * width.
+          - Add up x * p(x) * width. Do not divide by the length of the interval.
+    - question:
+        id: work-which-method
+        type: choice
+        system: s2
+        prompt: |
+          Consider $\displaystyle\int x\,e^{x^2}\,dx$ and $\displaystyle\int x\,e^{x}\,dx$. Which methods fit?
+        options:
+          - "Both by substitution."
+          - "The first by substitution with $u = x^2$, since the factor $x$ is half the derivative of the inside. The second by parts with $u = x$, since there is no inside function, only a product."
+          - "The first by parts, and the second by substitution with $u = e^x$."
+          - "Both by parts."
+        answer: 1
+        explanation: |
+          In $x\,e^{x^2}$ the exponential has an inside function, $x^2$, and the other factor is its derivative up to a constant: $du = 2x\,dx$. So the integral is $\frac{1}{2}\int e^u\,du = \frac{1}{2}e^{x^2}$. In $x\,e^x$ the exponent is just $x$, so nothing is hidden inside, and the factor $x$ is a genuine second factor: parts gives $x\,e^x - e^x$. The two integrands differ by one small exponent and need different rules, because they are footprints of different differentiation rules. The question to ask of a product is whether one factor is the derivative of something inside the other.
+        hints:
+          - In which integrand does the exponential have an inside function other than x?
+          - Is the remaining factor the derivative of that inside, up to a constant?
+          - If not, which factor becomes simpler when differentiated?
+    - question:
+        id: work-no-formula
+        type: choice
+        system: s2
+        prompt: |
+          You need $\displaystyle\int_0^1 e^{-x^2}\,dx$, and you cannot find an antiderivative. What is the right conclusion?
+        options:
+          - "The integral does not exist."
+          - "A cleverer substitution will find the antiderivative."
+          - "The integrand is continuous, so the integral exists and an antiderivative exists, but it cannot be written with the familiar functions. Compute the number with a sum of slices."
+          - "The integral equals $\\left[-\\frac{e^{-x^2}}{2x}\\right]_0^1$."
+        answer: 2
+        explanation: |
+          The fundamental theorem guarantees that every continuous function has an antiderivative, its own area function. It does not promise a formula for it. For $e^{-x^2}$ it has been proved that no finite combination of powers, exponentials, logarithms and trigonometric functions will do. The integral is still a definite number, about 0.7468, and the midpoint rule with a hundred slices gives it to six figures. The last option fails the check: differentiating it by the quotient rule does not return $e^{-x^2}$, and it is not even defined at 0. Formulas are a convenience for the integrals that happen to have them. The definition, a limit of sums, works always.
+        hints:
+          - What does the fundamental theorem say about a continuous integrand?
+          - Existing and having a formula are different things.
+          - Which method needs only the ability to evaluate the integrand?
+    - question:
+        id: work-tail
+        type: choice
+        system: s2
+        prompt: |
+          $\displaystyle\int_1^{\infty} \frac{1}{x^2}\,dx = 1$ but $\displaystyle\int_1^{\infty} \frac{1}{x}\,dx$ diverges. Both integrands tend to 0. What makes the difference?
+        options:
+          - "Nothing. Both should converge, since both integrands tend to 0."
+          - "The antiderivatives decide: $-\\frac{1}{b}$ settles to a limit as $b \\to \\infty$, while $\\ln b$ grows without bound. Tending to 0 is necessary for the area to be finite, but the integrand must shrink fast enough."
+          - "$\\frac{1}{x}$ is not continuous."
+          - "$\\frac{1}{x^2}$ is smaller than $\\frac{1}{x}$ at $x = 1$."
+        answer: 1
+        explanation: |
+          $\int_1^b x^{-2}\,dx = 1 - \frac{1}{b}$, which tends to 1. $\int_1^b x^{-1}\,dx = \ln b$, which exceeds any number you name once $b$ is large enough: it passes 10 when $b$ passes $e^{10}$, about 22000. An integrand that tends to 0 leaves open whether the total is finite. The same was true of series: the terms $\frac{1}{n}$ tend to 0 and the harmonic series still diverges, while the terms $\frac{1}{n^2}$ give a finite sum. Between the two, the power $x^{-1}$ is exactly the boundary case.
+        hints:
+          - Write down each integral up to b.
+          - What happens to 1 over b, and to the logarithm of b, as b grows?
+          - Recall the harmonic series.
+  connections:
+    - text: |
+        The puzzle put forward two integrals that were not in the table, and asked whether the rules of differentiation could be run backwards. They can. An integrand of the form "inside function, with the derivative of the inside as a factor" is the footprint of the chain rule, and substitution undoes it: $\int_0^1 2x\cos(x^2)\,dx = \sin 1$. An integrand that is a product with one factor that simplifies when differentiated is half the footprint of the product rule, and integration by parts trades it for an easier integral: $\int_0^1 x\,e^x\,dx = 1$.
+
+        Unlike differentiation, this is not a machine that always succeeds. It takes recognition, and for some perfectly ordinary functions, the bell curve among them, there is no formula to be found. That is why the lesson kept two things beside the techniques: the limit of sums, which computes any integral numerically, and the habit of checking every antiderivative by differentiating it or by comparing with slices.
+
+        This is the end of the cluster. It began with a limit: what a function approaches. From the limit came the derivative, the rate at which one quantity changes with another, and the rules for computing it, which is the mathematics a network uses to learn which way to adjust each weight. The second derivative measured bending, Taylor polynomials rebuilt functions from their derivatives at a point, and setting the derivative to zero found the best value of a single adjustable number, by formula or by descending step by step. Then the integral added up what the derivative takes apart, and the fundamental theorem showed the two to be inverse to each other.
+
+        All of it concerned functions of **one** variable. A model has thousands or billions of adjustable numbers, and its error depends on all of them at once. The ideas carry over, one variable at a time, in [[m12.functions-of-several-variables]], and integrals over regions of more than one dimension come in [[m12.multiple-integrals-and-change-of-variables]]. The integral itself is put on firm foundations in [[m11.the-riemann-integral]].

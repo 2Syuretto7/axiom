@@ -148,6 +148,45 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   await expect(keys).toContainText("“There is a key that opens every lock” is true: the column of key 2 is full.");
   await keys.getByRole("button", { name: "Increase pattern" }).click();
   await expect(keys).toContainText("“For every lock there is a key that opens it” is false: the row of lock 3 has no mark.");
+  // Calculus: limits, chords and tangents, chained rates, bending, Taylor polynomials, descent, and areas.
+  const approach = page.getByRole("figure").filter({ hasText: "Approaching a point from both sides" });
+  await expect(approach).toContainText("At x = 0.9 it is 1.9 and at x = 1.1 it is 2.1. At x = 1 itself the formula says 0 ÷ 0 and has no value.");
+  await approach.getByRole("button", { name: "Increase closeness" }).click();
+  await expect(approach).toContainText("At x = 0.99 it is 1.99 and at x = 1.01 it is 2.01.");
+  const chord = page.getByRole("figure").filter({ hasText: "From a chord to a tangent" });
+  await expect(chord).toContainText("From x = 1 to x = 1.5 the curve rises 1.25 over a run of 0.5, so the chord has slope 2.5. The tangent at x = 1 has slope 2.");
+  for (let i = 0; i < 3; i++) await chord.getByRole("button", { name: "Increase closeness" }).click();
+  await expect(chord).toContainText("the curve rises 0.0201 over a run of 0.01, so the chord has slope 2.01.");
+  const chain = page.getByRole("figure").filter({ hasText: "Rates multiply along a chain" });
+  await expect(chain).toContainText("So y changes 2 × 3 = 6 times as fast as x.");
+  await chain.getByRole("slider", { name: "x in tenths" }).fill("20");
+  await expect(chain).toContainText("At x = 2: u = 4 and y = 64.");
+  await expect(chain).toContainText("So y changes 4 × 48 = 192 times as fast as x.");
+  const bend = page.getByRole("figure").filter({ hasText: "Slope and bending" });
+  await expect(bend).toContainText("height −2, slope f′ = 0, second derivative f″ = 6.");
+  await expect(bend).toContainText("With slope 0 and upward bending, this is a local minimum.");
+  await bend.getByRole("slider", { name: "point a" }).fill("0");
+  await expect(bend).toContainText("height 0, slope f′ = −3, second derivative f″ = 0. The bending changes direction here.");
+  const taylor = page.getByRole("figure").filter({ hasText: "Taylor polynomials" });
+  await expect(taylor).toContainText("The polynomial of degree 3 for sin x about 0. At x = 2 it gives 0.6667, and the function itself is 0.9093: the error is 0.2426.");
+  await taylor.getByRole("button", { name: "Increase degree" }).click();
+  await taylor.getByRole("button", { name: "Increase degree" }).click();
+  await expect(taylor).toContainText("At x = 2 it gives 0.9333, and the function itself is 0.9093: the error is 0.024.");
+  const descent = page.getByRole("figure").filter({ hasText: "Stepping downhill" });
+  await expect(descent).toContainText("which is 0.8 times x. After 5 steps, x = 0.983 and f(x) = 0.9664. The distance from the minimum is multiplied by 0.8 at each step");
+  await descent.getByRole("slider", { name: "step size in hundredths" }).fill("100");
+  await expect(descent).toContainText("The factor is −1, so x jumps between 3 and −3 for ever and never improves.");
+  await descent.getByRole("slider", { name: "step size in hundredths" }).fill("110");
+  await expect(descent).toContainText("The method diverges.");
+  const rectangles = page.getByRole("figure").filter({ hasText: "Area as a sum of rectangles" });
+  await expect(rectangles).toContainText("4 rectangles under y = x² from 0 to 3, with heights taken at the left ends, total 5.906");
+  await rectangles.getByRole("button", { name: "Change rule" }).click();
+  await rectangles.getByRole("button", { name: "Change rule" }).click();
+  await expect(rectangles).toContainText("with heights taken at the midpoints, total 8.8594. The exact area is 9. The error is 0.1406.");
+  const total = page.getByRole("figure").filter({ hasText: "A total and its rate" });
+  await expect(total).toContainText("The area gathered from 0 to x = 2 is A(x) = 4. At this moment A is changing at the rate f(2) = 1. The rate is positive");
+  await total.getByRole("slider", { name: "x in quarters" }).fill("12");
+  await expect(total).toContainText("A(x) = 4.5. At this moment A is changing at the rate f(3) = 0. The rate is zero");
   await expect(page.locator(".prose-lesson img")).toHaveCount(0);
 
   // Wrong, then a hint, then right. Fractions and words are handled by the grader.

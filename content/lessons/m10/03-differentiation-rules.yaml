@@ -1,0 +1,673 @@
+concept: m10.differentiation-rules
+minutes: 100
+claim: You can differentiate any polynomial and any quotient of polynomials without taking a limit, by the power, sum, constant-multiple, product and quotient rules, you can prove each rule from the definition, and you can make a program differentiate by carrying a rate alongside every value.
+recalls: [m10.derivative-as-slope-and-rate]
+uses: [m10.limits-and-continuity, m1.polynomials, m1.exponent-laws, m1.variables-and-expressions, m1.quadratics, m3.induction-and-strong-induction, m3.direct-proof, m3.cases-and-counterexamples, m2.functions-as-machines, e0.functions, e0.lists-and-tuples, e1.comprehensions-and-iterators, e1.classes-and-objects, e1.special-methods-and-operator-overloading]
+leads: [m10.chain-rule, m10.derivatives-of-exp-log-and-trig, m13.forward-mode-and-dual-numbers]
+starter: |
+  # Scratch space. A polynomial as a list of coefficients, constant term first.
+  # 7 + 0x + 3x^2 + 2x^3
+  coeffs = [7, 0, 3, 2]
+
+  def value(coeffs, x):
+      return sum(coeffs[k] * x ** k for k in range(len(coeffs)))
+
+  h = 1e-5
+  print((value(coeffs, 1 + h) - value(coeffs, 1 - h)) / (2 * h))
+parts:
+  recall:
+    - text: |
+        In [[m10.derivative-as-slope-and-rate]] the derivative was defined as a limit, and you dug five derivatives out of that definition by hand. Each took an expansion, a cancellation and a limit. Today you will never have to do that again for a polynomial. Three quick pulls first.
+    - question:
+        id: recall-definition
+        type: choice
+        system: s1
+        concepts: [m10.derivative-as-slope-and-rate]
+        prompt: |
+          Which is the definition of $f'(a)$?
+        options:
+          - "$\\dfrac{f(a + h) - f(a)}{h}$ with $h = 0$"
+          - "$\\displaystyle\\lim_{h \\to 0} \\dfrac{f(a + h) - f(a)}{h}$"
+          - "$\\displaystyle\\lim_{h \\to 0} \\dfrac{f(a + h)}{h}$"
+          - "$f(a + 1) - f(a)$"
+        answer: 1
+        explanation: The derivative is the limit of the difference quotient. Putting h equal to 0 gives 0 over 0, which is why a limit is needed.
+        hints:
+          - It is a limit of slopes of chords.
+          - The chord runs from a to a + h.
+    - question:
+        id: recall-cube
+        type: numeric
+        system: s1
+        concepts: [m10.derivative-as-slope-and-rate]
+        prompt: |
+          The derivative of $x^3$ is $3x^2$. What is the slope of $y = x^3$ at $x = -2$?
+        answer: "12"
+        explanation: Three times the square of minus two. The square is positive, so the curve is rising there.
+        hints:
+          - Substitute into 3x squared.
+          - The square of a negative number is positive.
+    - question:
+        id: recall-continuous
+        type: choice
+        system: s1
+        concepts: [m10.derivative-as-slope-and-rate]
+        prompt: |
+          $f$ is differentiable at $a$. What is $\displaystyle\lim_{h \to 0} f(a + h)$?
+        options: ["$f'(a)$", "$f(a)$", "0", "It need not exist"]
+        answer: 1
+        explanation: Differentiable implies continuous, and continuity says the nearby values approach the value at the point. This fact is used in the proof of the product rule below.
+        hints:
+          - What does differentiability imply about continuity?
+          - What does continuity say about this limit?
+  puzzle:
+    - text: |
+        Here is a polynomial.
+
+        $$p(x) = 4x^5 - 3x^2 + 7x - 2$$
+
+        What is its derivative? From the definition you would have to expand $(a + h)^5$, six terms, multiply by 4, do the same for the square, collect, cancel and take the limit. It can be done. Then somebody asks for the derivative of $x^{100}$.
+
+        The table at the end of the last lesson hinted at a short cut for single powers: the exponent comes down in front and drops by one. But a polynomial is built out of powers by **adding** and by **multiplying by constants**. And other functions are built by **multiplying** functions together and by **dividing** one by another. If we knew what differentiation does to each of those four ways of building, we could differentiate anything built from pieces we already know, without a limit in sight.
+
+        For sums the natural guess is right: the derivative of a sum is the sum of the derivatives. You saw it happen with the ball's height.
+
+        For products the natural guess is that the derivative of a product is the product of the derivatives. Test it, as you learned to test any general claim, on the smallest case you can find. $x^2 = x \cdot x$. The derivative of each factor is 1, and $1 \cdot 1 = 1$. But the derivative of $x^2$ is $2x$. **The natural guess is false**, and one counterexample is enough to kill it.
+
+        **So what is the derivative of a product?**
+  intuition:
+    - text: |
+        Think of rates. Two taps run into one tank. The first delivers 3 litres a minute and the second 5. The level in the tank rises at 8 litres a minute. **Rates of things that are added, add.** If one tap is replaced by a pipe three times as wide, its rate triples. **A constant multiple of a quantity changes at that multiple of the rate.** Those two facts are the sum rule and the constant-multiple rule, and together they say that differentiation respects the way polynomials are assembled.
+
+        Now the product. Picture a rectangle whose sides are both changing with time: width $u$ and height $v$. Its area is the product $uv$. In a short time the width grows by a little, $\Delta u$, and the height by a little, $\Delta v$. How much area is gained?
+
+        Draw it. The new rectangle is the old one plus three pieces. A thin strip along the side: height $v$, width $\Delta u$, so area $v\,\Delta u$. A thin strip along the top: width $u$, height $\Delta v$, so area $u\,\Delta v$. And a tiny corner piece, $\Delta u$ by $\Delta v$.
+
+        $$\Delta(uv) = v\,\Delta u + u\,\Delta v + \Delta u\,\Delta v.$$
+
+        The corner is the product of two small things, so it is far smaller than either strip. If each side grows by a thousandth, each strip has an area of about a thousandth and the corner about a millionth. Divide everything by the time taken and let the time shrink: the two strips give rates, and the corner gives a rate multiplied by something vanishing. It disappears.
+
+        $$\text{rate of change of } uv \;=\; v \times (\text{rate of } u) \;+\; u \times (\text{rate of } v).$$
+
+        That is the **product rule**. Each factor takes its turn to change while the other stands still, and the two effects are added. Check it on $x \cdot x$: the first $x$ changes at rate 1 while the second is $x$, giving $x$. Then the roles swap, giving $x$ again. Total $2x$. The guess that failed had kept only something like the corner and thrown away the two strips.
+
+        The figure lets you check the short cut for powers on the cube, where the rule says the slope at $a$ should be $3a^2$. Move the point and compare.
+    - figure: secant
+      props: { fn: cube, at: 1, closeness: 2 }
+  derivation:
+    - text: |
+        Each rule below is a theorem about limits, and each is proved from the definition once. After that the definition can be put away.
+
+        Throughout, $f$ and $g$ are differentiable at the point in question and $c$ is a constant.
+
+        **Sum rule.** $(f + g)' = f' + g'$.
+
+        > **Proof.** The difference quotient of $f + g$ splits:
+        >
+        > $$\frac{f(a + h) + g(a + h) - f(a) - g(a)}{h} = \frac{f(a + h) - f(a)}{h} + \frac{g(a + h) - g(a)}{h}.$$
+        >
+        > By the sum law for limits, the right side approaches $f'(a) + g'(a)$. $\blacksquare$
+
+        **Constant-multiple rule.** $(cf)' = c\,f'$. The proof is the same, with the constant taken outside the quotient and the constant-multiple law for limits.
+
+        These two together say that differentiation is **linear**: it passes through sums and constant multiples untouched. That word will follow you through the rest of this course.
+
+        **Product rule.** $(fg)' = f'g + fg'$.
+
+        > **Proof.** In the top of the difference quotient, subtract and add the same quantity, $f(a + h)g(a)$. This is the rectangle picture in algebra: it changes one factor at a time.
+        >
+        > $$f(a + h)g(a + h) - f(a)g(a) = f(a + h)\bigl[g(a + h) - g(a)\bigr] + g(a)\bigl[f(a + h) - f(a)\bigr].$$
+        >
+        > Divide by $h$:
+        >
+        > $$f(a + h) \cdot \frac{g(a + h) - g(a)}{h} \;+\; g(a) \cdot \frac{f(a + h) - f(a)}{h}.$$
+        >
+        > As $h \to 0$ the two quotients approach $g'(a)$ and $f'(a)$. And $f(a + h) \to f(a)$, because a differentiable function is continuous. By the product and sum laws the whole expression approaches $f(a)g'(a) + g(a)f'(a)$. $\blacksquare$
+
+        Notice the last step. The theorem "differentiable implies continuous" looked like a side remark in the last lesson. Here it carries the proof.
+
+        **Power rule.** For every whole number $n \ge 1$, $\ \dfrac{d}{dx}\,x^n = n\,x^{n-1}$.
+
+        > **Proof, by induction on $n$.** *Base case.* For $n = 1$ the claim is that the derivative of $x$ is $1 \cdot x^0 = 1$, which is the derivative of a line of slope 1.
+        >
+        > *Inductive step.* Suppose the derivative of $x^n$ is $n x^{n-1}$. Write $x^{n+1} = x \cdot x^n$ and apply the product rule:
+        >
+        > $$\frac{d}{dx}\,x^{n+1} = 1 \cdot x^n + x \cdot n x^{n-1} = x^n + n x^n = (n + 1)\,x^n.$$
+        >
+        > That is the claim for $n + 1$. By induction it holds for every $n \ge 1$. $\blacksquare$
+
+        Three lessons ago induction was a method for proving formulas about sums. Here it has just differentiated infinitely many functions at once. For $n = 0$ the rule also gives the right answer, 0, for the constant 1.
+
+        **Every polynomial.** Put the three rules together. A polynomial is a sum of constant multiples of powers, so differentiate it **term by term**: in each term, multiply the coefficient by the exponent and lower the exponent by one. The constant term vanishes.
+
+        $$\frac{d}{dx}\bigl(4x^5 - 3x^2 + 7x - 2\bigr) = 20x^4 - 6x + 7.$$
+
+        That answers the puzzle in one line. And $x^{100}$ has the derivative $100x^{99}$.
+
+        In the cluster on algebra a polynomial was stored as a list of coefficients, constant term first. Differentiation is then an operation on lists: drop the first entry, and multiply the entry that was at position $k$ by $k$.
+
+        ```python
+        def poly_derivative(coeffs):
+            return [k * coeffs[k] for k in range(1, len(coeffs))]
+        ```
+
+        `poly_derivative([-2, 7, -3, 0, 0, 4])` is `[7, -6, 0, 0, 20]`. A limit has become a list comprehension. The derivative of a polynomial of degree $n$ is a polynomial of degree $n - 1$: each differentiation lowers the degree by one, and a polynomial of degree $n$ differentiated $n + 1$ times is 0.
+    - question:
+        id: order-product-proof
+        type: order
+        system: s2
+        prompt: Put the steps of the proof of the product rule in order.
+        steps:
+          - "Write the top of the difference quotient: $f(a + h)g(a + h) - f(a)g(a)$."
+          - "Subtract and add $f(a + h)g(a)$, so that only one factor changes at a time."
+          - "Group: $f(a + h)\\bigl[g(a + h) - g(a)\\bigr] + g(a)\\bigl[f(a + h) - f(a)\\bigr]$."
+          - "Divide by $h$, giving $f(a + h)$ times the difference quotient of $g$, plus $g(a)$ times the difference quotient of $f$."
+          - "Let $h \\to 0$, using $f(a + h) \\to f(a)$ because $f$ is continuous at $a$."
+          - "Conclude that the limit is $f(a)g'(a) + g(a)f'(a)$."
+        explanation: The proof starts from the definition, then inserts a middle term so that the change in the product is split into a change in g alone and a change in f alone. Dividing by h turns each into a difference quotient. Only then is the limit taken, and it needs the continuity of f to deal with the factor f(a + h).
+        hints:
+          - The proof begins with the difference quotient of the product.
+          - The middle term must be inserted before the expression can be grouped.
+          - The limit is the last thing taken, after dividing by h.
+    - text: |
+        **Reciprocal rule.** If $g(a) \ne 0$, then $\left(\dfrac{1}{g}\right)' = -\dfrac{g'}{g^2}$.
+
+        > **Proof.** Put the difference over a common denominator, as for $\dfrac{1}{x}$ in the last lesson.
+        >
+        > $$\frac{1}{h}\left(\frac{1}{g(a + h)} - \frac{1}{g(a)}\right) = -\frac{g(a + h) - g(a)}{h} \cdot \frac{1}{g(a + h)\,g(a)} \;\longrightarrow\; -g'(a) \cdot \frac{1}{g(a)^2}. \qquad \blacksquare$$
+
+        The minus sign makes sense: when the bottom of a fraction grows, the fraction shrinks.
+
+        **Quotient rule.** If $g(a) \ne 0$, then $\left(\dfrac{f}{g}\right)' = \dfrac{f'g - fg'}{g^2}$.
+
+        > **Proof.** $\dfrac{f}{g} = f \cdot \dfrac{1}{g}$. By the product rule and the reciprocal rule,
+        >
+        > $$\left(\frac{f}{g}\right)' = f' \cdot \frac{1}{g} + f \cdot \left(-\frac{g'}{g^2}\right) = \frac{f'g - fg'}{g^2}. \qquad \blacksquare$$
+
+        The order on top matters, because of the minus sign. The term with the derivative of the **top** comes first and is positive: making the top grow makes the fraction grow. For example
+
+        $$\frac{d}{dx}\,\frac{x}{x^2 + 1} = \frac{1 \cdot (x^2 + 1) - x \cdot 2x}{(x^2 + 1)^2} = \frac{1 - x^2}{(x^2 + 1)^2}.$$
+
+        The derivative is positive between $-1$ and 1 and negative outside: the function rises to a peak at $x = 1$ and then falls away.
+
+        **Negative powers.** For a whole number $n \ge 1$, apply the reciprocal rule to $x^{-n} = \dfrac{1}{x^n}$.
+
+        $$\frac{d}{dx}\,x^{-n} = -\frac{n x^{n-1}}{x^{2n}} = -n\,x^{-n-1}.$$
+
+        This is the power rule again: the exponent $-n$ has come down in front and dropped by one, to $-n - 1$. So the rule $\dfrac{d}{dx}\,x^r = r\,x^{r-1}$ holds for every whole-number exponent, positive or negative. It holds for every real exponent too. You have checked $r = \frac{1}{2}$ already, and the general proof comes two lessons from now.
+
+        **The rules as code.** You estimated derivatives numerically in the last lesson, by evaluating a function at two nearby points. The rules of this lesson allow something better: computing a derivative **exactly, while computing the value**, with no small $h$ anywhere.
+
+        The idea is to carry two numbers wherever a program used to carry one: the **value** of a quantity, and its **rate** of change with respect to the input. Each arithmetic operation then updates both, the value in the usual way and the rate by the rule of this lesson that matches the operation.
+
+        ```python
+        class Dual:
+            def __init__(self, value, rate):
+                self.value = value
+                self.rate = rate
+
+            def __add__(self, other):
+                return Dual(self.value + other.value, self.rate + other.rate)
+
+            def __mul__(self, other):
+                return Dual(self.value * other.value,
+                            self.rate * other.value + self.value * other.rate)
+        ```
+
+        `__add__` is the sum rule. `__mul__` is the product rule. To use it, the input is given the rate 1, since the rate of change of $x$ with respect to $x$ is 1, and every constant is given the rate 0.
+
+        ```python
+        x = Dual(3, 1)
+        five = Dual(5, 0)
+        y = x * x * x + five * x
+        print(y.value, y.rate)    # 42 32
+        ```
+
+        The value of $x^3 + 5x$ at 3 is 42, and its derivative $3x^2 + 5$ at 3 is 32. Nobody told the program the power rule. It multiplied $x$ by $x$ by $x$, applied the product rule twice, and the power rule came out, exactly as in the induction above. Because the operators are overloaded, any function written with `+` and `*` can be differentiated by simply calling it on a `Dual`.
+
+        This is called **automatic differentiation**, here in its simplest form. It is neither the numerical estimate of the last lesson, since there is no $h$ and no rounding trouble, nor algebra on formulas. It is the rules of this lesson applied to numbers, one operation at a time, as the program runs. Every modern machine learning library computes its derivatives by a refinement of this idea.
+
+        **How the rules go wrong.**
+
+        | Mistake | Example | Correct |
+        | --- | --- | --- |
+        | Product of the derivatives | $(x^2 \cdot x^3)' = 2x \cdot 3x^2$ | $2x \cdot x^3 + x^2 \cdot 3x^2 = 5x^4$ |
+        | Quotient of the derivatives | $\left(\dfrac{x^3}{x}\right)' = \dfrac{3x^2}{1}$ | $2x$ |
+        | Keeping the constant term | $(x^2 + 5)' = 2x + 5$ | $2x$ |
+        | Quotient rule in the wrong order | $\dfrac{fg' - f'g}{g^2}$ | $\dfrac{f'g - fg'}{g^2}$ |
+        | Power rule on a constant base | $(2^x)' = x\,2^{x-1}$ | not a power of $x$ at all: the variable is in the exponent |
+
+        The last one deserves a second look. The power rule is for a **variable raised to a constant**. $2^x$ is a constant raised to a variable, a different kind of function, with a different derivative, which you will find two lessons from now.
+    - question:
+        id: derivation-dual
+        type: choice
+        system: s2
+        prompt: |
+          With the `Dual` class of the lesson, `x = Dual(2, 1)` and `y = x * x`. What are `y.value` and `y.rate`, and which rule produced the rate?
+        options:
+          - "4 and 1, by the sum rule"
+          - "4 and 4, by the product rule: $1 \\cdot 2 + 2 \\cdot 1$"
+          - "4 and 2, since the rate of $x$ is 1 and there are two factors"
+          - "2 and 4, by the power rule"
+        answer: 1
+        explanation: |
+          `__mul__` returns the value $2 \cdot 2 = 4$ and the rate `self.rate * other.value + self.value * other.rate`, which is $1 \cdot 2 + 2 \cdot 1 = 4$. That is the product rule with both factors equal to $x$, and it agrees with the derivative $2x$ of $x^2$ at 2. The class contains no power rule. It rediscovers it every time a variable is multiplied by itself.
+        hints:
+          - What does __mul__ compute for the value?
+          - Substitute value 2 and rate 1 for both self and other in the rate formula.
+          - Compare with the derivative of x squared at 2.
+  formal:
+    - text: |
+        Let $f$ and $g$ be differentiable at the point concerned and let $c$ be a constant.
+
+        | Rule | Statement |
+        | --- | --- |
+        | Constant | $c' = 0$ |
+        | Power | $\dfrac{d}{dx}\,x^n = n\,x^{n-1}$ for every whole number $n$ (with $x \ne 0$ when $n < 0$) |
+        | Sum | $(f + g)' = f' + g'$ |
+        | Constant multiple | $(cf)' = c\,f'$ |
+        | Product | $(fg)' = f'g + fg'$ |
+        | Reciprocal | $\left(\dfrac{1}{g}\right)' = -\dfrac{g'}{g^2}$ where $g \ne 0$ |
+        | Quotient | $\left(\dfrac{f}{g}\right)' = \dfrac{f'g - fg'}{g^2}$ where $g \ne 0$ |
+
+        **Linearity.** The sum and constant-multiple rules together: $(af + bg)' = af' + bg'$ for constants $a$ and $b$.
+
+        **Polynomials.** $\dfrac{d}{dx}\bigl(c_0 + c_1 x + c_2 x^2 + \dots + c_n x^n\bigr) = c_1 + 2c_2 x + \dots + n c_n x^{n-1}$. As coefficient lists, constant term first: the derivative of `[c0, c1, c2, ..., cn]` is `[c1, 2*c2, ..., n*cn]`.
+
+        **Dual numbers.** Carry a pair (value, rate). Sum: $(u, u') + (v, v') = (u + v,\ u' + v')$. Product: $(u, u') \cdot (v, v') = (uv,\ u'v + uv')$. The input is $(x, 1)$ and a constant is $(c, 0)$.
+  drill:
+    - text: Seconds each. Exponent down in front, exponent drops by one, constants vanish.
+    - question:
+        id: drill-power
+        type: numeric
+        system: s1
+        prompt: |
+          $f(x) = x^7$. What is $f'(1)$?
+        answer: "7"
+        explanation: The derivative is $7x^6$, and any power of 1 is 1.
+        hints:
+          - Bring the exponent down in front.
+          - What is 1 to the sixth power?
+    - question:
+        id: drill-multiple
+        type: numeric
+        system: s1
+        prompt: |
+          $f(x) = 5x^3$. What is $f'(2)$?
+        answer: "60"
+        explanation: The derivative is $15x^2$, and fifteen times four is sixty.
+        hints:
+          - The constant 5 stays, multiplied by the exponent.
+          - Then square 2.
+    - question:
+        id: drill-sum
+        type: numeric
+        system: s1
+        prompt: |
+          $f(x) = x^4 + x^2$. What is $f'(1)$?
+        answer: "6"
+        explanation: Term by term the derivative is $4x^3 + 2x$, which is 4 + 2 at 1.
+        hints:
+          - Differentiate each term separately.
+          - Add the two results at x = 1.
+    - question:
+        id: drill-poly-at-zero
+        type: numeric
+        system: s1
+        prompt: |
+          $p(x) = 4x^5 - 3x^2 + 7x - 2$. What is $p'(0)$?
+        answer: "7"
+        explanation: The derivative is $20x^4 - 6x + 7$. At 0 only the constant term of the derivative survives, and it is the coefficient of x in p.
+        hints:
+          - Differentiate term by term.
+          - At x = 0 every term with an x in it vanishes.
+    - question:
+        id: drill-negative-power
+        type: choice
+        system: s1
+        prompt: |
+          What is the derivative of $x^{-2}$?
+        options: ["$-2x^{-1}$", "$-2x^{-3}$", "$2x^{-3}$", "$-2x^{-2}$"]
+        answer: 1
+        explanation: The exponent $-2$ comes down in front, and the exponent drops by one, from $-2$ to $-3$.
+        hints:
+          - The power rule works for negative exponents too.
+          - What is minus two, less one?
+    - question:
+        id: drill-product-rule
+        type: choice
+        system: s1
+        prompt: |
+          Which is the product rule?
+        options:
+          - "$(fg)' = f'g'$"
+          - "$(fg)' = f'g + fg'$"
+          - "$(fg)' = f'g - fg'$"
+          - "$(fg)' = fg' $"
+        answer: 1
+        explanation: Each factor takes its turn to change while the other stands still, and the two effects add. These are the two strips of the growing rectangle.
+        hints:
+          - Think of the two strips added to a growing rectangle.
+          - Both factors contribute, and the contributions add.
+    - question:
+        id: drill-product-values
+        type: numeric
+        system: s1
+        prompt: |
+          $u(2) = 3$, $u'(2) = 4$, $v(2) = 5$, $v'(2) = -1$. What is $(uv)'(2)$?
+        answer: "17"
+        explanation: |
+          $u'v + uv' = 4 \cdot 5 + 3 \cdot (-1) = 20 - 3$.
+        hints:
+          - Use u'v + uv'.
+          - One of the two products is negative.
+    - question:
+        id: drill-quotient-values
+        type: numeric
+        system: s1
+        prompt: |
+          With the same values, $u(2) = 3$, $u'(2) = 4$, $v(2) = 5$, $v'(2) = -1$, what is $\left(\dfrac{u}{v}\right)'(2)$? Answer as a decimal.
+        answer: "0.92"
+        explanation: |
+          $\dfrac{u'v - uv'}{v^2} = \dfrac{20 - (-3)}{25} = \dfrac{23}{25}$.
+        hints:
+          - The top is u'v minus uv'.
+          - Subtracting a negative adds. Then divide by v squared.
+    - question:
+        id: drill-constant-term
+        type: choice
+        system: s1
+        prompt: |
+          What is the derivative of $x^2 + 5$?
+        options: ["$2x + 5$", "$2x$", "$x + 5$", "$2x^2$"]
+        answer: 1
+        explanation: The constant 5 does not change, so it contributes nothing to the rate. Adding a constant moves a graph up without changing its slope anywhere.
+        hints:
+          - What is the derivative of a constant?
+          - Does lifting a graph change its steepness?
+    - question:
+        id: drill-degree
+        type: numeric
+        system: s1
+        prompt: |
+          A polynomial has degree 6. What is the degree of its derivative?
+        answer: "5"
+        explanation: Each term's exponent drops by one, so the highest drops from 6 to 5.
+        hints:
+          - What happens to each exponent?
+          - Look at the leading term.
+    - question:
+        id: drill-reciprocal-cube
+        type: numeric
+        system: s1
+        prompt: |
+          $f(x) = \dfrac{1}{x^3}$. What is $f'(1)$?
+        answer: "-3"
+        explanation: |
+          $f(x) = x^{-3}$, with derivative $-3x^{-4}$, which is $-3$ at 1.
+        hints:
+          - Write the function as a negative power.
+          - Bring the exponent down.
+    - question:
+        id: predict-poly-derivative
+        type: predict
+        system: s1
+        prompt: The list holds the coefficients of a polynomial, constant term first. What does this show?
+        code: |
+          def poly_derivative(coeffs):
+              return [k * coeffs[k] for k in range(1, len(coeffs))]
+
+          print(poly_derivative([7, 0, 3, 2]))
+        output: "[0, 6, 6]"
+        explanation: The polynomial is 7 + 3x² + 2x³. Its derivative is 6x + 6x², whose coefficients, constant term first, are 0, 6 and 6. The constant 7 has gone, and each remaining coefficient has been multiplied by its exponent.
+        hints:
+          - Which polynomial does the list stand for?
+          - The entry at position k is multiplied by k, and position 0 is dropped.
+    - question:
+        id: predict-slope-from-list
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          p = [1, 2, 3]
+          d = [k * p[k] for k in range(1, len(p))]
+          print(d, sum(d[k] * 2 ** k for k in range(len(d))))
+        output: "[2, 6] 14"
+        explanation: The polynomial is 1 + 2x + 3x². Its derivative is 2 + 6x, the list 2, 6. The sum evaluates that derivative at x = 2, giving 2 + 12.
+        hints:
+          - First find the list of the derivative's coefficients.
+          - Then evaluate that polynomial at x = 2.
+  work:
+    - text: Slower now. Name the rule before you use it.
+    - question:
+        id: work-product
+        type: numeric
+        system: s2
+        prompt: |
+          $f(x) = (x^2 + 1)(3x - 2)$. Use the product rule to find $f'(1)$.
+        answer: "8"
+        explanation: |
+          $f'(x) = 2x\,(3x - 2) + (x^2 + 1) \cdot 3$. At $x = 1$: $2 \cdot 1 + 2 \cdot 3 = 8$. As a check, multiply out first: $f(x) = 3x^3 - 2x^2 + 3x - 2$, so $f'(x) = 9x^2 - 4x + 3$, which is 8 at 1. Two routes, one answer.
+        hints:
+          - Differentiate each bracket separately first.
+          - Derivative of the first times the second, plus the first times the derivative of the second.
+          - Substitute x = 1 into both products and add.
+    - question:
+        id: work-quotient
+        type: numeric
+        system: s2
+        prompt: |
+          $g(x) = \dfrac{x}{x^2 + 1}$. Find $g'(2)$. Answer as a decimal.
+        answer: "-0.12"
+        explanation: |
+          $g'(x) = \dfrac{1 \cdot (x^2 + 1) - x \cdot 2x}{(x^2 + 1)^2} = \dfrac{1 - x^2}{(x^2 + 1)^2}$. At $x = 2$ that is $\dfrac{-3}{25} = -0.12$. The function is falling at 2: it peaked at $x = 1$, where the top of the derivative is 0.
+        hints:
+          - The top of the quotient rule is the derivative of the top times the bottom, minus the top times the derivative of the bottom.
+          - The bottom of the answer is the old bottom squared.
+          - At x = 2 the old bottom is 5.
+    - question:
+        id: work-level-tangent
+        type: numeric
+        system: s2
+        prompt: |
+          The curve $y = x^3 - 12x$ has a level tangent at two points. What is the positive value of $x$ at which the tangent is level?
+        answer: "2"
+        explanation: |
+          $\dfrac{dy}{dx} = 3x^2 - 12$, which is 0 when $x^2 = 4$, so $x = 2$ or $x = -2$. At $x = 2$ the curve is at the bottom of a valley, with $y = 8 - 24 = -16$, and at $x = -2$ at the top of a hill, with $y = 16$.
+        hints:
+          - Differentiate term by term.
+          - A level tangent has slope 0.
+          - Solve 3x squared = 12.
+    - question:
+        id: write-dual-mul
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          The class `Dual` carries a `value` and a `rate`. Addition is written for you and is the sum rule. Write `__mul__` so that multiplying two `Dual` objects returns a new `Dual` whose value is the product of the values and whose rate is given by the **product rule**.
+
+          The program then differentiates $x^3 + 5x$ at $x = 3$ and should print `42 32`.
+        starter: |
+          class Dual:
+              def __init__(self, value, rate):
+                  self.value = value
+                  self.rate = rate
+
+              def __add__(self, other):
+                  return Dual(self.value + other.value, self.rate + other.rate)
+
+              def __mul__(self, other):
+                  # Replace the next line with your own.
+                  return Dual(0, 0)
+
+          x = Dual(3, 1)
+          five = Dual(5, 0)
+          y = x * x * x + five * x
+          print(y.value, y.rate)
+        solution: |
+          class Dual:
+              def __init__(self, value, rate):
+                  self.value = value
+                  self.rate = rate
+
+              def __add__(self, other):
+                  return Dual(self.value + other.value, self.rate + other.rate)
+
+              def __mul__(self, other):
+                  return Dual(self.value * other.value, self.rate * other.value + self.value * other.rate)
+
+          x = Dual(3, 1)
+          five = Dual(5, 0)
+          y = x * x * x + five * x
+          print(y.value, y.rate)
+        tests: |
+          _x = Dual(2, 1)
+          _y = _x * _x
+          assert (_y.value, _y.rate) == (4, 4), "x * x at 2 has value 4 and rate 2x = 4. You got " + repr((_y.value, _y.rate))
+          _y = _x * _x * _x * _x
+          assert (_y.value, _y.rate) == (16, 32), "x to the fourth at 2 has value 16 and rate 4 * 8 = 32. You got " + repr((_y.value, _y.rate))
+          _c = Dual(7, 0)
+          _y = _c * _x
+          assert (_y.value, _y.rate) == (14, 7), "7x at 2 has value 14 and rate 7. You got " + repr((_y.value, _y.rate))
+          _y = _x * _c
+          assert (_y.value, _y.rate) == (14, 7), "x times 7 must give the same as 7 times x. You got " + repr((_y.value, _y.rate))
+          _u = Dual(3, 4)
+          _v = Dual(5, -1)
+          _y = _u * _v
+          assert (_y.value, _y.rate) == (15, 17), "With u = 3, u' = 4, v = 5, v' = -1 the product has value 15 and rate 4*5 + 3*(-1) = 17. You got " + repr((_y.value, _y.rate))
+          assert (_u.value, _u.rate, _v.value, _v.rate) == (3, 4, 5, -1), "Multiplying must return a new Dual and leave both factors unchanged"
+          assert output.split() == ["42", "32"], "The program should print 42 32"
+        wrong:
+          - "class Dual:\n    def __init__(self, value, rate):\n        self.value = value\n        self.rate = rate\n    def __add__(self, other):\n        return Dual(self.value + other.value, self.rate + other.rate)\n    def __mul__(self, other):\n        return Dual(self.value * other.value, self.rate * other.rate)\n\nprint(42, 32)\n"
+          - "class Dual:\n    def __init__(self, value, rate):\n        self.value = value\n        self.rate = rate\n    def __add__(self, other):\n        return Dual(self.value + other.value, self.rate + other.rate)\n    def __mul__(self, other):\n        return Dual(self.value * other.value, self.rate * other.value)\n\nprint(42, 32)\n"
+          - "class Dual:\n    def __init__(self, value, rate):\n        self.value = value\n        self.rate = rate\n    def __add__(self, other):\n        return Dual(self.value + other.value, self.rate + other.rate)\n    def __mul__(self, other):\n        return Dual(self.value * other.value, self.rate * other.value - self.value * other.rate)\n\nprint(42, 32)\n"
+          - "class Dual:\n    def __init__(self, value, rate):\n        self.value = value\n        self.rate = rate\n    def __add__(self, other):\n        return Dual(self.value + other.value, self.rate + other.rate)\n    def __mul__(self, other):\n        return Dual(self.value * other.value, self.rate + other.rate)\n\nprint(42, 32)\n"
+        explanation: |
+          The rate of a product is $u'v + uv'$: `self.rate * other.value + self.value * other.rate`. With that one line the program differentiates any expression built from `+` and `*`. For $x \cdot x \cdot x$ it applies the product rule twice and arrives at $3x^2 = 27$, and for $5 \cdot x$ the constant's rate of 0 kills one of the two terms and leaves 5, which is the constant-multiple rule falling out of the product rule. The sum is $27 + 5 = 32$. Multiplying the two rates together, the natural guess from the puzzle, gives a rate of 1 for $x \cdot x$ and 0 for anything involving a constant. No limit was taken and no small $h$ was chosen, so the answer is exact.
+        hints:
+          - The value of a product is the product of the values.
+          - "The rate follows the product rule: rate of the first times value of the second, plus value of the first times rate of the second."
+          - Return a new Dual built from those two numbers.
+    - question:
+        id: write-tangent-at
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A polynomial is given as a list of coefficients, constant term first. Write `tangent_at(coeffs, a)`. It returns a tuple `(slope, intercept)` describing the tangent line to the polynomial at $x = a$, in the form $y = \text{slope} \cdot x + \text{intercept}$.
+
+          Use the rules of this lesson for the slope. No small `h` is needed or allowed. For $x^2$, the list `[0, 0, 1]`, at $a = 3$ the tangent is $y = 6x - 9$, so the result is `(6, -9)`.
+        starter: |
+          def tangent_at(coeffs, a):
+              # Replace the next line with your own.
+              return (0, 0)
+
+          print(tangent_at([0, 0, 1], 3))
+        solution: |
+          def tangent_at(coeffs, a):
+              value = sum(coeffs[k] * a ** k for k in range(len(coeffs)))
+              slope = sum(k * coeffs[k] * a ** (k - 1) for k in range(1, len(coeffs)))
+              return (slope, value - slope * a)
+
+          print(tangent_at([0, 0, 1], 3))
+        tests: |
+          assert tangent_at([0, 0, 1], 3) == (6, -9), "The tangent to x^2 at 3 is y = 6x - 9. You returned " + repr(tangent_at([0, 0, 1], 3))
+          assert tangent_at([1, 2, 3], 2) == (14, -11), "For 1 + 2x + 3x^2 at 2 the value is 17 and the slope is 2 + 12 = 14, so the intercept is 17 - 28 = -11. You returned " + repr(tangent_at([1, 2, 3], 2))
+          assert tangent_at([0, -12, 0, 1], 2) == (0, -16), "For x^3 - 12x at 2 the tangent is level at height -16. You returned " + repr(tangent_at([0, -12, 0, 1], 2))
+          assert tangent_at([5], 1) == (0, 5), "A constant polynomial is its own tangent, with slope 0. You returned " + repr(tangent_at([5], 1))
+          assert tangent_at([4, 3], 10) == (3, 4), "A line is its own tangent: for 4 + 3x the answer is (3, 4) at every point. You returned " + repr(tangent_at([4, 3], 10))
+          assert tangent_at([0, 0, 0, 1], -1) == (3, 2), "For x^3 at -1 the slope is 3 and the line is y = 3x + 2. You returned " + repr(tangent_at([0, 0, 0, 1], -1))
+          assert "1e-" not in source and "0.0001" not in source, "Use the power rule for the slope, with no small step h"
+          assert output.strip() == "(6, -9)", "The program should print (6, -9)"
+        wrong:
+          - "def tangent_at(coeffs, a):\n    value = sum(coeffs[k] * a ** k for k in range(len(coeffs)))\n    slope = sum(coeffs[k] * a ** (k - 1) for k in range(1, len(coeffs)))\n    return (slope, value - slope * a)\n\nprint((6, -9))\n"
+          - "def tangent_at(coeffs, a):\n    value = sum(coeffs[k] * a ** k for k in range(len(coeffs)))\n    slope = sum(k * coeffs[k] * a ** (k - 1) for k in range(1, len(coeffs)))\n    return (slope, value)\n\nprint((6, -9))\n"
+          - "def tangent_at(coeffs, a):\n    value = sum(coeffs[k] * a ** k for k in range(len(coeffs)))\n    slope = sum(k * coeffs[k] * a ** k for k in range(1, len(coeffs)))\n    return (slope, value - slope * a)\n\nprint((6, -9))\n"
+          - "def tangent_at(coeffs, a):\n    value = sum(coeffs[k] * a ** k for k in range(len(coeffs)))\n    slope = sum(k * coeffs[k] * a ** (k - 1) for k in range(1, len(coeffs)))\n    return (slope, value + slope * a)\n\nprint((6, -9))\n"
+        explanation: |
+          Two sums. The value is $\sum c_k a^k$ and, by the power rule term by term, the slope is $\sum k\,c_k a^{k-1}$, starting from $k = 1$ because the constant term contributes nothing. The tangent is $y = p(a) + p'(a)(x - a)$, and multiplying out gives the slope $p'(a)$ and the intercept $p(a) - p'(a) \cdot a$. For a polynomial that is already a line, the tangent at every point is the line itself, which is a good check on any tangent routine. Because the slope comes from a rule and not from a difference quotient, the answers are exact whole numbers here.
+        hints:
+          - First compute the value of the polynomial at a.
+          - The slope is the sum of k * coeffs[k] * a ** (k - 1), for k from 1 upwards.
+          - "The tangent is y = value + slope * (x - a). Multiply out to find the intercept."
+    - question:
+        id: fix-quotient-rule
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `quotient_rate(u, du, v, dv)` is given the values of two functions at a point and their derivatives there, and should return the derivative of $\dfrac{u}{v}$ at that point. For $\dfrac{x}{x^2 + 1}$ at $x = 2$ the inputs are $u = 2$, $u' = 1$, $v = 5$, $v' = 4$ and the answer should be $-0.12$. It prints $0.12$. Fix it.
+        starter: |
+          def quotient_rate(u, du, v, dv):
+              return (u * dv - du * v) / v ** 2
+
+          print(quotient_rate(2, 1, 5, 4))
+        solution: |
+          def quotient_rate(u, du, v, dv):
+              return (du * v - u * dv) / v ** 2
+
+          print(quotient_rate(2, 1, 5, 4))
+        tests: |
+          assert abs(quotient_rate(2, 1, 5, 4) - (-0.12)) < 1e-12, "For x / (x^2 + 1) at 2 the derivative is (1*5 - 2*4) / 25 = -0.12. You returned " + repr(quotient_rate(2, 1, 5, 4))
+          assert abs(quotient_rate(3, 4, 5, -1) - 0.92) < 1e-12, "With u = 3, u' = 4, v = 5, v' = -1 the answer is 23/25 = 0.92. You returned " + repr(quotient_rate(3, 4, 5, -1))
+          assert abs(quotient_rate(1, 0, 2, 1) - (-0.25)) < 1e-12, "For 1/x at 2 the inputs are u = 1, u' = 0, v = 2, v' = 1 and the answer is -0.25. You returned " + repr(quotient_rate(1, 0, 2, 1))
+          assert abs(quotient_rate(6, 2, 2, 0) - 1) < 1e-12, "Dividing by the constant 2 halves the rate: with u' = 2 the answer is 1. You returned " + repr(quotient_rate(6, 2, 2, 0))
+          assert output.strip() == "-0.12", "The program should print -0.12"
+        wrong:
+          - "def quotient_rate(u, du, v, dv):\n    return (du * v - u * dv) / v\n\nprint(-0.12)\n"
+          - "def quotient_rate(u, du, v, dv):\n    return (du * v + u * dv) / v ** 2\n\nprint(-0.12)\n"
+          - "def quotient_rate(u, du, v, dv):\n    return du / dv\n\nprint(-0.12)\n"
+          - "def quotient_rate(u, du, v, dv):\n    return (u * dv - du * v) / v ** 2\n\nprint(-0.12)\n"
+        explanation: |
+          The top of the quotient rule is $u'v - uv'$, in that order. The starter had the two terms the other way round, which flips the sign of every answer. A way to remember the order without memorising it: think about which change should make the fraction **grow**. Increasing the top makes a positive fraction larger, so the term with $u'$ must be the positive one. Increasing the bottom makes it smaller, so the term with $v'$ carries the minus. The simplest test is $\dfrac{1}{x}$, whose derivative you know to be negative.
+        hints:
+          - Write down the quotient rule and compare it term by term.
+          - Which term should be positive, the one with the derivative of the top or of the bottom?
+          - Swap the two products on top.
+    - question:
+        id: work-induction-step
+        type: choice
+        system: s2
+        prompt: |
+          In the proof by induction that $\dfrac{d}{dx}\,x^n = n x^{n-1}$, the inductive step differentiates $x^{n+1}$. Which line is that step, and what does it use?
+        options:
+          - "$\\dfrac{d}{dx}\\,x^{n+1} = (n + 1)x^n$, by the power rule."
+          - "$\\dfrac{d}{dx}\\,(x \\cdot x^n) = 1 \\cdot x^n + x \\cdot n x^{n-1} = (n + 1)x^n$, by the product rule and the inductive hypothesis."
+          - "$\\dfrac{d}{dx}\\,(x \\cdot x^n) = 1 \\cdot n x^{n-1}$, by multiplying the two derivatives."
+          - "It checks the formula for $n = 1, 2, 3$ and observes the pattern."
+        answer: 1
+        explanation: |
+          The step must derive the case $n + 1$ from the case $n$. It writes $x^{n+1}$ as a product, applies the product rule, and uses the hypothesis for the derivative of $x^n$. The first option assumes what is to be proved: the power rule for $n + 1$ is the very thing the step must establish. The third uses the false rule from the puzzle. The fourth is evidence from three cases, which you know is not proof.
+        hints:
+          - The inductive step may use the claim for n, and nothing about n + 1.
+          - How can x to the power n + 1 be written using x to the power n?
+          - Which rule differentiates a product?
+    - question:
+        id: work-kinds-of-derivative
+        type: choice
+        system: s2
+        prompt: |
+          You now know three ways for a program to obtain $f'(a)$. Which statement about them is correct?
+        options:
+          - "A central difference is exact, and dual numbers are approximate."
+          - "Dual numbers apply the differentiation rules to numbers as the program runs, so they give the exact derivative with no step size. A central difference only estimates it, with an error that depends on $h$."
+          - "Dual numbers need the formula for the derivative to be typed in by hand."
+          - "All three always give exactly the same number."
+        answer: 1
+        explanation: |
+          A difference quotient evaluates the function at nearby points and divides. It has a mathematical error from $h$ being non-zero and a rounding error from the subtraction, and the two pull in opposite directions. Dual numbers never subtract nearby values. Each operation updates a rate by the sum rule or the product rule, so the result is the true derivative, up to the ordinary rounding of the arithmetic itself. Nobody supplies a formula for the derivative. The rules are built into the operators. Differentiating a formula by hand, the third way, is exact too, and does not scale to a program with a million operations.
+        hints:
+          - Where does the small h appear in each method?
+          - Which rules are built into the operators of the Dual class?
+          - Does the Dual class ever subtract two nearly equal numbers?
+  connections:
+    - text: |
+        The puzzle asked what the derivative of a product is, the natural guess having failed on $x \cdot x$. The answer came from a rectangle with two growing sides: each factor takes its turn to change while the other stands still, and the effects add. From that one rule, with the sum rule and induction, came the power rule for every whole-number exponent, the derivative of every polynomial, and the quotient rule.
+
+        Something has changed in kind. In the last lesson a derivative was a limit, and finding one was a small piece of analysis. After today it is bookkeeping. The limits were taken once and for all in the proofs of five rules, and what remains is mechanical enough to be written as a list comprehension, or to be built into the `+` and `*` of a class so that programs differentiate themselves as they run.
+
+        One way of building functions is still missing, and it is the one that matters most. You can differentiate $x^3$ and you can differentiate $2x + 1$. You cannot yet differentiate $(2x + 1)^3$ without multiplying it out, and for $(2x + 1)^{100}$ multiplying out is hopeless. This is a **composition**: one function fed into another. A neural network is nothing but a long composition, layer inside layer inside layer, and the rule that differentiates compositions is the single most important formula in machine learning. It is the next lesson, [[m10.chain-rule]].
+
+        Powers, sums, products and quotients cover the polynomials and their ratios. The functions that are not built that way, the exponential, the logarithm, the sine and the cosine, need their own derivatives found from the definition, in [[m10.derivatives-of-exp-log-and-trig]], and with them and the chain rule the power rule will at last be proved for every real exponent.
+
+        The `Dual` class you completed is a small working model of the engine inside every deep learning library. Carrying a rate forward alongside each value is called forward mode. There is a second way to organise the same rules, running backwards from the output, which is far cheaper when a function has millions of inputs and one output, as the error of a model does. The forward way is studied properly in [[m13.forward-mode-and-dual-numbers]], and the backward one, studied alongside it, is what trains every large model in existence.
