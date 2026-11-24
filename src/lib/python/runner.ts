@@ -7,7 +7,11 @@ export type RunResult = {
   truncated: boolean;
 };
 
-type Pending = { resolve: (r: RunResult) => void; timer?: ReturnType<typeof setTimeout> };
+type Timer = ReturnType<typeof setTimeout>;
+type Pending = { resolve: (r: RunResult) => void; timer?: Timer; limit?: () => Timer };
+
+/** How long Python itself may take to load, on top of a run's own limit, before the run is given up. */
+const LOADING_MS = 60_000;
 
 /**
  * Owns the Python worker. A run that exceeds its time limit, or is stopped by
@@ -24,7 +28,14 @@ export class PythonRunner {
     worker.onmessage = (event) => {
       const { id, type, out, error, ms, truncated } = event.data;
       const entry = this.pending.get(id);
-      if (!entry || type !== "done") return;
+      if (!entry) return;
+      if (type === "started") {
+        // Loading Python, and NumPy the first time it is used, does not count against the run.
+        clearTimeout(entry.timer);
+        entry.timer = entry.limit?.();
+        return;
+      }
+      if (type !== "done") return;
       clearTimeout(entry.timer);
       this.pending.delete(id);
       entry.resolve({ out, error, ms, timedOut: false, truncated });
@@ -42,11 +53,12 @@ export class PythonRunner {
   run(code: string, timeoutMs = 10_000): Promise<RunResult> {
     const id = this.nextId++;
     return new Promise((resolve) => {
-      const timer = setTimeout(
-        () => this.abort(`Stopped after ${Math.round(timeoutMs / 1000)} seconds. Look for a loop that never ends.`, true),
-        timeoutMs,
-      );
-      this.pending.set(id, { resolve, timer });
+      const limit = (extra = 0) =>
+        setTimeout(
+          () => this.abort(`Stopped after ${Math.round(timeoutMs / 1000)} seconds. Look for a loop that never ends.`, true),
+          timeoutMs + extra,
+        );
+      this.pending.set(id, { resolve, timer: limit(LOADING_MS), limit });
       this.ensure().postMessage({ id, type: "run", code });
     });
   }

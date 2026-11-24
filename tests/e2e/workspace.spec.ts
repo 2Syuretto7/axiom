@@ -106,6 +106,13 @@ test("Python runs in the browser and prints its output", async ({ page }, info) 
   await page.screenshot({ path: `test-results/screens/workspace-run-${info.project.name}.png` });
 });
 
+test("NumPy is loaded the first time code asks for it", async ({ page }, info) => {
+  await withCode(page, "import numpy as np\n\nA = np.array([[2, 1], [1, 2]])\nprint(A @ np.array([1, 1]), A.shape)\n");
+  await openCode(page, info.project.name);
+  await page.getByRole("button", { name: /^Run/ }).click();
+  await expect(page.getByTestId("output")).toContainText("[3 3] (2, 2)", { timeout: FIRST_RUN });
+});
+
 test("errors are shown as Python reports them, about the learner's own line", async ({ page }, info) => {
   await withCode(page, "x = 10\nprint(x / 0)\n");
   await openCode(page, info.project.name);
