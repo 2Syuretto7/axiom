@@ -1,0 +1,592 @@
+concept: m4.vector-addition-and-scaling
+minutes: 85
+claim: You can add and subtract vectors and multiply them by scalars, both by components and as arrows, use the rules these operations obey, form unit vectors, averages and points part of the way between two others, and write a step of gradient descent on many weights as one line of vector arithmetic.
+recalls: [m4.vectors-as-arrows-and-as-lists]
+uses: [m1.coordinates-and-the-plane, m1.variables-and-expressions, m10.maxima-and-minima, m10.derivative-as-slope-and-rate, m0.negative-numbers, e0.lists-and-tuples, e0.functions, e1.comprehensions-and-iterators, e1.modules-and-imports, e1.special-methods-and-operator-overloading]
+leads: [m4.linear-combinations-and-span, m4.norms-and-distance, m5.matrices-as-linear-maps, m12.gradient]
+starter: |
+  # Scratch space. A boat steers straight across a river while the current
+  # carries it downstream. Each velocity is [downstream, across] in km/h.
+  import math
+
+  boat = [0, 4]
+  current = [3, 0]
+  actual = [b + c for b, c in zip(boat, current)]
+  print("actual velocity", actual)
+  print("actual speed", math.sqrt(sum([x * x for x in actual])))
+parts:
+  recall:
+    - text: |
+        [[m4.vectors-as-arrows-and-as-lists]] said what a vector is: an arrow with a length and a direction, or equally an ordered list of components. It left one question open. Two legs of a walk, 3 kilometres and 4 kilometres, did not combine into 7. Three quick pulls first.
+    - question:
+        id: recall-length
+        type: numeric
+        system: s1
+        concepts: [m4.vectors-as-arrows-and-as-lists]
+        prompt: |
+          What is the length of $(3, 4)$?
+        answer: "5"
+        explanation: The square root of 9 + 16.
+        hints:
+          - Square each component and add.
+          - Take the square root.
+    - question:
+        id: recall-between
+        type: choice
+        system: s1
+        concepts: [m4.vectors-as-arrows-and-as-lists]
+        prompt: |
+          Which vector carries the point $(1, 1)$ to the point $(4, 3)$?
+        options: ["$(5, 4)$", "$(3, 2)$", "$(-3, -2)$", "$(4, 3)$"]
+        answer: 1
+        explanation: End minus start, one component at a time.
+        hints:
+          - Subtract the start from the end.
+          - 4 − 1 and 3 − 1.
+    - question:
+        id: recall-same
+        type: choice
+        system: s1
+        concepts: [m4.vectors-as-arrows-and-as-lists]
+        prompt: |
+          An arrow is slid to a new starting point without being turned or stretched. Is it still the same vector?
+        options: ["Yes", "No", "Only if it starts at the origin", "Only in two dimensions"]
+        answer: 0
+        explanation: A vector records how far to go in each direction, and not where to begin.
+        hints:
+          - Do the components change when the arrow is slid?
+          - A vector is its components.
+  puzzle:
+    - text: |
+        A boat can make 4 kilometres an hour through the water. Its pilot points it straight across a river. The river flows at 3 kilometres an hour.
+
+        The boat does not arrive at the point directly opposite. It is carried downstream as it crosses. **In which direction does it really travel, and how fast?** Not at 7 kilometres an hour, as the starter shows, and not at 4.
+
+        The same question, about something you will actually do. A model has two weights, $(2, 5)$. The slope of its error with respect to the first weight is 3, and with respect to the second, $-4$. In the lesson on maxima and minima, a single weight was improved by the rule $x \leftarrow x - \eta f'(x)$: subtract a small multiple of the slope. **What should that rule become when there are two weights, or two million, to be moved at once?**
+
+        Both questions ask the same thing. What does it mean to **add** two vectors, and to multiply a vector by a number?
+  intuition:
+    - text: |
+        Think of a vector as an instruction to move. $(3, 0)$ says "3 east". $(0, 4)$ says "4 north". The natural way to combine two instructions is to carry out one and then the other. Draw the first arrow, and start the second where the first ended: **tip to tail**. The single arrow from where you began to where you finished is the sum.
+
+        Where do you finish? Altogether you went $3 + 0$ east and $0 + 4$ north. Movements to the east add up among themselves, and movements to the north add up among themselves, and the two never interfere. So in components, adding vectors is simply **adding matching components**:
+
+        $$(3, 0) + (0, 4) = (3 + 0,\; 0 + 4) = (3, 4).$$
+
+        That resolves the walk. The **vectors** add, component by component, and the result has length 5. The **lengths** do not add, because the two legs point in different directions. They add only when the second leg continues straight on from the first.
+
+        The boat is the same sum. In one hour the water carries it 3 kilometres downstream, and its engine carries it 4 kilometres across. Its true velocity is $(3, 0) + (0, 4) = (3, 4)$: a speed of 5 kilometres an hour, slanting downstream.
+
+        The second operation is simpler still. Walk the leg $(3, 4)$ twice and you have gone $(6, 8)$: each component doubled, the same direction, twice the length. Multiplying a vector by a number stretches it. A number used like this, to change a vector's scale, is called a **scalar**, and that is where the word comes from. A negative scalar turns the arrow round.
+
+        In the figure, change the scale of $\mathbf{b}$, through zero and into the negatives, and swap the order in which the two arrows are walked.
+    - figure: vector-sum
+      props: { ax: 2, ay: 1, bx: 1, by: 1, scale: 1 }
+    - text: |
+        Whichever arrow is walked first, the journey ends at the same point. The two routes are the two halves of a parallelogram, and the sum is its diagonal.
+  derivation:
+    - text: |
+        **Addition.** For two vectors of the same dimension,
+
+        $$\mathbf{u} + \mathbf{v} = (u_1 + v_1,\; u_2 + v_2,\; \dots,\; u_n + v_n).$$
+
+        Vectors of different dimensions cannot be added: a colour has no sum with a position.
+
+        **Scalar multiplication.** For a number $c$,
+
+        $$c\,\mathbf{v} = (c\,v_1,\; c\,v_2,\; \dots,\; c\,v_n).$$
+
+        Its length is $\lVert c\,\mathbf{v} \rVert = \sqrt{c^2 v_1^2 + \dots + c^2 v_n^2} = \lvert c \rvert\,\lVert \mathbf{v} \rVert$. The absolute value is there because a length cannot be negative: $-2\mathbf{v}$ is twice as long as $\mathbf{v}$ and points the opposite way.
+
+        **Negatives and subtraction.** $-\mathbf{v}$ means $(-1)\mathbf{v}$, the same arrow reversed, and $\mathbf{u} - \mathbf{v}$ means $\mathbf{u} + (-\mathbf{v})$, which in components is
+
+        $$\mathbf{u} - \mathbf{v} = (u_1 - v_1,\; \dots,\; u_n - v_n).$$
+
+        You have already used this. The vector from a point $P$ to a point $Q$ was "end minus start": if $\mathbf{p}$ and $\mathbf{q}$ are the arrows from the origin to the two points, the vector from $P$ to $Q$ is $\mathbf{q} - \mathbf{p}$. As a picture: draw $\mathbf{u}$ and $\mathbf{v}$ from the same point, and $\mathbf{u} - \mathbf{v}$ is the arrow from the tip of $\mathbf{v}$ to the tip of $\mathbf{u}$. It is what must be added to $\mathbf{v}$ to get $\mathbf{u}$.
+
+        **The rules.** Because everything happens one component at a time, vectors inherit the arithmetic of ordinary numbers. For all vectors $\mathbf{u}, \mathbf{v}, \mathbf{w}$ of one dimension and all scalars $c, d$:
+
+        | Rule | Statement |
+        | --- | --- |
+        | order does not matter | $\mathbf{u} + \mathbf{v} = \mathbf{v} + \mathbf{u}$ |
+        | grouping does not matter | $(\mathbf{u} + \mathbf{v}) + \mathbf{w} = \mathbf{u} + (\mathbf{v} + \mathbf{w})$ |
+        | zero changes nothing | $\mathbf{v} + \mathbf{0} = \mathbf{v}$ |
+        | every vector has an opposite | $\mathbf{v} + (-\mathbf{v}) = \mathbf{0}$ |
+        | scalars distribute over vectors | $c(\mathbf{u} + \mathbf{v}) = c\,\mathbf{u} + c\,\mathbf{v}$ |
+        | vectors distribute over scalars | $(c + d)\mathbf{v} = c\,\mathbf{v} + d\,\mathbf{v}$ |
+        | scalings compose | $c(d\,\mathbf{v}) = (cd)\mathbf{v}$ |
+        | one changes nothing | $1\,\mathbf{v} = \mathbf{v}$ |
+
+        Each is proved by looking at one component. For the first: the $i$th component of $\mathbf{u} + \mathbf{v}$ is $u_i + v_i$, which equals $v_i + u_i$ because numbers can be added in either order, and that is the $i$th component of $\mathbf{v} + \mathbf{u}$. The figure showed this rule as the two routes round a parallelogram.
+
+        These eight rules are worth more than they look. Later the course will meet other things that can be added and scaled, such as functions, polynomials and matrices, and whatever obeys these same eight rules will be called a vector too.
+
+        One thing is missing from the list, on purpose. There is no rule for **multiplying two vectors** component by component to get a vector. There is a product of two vectors, a very important one, but its result is a single number, and it has a lesson to itself.
+
+        **In Python.** The component rules are one comprehension each.
+
+        ```python
+        def add(u, v):
+            return [a + b for a, b in zip(u, v)]
+
+        def scale(c, v):
+            return [c * x for x in v]
+        ```
+
+        Be careful with the built-in operators. For lists, `+` means "join end to end" and `*` means "repeat", so `[1, 2] + [3, 4]` is `[1, 2, 3, 4]` and not a vector sum. That is why your `Vector` class defined `__add__` for itself, and why numerical libraries supply their own array type.
+    - question:
+        id: derivation-lengths
+        type: choice
+        system: s2
+        prompt: |
+          $\mathbf{u}$ has length 3 and $\mathbf{v}$ has length 4. What can be said about the length of $\mathbf{u} + \mathbf{v}$?
+        options:
+          - "It is 7."
+          - "It is 5."
+          - "It is somewhere from 1 to 7, depending on the directions: 7 if they point the same way, 1 if they point opposite ways, and 5 if they are at right angles."
+          - "Nothing at all can be said."
+        answer: 2
+        explanation: |
+          Place the arrows tip to tail. If $\mathbf{v}$ continues straight on from $\mathbf{u}$, the total is $3 + 4 = 7$. If it doubles back, the total is $4 - 3 = 1$. At a right angle, Pythagoras gives 5. Every other angle gives something between 1 and 7. The lengths of the two vectors do not decide the length of the sum, but they do bound it: going by way of a corner is never shorter than going straight, so $\lVert \mathbf{u} + \mathbf{v} \rVert \le \lVert \mathbf{u} \rVert + \lVert \mathbf{v} \rVert$. That is called the triangle inequality, and it will be proved in the lesson on norms.
+        hints:
+          - Try the two vectors pointing the same way, then opposite ways.
+          - Then try them at right angles, as in the walk.
+          - The answer depends on the angle between them.
+    - text: |
+        **Unit vectors.** A vector of length 1 is a **unit vector**. Any non-zero vector can be shrunk or stretched to length 1 without changing its direction: divide it by its own length.
+
+        $$\hat{\mathbf{v}} = \frac{1}{\lVert \mathbf{v} \rVert}\,\mathbf{v}, \qquad \lVert \hat{\mathbf{v}} \rVert = \frac{1}{\lVert \mathbf{v} \rVert}\,\lVert \mathbf{v} \rVert = 1.$$
+
+        This is called **normalising**. For $(3, 4)$ the unit vector is $\left(\frac{3}{5}, \frac{4}{5}\right) = (0.6, 0.8)$, and you can check that $0.36 + 0.64 = 1$. A unit vector is a pure direction, with the size taken out. Every vector is then its length times its direction: $\mathbf{v} = \lVert \mathbf{v} \rVert\,\hat{\mathbf{v}}$.
+
+        The news reports of the last lesson show why one would want this. $\mathbf{a} = (4, 1)$ and $\mathbf{b} = (8, 2) = 2\mathbf{a}$ are a short and a long report on the same subject. Normalised, they become the same unit vector. The scale said how long the report was. The direction says what it was about.
+
+        **Averages.** The mean of two numbers is half their sum. The mean of two vectors is the same thing, done with vector arithmetic:
+
+        $$\tfrac{1}{2}(\mathbf{u} + \mathbf{v}) = \left(\tfrac{u_1 + v_1}{2}, \dots, \tfrac{u_n + v_n}{2}\right).$$
+
+        As points, it is the midpoint of the segment joining them, the midpoint formula of your first lesson on coordinates. For $k$ vectors the mean is $\frac{1}{k}(\mathbf{v}_1 + \dots + \mathbf{v}_k)$, the **centroid**: the balance point of the cloud of points. "The average picture of a 7" or "the centre of a cluster of customers" is this formula in a space of many dimensions.
+
+        **Part of the way.** Start at the point $\mathbf{p}$ and move a fraction $t$ of the way towards $\mathbf{q}$. The full journey is $\mathbf{q} - \mathbf{p}$, so the fraction $t$ of it lands at
+
+        $$\mathbf{p} + t(\mathbf{q} - \mathbf{p}) = (1 - t)\,\mathbf{p} + t\,\mathbf{q}.$$
+
+        At $t = 0$ this is $\mathbf{p}$, at $t = 1$ it is $\mathbf{q}$, and at $t = \frac{1}{2}$ it is the midpoint. As $t$ runs from 0 to 1 the point traces the straight segment between them. Blending one colour into another, or one picture into another, is this formula applied to their vectors.
+
+        **Descent on many weights.** Now the puzzle's second question. Collect the weights of a model into one vector $\mathbf{w}$, and the slopes of the error with respect to each weight into another vector, $\mathbf{g}$. Each weight should move against its own slope, by the step size times that slope. Doing that to every component at once is one scaling and one subtraction:
+
+        $$\mathbf{w} \leftarrow \mathbf{w} - \eta\,\mathbf{g}.$$
+
+        With $\mathbf{w} = (2, 5)$, $\mathbf{g} = (3, -4)$ and $\eta = 0.1$:
+
+        $$(2, 5) - 0.1\,(3, -4) = (2 - 0.3,\; 5 + 0.4) = (1.7, 5.4).$$
+
+        The first weight, whose slope was positive, went down. The second, whose slope was negative, went up. The whole step is the vector $-\eta\,\mathbf{g} = (-0.3, 0.4)$, of length 0.5. The vector of slopes has a name, the **gradient**, and a lesson to come. The update rule for a network of a billion weights is this same line.
+
+        ```python
+        def step(w, g, rate):
+            return [wi - rate * gi for wi, gi in zip(w, g)]
+        ```
+    - question:
+        id: order-midway
+        type: order
+        system: s2
+        prompt: Put the steps in order to find the point one quarter of the way from $\mathbf{p} = (2, 1)$ to $\mathbf{q} = (10, 5)$.
+        steps:
+          - "Find the vector of the whole journey, end minus start: $\\mathbf{q} - \\mathbf{p} = (8, 4)$."
+          - "Scale it by the fraction wanted: $\\frac{1}{4}(8, 4) = (2, 1)$."
+          - "Add that to the starting point: $(2, 1) + (2, 1)$."
+          - "The point is $(4, 2)$."
+          - "Check with the other form: $\\frac{3}{4}(2, 1) + \\frac{1}{4}(10, 5) = (1.5 + 2.5,\\; 0.75 + 1.25) = (4, 2)$."
+        explanation: The journey vector is found first, since it is what gets scaled. A quarter of it is then added to the start. The second form of the formula, with weights adding to 1, gives the same point and serves as the check.
+        hints:
+          - The journey from p to q must be known before a fraction of it can be taken.
+          - The scaled journey is added to the start, not to the end.
+          - The check comes last.
+  formal:
+    - text: |
+        For $\mathbf{u}, \mathbf{v} \in \mathbb{R}^n$ and a scalar $c$:
+
+        **Sum.** $\mathbf{u} + \mathbf{v} = (u_1 + v_1, \dots, u_n + v_n)$. As arrows: tip to tail, or the diagonal of the parallelogram.
+
+        **Scalar multiple.** $c\,\mathbf{v} = (c\,v_1, \dots, c\,v_n)$, with $\lVert c\,\mathbf{v} \rVert = \lvert c \rvert\,\lVert \mathbf{v} \rVert$.
+
+        **Difference.** $\mathbf{u} - \mathbf{v} = \mathbf{u} + (-1)\mathbf{v}$, the arrow from the tip of $\mathbf{v}$ to the tip of $\mathbf{u}$.
+
+        **Rules.** Addition is commutative and associative, with zero $\mathbf{0}$ and opposites $-\mathbf{v}$. Scaling satisfies $c(\mathbf{u} + \mathbf{v}) = c\mathbf{u} + c\mathbf{v}$, $(c + d)\mathbf{v} = c\mathbf{v} + d\mathbf{v}$, $c(d\mathbf{v}) = (cd)\mathbf{v}$ and $1\mathbf{v} = \mathbf{v}$.
+
+        **Unit vector.** For $\mathbf{v} \ne \mathbf{0}$: $\ \hat{\mathbf{v}} = \mathbf{v} / \lVert \mathbf{v} \rVert$.
+
+        **Centroid.** $\frac{1}{k}(\mathbf{v}_1 + \dots + \mathbf{v}_k)$.
+
+        **Point between.** $(1 - t)\mathbf{p} + t\,\mathbf{q}$ for $0 \le t \le 1$.
+
+        **Descent step.** $\mathbf{w} \leftarrow \mathbf{w} - \eta\,\mathbf{g}$.
+  drill:
+    - text: Seconds each. Everything happens one component at a time.
+    - question:
+        id: drill-add
+        type: choice
+        system: s1
+        prompt: |
+          What is $(2, 5) + (3, -1)$?
+        options: ["$(5, 4)$", "$(5, 6)$", "$(6, -5)$", "$(-1, 6)$"]
+        answer: 0
+        explanation: 2 + 3 and 5 + (−1).
+        hints:
+          - Add the first components, then the second components.
+          - 5 plus minus 1 is 4.
+    - question:
+        id: drill-subtract
+        type: choice
+        system: s1
+        prompt: |
+          What is $(7, 2) - (4, 6)$?
+        options: ["$(3, 4)$", "$(3, -4)$", "$(11, 8)$", "$(-3, 4)$"]
+        answer: 1
+        explanation: 7 − 4 and 2 − 6.
+        hints:
+          - Subtract matching components.
+          - 2 minus 6 is negative.
+    - question:
+        id: drill-scale
+        type: choice
+        system: s1
+        prompt: |
+          What is $-2\,(3, -1)$?
+        options: ["$(6, -2)$", "$(-6, 2)$", "$(1, -3)$", "$(-6, -2)$"]
+        answer: 1
+        explanation: Each component is multiplied by −2.
+        hints:
+          - Multiply both components by the scalar.
+          - Minus 2 times minus 1 is positive.
+    - question:
+        id: drill-scale-length
+        type: numeric
+        system: s1
+        prompt: |
+          $\mathbf{v}$ has length 5. What is the length of $-3\mathbf{v}$?
+        answer: "15"
+        explanation: Scaling multiplies the length by the absolute value of the scalar.
+        hints:
+          - A length is never negative.
+          - Multiply 5 by the size of the scalar.
+    - question:
+        id: drill-unit
+        type: numeric
+        system: s1
+        prompt: |
+          What is the first component of the unit vector in the direction of $(6, 8)$?
+        answer: "0.6"
+        explanation: The length is 10, and 6 divided by 10 is 0.6. The unit vector is (0.6, 0.8).
+        hints:
+          - Find the length first.
+          - Divide the first component by the length.
+    - question:
+        id: drill-midpoint
+        type: choice
+        system: s1
+        prompt: |
+          What is the mean of $(4, 1)$ and $(1, 4)$?
+        options: ["$(5, 5)$", "$(2.5, 2.5)$", "$(3, 3)$", "$(1.5, -1.5)$"]
+        answer: 1
+        explanation: Add them to get (5, 5) and halve.
+        hints:
+          - Add the two vectors.
+          - Multiply the sum by a half.
+    - question:
+        id: drill-combination
+        type: choice
+        system: s1
+        prompt: |
+          What is $2\,(1, 0) + 3\,(0, 1)$?
+        options: ["$(2, 3)$", "$(3, 2)$", "$(5, 5)$", "$(6, 0)$"]
+        answer: 0
+        explanation: (2, 0) + (0, 3). Every vector of the plane is built from these two in this way.
+        hints:
+          - Scale each vector first.
+          - Then add (2, 0) and (0, 3).
+    - question:
+        id: drill-opposite
+        type: choice
+        system: s1
+        prompt: |
+          What is $\mathbf{v} + (-\mathbf{v})$?
+        options: ["$2\\mathbf{v}$", "$\\mathbf{0}$", "$\\mathbf{v}$", "$1$"]
+        answer: 1
+        explanation: Walking an arrow and then the same arrow reversed brings you back to where you started.
+        hints:
+          - Each component is added to its own negative.
+          - Out and back.
+    - question:
+        id: drill-step
+        type: choice
+        system: s1
+        prompt: |
+          $\mathbf{w} = (1, 1)$, $\mathbf{g} = (2, -2)$ and $\eta = 0.5$. What is $\mathbf{w} - \eta\,\mathbf{g}$?
+        options: ["$(0, 2)$", "$(2, 0)$", "$(0, 0)$", "$(-1, 3)$"]
+        answer: 0
+        explanation: The scaled gradient is (1, −1), and (1, 1) − (1, −1) = (0, 2).
+        hints:
+          - Scale g by 0.5 first.
+          - Subtracting a negative component adds.
+    - question:
+        id: drill-quarter
+        type: choice
+        system: s1
+        prompt: |
+          Which point is half way from $(0, 0)$ to $(6, 2)$?
+        options: ["$(6, 2)$", "$(3, 1)$", "$(12, 4)$", "$(3, 2)$"]
+        answer: 1
+        explanation: Half of the journey vector (6, 2), added to the start.
+        hints:
+          - Take half of each component.
+          - The start is the origin.
+    - question:
+        id: predict-add-scale
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          u = [3, 0]
+          v = [0, 4]
+          print([a + b for a, b in zip(u, v)], [2 * x for x in [3, -1]])
+        output: "[3, 4] [6, -2]"
+        explanation: The first comprehension adds matching components, giving the walk's total displacement. The second multiplies each component by 2.
+        hints:
+          - The zip pairs 3 with 0 and 0 with 4.
+          - Each component of the second list is doubled.
+    - question:
+        id: predict-list-trap
+        type: predict
+        system: s1
+        prompt: These are plain Python lists, not vectors. What does this show?
+        code: |
+          u = [1, 2]
+          v = [3, 4]
+          print(u + v, u * 2)
+        output: "[1, 2, 3, 4] [1, 2, 1, 2]"
+        explanation: For lists, + joins end to end and * repeats. Neither is vector arithmetic. The vector sum would be [4, 6] and the scaled vector [2, 4], and both need a comprehension, or a class that defines the operators.
+        hints:
+          - What does + do to two lists?
+          - What does a list times 2 give?
+  work:
+    - text: Slower now. Draw the arrows tip to tail in your head before you compute.
+    - question:
+        id: work-boat
+        type: numeric
+        system: s2
+        unit: km/h
+        prompt: |
+          A boat's engine drives it at $(0, 12)$ kilometres an hour, straight across a river. The current is $(5, 0)$. What is the boat's actual speed?
+        answer: "13"
+        explanation: |
+          The velocities add: $(5, 0) + (0, 12) = (5, 12)$. Its length is $\sqrt{25 + 144} = \sqrt{169} = 13$. The boat is faster than its engine alone would make it, and it is not heading where it is pointed.
+        hints:
+          - Add the two velocity vectors.
+          - The speed is the length of the sum.
+          - 25 plus 144.
+    - question:
+        id: work-upstream
+        type: choice
+        system: s2
+        prompt: |
+          The river flows at $(3, 0)$. The pilot wants the boat's actual velocity to be $(0, 4)$, straight across. What velocity must the engine supply, and what speed is that?
+        options:
+          - "$(0, 4)$, a speed of 4"
+          - "$(-3, 4)$, a speed of 5"
+          - "$(3, 4)$, a speed of 5"
+          - "$(-3, 0)$, a speed of 3"
+        answer: 1
+        explanation: |
+          Engine plus current must equal the wanted velocity: $\mathbf{e} + (3, 0) = (0, 4)$. Subtract the current from both sides: $\mathbf{e} = (0, 4) - (3, 0) = (-3, 4)$. The pilot must point partly upstream, and the engine must work at $\sqrt{9 + 16} = 5$ kilometres an hour to make 4 across. Vector equations are solved like ordinary ones, by adding or subtracting the same vector on both sides.
+        hints:
+          - Write engine + current = wanted.
+          - Solve for the engine by subtracting the current.
+          - Find the length of the result.
+    - question:
+        id: write-step
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `step(w, g, rate)`. `w` is the list of a model's weights and `g` the list of slopes of the error, one for each weight. Return the new weights after one step of gradient descent,
+
+          $$\mathbf{w} - \text{rate} \cdot \mathbf{g}.$$
+
+          Do not change the lists you are given.
+        starter: |
+          def step(w, g, rate):
+              # Replace the next line with your own.
+              return w
+
+          print([round(x, 6) for x in step([2, 5], [3, -4], 0.1)])
+        solution: |
+          def step(w, g, rate):
+              return [wi - rate * gi for wi, gi in zip(w, g)]
+
+          print([round(x, 6) for x in step([2, 5], [3, -4], 0.1)])
+        tests: |
+          def _close(got, want, name):
+              assert len(got) == len(want), name + " should have " + str(len(want)) + " components"
+              for _a, _b in zip(got, want):
+                  assert abs(_a - _b) < 1e-9, name + " should be " + str(want) + " and you returned " + repr(got)
+          _close(step([2, 5], [3, -4], 0.1), [1.7, 5.4], "step([2, 5], [3, -4], 0.1)")
+          _close(step([1, 1], [2, -2], 0.5), [0, 2], "step([1, 1], [2, -2], 0.5)")
+          _close(step([3], [6], 0.25), [1.5], "With one weight this is the rule from the lesson on minima: 3 - 0.25 * 6")
+          _close(step([1, 2, 3, 4], [0, 0, 0, 0], 0.7), [1, 2, 3, 4], "With zero slopes nothing moves")
+          _close(step([0, 0, 0], [1, -2, 4], 1), [-1, 2, -4], "step([0, 0, 0], [1, -2, 4], 1)")
+          _w = [2, 5]
+          _g = [3, -4]
+          step(_w, _g, 0.1)
+          assert _w == [2, 5] and _g == [3, -4], "Do not change the lists that were passed in"
+          assert output.strip() == "[1.7, 5.4]", "The program should print [1.7, 5.4]"
+        wrong:
+          - "def step(w, g, rate):\n    return [wi + rate * gi for wi, gi in zip(w, g)]\n\nprint([1.7, 5.4])\n"
+          - "def step(w, g, rate):\n    return [wi - gi for wi, gi in zip(w, g)]\n\nprint([1.7, 5.4])\n"
+          - "def step(w, g, rate):\n    return [rate * (wi - gi) for wi, gi in zip(w, g)]\n\nprint([1.7, 5.4])\n"
+          - "def step(w, g, rate):\n    return [wi - rate * g[0] for wi in w]\n\nprint([1.7, 5.4])\n"
+          - "def step(w, g, rate):\n    return [wi - rate * abs(gi) for wi, gi in zip(w, g)]\n\nprint([1.7, 5.4])\n"
+        explanation: |
+          Each weight moves against its own slope, by the rate times that slope: one scaling and one subtraction, done to all components together. With a single weight the function is exactly the update from the lesson on maxima and minima. The sign of each slope matters and must be kept: the second weight here has a negative slope, so subtracting a multiple of it moves that weight **up**. This one line is the whole of the update step in the training of a network. What remains hard is finding the slopes.
+        hints:
+          - Pair each weight with its slope using zip.
+          - The new weight is the old weight minus rate times the slope.
+          - Build a new list with a comprehension.
+    - question:
+        id: fix-unit
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `unit(v)` should return the unit vector in the direction of `v`: the same direction, with length 1. For `[3, 4]` it should print `[0.6, 0.8]`. It prints two other numbers. Fix it.
+        starter: |
+          import math
+
+          def unit(v):
+              size = sum(v)
+              return [x / size for x in v]
+
+          print(unit([3, 4]))
+        solution: |
+          import math
+
+          def unit(v):
+              size = math.sqrt(sum([x * x for x in v]))
+              return [x / size for x in v]
+
+          print(unit([3, 4]))
+        tests: |
+          import math as _m
+          def _close(got, want, name):
+              assert len(got) == len(want), name + " should have " + str(len(want)) + " components"
+              for _a, _b in zip(got, want):
+                  assert abs(_a - _b) < 1e-9, name + " should be " + str(want) + " and you returned " + repr(got)
+          _close(unit([3, 4]), [0.6, 0.8], "unit([3, 4])")
+          _close(unit([0, -5]), [0, -1], "unit([0, -5])")
+          _close(unit([1, 2, 2]), [1 / 3, 2 / 3, 2 / 3], "unit([1, 2, 2])")
+          _close(unit([3, -4]), [0.6, -0.8], "unit([3, -4])")
+          _close(unit([8, 2]), unit([4, 1]), "unit([8, 2]), which has the same direction as [4, 1],")
+          for _v in [[5, 12], [1, 1, 1, 1], [-2, 7, 0.5]]:
+              assert abs(_m.sqrt(sum([x * x for x in unit(_v)])) - 1) < 1e-9, "The result must have length 1. For " + str(_v) + " you returned " + repr(unit(_v))
+          assert output.strip() == "[0.6, 0.8]", "The program should print [0.6, 0.8]"
+        wrong:
+          - "import math\n\ndef unit(v):\n    size = sum(v)\n    return [x / size for x in v]\n\nprint([0.6, 0.8])\n"
+          - "import math\n\ndef unit(v):\n    size = sum([x * x for x in v])\n    return [x / size for x in v]\n\nprint([0.6, 0.8])\n"
+          - "import math\n\ndef unit(v):\n    size = sum([abs(x) for x in v])\n    return [x / size for x in v]\n\nprint([0.6, 0.8])\n"
+          - "import math\n\ndef unit(v):\n    size = math.sqrt(sum([x * x for x in v]))\n    return [abs(x) / size for x in v]\n\nprint([0.6, 0.8])\n"
+          - "import math\n\ndef unit(v):\n    size = max(v)\n    return [x / size for x in v]\n\nprint([0.6, 0.8])\n"
+        explanation: |
+          To give a vector length 1, divide it by its **length**, the root of the sum of the squares. The starter divided by the sum of the components, which produces numbers that add up to 1 but a vector whose length is not 1. Dividing by the sum is a real operation with its own uses, turning counts into proportions, but it is not normalising to unit length, and it fails outright when the components sum to zero, as for `[3, -3]`. Scaling by a positive number never changes direction, so `[8, 2]` and `[4, 1]` must give the same unit vector, and one of the tests checks exactly that.
+        hints:
+          - What should a vector be divided by to make its length 1?
+          - The length is not the sum of the components.
+          - Use math.sqrt of the sum of the squares.
+    - question:
+        id: write-centroid
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `centroid(vectors)`. `vectors` is a non-empty list of vectors, all of the same dimension. Return their mean: the vector whose $i$th component is the average of the $i$th components.
+        starter: |
+          def centroid(vectors):
+              # Replace the next line with your own.
+              return vectors[0]
+
+          print(centroid([[4, 1], [1, 4]]))
+        solution: |
+          def centroid(vectors):
+              count = len(vectors)
+              return [sum([v[i] for v in vectors]) / count for i in range(len(vectors[0]))]
+
+          print(centroid([[4, 1], [1, 4]]))
+        tests: |
+          def _close(got, want, name):
+              assert len(got) == len(want), name + " should have " + str(len(want)) + " components"
+              for _a, _b in zip(got, want):
+                  assert abs(_a - _b) < 1e-9, name + " should be " + str(want) + " and you returned " + repr(got)
+          _close(centroid([[4, 1], [1, 4]]), [2.5, 2.5], "The mean of [4, 1] and [1, 4]")
+          _close(centroid([[4, 1], [8, 2], [1, 4]]), [13 / 3, 7 / 3], "The mean of the three reports")
+          _close(centroid([[7, -2, 5]]), [7, -2, 5], "The mean of a single vector")
+          _close(centroid([[0, 0], [6, 0], [0, 6]]), [2, 2], "The centroid of the triangle (0,0), (6,0), (0,6)")
+          _close(centroid([[2], [3], [3], [5], [7]]), [4], "With one component this is the ordinary mean of 2, 3, 3, 5, 7")
+          _close(centroid([[1, 2, 3, 4], [3, 2, 1, 0]]), [2, 2, 2, 2], "The mean of [1, 2, 3, 4] and [3, 2, 1, 0]")
+          assert output.strip() == "[2.5, 2.5]", "The program should print [2.5, 2.5]"
+        wrong:
+          - "def centroid(vectors):\n    return [sum([v[i] for v in vectors]) for i in range(len(vectors[0]))]\n\nprint([2.5, 2.5])\n"
+          - "def centroid(vectors):\n    return [sum([v[i] for v in vectors]) / 2 for i in range(len(vectors[0]))]\n\nprint([2.5, 2.5])\n"
+          - "def centroid(vectors):\n    count = len(vectors)\n    return [sum(v) / count for v in vectors]\n\nprint([2.5, 2.5])\n"
+          - "def centroid(vectors):\n    count = len(vectors[0])\n    return [sum([v[i] for v in vectors]) / count for i in range(len(vectors[0]))]\n\nprint([2.5, 2.5])\n"
+          - "def centroid(vectors):\n    count = len(vectors)\n    return [sum([v[i] for v in vectors]) / count for i in range(count)]\n\nprint([2.5, 2.5])\n"
+        explanation: |
+          The mean of $k$ vectors is their sum scaled by $\frac{1}{k}$, and since both operations work component by component, the $i$th component of the answer is the ordinary mean of the $i$th components. The outer comprehension runs over positions and the inner one collects that position from every vector. Two numbers are easy to confuse: the count of vectors, which is what you divide by, and the dimension, which is how many components the answer has. With a single component the function is the mean of five numbers from the lesson on minima, and the centroid inherits its meaning: it is the point that minimises the total squared distance to all the others.
+        hints:
+          - The answer has as many components as each vector, len(vectors[0]).
+          - For position i, add up v[i] over all the vectors.
+          - Divide each total by the number of vectors, len(vectors).
+    - question:
+        id: work-rules
+        type: choice
+        system: s2
+        prompt: |
+          Solve for the vector $\mathbf{x}$: $\quad 2\mathbf{x} + (1, 4) = (7, 0)$.
+        options:
+          - "$(3, -2)$"
+          - "$(4, 2)$"
+          - "$(6, -4)$"
+          - "$(3, 2)$"
+        answer: 0
+        explanation: |
+          Subtract $(1, 4)$ from both sides: $2\mathbf{x} = (7, 0) - (1, 4) = (6, -4)$. Scale both sides by $\frac{1}{2}$: $\mathbf{x} = (3, -2)$. Check: $2(3, -2) + (1, 4) = (6, -4) + (1, 4) = (7, 0)$. The eight rules are what permit each step. Because vectors obey the same laws of addition and scaling as numbers, an equation in vectors is solved by the moves you learned for linear equations, and it is really two ordinary equations, one for each component, solved side by side.
+        hints:
+          - Subtract (1, 4) from both sides.
+          - Then multiply both sides by a half.
+          - Check by substituting back.
+    - question:
+        id: work-blend
+        type: choice
+        system: s2
+        prompt: |
+          Two colours are stored as (red, green, blue): $\mathbf{p} = (200, 0, 0)$ and $\mathbf{q} = (0, 0, 100)$. Which is the colour $(1 - t)\mathbf{p} + t\,\mathbf{q}$ at $t = 0.25$, and where does it lie?
+        options:
+          - "$(50, 0, 75)$, three quarters of the way to $\\mathbf{q}$"
+          - "$(150, 0, 25)$, a quarter of the way from $\\mathbf{p}$ to $\\mathbf{q}$"
+          - "$(200, 0, 100)$, beyond both"
+          - "$(100, 0, 50)$, half way"
+        answer: 1
+        explanation: |
+          $0.75\,(200, 0, 0) + 0.25\,(0, 0, 100) = (150, 0, 0) + (0, 0, 25) = (150, 0, 25)$. The weight on $\mathbf{p}$ is $1 - t = 0.75$, so the result is still mostly $\mathbf{p}$: it has gone a quarter of the journey $\mathbf{q} - \mathbf{p} = (-200, 0, 100)$, and $(200, 0, 0) + 0.25(-200, 0, 100)$ gives the same colour. As $t$ runs from 0 to 1 the colour moves along the straight segment between the two in the space of colours. A fade from one image to another does this for every pixel at once.
+        hints:
+          - The weights are 0.75 on p and 0.25 on q.
+          - Scale each colour and add.
+          - A small t means the result is still close to p.
+  connections:
+    - text: |
+        The puzzle asked how the boat really moves, and what gradient descent should do with many weights. Both are answered by the two operations of this lesson. Vectors are **added** by adding matching components, which as arrows means placing them tip to tail. The engine's $(0, 4)$ and the current's $(3, 0)$ make $(3, 4)$, a speed of 5, slanting downstream. A vector is **scaled** by multiplying every component by a number, which stretches it, and reverses it if the number is negative. Scale the vector of slopes by the step size and subtract it from the vector of weights, and you have one step of descent, $\mathbf{w} \leftarrow \mathbf{w} - \eta\,\mathbf{g}$, for any number of weights.
+
+        From those two operations came unit vectors, which keep a direction and discard a size, the centroid of a cloud of points, and the points along the segment between two others. And the operations obey eight rules that make equations in vectors as easy to handle as equations in numbers.
+
+        Look at what the last few constructions had in common. A point part of the way from $\mathbf{p}$ to $\mathbf{q}$ was $(1 - t)\mathbf{p} + t\,\mathbf{q}$. A centroid was $\frac{1}{k}\mathbf{v}_1 + \dots + \frac{1}{k}\mathbf{v}_k$. A descent step was $1\,\mathbf{w} + (-\eta)\,\mathbf{g}$. Each takes some vectors, scales each by a number, and adds the results. That single pattern has a name, a linear combination, and a natural question goes with it: starting from a few given vectors, **which** vectors can be made by scaling and adding, and which are out of reach? That is the next lesson, [[m4.linear-combinations-and-span]].
+
+        The triangle inequality met in passing is proved in [[m4.norms-and-distance]]. The vector of slopes is defined properly in [[m12.gradient]]. And the functions that respect addition and scaling, the ones for which the image of a sum is the sum of the images, are the subject of [[m5.matrices-as-linear-maps]].

@@ -1,0 +1,617 @@
+concept: m4.linear-independence
+minutes: 90
+claim: You can say what it means for a list of vectors to be linearly independent, show that this is the same as no vector being a combination of the others and as every vector in the span having exactly one set of coefficients, test small lists, prove that perpendicular vectors are independent, and explain why redundant features leave a model's weights undetermined.
+recalls: [m4.lines-planes-and-hyperplanes]
+uses: [m4.projection-onto-a-vector, m4.norms-and-distance, m4.dot-product, m4.linear-combinations-and-span, m4.vector-addition-and-scaling, m4.vectors-as-arrows-and-as-lists, m1.simultaneous-equations, m3.contrapositive-and-contradiction, m3.direct-proof, m3.cases-and-counterexamples, e0.functions, e0.loops, e0.lists-and-tuples, e0.booleans-and-conditionals, e1.comprehensions-and-iterators]
+leads: [e3.arrays-and-linked-lists, m5.matrices-as-linear-maps, m5.elimination-and-linear-systems, m5.rank, m5.basis-and-dimension, m7.orthonormal-bases]
+starter: |
+  # Scratch space. Four flats, three features each: rooms, bathrooms, and rooms + bathrooms.
+  # Three different sets of weights. Compare the predicted rents.
+  flats = [[3, 1, 4], [2, 1, 3], [4, 2, 6], [1, 1, 2]]
+
+  for w in [[3, 1, 0], [2, 0, 1], [0, -2, 3]]:
+      print(w, [sum([a * b for a, b in zip(w, x)]) for x in flats])
+parts:
+  recall:
+    - text: |
+        [[m4.lines-planes-and-hyperplanes]] ended on a question about normals: two lines in the plane meet in exactly one point unless one normal is a multiple of the other, and for more hyperplanes the condition had to be about **combinations**. Far earlier, the lesson on span found two vectors in the plane spanning only a line when $D = a_1 b_2 - a_2 b_1$ was zero. Today names what those have in common. Three quick pulls first.
+    - question:
+        id: recall-parallel-lines
+        type: choice
+        system: s1
+        concepts: [m4.lines-planes-and-hyperplanes]
+        prompt: |
+          How many points lie on both $x + y - 3 = 0$ and $2x + 2y - 1 = 0$?
+        options: ["Exactly one", "None", "Infinitely many", "Exactly two"]
+        answer: 1
+        explanation: The normals (1, 1) and (2, 2) are multiples of each other, so the lines are parallel, and they are different lines.
+        hints:
+          - Compare the two normal vectors.
+          - Parallel lines that are not the same line never meet.
+    - question:
+        id: recall-d
+        type: numeric
+        system: s1
+        concepts: [m4.linear-combinations-and-span]
+        prompt: |
+          For $\mathbf{a} = (2, 1)$ and $\mathbf{b} = (4, 2)$, what is $D = a_1 b_2 - a_2 b_1$?
+        answer: "0"
+        explanation: 2 × 2 − 1 × 4. The second vector is twice the first.
+        hints:
+          - Multiply the first component of a by the second of b.
+          - Subtract the second of a times the first of b.
+    - question:
+        id: recall-span
+        type: choice
+        system: s1
+        concepts: [m4.linear-combinations-and-span]
+        prompt: |
+          What is the span of $(2, 1)$ and $(4, 2)$?
+        options: ["The whole plane", "The line through the origin along $(2, 1)$", "The single point $(2, 1)$", "Two separate lines"]
+        answer: 1
+        explanation: Every combination is a multiple of (2, 1). The second vector reaches nothing new.
+        hints:
+          - How is the second vector related to the first?
+          - What can multiples of a single vector reach?
+  puzzle:
+    - text: |
+        You are predicting the rent of a flat as a weighted sum of three features: the number of rooms, the number of bathrooms, and a third column that someone added to the table, the total of rooms and bathrooms. Four flats are on file.
+
+        | Flat | Rooms | Bathrooms | Total |
+        | --- | --- | --- | --- |
+        | 1 | 3 | 1 | 4 |
+        | 2 | 2 | 1 | 3 |
+        | 3 | 4 | 2 | 6 |
+        | 4 | 1 | 1 | 2 |
+
+        Run the starter. The weights $(3, 1, 0)$ predict rents of 10, 7, 14 and 4. The weights $(2, 0, 1)$ predict 10, 7, 14 and 4. So do the weights $(0, -2, 3)$.
+
+        Three models that could hardly look more different. The first says a bathroom adds 1 to the rent. The second says a bathroom, as such, adds nothing. The third says a bathroom **lowers** the rent by 2. And they agree on every flat, including any flat you could ever add to the table.
+
+        **Which of them has the right weights?** No data can ever tell you. Whatever error one of them makes, the others make the same error. If you trained this model by descent, the weights you ended with would depend on where you happened to start.
+
+        **What exactly is wrong with these three features? How would you detect the same fault among a hundred features, where it will not be visible to the eye?**
+  intuition:
+    - text: |
+        Turn the table on its side, as you did when fitting a line. Each **feature** is a vector with one component for each flat:
+
+        $$\mathbf{r} = (3, 2, 4, 1), \qquad \mathbf{b} = (1, 1, 2, 1), \qquad \mathbf{t} = (4, 3, 6, 2).$$
+
+        The predictions of a model with weights $(w_1, w_2, w_3)$ are the combination $w_1\mathbf{r} + w_2\mathbf{b} + w_3\mathbf{t}$. The fault is now plain: $\mathbf{t} = \mathbf{r} + \mathbf{b}$. The third vector is a combination of the other two. It points nowhere that they could not already reach, so it adds nothing to the span. Any use the model makes of $\mathbf{t}$ can be replaced by using $\mathbf{r}$ and $\mathbf{b}$ a little more.
+
+        You have seen the smallest case of this. Two vectors along the same line span only that line, and the second is wasted. In the figure $\mathbf{b}$ is $-0.5$ times $\mathbf{a}$. Find a combination that returns to the origin without both multiples being zero.
+    - figure: span
+      props: { s: 1, t: 1, parallel: true }
+    - text: |
+        With the multiple of $\mathbf{b}$ at 2 and the multiple of $\mathbf{a}$ at 1, the marked point sits on the origin: $\mathbf{a} + 2\mathbf{b} = \mathbf{0}$. You went out along one vector and the other brought you exactly back. Now turn $\mathbf{b}$ away from $\mathbf{a}$ and try again. The only way home is not to leave: both multiples must be 0.
+
+        That is the test. **A list of vectors is redundant exactly when you can travel along them, by amounts not all zero, and end where you began.** For the flats, $\mathbf{r} + \mathbf{b} - \mathbf{t} = \mathbf{0}$ is such a round trip. And a round trip is what made the weights ambiguous: add it to any set of weights, any number of times, and the predictions do not move.
+  derivation:
+    - text: |
+        **The definition.** A list of vectors $\mathbf{v}_1, \dots, \mathbf{v}_k$ is **linearly dependent** if there are numbers $c_1, \dots, c_k$, **not all zero**, with
+
+        $$c_1\mathbf{v}_1 + c_2\mathbf{v}_2 + \dots + c_k\mathbf{v}_k = \mathbf{0}.$$
+
+        The list is **linearly independent** if it is not dependent: the **only** combination that gives the zero vector is the one with every coefficient zero.
+
+        The words "not all zero" carry the whole meaning. Taking every coefficient to be 0 gives $\mathbf{0}$ for any list whatever, and tells you nothing. That is called the trivial combination. Dependence means there is another one.
+
+        For the flats, $1\,\mathbf{r} + 1\,\mathbf{b} + (-1)\,\mathbf{t} = \mathbf{0}$, with coefficients $(1, 1, -1)$. The three features are dependent.
+
+        **Dependent means one is a combination of the others.** The definition treats all the vectors alike. The intuition spoke of one vector being made from the rest. They say the same thing.
+
+        *If one vector is a combination of the others, the list is dependent.* Suppose $\mathbf{v}_j = \sum_{i \ne j} a_i\mathbf{v}_i$. Move $\mathbf{v}_j$ across: $\sum_{i \ne j} a_i\mathbf{v}_i - \mathbf{v}_j = \mathbf{0}$. The coefficient of $\mathbf{v}_j$ is $-1$, which is not zero.
+
+        *If the list is dependent, one vector is a combination of the others.* Suppose $c_1\mathbf{v}_1 + \dots + c_k\mathbf{v}_k = \mathbf{0}$ with some $c_j \ne 0$. Then you may divide by $c_j$ and solve for $\mathbf{v}_j$:
+
+        $$\mathbf{v}_j = -\sum_{i \ne j} \frac{c_i}{c_j}\,\mathbf{v}_i.$$
+
+        Notice which vector can be solved for: one whose coefficient is not zero. It need not be the last, and it need not be any particular one. Take $(1, 0)$, $(2, 0)$, $(0, 1)$. The list is dependent, since $2\,(1, 0) - (2, 0) + 0\,(0, 1) = \mathbf{0}$. Yet $(0, 1)$ is **not** a combination of the other two, which both lie along the horizontal axis. This is why the definition is phrased with a combination equal to zero. "Some vector is a combination of the others" is right, but it does not say which, and the symmetric form never has to.
+
+        **Small cases.**
+
+        | List | Independent exactly when |
+        | --- | --- |
+        | one vector $\mathbf{v}$ | $\mathbf{v} \ne \mathbf{0}$ |
+        | two vectors | neither is a multiple of the other |
+        | two vectors in the plane | $D = a_1 b_2 - a_2 b_1 \ne 0$ |
+        | any list containing $\mathbf{0}$ | never |
+
+        For one vector, $c\,\mathbf{v} = \mathbf{0}$ with $c \ne 0$ forces $\mathbf{v} = \mathbf{0}$. For a list containing the zero vector, give $\mathbf{0}$ the coefficient 1 and every other vector the coefficient 0: a combination that is not trivial, and equals zero. For two vectors in the plane, the lesson on span showed that $D = 0$ is exactly the condition for one to be a multiple of the other, or for one to be zero.
+    - question:
+        id: derivation-not-all-zero
+        type: choice
+        system: s2
+        prompt: |
+          The definition of dependence asks for coefficients "not all zero" with $c_1\mathbf{v}_1 + \dots + c_k\mathbf{v}_k = \mathbf{0}$. What would go wrong if those three words were left out?
+        options:
+          - "Nothing. They are there for emphasis."
+          - "Every list would count as dependent, because taking every coefficient to be zero gives the zero vector for any list at all."
+          - "No list would count as dependent."
+          - "Only lists of two vectors would be covered."
+        answer: 1
+        explanation: |
+          $0\,\mathbf{v}_1 + \dots + 0\,\mathbf{v}_k = \mathbf{0}$ always. A condition that every list satisfies distinguishes nothing. The content of the definition is the existence of a **second** way to reach the zero vector. Note also that "not all zero" is not "all non-zero": in $2\,(1, 0) - (2, 0) + 0\,(0, 1) = \mathbf{0}$ one coefficient is zero, and the list is dependent all the same.
+        hints:
+          - What does the combination with every coefficient zero equal?
+          - For which lists is that true?
+          - A test that everything passes is not a test.
+    - text: |
+        **Independent means coefficients are unique.** Here is the property that matters most in practice, and it answers the puzzle.
+
+        *Claim.* The vectors $\mathbf{v}_1, \dots, \mathbf{v}_k$ are independent exactly when every vector in their span can be written as a combination of them in **only one way**.
+
+        *Proof.* Suppose some vector has two different sets of coefficients:
+
+        $$a_1\mathbf{v}_1 + \dots + a_k\mathbf{v}_k = b_1\mathbf{v}_1 + \dots + b_k\mathbf{v}_k.$$
+
+        Subtract the right side from the left: $(a_1 - b_1)\mathbf{v}_1 + \dots + (a_k - b_k)\mathbf{v}_k = \mathbf{0}$. The two sets differ somewhere, so the coefficients $a_i - b_i$ are not all zero. The list is dependent. Turned round: if the list is independent, no vector can have two sets of coefficients.
+
+        In the other direction, if the list is dependent, the zero vector itself has two sets of coefficients, the trivial one and another. $\blacksquare$
+
+        Now read this with features for vectors and weights for coefficients. **If the feature vectors are independent, each possible vector of predictions comes from exactly one set of weights.** If they are dependent, with $c_1\mathbf{v}_1 + \dots + c_k\mathbf{v}_k = \mathbf{0}$, then the weights $\mathbf{w}$ and $\mathbf{w} + s\,\mathbf{c}$ predict identically for every number $s$. For the flats $\mathbf{c} = (1, 1, -1)$:
+
+        $$(3, 1, 0) - (1, 1, -1) = (2, 0, 1), \qquad (3, 1, 0) - 3\,(1, 1, -1) = (0, -2, 3).$$
+
+        The three models of the puzzle are one model, shifted along the dependency. The question "what does a bathroom add to the rent?" has no answer in this table, because the table cannot separate the effect of a bathroom from the effect of the total.
+
+        **How many independent vectors can there be?** In the plane, at most two.
+
+        *Proof.* Take three vectors $\mathbf{a}, \mathbf{b}, \mathbf{c}$ in $\mathbb{R}^2$. If $D \ne 0$ for $\mathbf{a}$ and $\mathbf{b}$, they span the plane, so $\mathbf{c} = s\,\mathbf{a} + t\,\mathbf{b}$ for some $s$ and $t$, and one vector is a combination of the others. If $D = 0$, then $\mathbf{a}$ and $\mathbf{b}$ are already dependent, and giving $\mathbf{c}$ the coefficient 0 extends their dependency to all three. Either way the three are dependent. $\blacksquare$
+
+        The same holds in every dimension: **in $\mathbb{R}^n$, any list of more than $n$ vectors is dependent.** The proof needs a systematic way of solving many equations at once, which you will have soon, and you may rely on the statement until then. Its consequence for data is worth remembering. With only four flats, each feature is a vector in $\mathbb{R}^4$, so any five features are certain to be dependent, however sensibly they were chosen. A model with more weights than examples never has uniquely determined weights.
+
+        A list of exactly $n$ independent vectors in $\mathbb{R}^n$ wastes nothing and reaches everything. Such a list is called a **basis**, and every vector then has one and only one set of coefficients with respect to it. The two axis directions $(1, 0)$ and $(0, 1)$ are the most familiar example, and the coefficients are the ordinary coordinates.
+
+        **Perpendicular vectors are independent.** There is one situation in which independence comes free.
+
+        *Claim.* If $\mathbf{v}_1, \dots, \mathbf{v}_k$ are non-zero and every two of them are perpendicular, they are independent.
+
+        *Proof.* Suppose $c_1\mathbf{v}_1 + \dots + c_k\mathbf{v}_k = \mathbf{0}$. Take the dot product of both sides with $\mathbf{v}_j$. Every term $c_i\,(\mathbf{v}_i \cdot \mathbf{v}_j)$ with $i \ne j$ vanishes, because the vectors are perpendicular. What remains is
+
+        $$c_j\,(\mathbf{v}_j \cdot \mathbf{v}_j) = 0.$$
+
+        Since $\mathbf{v}_j \ne \mathbf{0}$, its squared length is not zero, so $c_j = 0$. This works for each $j$, so every coefficient is zero. $\blacksquare$
+
+        The converse is false. $(1, 0)$ and $(1, 1)$ are independent, with $D = 1$, and they are 45° apart. Independence asks only for different directions. Perpendicularity is the best case of it, where no vector has any component along another, and finding coefficients needs no equations at all: each is a projection.
+
+        **Testing three vectors.** Take $(1, 0, 1)$, $(0, 1, 1)$, $(1, 1, 2)$. Look for $c_1, c_2, c_3$ with combination zero, one component at a time:
+
+        $$c_1 + c_3 = 0, \qquad c_2 + c_3 = 0, \qquad c_1 + c_2 + 2c_3 = 0.$$
+
+        The first two give $c_1 = c_2 = -c_3$, and then the third reads $-2c_3 + 2c_3 = 0$, true for every $c_3$. Choose $c_3 = -1$: the coefficients $(1, 1, -1)$ work, and the list is dependent. Indeed the third vector is the sum of the first two.
+
+        Now $(1, 0, 0)$, $(1, 1, 0)$, $(1, 1, 1)$. The third components give $c_3 = 0$. Then the second components give $c_2 = 0$, and the first give $c_1 = 0$. Only the trivial combination works: independent.
+
+        **Nearly dependent.** In practice features are rarely exact combinations of each other. They are often almost so: a length in metres and the same length measured by a slightly different instrument. The vectors are then independent in principle and the weights are unique, but they are balanced on a knife-edge. A small change in the data swings them enormously. A value of $D$ that is tiny beside the sizes of the vectors is the warning sign in the plane.
+    - question:
+        id: order-unique
+        type: order
+        system: s2
+        prompt: Put the steps in order to prove that if $\mathbf{v}_1, \dots, \mathbf{v}_k$ are independent, no vector has two different sets of coefficients.
+        steps:
+          - "Suppose, for a contradiction, that $a_1\\mathbf{v}_1 + \\dots + a_k\\mathbf{v}_k = b_1\\mathbf{v}_1 + \\dots + b_k\\mathbf{v}_k$ with the two sets of coefficients different."
+          - "Subtract: $(a_1 - b_1)\\mathbf{v}_1 + \\dots + (a_k - b_k)\\mathbf{v}_k = \\mathbf{0}$."
+          - "The sets differ in at least one place, so the coefficients $a_i - b_i$ are not all zero."
+          - "That is a combination, not the trivial one, equal to the zero vector, so the list is dependent."
+          - "This contradicts independence, so the two sets of coefficients must be the same."
+        explanation: The proof supposes the opposite of what is wanted, then turns two expressions for one vector into one expression for the zero vector by subtracting. The supposition that the sets differ is what makes the new coefficients not all zero. That is dependence, which the hypothesis rules out.
+        hints:
+          - A proof by contradiction begins by supposing the opposite.
+          - Subtracting comes before examining the new coefficients.
+          - The contradiction is named last.
+  formal:
+    - text: |
+        **Linearly dependent.** $\mathbf{v}_1, \dots, \mathbf{v}_k$ are dependent if $c_1\mathbf{v}_1 + \dots + c_k\mathbf{v}_k = \mathbf{0}$ for some numbers $c_1, \dots, c_k$ not all zero. **Linearly independent.** Otherwise: the equation holds only when every $c_i = 0$.
+
+        **Equivalent forms.** For $k \ge 2$, a list is dependent exactly when some vector in it is a combination of the others. A list is independent exactly when each vector of its span has exactly one set of coefficients.
+
+        **Small cases.** One vector is independent exactly when it is non-zero. Two vectors are independent exactly when neither is a multiple of the other, which in $\mathbb{R}^2$ means $a_1 b_2 - a_2 b_1 \ne 0$. A list containing $\mathbf{0}$ is dependent.
+
+        **Size.** Any list of more than $n$ vectors in $\mathbb{R}^n$ is dependent. A list of $n$ independent vectors in $\mathbb{R}^n$ is a **basis**.
+
+        **Orthogonality.** Non-zero vectors that are perpendicular in pairs are independent.
+
+        **Weights.** If $\sum c_i\mathbf{v}_i = \mathbf{0}$, then the coefficients $\mathbf{w}$ and $\mathbf{w} + s\,\mathbf{c}$ give the same combination for every $s$.
+  drill:
+    - text: Seconds each. Look for a round trip. If there is one, the list is dependent.
+    - question:
+        id: drill-axes
+        type: choice
+        system: s1
+        prompt: |
+          Are $(1, 0)$ and $(0, 1)$ linearly independent?
+        options: ["Yes", "No", "Only if scaled", "It cannot be told"]
+        answer: 0
+        explanation: D = 1 × 1 − 0 × 0 = 1, which is not zero. Neither is a multiple of the other.
+        hints:
+          - Compute D.
+          - Is either a multiple of the other?
+    - question:
+        id: drill-multiple
+        type: choice
+        system: s1
+        prompt: |
+          Are $(1, 2)$ and $(3, 6)$ linearly independent?
+        options: ["Yes", "No, because the second is 3 times the first", "No, because they are perpendicular", "Yes, because they are different"]
+        answer: 1
+        explanation: 3 (1, 2) − (3, 6) = 0, a combination that is not trivial.
+        hints:
+          - Compare the ratios of the components.
+          - Being different vectors is not enough.
+    - question:
+        id: drill-coefficient
+        type: numeric
+        system: s1
+        prompt: |
+          For which number $c$ is $c\,(1, 2) + (3, 6) = (0, 0)$?
+        answer: "-3"
+        explanation: (3, 6) is 3 times (1, 2), so minus 3 of the first cancels it.
+        hints:
+          - How many times (1, 2) is (3, 6)?
+          - Use the opposite of that number.
+    - question:
+        id: drill-zero-vector
+        type: choice
+        system: s1
+        prompt: |
+          A list of vectors contains the zero vector. The list is
+        options: ["independent", "dependent", "independent only if the others are", "undefined"]
+        answer: 1
+        explanation: Give the zero vector the coefficient 1 and the rest 0. The coefficients are not all zero and the combination is zero.
+        hints:
+          - What is 1 times the zero vector?
+          - Are the coefficients then all zero?
+    - question:
+        id: drill-single
+        type: choice
+        system: s1
+        prompt: |
+          Is the list containing only $(0, 5)$ linearly independent?
+        options: ["Yes, because the vector is not zero", "No, because one component is zero", "No, because a list needs two vectors", "Only in the plane"]
+        answer: 0
+        explanation: c (0, 5) is zero only when c is 0. One zero component does not make a zero vector.
+        hints:
+          - When is c times (0, 5) the zero vector?
+          - Is (0, 5) the zero vector?
+    - question:
+        id: drill-three-in-plane
+        type: choice
+        system: s1
+        prompt: |
+          Three vectors in the plane are
+        options: ["always independent", "always dependent", "independent when no two are parallel", "independent when they are all non-zero"]
+        answer: 1
+        explanation: The plane has room for only two independent directions.
+        hints:
+          - If two of them span the plane, what is the third?
+          - If two of them do not, they are already dependent.
+    - question:
+        id: drill-max
+        type: numeric
+        system: s1
+        prompt: |
+          What is the largest number of vectors a linearly independent list in $\mathbb{R}^5$ can have?
+        answer: "5"
+        explanation: More than n vectors in n dimensions are always dependent.
+        hints:
+          - Compare the number of vectors with the dimension.
+          - The limit is the dimension itself.
+    - question:
+        id: drill-must-be-zero
+        type: numeric
+        system: s1
+        prompt: |
+          $\mathbf{u}, \mathbf{v}, \mathbf{w}$ are linearly independent and $c_1\mathbf{u} + c_2\mathbf{v} + c_3\mathbf{w} = \mathbf{0}$. What is $c_2$?
+        answer: "0"
+        explanation: For an independent list only the trivial combination gives zero.
+        hints:
+          - What does independence say about such a combination?
+          - Every coefficient is forced.
+    - question:
+        id: drill-unique
+        type: numeric
+        system: s1
+        prompt: |
+          $\mathbf{a}$ and $\mathbf{b}$ are linearly independent, and $s\,\mathbf{a} + t\,\mathbf{b} = 3\mathbf{a} + 5\mathbf{b}$. What is $t$?
+        answer: "5"
+        explanation: Coefficients with respect to an independent list are unique.
+        hints:
+          - Can a vector have two different sets of coefficients here?
+          - Match the coefficients of b.
+    - question:
+        id: drill-perpendicular
+        type: choice
+        system: s1
+        prompt: |
+          Three non-zero vectors in $\mathbb{R}^3$ are perpendicular in pairs. They are
+        options: ["dependent", "independent", "independent only if they are unit vectors", "impossible to classify without their components"]
+        answer: 1
+        explanation: Non-zero vectors perpendicular in pairs are always independent, whatever their lengths.
+        hints:
+          - Recall the claim about perpendicular vectors.
+          - Did its proof use the lengths being 1?
+    - question:
+        id: drill-sum
+        type: choice
+        system: s1
+        prompt: |
+          Are $(1, 0, 1)$, $(0, 1, 1)$ and $(1, 1, 2)$ linearly independent?
+        options: ["Yes", "No, because the third is the sum of the first two", "No, because they have three components", "Yes, because none is a multiple of another"]
+        answer: 1
+        explanation: First plus second minus third is the zero vector. No pair is parallel, and the three are dependent all the same.
+        hints:
+          - Add the first two.
+          - Checking pairs is not enough for three vectors.
+    - question:
+        id: drill-shift
+        type: choice
+        system: s1
+        prompt: |
+          The features satisfy $\mathbf{r} + \mathbf{b} - \mathbf{t} = \mathbf{0}$. Which weights predict the same as $(3, 1, 0)$?
+        options: ["$(4, 2, 1)$", "$(4, 2, -1)$", "$(3, 1, 1)$", "$(6, 2, 0)$"]
+        answer: 1
+        explanation: Adding the dependency (1, 1, −1) to the weights adds the zero vector to the predictions.
+        hints:
+          - The dependency has coefficients (1, 1, −1).
+          - Add it to the weights.
+    - question:
+        id: predict-d
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          pairs = [([2, 1], [4, 2]), ([2, 1], [1, 3])]
+
+          for a, b in pairs:
+              print(a[0] * b[1] - a[1] * b[0] != 0)
+        output: |
+          False
+          True
+        explanation: For the first pair D is 4 − 4 = 0, so the comparison is False and the vectors are dependent. For the second D is 6 − 1 = 5, and they are independent.
+        hints:
+          - Compute D for each pair.
+          - The line prints whether D differs from 0.
+    - question:
+        id: predict-round-trip
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          r = [3, 2, 4, 1]
+          b = [1, 1, 2, 1]
+          t = [4, 3, 6, 2]
+
+          print([x + y - z for x, y, z in zip(r, b, t)])
+        output: "[0, 0, 0, 0]"
+        explanation: Each component of t is the sum of the matching components of r and b, so r + b − t is the zero vector. That combination, with coefficients 1, 1 and −1, shows the three features to be dependent.
+        hints:
+          - Work out one component at a time.
+          - 3 + 1 − 4, then 2 + 1 − 3, and so on.
+  work:
+    - text: Slower now. To show dependence, exhibit the coefficients. To show independence, prove that they must all be zero.
+    - question:
+        id: work-which-independent
+        type: choice
+        system: s2
+        prompt: |
+          Which of these lists of vectors in $\mathbb{R}^3$ is linearly independent?
+        options:
+          - "$(1, 2, 3)$, $(2, 4, 6)$, $(0, 0, 1)$"
+          - "$(1, 0, 0)$, $(1, 1, 0)$, $(1, 1, 1)$"
+          - "$(1, 0, 1)$, $(0, 1, 1)$, $(1, 1, 2)$"
+          - "$(1, 0, 0)$, $(0, 1, 0)$, $(0, 0, 1)$, $(1, 1, 1)$"
+        answer: 1
+        explanation: |
+          In the second list, a combination equal to zero has third component $c_3 = 0$, then second component $c_2 + c_3 = 0$ so $c_2 = 0$, then first component $c_1 + c_2 + c_3 = 0$ so $c_1 = 0$. Only the trivial combination works. In the first list the second vector is twice the first. In the third list the third vector is the sum of the first two. The fourth list has four vectors in a space of three dimensions, which is always too many, and here the last is plainly the sum of the other three.
+        hints:
+          - Look first for a vector that is a multiple or a sum of others.
+          - Count the vectors against the dimension.
+          - For the remaining list, solve for the coefficients one component at a time, starting with the last.
+    - question:
+        id: write-check-dependency
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `check_dependency(vectors, coefficients)`. `vectors` is a non-empty list of vectors of the same dimension, and `coefficients` has one number for each. Return `True` exactly when the coefficients show the vectors to be linearly dependent: they are **not all zero**, and the combination they describe is the zero vector. Treat a component smaller in size than `1e-9` as zero.
+        starter: |
+          def check_dependency(vectors, coefficients):
+              # Replace the next line with your own.
+              return False
+
+          print(check_dependency([[1, 0], [2, 0], [0, 1]], [2, -1, 0]))
+        solution: |
+          def check_dependency(vectors, coefficients):
+              if all([c == 0 for c in coefficients]):
+                  return False
+              n = len(vectors[0])
+              total = [sum([c * v[i] for c, v in zip(coefficients, vectors)]) for i in range(n)]
+              return all([abs(x) < 1e-9 for x in total])
+
+          print(check_dependency([[1, 0], [2, 0], [0, 1]], [2, -1, 0]))
+        tests: |
+          _flats = [[3, 2, 4, 1], [1, 1, 2, 1], [4, 3, 6, 2]]
+          assert check_dependency([[1, 0], [2, 0], [0, 1]], [2, -1, 0]) is True, "2 times [1, 0] minus [2, 0] is the zero vector, and the coefficients are not all zero"
+          assert check_dependency([[1, 0], [2, 0], [0, 1]], [-2, 1, 0]) is True, "The opposite coefficients, [-2, 1, 0], also give the zero vector"
+          assert check_dependency([[1, 0], [2, 0], [0, 1]], [2, -1, 1]) is False, "With coefficients [2, -1, 1] the combination is [0, 1], not the zero vector"
+          assert check_dependency(_flats, [1, 1, -1]) is True, "Rooms plus bathrooms minus total is the zero vector"
+          assert check_dependency(_flats, [3, 3, -3]) is True, "Any multiple of a dependency is a dependency"
+          assert check_dependency(_flats, [1, 1, 1]) is False, "With coefficients [1, 1, 1] the combination is [8, 6, 12, 4]"
+          assert check_dependency(_flats, [0, 0, 0]) is False, "Coefficients that are all zero show nothing, so return False"
+          assert check_dependency([[1, 0], [0, 1]], [0, 0]) is False, "Coefficients that are all zero show nothing, so return False"
+          assert check_dependency([[1.5, 0.5], [-0.75, -0.25]], [1, 2]) is True, "[1.5, 0.5] plus 2 times [-0.75, -0.25] is the zero vector"
+          assert check_dependency([[1, -1], [2, 3]], [1, 0]) is False, "The combination is [1, -1]. Its components add to 0, but it is not the zero vector"
+          assert check_dependency([[0, 3], [0, 3]], [1, -1]) is True, "A vector minus itself is the zero vector"
+          assert check_dependency([[0, 0, 0]], [5]) is True, "5 times the zero vector is the zero vector, with a coefficient that is not zero"
+          assert output.strip() == "True", "The program should print True"
+        wrong:
+          - "def check_dependency(vectors, coefficients):\n    n = len(vectors[0])\n    total = [sum([c * v[i] for c, v in zip(coefficients, vectors)]) for i in range(n)]\n    return all([abs(x) < 1e-9 for x in total])\n\nprint(True)\n"
+          - "def check_dependency(vectors, coefficients):\n    if all([c == 0 for c in coefficients]):\n        return False\n    total = sum([c * v[0] for c, v in zip(coefficients, vectors)])\n    return abs(total) < 1e-9\n\nprint(True)\n"
+          - "def check_dependency(vectors, coefficients):\n    if all([c == 0 for c in coefficients]):\n        return False\n    n = len(vectors[0])\n    total = [sum([c * v[i] for c, v in zip(coefficients, vectors)]) for i in range(n)]\n    return abs(sum(total)) < 1e-9\n\nprint(True)\n"
+          - "def check_dependency(vectors, coefficients):\n    if any([c == 0 for c in coefficients]):\n        return False\n    n = len(vectors[0])\n    total = [sum([c * v[i] for c, v in zip(coefficients, vectors)]) for i in range(n)]\n    return all([abs(x) < 1e-9 for x in total])\n\nprint(True)\n"
+          - "def check_dependency(vectors, coefficients):\n    if all([c == 0 for c in coefficients]):\n        return False\n    n = len(vectors[0])\n    total = [sum([v[i] for v in vectors]) for i in range(n)]\n    return all([abs(x) < 1e-9 for x in total])\n\nprint(True)\n"
+        explanation: |
+          The function is the definition, clause by clause. First the coefficients must not all be zero, since the trivial combination proves nothing. Then the combination is built one component at a time, and **every** component must vanish. "Not all zero" is weaker than "all non-zero": the coefficients $(2, -1, 0)$ are a perfectly good dependency. And a vector whose components happen to add up to zero, such as $(1, -1)$, is not the zero vector. Checking a proposed dependency is easy, as this shows. **Finding** one, or proving that none exists, is the harder problem, and it is what elimination will do.
+        hints:
+          - If every coefficient is 0, return False at once.
+          - For each position i, add up coefficient times the i-th component of each vector.
+          - Return True only if every one of those sums is zero.
+    - question:
+        id: write-independent-pair
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `independent_pair(u, v)` for two vectors of the same dimension, any dimension, with whole-number components. Return `True` exactly when they are linearly independent.
+
+          Use the equality case of the Cauchy-Schwarz inequality: $(\mathbf{u} \cdot \mathbf{v})^2 = (\mathbf{u} \cdot \mathbf{u})(\mathbf{v} \cdot \mathbf{v})$ exactly when one vector is a multiple of the other.
+        starter: |
+          def independent_pair(u, v):
+              # Replace the next line with your own.
+              return True
+
+          print(independent_pair([1, 2], [3, 6]), independent_pair([1, 2], [2, 1]))
+        solution: |
+          def independent_pair(u, v):
+              top = sum([a * b for a, b in zip(u, v)])
+              uu = sum([a * a for a in u])
+              vv = sum([b * b for b in v])
+              return top * top != uu * vv
+
+          print(independent_pair([1, 2], [3, 6]), independent_pair([1, 2], [2, 1]))
+        tests: |
+          assert independent_pair([1, 2], [3, 6]) is False, "[3, 6] is 3 times [1, 2]"
+          assert independent_pair([1, 2], [2, 1]) is True, "[1, 2] and [2, 1] point in different directions"
+          assert independent_pair([1, 0], [0, 1]) is True, "Perpendicular non-zero vectors are independent, though their dot product is 0"
+          assert independent_pair([1, 2], [-2, -4]) is False, "[-2, -4] is -2 times [1, 2]"
+          assert independent_pair([1, 0, 1], [2, 0, 2]) is False, "[2, 0, 2] is twice [1, 0, 1]"
+          assert independent_pair([1, 0, 1], [2, 0, 3]) is True, "[2, 0, 3] is not a multiple of [1, 0, 1]"
+          assert independent_pair([1, 2, 3], [2, 4, 7]) is True, "[2, 4, 7] is not a multiple of [1, 2, 3], though their first two components are in proportion"
+          assert independent_pair([0, 0], [1, 2]) is False, "A pair containing the zero vector is dependent"
+          assert independent_pair([1, 1, 1, 1], [1, 1, 1, 2]) is True, "The two vectors differ in direction"
+          assert independent_pair([4, 4], [4, 4]) is False, "A vector and itself are dependent"
+          assert output.strip() == "False True", "The program should print False True"
+        wrong:
+          - "def independent_pair(u, v):\n    return sum([a * b for a, b in zip(u, v)]) != 0\n\nprint(False, True)\n"
+          - "def independent_pair(u, v):\n    return u[0] * v[1] - u[1] * v[0] != 0\n\nprint(False, True)\n"
+          - "def independent_pair(u, v):\n    top = sum([a * b for a, b in zip(u, v)])\n    uu = sum([a * a for a in u])\n    vv = sum([b * b for b in v])\n    return top * top == uu * vv\n\nprint(False, True)\n"
+          - "def independent_pair(u, v):\n    return u != v\n\nprint(False, True)\n"
+          - "def independent_pair(u, v):\n    top = sum([a * b for a, b in zip(u, v)])\n    uu = sum([a * a for a in u])\n    vv = sum([b * b for b in v])\n    return top * top != uu + vv\n\nprint(False, True)\n"
+        explanation: |
+          The Cauchy-Schwarz inequality says $(\mathbf{u} \cdot \mathbf{v})^2 \le (\mathbf{u} \cdot \mathbf{u})(\mathbf{v} \cdot \mathbf{v})$, and you saw that equality holds exactly when one vector is a multiple of the other, the zero vector included. So the pair is independent exactly when the two sides differ. Three dot products settle it in any number of dimensions, with no division and no search for the multiple. The test $D \ne 0$ is the same statement in the plane and looks at only two components, so it is fooled by $(1, 2, 3)$ and $(2, 4, 7)$. Independence is also not the same as a non-zero dot product: the two axis directions have dot product 0 and are as independent as vectors can be. With whole numbers the comparison is exact. With floats it would need a tolerance.
+        hints:
+          - Compute u · v, u · u and v · v.
+          - Square the first and multiply the other two.
+          - The pair is independent when those two numbers differ.
+    - question:
+        id: fix-orthogonal
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `orthogonal(vectors)` should return `True` exactly when **every two** vectors in the list are perpendicular. For the list below, the first and third vectors have dot product 1, so it should print `False`. It prints `True`. Fix it.
+        starter: |
+          def orthogonal(vectors):
+              for i in range(len(vectors) - 1):
+                  if sum([a * b for a, b in zip(vectors[i], vectors[i + 1])]) != 0:
+                      return False
+              return True
+
+          print(orthogonal([[1, 0, 0], [0, 1, 0], [1, 0, 5]]))
+        solution: |
+          def orthogonal(vectors):
+              for i in range(len(vectors)):
+                  for j in range(i + 1, len(vectors)):
+                      if sum([a * b for a, b in zip(vectors[i], vectors[j])]) != 0:
+                          return False
+              return True
+
+          print(orthogonal([[1, 0, 0], [0, 1, 0], [1, 0, 5]]))
+        tests: |
+          assert orthogonal([[1, 0, 0], [0, 1, 0], [1, 0, 5]]) is False, "The first and third vectors have dot product 1"
+          assert orthogonal([[1, 0, 0], [0, 1, 0], [0, 0, 1]]) is True, "The three axis directions are perpendicular in pairs"
+          assert orthogonal([[1, 1], [1, -1]]) is True, "[1, 1] and [1, -1] have dot product 0"
+          assert orthogonal([[1, 1], [1, 0]]) is False, "[1, 1] and [1, 0] have dot product 1"
+          assert orthogonal([[2, 0, 0], [0, 0, 3], [0, 1, 0], [1, 0, 0]]) is False, "The first and last vectors have dot product 2"
+          assert orthogonal([[1, 0, 0], [0, 1, 0], [0, 1, 1]]) is False, "The second and third vectors have dot product 1"
+          assert orthogonal([[1, 2, 2], [2, 1, -2], [2, -2, 1]]) is True, "Each pair has dot product 0"
+          assert orthogonal([[1, 2]]) is True, "A single vector has no pairs to fail"
+          assert output.strip() == "False", "The program should print False"
+        wrong:
+          - "def orthogonal(vectors):\n    for i in range(len(vectors) - 1):\n        if sum([a * b for a, b in zip(vectors[i], vectors[i + 1])]) != 0:\n            return False\n    return True\n\nprint(False)\n"
+          - "def orthogonal(vectors):\n    for i in range(len(vectors) - 2):\n        if sum([a * b for a, b in zip(vectors[i], vectors[i + 2])]) != 0:\n            return False\n    return True\n\nprint(False)\n"
+          - "def orthogonal(vectors):\n    for i in range(len(vectors)):\n        for j in range(i, len(vectors)):\n            if sum([a * b for a, b in zip(vectors[i], vectors[j])]) != 0:\n                return False\n    return True\n\nprint(False)\n"
+          - "def orthogonal(vectors):\n    for j in range(1, len(vectors)):\n        if sum([a * b for a, b in zip(vectors[0], vectors[j])]) != 0:\n            return False\n    return True\n\nprint(False)\n"
+          - "def orthogonal(vectors):\n    for i in range(len(vectors)):\n        for j in range(i + 1, len(vectors)):\n            if sum([a * b for a, b in zip(vectors[i], vectors[j])]) == 0:\n                return True\n    return False\n\nprint(False)\n"
+        explanation: |
+          The starter compared each vector only with its neighbour in the list. Perpendicularity does not pass along a chain: the first can be perpendicular to the second and the second to the third while the first and third are not. Every pair has to be tested, which takes a loop inside a loop. Starting the inner loop at `i + 1` visits each pair once and never pairs a vector with itself, whose dot product with itself is its squared length and not zero. For $k$ vectors that is $\frac{k(k - 1)}{2}$ dot products. When this function returns `True` for non-zero vectors, the proof in this lesson guarantees that they are independent, with no further work.
+        hints:
+          - Which pairs of positions does the loop compare?
+          - Which pair in the example is never compared?
+          - Use a second loop so that every later vector is compared with vectors[i].
+    - question:
+        id: work-orthogonal-proof
+        type: choice
+        system: s2
+        prompt: |
+          $\mathbf{v}_1, \mathbf{v}_2, \mathbf{v}_3$ are non-zero and perpendicular in pairs, and $c_1\mathbf{v}_1 + c_2\mathbf{v}_2 + c_3\mathbf{v}_3 = \mathbf{0}$. Which step shows that $c_2 = 0$?
+        options:
+          - "Divide both sides by $\\mathbf{v}_2$."
+          - "Take the dot product of both sides with $\\mathbf{v}_2$. The terms with $\\mathbf{v}_1$ and $\\mathbf{v}_3$ vanish, leaving $c_2\\,\\lVert \\mathbf{v}_2 \\rVert^2 = 0$, and the squared length is not zero."
+          - "Take the length of both sides."
+          - "Set $c_1$ and $c_3$ to zero."
+        answer: 1
+        explanation: |
+          The dot product with $\mathbf{v}_2$ picks out the one term that is not perpendicular to it: $c_1\,(\mathbf{v}_1 \cdot \mathbf{v}_2) + c_2\,(\mathbf{v}_2 \cdot \mathbf{v}_2) + c_3\,(\mathbf{v}_3 \cdot \mathbf{v}_2) = c_2\,\lVert \mathbf{v}_2 \rVert^2$, and the right side is $\mathbf{0} \cdot \mathbf{v}_2 = 0$. A non-zero vector has a non-zero squared length, so $c_2 = 0$. Vectors cannot be divided by, and setting $c_1$ and $c_3$ to zero would assume what is to be proved. The same move finds coefficients in general: for perpendicular vectors, the coefficient of $\mathbf{v}_j$ in any combination $\mathbf{x}$ is $\dfrac{\mathbf{x} \cdot \mathbf{v}_j}{\mathbf{v}_j \cdot \mathbf{v}_j}$, the projection coefficient.
+        hints:
+          - Which operation turns a vector equation into an equation between numbers?
+          - What happens to the terms perpendicular to the chosen vector?
+          - Why is the squared length of the chosen vector not zero?
+    - question:
+        id: work-nearly-dependent
+        type: choice
+        system: s2
+        prompt: |
+          $\mathbf{a} = (1, 1)$ and $\mathbf{b} = (1, 1.01)$ are independent, with $D = 0.01$. Which coefficients give $s\,\mathbf{a} + t\,\mathbf{b} = (0, 1)$, and what do they show?
+        options:
+          - "$s = 0$ and $t = 1$, the ordinary case."
+          - "$s = -100$ and $t = 100$. To reach a nearby target, two nearly parallel vectors must be used in huge and opposite amounts, so a small change in the target changes the coefficients greatly."
+          - "No coefficients exist, since the vectors are almost parallel."
+          - "$s = 1$ and $t = -1$."
+        answer: 1
+        explanation: |
+          The components give $s + t = 0$ and $s + 1.01\,t = 1$. Subtracting, $0.01\,t = 1$, so $t = 100$ and $s = -100$. The vectors are independent, so the answer exists and is unique, as the theory promises. But the two vectors differ only by $(0, 0.01)$, and to build a step of size 1 out of that tiny difference takes a hundred of one and minus a hundred of the other. Move the target by 0.01 and the coefficients move by 1. Features that are almost redundant give a model weights of this kind: enormous, opposite in sign, and unstable. Penalising $\lVert \mathbf{w} \rVert^2$, which you met with norms, is the usual cure.
+        hints:
+          - Write one equation for each component.
+          - Subtract the first equation from the second.
+          - How large are the coefficients beside the target?
+    - question:
+        id: work-more-weights
+        type: choice
+        system: s2
+        prompt: |
+          A model predicts with a weighted sum of 50 features and is trained on 30 examples. What can be said about its weights?
+        options:
+          - "They are uniquely determined if the features were chosen carefully."
+          - "They are never uniquely determined. Each feature is a vector in $\\mathbb{R}^{30}$, and 50 vectors in a space of 30 dimensions are always dependent, so some change of weights leaves every prediction on the training examples unchanged."
+          - "They are uniquely determined because there are more weights than examples."
+          - "Nothing, without seeing the data."
+        answer: 1
+        explanation: |
+          Turn the table on its side: each feature is a column with one entry for each example, a vector in $\mathbb{R}^{30}$. More than 30 vectors there must be dependent, whatever they are. A dependency $\mathbf{c}$ can be added to the weights, in any amount, without changing a single prediction on the 30 examples. So infinitely many weight vectors fit the training data equally well, and they will generally disagree about new data. Modern networks live permanently in this situation, with far more weights than examples. Which of the many fitting solutions the training procedure ends at, and why that one tends to work, is a question you will return to.
+        hints:
+          - In what space does each feature, as a column, live?
+          - How many independent vectors can that space hold?
+          - What does a dependency among the features allow you to do to the weights?
+  connections:
+    - text: |
+        The puzzle showed three sets of weights, as different as could be, predicting the same rent for every flat. The cause was a feature that was the sum of two others. Seen as vectors, the three features allowed a round trip, $\mathbf{r} + \mathbf{b} - \mathbf{t} = \mathbf{0}$, and adding that round trip to the weights changes nothing. A list of vectors that allows such a trip, with coefficients not all zero, is linearly dependent. A list that allows only the trivial one is independent.
+
+        Three statements turned out to be one: no combination but the trivial one gives zero, no vector is a combination of the others, and every vector in the span has exactly one set of coefficients. The third is why independence matters for models. It is the difference between weights that mean something and weights that could have been anything.
+
+        The cluster closes here, and its pieces fit together. Vectors were lists and arrows. Adding and scaling them gave combinations, and combinations gave spans. The dot product gave length, distance, angle and the right angle. Projection found the closest point of a span of one vector, and the hyperplanes of [[m4.lines-planes-and-hyperplanes]] were drawn with a normal and a number. Independence says when a list of directions has no waste in it, and the open question from the last lesson is answered in its terms: hyperplanes meet in exactly one point when there are as many as the dimension and their normals are independent.
+
+        What is missing is a method. Finding a dependency among a hundred vectors, or proving there is none, means solving a hundred equations at once, and for that the vectors need to be arranged in a grid and handled together. That is the work of matrices: [[m5.matrices-as-linear-maps]], then [[m5.elimination-and-linear-systems]], with the number of independent vectors in a list named in [[m5.rank]], lists with no waste and no gaps in [[m5.basis-and-dimension]], and perpendicular ones in [[m7.orthonormal-bases]].
+
+        Before that, a turn towards the machine. Every vector in this cluster has been a Python list. You have indexed lists, appended to them, looped over them and sorted them, and once searched a list of vectors for the nearest, without asking what any of those operations costs. For four flats it does not matter. For a million stored embeddings, each a vector of a thousand numbers, it decides whether an answer arrives in a millisecond or a minute. The next lesson, [[e3.arrays-and-linked-lists]], opens the list up: how its items are laid out in memory, why reaching the item at position $i$ takes one step however long the list is, and what that layout makes cheap and what it makes expensive.

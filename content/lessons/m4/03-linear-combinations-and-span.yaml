@@ -1,0 +1,599 @@
+concept: m4.linear-combinations-and-span
+minutes: 90
+claim: You can form linear combinations of vectors, describe the span of one, two or three vectors as a line, a plane or all of space, decide whether a target vector lies in a span by solving for the coefficients, and explain why two vectors in the plane reach everything exactly when they are not parallel.
+recalls: [m4.vector-addition-and-scaling]
+uses: [m4.vectors-as-arrows-and-as-lists, m1.simultaneous-equations, m1.straight-lines-and-slope, m1.linear-equations, m2.sets, m3.cases-and-counterexamples, e0.functions, e0.lists-and-tuples, e0.booleans-and-conditionals, e1.comprehensions-and-iterators]
+leads: [m4.dot-product, m4.linear-independence, m5.matrix-vector-product, m5.column-space-and-null-space, m5.basis-and-dimension]
+starter: |
+  # Scratch space. A drone can fly only along two fixed directions, a and b,
+  # forwards or backwards, for as long as you like. Try to reach [7, 11].
+  a = [2, 1]
+  b = [1, 3]
+
+  for s in range(0, 5):
+      for t in range(0, 5):
+          at = [s * x + t * y for x, y in zip(a, b)]
+          print(s, t, at)
+parts:
+  recall:
+    - text: |
+        [[m4.vector-addition-and-scaling]] gave vectors their two operations, adding and scaling, and ended by noticing that a midpoint, a centroid and a descent step are all built in the same way: scale some vectors and add the results. Three quick pulls first.
+    - question:
+        id: recall-combination
+        type: choice
+        system: s1
+        concepts: [m4.vector-addition-and-scaling]
+        prompt: |
+          What is $2\,(2, 1) + 3\,(1, 3)$?
+        options: ["$(7, 11)$", "$(5, 4)$", "$(3, 4)$", "$(7, 9)$"]
+        answer: 0
+        explanation: (4, 2) + (3, 9).
+        hints:
+          - Scale each vector first.
+          - Then add matching components.
+    - question:
+        id: recall-scale
+        type: choice
+        system: s1
+        concepts: [m4.vector-addition-and-scaling]
+        prompt: |
+          Which of these is a scalar multiple of $(2, 1)$?
+        options: ["$(4, 3)$", "$(1, 2)$", "$(-6, -3)$", "$(2, 2)$"]
+        answer: 2
+        explanation: It is −3 times (2, 1). In each of the others the two components are not in the ratio 2 to 1.
+        hints:
+          - A multiple has both components scaled by the same number.
+          - Look for a first component that is twice the second.
+    - question:
+        id: recall-simultaneous
+        type: numeric
+        system: s1
+        concepts: [m1.simultaneous-equations]
+        prompt: |
+          $x + y = 5$ and $x - y = 1$. What is $x$?
+        answer: "3"
+        explanation: Adding the two equations gives 2x = 6.
+        hints:
+          - Add the two equations.
+          - The y terms cancel.
+
+  puzzle:
+    - text: |
+        A delivery drone has a fault. It can fly only along two fixed directions: $\mathbf{a} = (2, 1)$, and $\mathbf{b} = (1, 3)$. Along each it can go forwards or backwards, for any distance, and it can switch between them as often as you like. It starts at the origin.
+
+        **Can it reach the point $(7, 11)$? Can it reach every point of the plane, or are some places out of bounds?**
+
+        The starter tries whole numbers of each move and prints where the drone ends up. Look through its output for $(7, 11)$.
+
+        A second drone has a different fault. Its two directions are $\mathbf{a} = (2, 1)$ and $\mathbf{b} = (4, 2)$. **Can that one reach $(7, 11)$?**
+
+        Behind the story is a question that runs through all of linear algebra and much of machine learning. A model is given a few fixed ingredients and is allowed to choose how much of each to use. What can it make, and what can it never make, however the amounts are chosen?
+  intuition:
+    - text: |
+        Whatever route the first drone takes, all its moves along $\mathbf{a}$ add up to some total multiple of $\mathbf{a}$, and all its moves along $\mathbf{b}$ to some total multiple of $\mathbf{b}$. The order does not matter, since vector addition can be done in any order. So every place it can reach has the form
+
+        $$s\,\mathbf{a} + t\,\mathbf{b}$$
+
+        for some numbers $s$ and $t$, positive, negative or fractional. An expression like that, some vectors each scaled and then added, is a **linear combination**. The set of all places reachable is the **span** of the two vectors.
+
+        Picture it. The multiples of $\mathbf{a}$ alone form a straight line through the origin. From any point of that line, the drone may then travel along $\mathbf{b}$, tracing a second line through that point, parallel to $\mathbf{b}$. Slide the starting point along the first line and the second line sweeps across the plane. Because $\mathbf{b}$ points in a different direction from $\mathbf{a}$, that sweep covers **everything**. The two vectors act as a slanted pair of axes, and $s$ and $t$ are the coordinates of a point with respect to them.
+
+        Now the second drone. Its $\mathbf{b} = (4, 2)$ is just $2\mathbf{a}$. A move along $\mathbf{b}$ is a move along the same line as $\mathbf{a}$. The sweep never leaves that one line. Every reachable point has its first component twice its second, and $(7, 11)$ does not.
+
+        In the figure, change the two multiples and watch the marked point. Then put $\mathbf{b}$ along $\mathbf{a}$.
+    - figure: span
+      props: { s: 1, t: 1 }
+    - text: |
+        The small dots mark some of the reachable points. With the two vectors in different directions they cover the plane like a slanted grid. With $\mathbf{b}$ along $\mathbf{a}$ the grid collapses onto a line: two vectors, but only one direction between them.
+  derivation:
+    - text: |
+        **Definitions.** A **linear combination** of the vectors $\mathbf{v}_1, \dots, \mathbf{v}_k$ is any vector of the form
+
+        $$c_1\mathbf{v}_1 + c_2\mathbf{v}_2 + \dots + c_k\mathbf{v}_k,$$
+
+        where the scalars $c_1, \dots, c_k$ are called **coefficients**, or weights. The **span** of the vectors is the set of all their linear combinations:
+
+        $$\operatorname{span}\{\mathbf{v}_1, \dots, \mathbf{v}_k\} = \{\,c_1\mathbf{v}_1 + \dots + c_k\mathbf{v}_k : c_1, \dots, c_k \in \mathbb{R}\,\}.$$
+
+        **Is a target in the span?** To ask whether the first drone reaches $(7, 11)$ is to ask whether numbers $s$ and $t$ exist with
+
+        $$s\,(2, 1) + t\,(1, 3) = (7, 11).$$
+
+        Two vectors are equal when their components are equal. So this one vector equation is two ordinary equations:
+
+        $$2s + t = 7, \qquad s + 3t = 11.$$
+
+        These are simultaneous equations of the kind you learned to solve by elimination. From the first, $t = 7 - 2s$. Put that in the second: $s + 21 - 6s = 11$, so $s = 2$, and then $t = 3$. Check: $2(2, 1) + 3(1, 3) = (4, 2) + (3, 9) = (7, 11)$. The drone flies twice along $\mathbf{a}$ and three times along $\mathbf{b}$. The starter prints it on the line `2 3 [7, 11]`.
+
+        This is the general method. **Deciding whether a vector is in a span is solving a system of linear equations**, one equation for each component, with the coefficients as the unknowns.
+
+        For the second drone the equations are $2s + 4t = 7$ and $s + 2t = 11$. Double the second: $2s + 4t = 22$. The left sides now agree and the right sides do not. No $s$ and $t$ can satisfy both. $(7, 11)$ is not in the span.
+
+        **Every target at once.** Do the first drone's vectors reach every point $(x, y)$? Solve with letters. Let $\mathbf{a} = (a_1, a_2)$ and $\mathbf{b} = (b_1, b_2)$. The equations are
+
+        $$a_1 s + b_1 t = x, \qquad a_2 s + b_2 t = y.$$
+
+        Multiply the first by $b_2$ and the second by $b_1$, and subtract: the $t$ terms cancel, leaving $(a_1 b_2 - a_2 b_1)\,s = x\,b_2 - y\,b_1$. Eliminating $s$ in the same way gives $(a_1 b_2 - a_2 b_1)\,t = a_1 y - a_2 x$. So provided the number
+
+        $$D = a_1 b_2 - a_2 b_1$$
+
+        is not zero,
+
+        $$s = \frac{x\,b_2 - y\,b_1}{D}, \qquad t = \frac{a_1 y - a_2 x}{D}.$$
+
+        There is a solution for **every** $(x, y)$, and exactly one. For the first drone $D = 2 \cdot 3 - 1 \cdot 1 = 5$, and $(7, 11)$ gives $s = \frac{21 - 11}{5} = 2$ and $t = \frac{22 - 7}{5} = 3$.
+
+        And when $D = 0$? Then $a_1 b_2 = a_2 b_1$. If $\mathbf{a}$ is not the zero vector, that says the components of $\mathbf{b}$ are in the same ratio as those of $\mathbf{a}$: $\mathbf{b}$ is a multiple of $\mathbf{a}$, and the two are **parallel**. For the second drone $D = 2 \cdot 2 - 1 \cdot 4 = 0$.
+
+        **Theorem.** Two vectors in the plane span the whole plane exactly when $a_1 b_2 - a_2 b_1 \ne 0$, that is, exactly when neither is a multiple of the other.
+
+        The number $D$ will return in the course on matrices under the name **determinant**. For now it is a one-line test for whether two directions are really two.
+
+        ```python
+        def solve2(a, b, target):
+            d = a[0] * b[1] - a[1] * b[0]
+            if d == 0:
+                return None
+            s = (target[0] * b[1] - target[1] * b[0]) / d
+            t = (a[0] * target[1] - a[1] * target[0]) / d
+            return [s, t]
+        ```
+    - question:
+        id: derivation-parallel
+        type: choice
+        system: s2
+        prompt: |
+          $\mathbf{a} = (2, 1)$ and $\mathbf{b} = (4, 2)$. Which describes the span of the two, and whether $(6, 3)$ and $(7, 11)$ lie in it?
+        options:
+          - "The whole plane. Both points are in it."
+          - "The line of all multiples of $(2, 1)$. The point $(6, 3)$ is in it, in many ways, and $(7, 11)$ is not."
+          - "The line of all multiples of $(2, 1)$. Neither point is in it."
+          - "Only the two points $(2, 1)$ and $(4, 2)$."
+        answer: 1
+        explanation: |
+          Since $\mathbf{b} = 2\mathbf{a}$, any combination $s\mathbf{a} + t\mathbf{b}$ equals $(s + 2t)\mathbf{a}$, a multiple of $\mathbf{a}$. The span is the line through the origin along $(2, 1)$. $(6, 3) = 3\mathbf{a}$ is on it, and it can be made in many ways: $s = 3, t = 0$, or $s = 1, t = 1$, or $s = -1, t = 2$, anything with $s + 2t = 3$. $(7, 11)$ is not a multiple of $(2, 1)$, so it cannot be made at all. When $D = 0$ the system of equations has either no solution or infinitely many, and never exactly one.
+        hints:
+          - Write b as a multiple of a and simplify the combination.
+          - Which points are multiples of (2, 1)?
+          - For (6, 3), try more than one choice of the two coefficients.
+    - text: |
+        **The standard basis.** Two vectors make every calculation easy: $\mathbf{e}_1 = (1, 0)$ and $\mathbf{e}_2 = (0, 1)$. For any vector,
+
+        $$(v_1, v_2) = v_1\,(1, 0) + v_2\,(0, 1) = v_1\mathbf{e}_1 + v_2\mathbf{e}_2.$$
+
+        The components of a vector **are** its coefficients with respect to these two. That is what components were all along: the amounts of "one step across" and "one step up" in the recipe for the vector. In $\mathbb{R}^n$ there are $n$ such vectors, $\mathbf{e}_i$ having a 1 in position $i$ and 0 elsewhere, and $\mathbf{v} = v_1\mathbf{e}_1 + \dots + v_n\mathbf{e}_n$. A colour on a screen, $(r, g, b)$, is $r$ parts of pure red, $g$ of pure green and $b$ of pure blue.
+
+        The first drone's vectors $\mathbf{a}$ and $\mathbf{b}$ are another pair that reaches everything, with different coefficients for the same point: $(7, 11)$ is 7 and 11 in the standard pair, and 2 and 3 in the drone's pair. A set of vectors that reaches everything, with exactly one recipe for each target, will be called a **basis**.
+
+        **Spans in general.** Here is what a span can look like.
+
+        | Vectors | Span |
+        | --- | --- |
+        | the zero vector alone | the single point $\mathbf{0}$ |
+        | one non-zero vector | a line through the origin |
+        | two vectors, not parallel | a plane through the origin |
+        | two parallel vectors | only a line |
+        | three vectors in $\mathbb{R}^3$, not all in one plane | all of $\mathbb{R}^3$ |
+        | three vectors in $\mathbb{R}^3$ lying in one plane | only that plane |
+
+        Three facts hold for every span. It contains the zero vector, since all the coefficients may be 0. It is closed under addition: the sum of two combinations is again a combination. And it is closed under scaling. So a span is always a flat thing passing through the origin, a line, a plane, or their higher analogue, and never a curve, a patch, or a set of scattered points.
+
+        In $\mathbb{R}^3$, two vectors span at most a plane: an infinite flat sheet through the origin, and nearly every point of space lies off it. A third vector helps only if it points out of that sheet. More vectors do not automatically mean more reach. What matters is how many genuinely different directions they contain, and making that idea exact is the last lesson of this cluster.
+
+        **Why a model cares.** Suppose you are predicting a quantity for four houses, and you know two features of each: its floor area, and its number of rooms. Write each feature as a vector with one component per house, $\mathbf{x}_1$ and $\mathbf{x}_2$. A linear model with weights $w_1$ and $w_2$ predicts, for all four houses at once,
+
+        $$\hat{\mathbf{y}} = w_1\mathbf{x}_1 + w_2\mathbf{x}_2.$$
+
+        The vector of predictions is a **linear combination of the feature vectors**, and training chooses the coefficients. So the predictions such a model can ever make are exactly the span of its features: a plane inside a space of four dimensions. If the true prices happen to lie in that plane, the model can fit them perfectly. If they do not, and usually they will not, no choice of weights reaches them, and the best the model can do is the point of the plane **nearest** to the truth. Finding that nearest point is where this cluster is heading.
+    - question:
+        id: order-solve
+        type: order
+        system: s2
+        prompt: Put the steps in order to write $(5, 1)$ as a combination of $\mathbf{a} = (1, 1)$ and $\mathbf{b} = (1, -1)$.
+        steps:
+          - "Write the vector equation $s\\,(1, 1) + t\\,(1, -1) = (5, 1)$."
+          - "Read off one equation for each component: $s + t = 5$ and $s - t = 1$."
+          - "Add the two equations: $2s = 6$, so $s = 3$."
+          - "Substitute back: $3 + t = 5$, so $t = 2$."
+          - "Check: $3\\,(1, 1) + 2\\,(1, -1) = (3 + 2,\\; 3 - 2) = (5, 1)$."
+        explanation: The vector equation comes first, and it splits into one ordinary equation for each component. Those are solved by elimination, one unknown and then the other, and the result is checked by forming the combination.
+        hints:
+          - The component equations come from the vector equation.
+          - One unknown must be found before it can be substituted.
+          - The check is last.
+  formal:
+    - text: |
+        **Linear combination.** $c_1\mathbf{v}_1 + \dots + c_k\mathbf{v}_k$, with scalar coefficients $c_i$.
+
+        **Span.** $\operatorname{span}\{\mathbf{v}_1, \dots, \mathbf{v}_k\}$ is the set of all linear combinations of the $\mathbf{v}_i$. It contains $\mathbf{0}$ and is closed under addition and scaling.
+
+        **Membership.** $\mathbf{t} \in \operatorname{span}\{\mathbf{v}_1, \dots, \mathbf{v}_k\}$ exactly when the system $c_1\mathbf{v}_1 + \dots + c_k\mathbf{v}_k = \mathbf{t}$, one equation per component, has a solution.
+
+        **Two vectors in the plane.** With $D = a_1 b_2 - a_2 b_1$: if $D \ne 0$ then $\operatorname{span}\{\mathbf{a}, \mathbf{b}\} = \mathbb{R}^2$, and each $(x, y)$ equals $s\mathbf{a} + t\mathbf{b}$ for exactly one pair
+
+        $$s = \frac{x\,b_2 - y\,b_1}{D}, \qquad t = \frac{a_1 y - a_2 x}{D}.$$
+
+        If $D = 0$ the two vectors are parallel, or one is zero, and they span at most a line.
+
+        **Standard basis.** $\mathbf{e}_i$ has 1 in position $i$ and 0 elsewhere, and $\mathbf{v} = \sum_{i=1}^{n} v_i\,\mathbf{e}_i$.
+  drill:
+    - text: Seconds each. Scale, add, and ask what can be reached.
+    - question:
+        id: drill-combine
+        type: choice
+        system: s1
+        prompt: |
+          What is $3\,(1, 2) - 2\,(0, 1)$?
+        options: ["$(3, 4)$", "$(3, 8)$", "$(1, 1)$", "$(3, 6)$"]
+        answer: 0
+        explanation: (3, 6) − (0, 2).
+        hints:
+          - Scale each vector.
+          - Subtract matching components.
+    - question:
+        id: drill-standard
+        type: numeric
+        system: s1
+        prompt: |
+          $(5, -3) = c_1\,(1, 0) + c_2\,(0, 1)$. What is $c_2$?
+        answer: "-3"
+        explanation: With the standard basis the coefficients are the components themselves.
+        hints:
+          - Only the second vector contributes to the second component.
+          - The coefficient is the second component.
+    - question:
+        id: drill-d
+        type: numeric
+        system: s1
+        prompt: |
+          For $\mathbf{a} = (2, 1)$ and $\mathbf{b} = (1, 3)$, what is $D = a_1 b_2 - a_2 b_1$?
+        answer: "5"
+        explanation: 2 × 3 − 1 × 1.
+        hints:
+          - First of a times second of b.
+          - Minus second of a times first of b.
+    - question:
+        id: drill-d-zero
+        type: numeric
+        system: s1
+        prompt: |
+          For $\mathbf{a} = (3, 6)$ and $\mathbf{b} = (1, 2)$, what is $D = a_1 b_2 - a_2 b_1$?
+        answer: "0"
+        explanation: 3 × 2 − 6 × 1. The first vector is 3 times the second, so they are parallel.
+        hints:
+          - 3 times 2, minus 6 times 1.
+          - Compare the two vectors. Is one a multiple of the other?
+    - question:
+        id: drill-span-one
+        type: choice
+        system: s1
+        prompt: |
+          What is the span of the single vector $(2, 1)$?
+        options:
+          - "The point $(2, 1)$"
+          - "The line through the origin and $(2, 1)$"
+          - "The whole plane"
+          - "The segment from the origin to $(2, 1)$"
+        answer: 1
+        explanation: All multiples of the vector, with coefficients of every size and sign, form the whole line through the origin in both directions.
+        hints:
+          - The coefficient may be any real number.
+          - Negative and large coefficients are allowed.
+    - question:
+        id: drill-in-span
+        type: choice
+        system: s1
+        prompt: |
+          Which of these lies in the span of $(2, 1)$ alone?
+        options: ["$(4, 3)$", "$(1, 2)$", "$(-10, -5)$", "$(2, 0)$"]
+        answer: 2
+        explanation: It is −5 times (2, 1). The others are not multiples of it.
+        hints:
+          - A multiple of (2, 1) has its first component equal to twice its second.
+          - Check each option.
+    - question:
+        id: drill-plane
+        type: choice
+        system: s1
+        prompt: |
+          Do $(1, 0)$ and $(1, 1)$ span the whole plane?
+        options:
+          - "No, they are not at right angles."
+          - "Yes, since neither is a multiple of the other."
+          - "No, two vectors are never enough."
+          - "Only the part above the horizontal axis."
+        answer: 1
+        explanation: D = 1 × 1 − 0 × 1 = 1, which is not zero. A right angle is not needed, only different directions.
+        hints:
+          - Compute D.
+          - Is one a multiple of the other?
+    - question:
+        id: drill-zero
+        type: choice
+        system: s1
+        prompt: |
+          Is the zero vector in the span of $(4, 7)$ and $(-1, 5)$?
+        options:
+          - "Yes. Take both coefficients to be 0."
+          - "No. Neither vector is zero."
+          - "Only if the vectors are parallel."
+          - "It cannot be decided."
+        answer: 0
+        explanation: The zero vector is in every span, since every coefficient may be chosen as 0.
+        hints:
+          - Which coefficients are allowed?
+          - Try the simplest choice.
+    - question:
+        id: drill-three-in-plane
+        type: choice
+        system: s1
+        prompt: |
+          In $\mathbb{R}^3$, what is the span of $(1, 0, 0)$, $(0, 1, 0)$ and $(1, 1, 0)$?
+        options:
+          - "All of space"
+          - "The plane of vectors whose third component is 0"
+          - "A line"
+          - "The three points only"
+        answer: 1
+        explanation: Every combination has third component 0, so nothing off the floor is reached. The third vector is the sum of the first two and adds no new direction.
+        hints:
+          - What is the third component of any combination?
+          - Is the third vector a combination of the first two?
+    - question:
+        id: drill-s
+        type: numeric
+        system: s1
+        prompt: |
+          $s\,(1, 0) + t\,(1, 1) = (5, 2)$. What is $s$?
+        answer: "3"
+        explanation: The second components give t = 2. Then s + 2 = 5.
+        hints:
+          - The second component involves only t.
+          - Then use the first component.
+    - question:
+        id: predict-combine
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          a = [2, 1]
+          b = [1, 3]
+          print([2 * x + 3 * y for x, y in zip(a, b)])
+        output: "[7, 11]"
+        explanation: Each component of the result is 2 times the matching component of a plus 3 times that of b. This is the combination 2a + 3b, the drone's route to its target.
+        hints:
+          - The first component is 2 × 2 + 3 × 1.
+          - The second is 2 × 1 + 3 × 3.
+    - question:
+        id: predict-d
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          def d(a, b):
+              return a[0] * b[1] - a[1] * b[0]
+
+          print(d([2, 1], [1, 3]), d([2, 1], [4, 2]))
+        output: "5 0"
+        explanation: The first pair gives 6 − 1, which is not zero, so they span the plane. The second gives 4 − 4. The second vector is twice the first, and the pair spans only a line.
+        hints:
+          - First of a times second of b, minus second of a times first of b.
+          - For the second pair that is 2 × 2 − 1 × 4.
+  work:
+    - text: Slower now. Turn each question about reach into equations for the coefficients.
+    - question:
+        id: work-alloy
+        type: numeric
+        system: s2
+        prompt: |
+          A bar of alloy A contains 3 kg of copper and 1 kg of zinc, the vector $(3, 1)$. A bar of alloy B contains $(1, 1)$. You need a melt with exactly 10 kg of copper and 6 kg of zinc. How many bars of A are needed?
+        answer: "2"
+        explanation: |
+          $s\,(3, 1) + t\,(1, 1) = (10, 6)$ gives $3s + t = 10$ and $s + t = 6$. Subtracting, $2s = 4$, so $s = 2$ and $t = 4$: two bars of A and four of B. Check: $(6, 2) + (4, 4) = (10, 6)$. Here the coefficients must also be positive, since you cannot add a negative number of bars. A target such as $(10, 2)$ is in the span, with $s = 4$ and $t = -2$, and still cannot be made in a foundry.
+        hints:
+          - Write one equation for copper and one for zinc.
+          - Subtract the second equation from the first.
+          - Then find the number of bars of B, and check.
+    - question:
+        id: work-third-direction
+        type: choice
+        system: s2
+        prompt: |
+          In $\mathbb{R}^3$ you have $\mathbf{u} = (1, 0, 0)$ and $\mathbf{v} = (0, 1, 0)$, which span the floor, the plane of vectors with third component 0. You may add one more vector. Which choice makes the three span all of space?
+        options:
+          - "$(1, 1, 0)$"
+          - "$(5, -2, 0)$"
+          - "$(2, 3, 1)$"
+          - "Any non-zero vector at all"
+        answer: 2
+        explanation: |
+          The first two options lie in the floor, so every combination still has third component 0, and nothing new is reached. $(2, 3, 1)$ points out of the floor. With it, any target $(x, y, z)$ can be made: take $z$ of the new vector to get the height right, giving $(2z, 3z, z)$, and then correct the first two components with $(x - 2z)\mathbf{u} + (y - 3z)\mathbf{v}$. The new vector did not have to point straight up. It only had to leave the plane the others already span.
+        hints:
+          - What is the third component of any combination of vectors in the floor?
+          - Which option has a non-zero third component?
+          - Try to make a general target with the three vectors.
+    - question:
+        id: write-combine
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `combine(coeffs, vectors)`. `coeffs` is a list of numbers and `vectors` a list of vectors, one for each coefficient, all of the same dimension. Return the linear combination
+
+          $$c_1\mathbf{v}_1 + c_2\mathbf{v}_2 + \dots + c_k\mathbf{v}_k$$
+
+          as a list. There is at least one vector.
+        starter: |
+          def combine(coeffs, vectors):
+              # Replace the next line with your own.
+              return vectors[0]
+
+          print(combine([2, 3], [[2, 1], [1, 3]]))
+        solution: |
+          def combine(coeffs, vectors):
+              total = [0] * len(vectors[0])
+              for c, v in zip(coeffs, vectors):
+                  total = [t + c * x for t, x in zip(total, v)]
+              return total
+
+          print(combine([2, 3], [[2, 1], [1, 3]]))
+        tests: |
+          assert combine([2, 3], [[2, 1], [1, 3]]) == [7, 11], "2 * [2, 1] + 3 * [1, 3] is [7, 11]. You returned " + repr(combine([2, 3], [[2, 1], [1, 3]]))
+          assert combine([5, -3], [[1, 0], [0, 1]]) == [5, -3], "With the standard basis the coefficients become the components. You returned " + repr(combine([5, -3], [[1, 0], [0, 1]]))
+          assert combine([4], [[1, 2, 3]]) == [4, 8, 12], "A single vector is just scaled. You returned " + repr(combine([4], [[1, 2, 3]]))
+          assert combine([1, -1, 1], [[5, 1], [3, 1], [3, 4]]) == [5, 4], "[5, 1] - [3, 1] + [3, 4] is [5, 4]. You returned " + repr(combine([1, -1, 1], [[5, 1], [3, 1], [3, 4]]))
+          assert combine([0, 0], [[9, 9], [7, 7]]) == [0, 0], "With all coefficients 0 the result is the zero vector"
+          assert combine([0.5, 0.5], [[4, 1], [1, 4]]) == [2.5, 2.5], "Half of each gives the midpoint. You returned " + repr(combine([0.5, 0.5], [[4, 1], [1, 4]]))
+          _v = [[2, 1], [1, 3]]
+          combine([2, 3], _v)
+          assert _v == [[2, 1], [1, 3]], "Do not change the vectors that were passed in"
+          assert output.strip() == "[7, 11]", "The program should print [7, 11]"
+        wrong:
+          - "def combine(coeffs, vectors):\n    total = [0] * len(vectors[0])\n    for c, v in zip(coeffs, vectors):\n        total = [t + x for t, x in zip(total, v)]\n    return total\n\nprint([7, 11])\n"
+          - "def combine(coeffs, vectors):\n    total = [0] * len(vectors[0])\n    for c, v in zip(coeffs, vectors):\n        total = [c * x for x in v]\n    return total\n\nprint([7, 11])\n"
+          - "def combine(coeffs, vectors):\n    return [sum(coeffs) * sum([v[i] for v in vectors]) for i in range(len(vectors[0]))]\n\nprint([7, 11])\n"
+          - "def combine(coeffs, vectors):\n    return [sum([c * x for c, x in zip(coeffs, v)]) for v in vectors]\n\nprint([7, 11])\n"
+          - "def combine(coeffs, vectors):\n    total = [0] * len(coeffs)\n    for c, v in zip(coeffs, vectors):\n        total = [t + c * x for t, x in zip(total, v)]\n    return total\n\nprint([7, 11])\n"
+        explanation: |
+          Start from the zero vector of the right dimension and add in each vector, scaled by its coefficient: the two operations of the last lesson inside a loop. The running total needs as many components as each **vector** has, which need not be the number of vectors. The test with three vectors of two components separates the two. This function is more important than it looks. Given the feature vectors of a data set and a list of weights, it returns the predictions of a linear model, and in the course on matrices it will be given a name of its own, the product of a matrix and a vector.
+        hints:
+          - Start with a list of zeros as long as one vector.
+          - For each coefficient and vector, add c times each component to the running total.
+          - zip(coeffs, vectors) pairs each coefficient with its vector.
+    - question:
+        id: fix-is-multiple
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `is_multiple(v, target)` should say whether `target` lies in the span of the single non-zero vector `v` in the plane, that is, whether `target` is some multiple of `v`. The program should print `True False`. It prints `False False`. Fix it.
+        starter: |
+          def is_multiple(v, target):
+              return v[0] * target[0] - v[1] * target[1] == 0
+
+          print(is_multiple([2, 1], [4, 2]), is_multiple([2, 1], [7, 11]))
+        solution: |
+          def is_multiple(v, target):
+              return v[0] * target[1] - v[1] * target[0] == 0
+
+          print(is_multiple([2, 1], [4, 2]), is_multiple([2, 1], [7, 11]))
+        tests: |
+          assert is_multiple([2, 1], [4, 2]) is True, "[4, 2] is 2 times [2, 1]"
+          assert is_multiple([2, 1], [-6, -3]) is True, "[-6, -3] is -3 times [2, 1]"
+          assert is_multiple([2, 1], [0, 0]) is True, "The zero vector is 0 times any vector"
+          assert is_multiple([2, 1], [7, 11]) is False, "[7, 11] is not a multiple of [2, 1]"
+          assert is_multiple([0, 3], [0, -9]) is True, "[0, -9] is -3 times [0, 3]"
+          assert is_multiple([0, 3], [1, 3]) is False, "[1, 3] is not a multiple of [0, 3]"
+          assert is_multiple([1, 1], [1, -1]) is False, "[1, -1] is not a multiple of [1, 1]"
+          assert is_multiple([1, 2], [2, 1]) is False, "[2, 1] is not a multiple of [1, 2]"
+          assert is_multiple([3, 0], [-12, 0]) is True, "[-12, 0] is -4 times [3, 0]"
+          assert output.strip() == "True False", "The program should print True False"
+        wrong:
+          - "def is_multiple(v, target):\n    return v[0] * target[0] - v[1] * target[1] == 0\n\nprint(True, False)\n"
+          - "def is_multiple(v, target):\n    return v[0] * target[1] + v[1] * target[0] == 0\n\nprint(True, False)\n"
+          - "def is_multiple(v, target):\n    return target[0] % v[0] == 0 and target[1] % v[1] == 0\n\nprint(True, False)\n"
+          - "def is_multiple(v, target):\n    return v[0] * target[1] == v[1] * target[1]\n\nprint(True, False)\n"
+          - "def is_multiple(v, target):\n    return v[0] * target[1] - v[1] * target[0] != 0\n\nprint(True, False)\n"
+        explanation: |
+          `target` is a multiple of `v` exactly when the pair has $D = 0$: $v_1 t_2 - v_2 t_1 = 0$. Each product takes the **first** component of one vector and the **second** of the other. The starter multiplied first by first and second by second, which is a different quantity altogether, one that the next lesson will show to be zero when two vectors are perpendicular, almost the opposite of parallel. The cross-multiplied test is better than comparing the ratios $\frac{t_1}{v_1}$ and $\frac{t_2}{v_2}$, because it never divides, and so it still works when a component of `v` is zero.
+        hints:
+          - Write down D for the two vectors.
+          - Which component of v is multiplied by which component of target?
+          - Each product should cross from the first component of one to the second of the other.
+    - question:
+        id: write-solve2
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `solve2(a, b, target)` for vectors in the plane. It returns the list `[s, t]` with $s\,\mathbf{a} + t\,\mathbf{b} = \text{target}$.
+
+          With $D = a_1 b_2 - a_2 b_1$, the solution is $s = \dfrac{x\,b_2 - y\,b_1}{D}$ and $t = \dfrac{a_1 y - a_2 x}{D}$, where the target is $(x, y)$. If $D$ is 0 there is no single solution, and the function returns `None`.
+        starter: |
+          def solve2(a, b, target):
+              # Replace the next line with your own.
+              return [0, 0]
+
+          print(solve2([2, 1], [1, 3], [7, 11]))
+        solution: |
+          def solve2(a, b, target):
+              d = a[0] * b[1] - a[1] * b[0]
+              if d == 0:
+                  return None
+              s = (target[0] * b[1] - target[1] * b[0]) / d
+              t = (a[0] * target[1] - a[1] * target[0]) / d
+              return [s, t]
+
+          print(solve2([2, 1], [1, 3], [7, 11]))
+        tests: |
+          def _check(a, b, target):
+              got = solve2(a, b, target)
+              assert got is not None and len(got) == 2, "For a = " + str(a) + " and b = " + str(b) + " there is a solution, so return a list of two numbers. You returned " + repr(got)
+              back = [got[0] * a[0] + got[1] * b[0], got[0] * a[1] + got[1] * b[1]]
+              assert abs(back[0] - target[0]) < 1e-9 and abs(back[1] - target[1]) < 1e-9, "With a = " + str(a) + ", b = " + str(b) + " and target " + str(target) + " you returned " + repr(got) + ", and that combination gives " + repr(back)
+          _check([2, 1], [1, 3], [7, 11])
+          _check([1, 1], [1, -1], [5, 1])
+          _check([1, 0], [0, 1], [5, -3])
+          _check([3, 1], [1, 1], [10, 6])
+          _check([0, 2], [5, 0], [10, 8])
+          _check([1.5, 0.5], [0.5, 1], [-2, 3])
+          _check([2, 1], [1, 3], [0, 0])
+          assert solve2([2, 1], [4, 2], [7, 11]) is None, "[2, 1] and [4, 2] are parallel, so return None"
+          assert solve2([2, 1], [4, 2], [6, 3]) is None, "When D is 0 return None, even if the target happens to lie on the line"
+          assert solve2([0, 0], [1, 1], [2, 2]) is None, "With a zero vector D is 0, so return None"
+          assert output.strip() == "[2.0, 3.0]", "The program should print [2.0, 3.0]"
+        wrong:
+          - "def solve2(a, b, target):\n    d = a[0] * b[1] - a[1] * b[0]\n    s = (target[0] * b[1] - target[1] * b[0]) / d\n    t = (a[0] * target[1] - a[1] * target[0]) / d\n    return [s, t]\n\nprint([2.0, 3.0])\n"
+          - "def solve2(a, b, target):\n    d = a[0] * b[1] - a[1] * b[0]\n    if d == 0:\n        return None\n    s = (target[0] * b[1] - target[1] * b[0]) / d\n    t = (a[0] * target[1] - a[1] * target[0]) / d\n    return [t, s]\n\nprint([2.0, 3.0])\n"
+          - "def solve2(a, b, target):\n    d = a[0] * b[0] - a[1] * b[1]\n    if d == 0:\n        return None\n    s = (target[0] * b[1] - target[1] * b[0]) / d\n    t = (a[0] * target[1] - a[1] * target[0]) / d\n    return [s, t]\n\nprint([2.0, 3.0])\n"
+          - "def solve2(a, b, target):\n    d = a[0] * b[1] - a[1] * b[0]\n    if d == 0:\n        return None\n    s = (target[0] * b[1] + target[1] * b[0]) / d\n    t = (a[0] * target[1] + a[1] * target[0]) / d\n    return [s, t]\n\nprint([2.0, 3.0])\n"
+          - "def solve2(a, b, target):\n    d = a[0] * b[1] - a[1] * b[0]\n    if d == 0:\n        return None\n    return [target[0] / a[0], target[1] / b[1]]\n\nprint([2.0, 3.0])\n"
+        explanation: |
+          The function is the general solution of the lesson, typed in. $D$ is computed first, because it decides whether there is anything to compute: when the two vectors are parallel there is either no recipe for the target or infinitely many, and the honest return value is `None`. Otherwise the two formulas give the one pair of coefficients. The tests do not compare your numbers with stored answers. They form $s\mathbf{a} + t\mathbf{b}$ from what you return and check that it lands on the target, which is the definition of being right. The function converts coordinates in the standard basis into coordinates in the basis $\mathbf{a}, \mathbf{b}$.
+        hints:
+          - Compute d = a[0] * b[1] - a[1] * b[0] first, and return None if it is 0.
+          - s is (target[0] * b[1] - target[1] * b[0]) / d.
+          - t is (a[0] * target[1] - a[1] * target[0]) / d.
+    - question:
+        id: work-predictions
+        type: choice
+        system: s2
+        prompt: |
+          A model predicts a value for each of three houses as $\hat{\mathbf{y}} = w_1\mathbf{x}_1 + w_2\mathbf{x}_2$, with feature vectors $\mathbf{x}_1 = (1, 0, 1)$ and $\mathbf{x}_2 = (0, 1, 1)$. The true values are $\mathbf{y} = (2, 3, 6)$. Can any choice of weights make the predictions exactly right?
+        options:
+          - "Yes: $w_1 = 2$ and $w_2 = 3$."
+          - "No. Any combination has the form $(w_1, w_2, w_1 + w_2)$, so its third component is the sum of the first two, and $2 + 3 \\ne 6$."
+          - "Yes, with large enough weights."
+          - "No, because three houses need three weights whatever the features are."
+        answer: 1
+        explanation: |
+          $w_1(1, 0, 1) + w_2(0, 1, 1) = (w_1, w_2, w_1 + w_2)$. To match the first two houses the weights must be 2 and 3, and then the third prediction is forced to be 5, not 6. The target is not in the span of the features. That span is a plane in $\mathbb{R}^3$, and $\mathbf{y}$ sits just off it. The best the model can do is the point of the plane closest to $\mathbf{y}$, and the gap that remains is its error. A model's features decide what it can express, and training only chooses among those possibilities.
+        hints:
+          - Write out the combination with letters for the weights.
+          - What relation holds among its three components?
+          - Does the target satisfy that relation?
+    - question:
+        id: work-analogy
+        type: choice
+        system: s2
+        prompt: |
+          Inside a language model, words are vectors. Suppose, in a toy version with two components, $\text{king} = (5, 1)$, $\text{man} = (3, 1)$ and $\text{woman} = (3, 4)$. What is $\text{king} - \text{man} + \text{woman}$, and what kind of expression is it?
+        options:
+          - "$(5, 4)$, a linear combination of the three vectors with coefficients $1, -1, 1$"
+          - "$(11, 6)$, their sum"
+          - "$(5, 4)$, which is not a linear combination because of the minus sign"
+          - "$(-1, 4)$, a linear combination with coefficients $1, 1, -1$"
+        answer: 0
+        explanation: |
+          $(5, 1) - (3, 1) + (3, 4) = (5 - 3 + 3,\; 1 - 1 + 4) = (5, 4)$. Coefficients may be negative, so this is a linear combination, with coefficients 1, $-1$ and 1. Read as arrows: $\text{king} - \text{man} = (2, 0)$ is the step from "man" to "king", and adding it to "woman" takes the same step from there. In real models, with hundreds of components, the vector nearest the result is often the one for "queen". Directions in such a space can carry meaning, and linear combinations are how they are followed.
+        hints:
+          - Work one component at a time.
+          - Is a coefficient of minus 1 allowed in a linear combination?
+          - What is king minus man, as a step from one point to another?
+  connections:
+    - text: |
+        The puzzle asked what a drone can reach when it may fly only along $\mathbf{a} = (2, 1)$ and $\mathbf{b} = (1, 3)$. Every position it can reach is a linear combination $s\mathbf{a} + t\mathbf{b}$, and the set of all of them is the span of the two vectors. Reaching $(7, 11)$ meant solving two equations for $s$ and $t$, and they gave 2 and 3. Solving with letters showed more: every point of the plane can be reached, in exactly one way, as long as $a_1 b_2 - a_2 b_1$ is not zero. For the second drone, whose $\mathbf{b}$ was twice its $\mathbf{a}$, that number was zero, the span was a single line, and $(7, 11)$ was out of bounds for good.
+
+        So two vectors can do the work of two, or only of one. The same is true of three vectors in space, and of the features of a model, whose span is the set of all predictions the model can ever make. The lesson that makes "genuinely different directions" exact is [[m4.linear-independence]], at the end of this cluster, and the ideas of a basis and of dimension follow in [[m5.basis-and-dimension]]. A linear combination of columns, with the coefficients collected into a vector, is the operation defined in [[m5.matrix-vector-product]], and the span of those columns is studied in [[m5.column-space-and-null-space]].
+
+        One question came up twice and was put off both times. When a target is **not** in a span, which point of the span is nearest to it? "Nearest" needs distances, and the shortest route from a point to a line or a plane meets it at a right angle, so it needs angles too. Lengths you have. Angles between vectors you do not have yet, and neither do you have a quick way to tell from two lists of numbers whether the arrows are perpendicular. One operation supplies all of it: a way of multiplying two vectors to get a single number. That is the next lesson, [[m4.dot-product]].

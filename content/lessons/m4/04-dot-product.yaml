@@ -1,0 +1,579 @@
+concept: m4.dot-product
+minutes: 90
+claim: You can compute the dot product of two vectors and use its rules, explain why it is zero exactly when the vectors are perpendicular, read it as one length times the other's shadow and so as the product of the lengths and the cosine of the angle, and recognise a weighted sum, and a neuron, as a dot product.
+recalls: [m4.linear-combinations-and-span]
+uses: [m4.vector-addition-and-scaling, m4.vectors-as-arrows-and-as-lists, m2.trigonometric-functions-on-the-unit-circle, m2.summation-and-product-notation, m1.coordinates-and-the-plane, m1.quadratics, m3.direct-proof, e0.functions, e0.lists-and-tuples, e0.booleans-and-conditionals, e1.comprehensions-and-iterators, e1.special-methods-and-operator-overloading]
+leads: [m4.norms-and-distance, m4.angle-and-cosine-similarity, m4.projection-onto-a-vector, m5.matrix-vector-product]
+starter: |
+  # Scratch space. Multiply matching components and add. Which pairs give 0?
+  pairs = [([3, 1], [-1, 3]), ([2, 5], [5, -2]), ([4, 1], [1, 4]), ([4, 1], [8, 2])]
+
+  for u, v in pairs:
+      print(u, v, sum([a * b for a, b in zip(u, v)]))
+parts:
+  recall:
+    - text: |
+        [[m4.linear-combinations-and-span]] ended wanting two things that vectors did not yet have: a measure of the angle between two arrows, and a quick test for a right angle. It also met, in a bug, the quantity "first times first plus second times second". Three quick pulls first.
+    - question:
+        id: recall-span
+        type: choice
+        system: s1
+        concepts: [m4.linear-combinations-and-span]
+        prompt: |
+          Do $(2, 1)$ and $(4, 2)$ span the whole plane?
+        options:
+          - "Yes, any two vectors do."
+          - "No. The second is twice the first, so they span only a line."
+          - "Yes, since neither is zero."
+          - "No, because they are not perpendicular."
+        answer: 1
+        explanation: 2 × 2 − 1 × 4 = 0. Two parallel vectors give one direction between them.
+        hints:
+          - Is one a multiple of the other?
+          - Compute the first of a times the second of b, minus the second of a times the first of b.
+    - question:
+        id: recall-length-squared
+        type: numeric
+        system: s1
+        concepts: [m4.vectors-as-arrows-and-as-lists]
+        prompt: |
+          What is the **square** of the length of $(3, 4)$?
+        answer: "25"
+        explanation: 9 + 16. The length itself is 5.
+        hints:
+          - Square each component and add.
+          - Do not take the square root.
+    - question:
+        id: recall-cosine
+        type: numeric
+        system: s1
+        concepts: [m2.trigonometric-functions-on-the-unit-circle]
+        prompt: |
+          What is $\cos 90^\circ$?
+        answer: "0"
+        explanation: At a quarter turn the point on the unit circle is straight above the centre, with nothing across.
+        hints:
+          - The cosine is the distance across.
+          - Where is the point on the unit circle after a quarter turn?
+  puzzle:
+    - text: |
+        Here are three pairs of vectors. In each pair, are the two arrows at right angles to each other?
+
+        $$(3, 1) \text{ and } (-1, 3) \qquad (2, 5) \text{ and } (5, -2) \qquad (4, 1) \text{ and } (1, 4)$$
+
+        You could draw them on squared paper and look. But a look is not a proof, and in seven hundred dimensions there is nothing to draw. **Is there a calculation on the two lists of numbers that says, exactly, whether the arrows are perpendicular?**
+
+        Now something that seems to have nothing to do with it. You buy 3 notebooks, 2 pens and 1 bag, at 40, 30 and 60 rupees each. The bill is
+
+        $$3 \times 40 + 2 \times 30 + 1 \times 60 = 240.$$
+
+        Two lists, one of quantities and one of prices. Multiply matching entries, add the results, get a single number. Every weighted total is computed in this way: a mark from weighted papers, the input to a neuron from its weighted inputs.
+
+        The starter applies that same recipe to pairs of vectors. Run it. The first two pairs give exactly 0, and the third does not.
+
+        **Why should the recipe for a shopping bill detect right angles?**
+  intuition:
+    - text: |
+        Give the recipe a name. The **dot product** of two vectors is the sum of the products of their matching components, written with a dot:
+
+        $$(3, 1) \cdot (-1, 3) = 3 \times (-1) + 1 \times 3 = 0.$$
+
+        Two vectors go in and one **number** comes out. It is not another vector.
+
+        To see what the number means, take the simplest case. Let $\mathbf{a}$ lie along the horizontal axis, $\mathbf{a} = (3, 0)$, and let $\mathbf{b} = (b_1, b_2)$ be anything. Then
+
+        $$\mathbf{a} \cdot \mathbf{b} = 3 \times b_1 + 0 \times b_2 = 3\,b_1.$$
+
+        The second component of $\mathbf{b}$, the part of it that goes straight up, at right angles to $\mathbf{a}$, has been multiplied by 0 and thrown away. What survives is $b_1$: **how far $\mathbf{b}$ goes in the direction of $\mathbf{a}$**. Imagine a light shining straight down onto the horizontal axis. $b_1$ is the length of the **shadow** that $\mathbf{b}$ casts on the line of $\mathbf{a}$.
+
+        So the dot product is the length of $\mathbf{a}$ times the shadow of $\mathbf{b}$ on it. It measures how much the two vectors **go the same way**.
+
+        - If $\mathbf{b}$ leans along $\mathbf{a}$, the shadow falls forwards and the product is positive.
+        - If $\mathbf{b}$ is at a right angle to $\mathbf{a}$, it casts no shadow, and the product is **zero**.
+        - If $\mathbf{b}$ leans back against $\mathbf{a}$, the shadow falls behind the origin and the product is negative.
+
+        Turn $\mathbf{b}$ round in the figure and watch the shadow and the number together.
+    - figure: dot-product
+      props: { angle: 45, length: 2 }
+    - text: |
+        The product is greatest when the arrows are in line, falls to zero at a right angle, and is most negative when they are opposed. Lengthening $\mathbf{b}$ lengthens its shadow in proportion.
+
+        That is the picture when $\mathbf{a}$ lies along an axis. The claim to be established is that it is the picture always, for two arrows at any tilt, because the dot product depends only on the two lengths and the angle between them, and not on how the pair is placed.
+  derivation:
+    - text: |
+        **Definition.** For $\mathbf{u}, \mathbf{v} \in \mathbb{R}^n$,
+
+        $$\mathbf{u} \cdot \mathbf{v} = u_1 v_1 + u_2 v_2 + \dots + u_n v_n = \sum_{i=1}^{n} u_i v_i.$$
+
+        It is also called the **inner product** or the scalar product, and in Python it is one line:
+
+        ```python
+        def dot(u, v):
+            return sum([a * b for a, b in zip(u, v)])
+        ```
+
+        **Rules.** Each follows from the definition by looking at one term of the sum.
+
+        | Rule | Statement |
+        | --- | --- |
+        | order does not matter | $\mathbf{u} \cdot \mathbf{v} = \mathbf{v} \cdot \mathbf{u}$ |
+        | it distributes over addition | $\mathbf{u} \cdot (\mathbf{v} + \mathbf{w}) = \mathbf{u} \cdot \mathbf{v} + \mathbf{u} \cdot \mathbf{w}$ |
+        | scalars come out | $(c\,\mathbf{u}) \cdot \mathbf{v} = c\,(\mathbf{u} \cdot \mathbf{v})$ |
+        | a vector with itself | $\mathbf{v} \cdot \mathbf{v} = v_1^2 + \dots + v_n^2 = \lVert \mathbf{v} \rVert^2$ |
+
+        The last one ties the dot product to length: $\lVert \mathbf{v} \rVert = \sqrt{\mathbf{v} \cdot \mathbf{v}}$. With the first three, expressions in dot products can be multiplied out exactly like brackets in algebra.
+
+        **Expanding a squared length.** Do that to the vector $\mathbf{u} - \mathbf{v}$:
+
+        $$\lVert \mathbf{u} - \mathbf{v} \rVert^2 = (\mathbf{u} - \mathbf{v}) \cdot (\mathbf{u} - \mathbf{v}) = \mathbf{u} \cdot \mathbf{u} - 2\,\mathbf{u} \cdot \mathbf{v} + \mathbf{v} \cdot \mathbf{v}.$$
+
+        $$\lVert \mathbf{u} - \mathbf{v} \rVert^2 = \lVert \mathbf{u} \rVert^2 + \lVert \mathbf{v} \rVert^2 - 2\,\mathbf{u} \cdot \mathbf{v}.$$
+
+        It is $(a - b)^2 = a^2 - 2ab + b^2$ for vectors.
+
+        **The right-angle test.** Draw $\mathbf{u}$ and $\mathbf{v}$ from the origin. With the arrow $\mathbf{u} - \mathbf{v}$, which joins their tips, they form a triangle whose three sides have lengths $\lVert \mathbf{u} \rVert$, $\lVert \mathbf{v} \rVert$ and $\lVert \mathbf{u} - \mathbf{v} \rVert$. The theorem of Pythagoras, together with its converse, says that the angle at the origin is a right angle **exactly when**
+
+        $$\lVert \mathbf{u} - \mathbf{v} \rVert^2 = \lVert \mathbf{u} \rVert^2 + \lVert \mathbf{v} \rVert^2.$$
+
+        Compare that with the expansion. The two agree exactly when the extra term vanishes:
+
+        $$\mathbf{u} \perp \mathbf{v} \quad\Longleftrightarrow\quad \mathbf{u} \cdot \mathbf{v} = 0.$$
+
+        That is the answer to the puzzle. The dot product is precisely the amount by which a triangle **fails** to obey Pythagoras, and so it is zero for a right angle and for nothing else. The symbol $\perp$ is read "is perpendicular to". Two vectors with dot product 0 are also called **orthogonal**, and that word is used in any number of dimensions, where the dot product is taken as the definition of a right angle.
+
+        $(3, 1) \cdot (-1, 3) = 0$ and $(2, 5) \cdot (5, -2) = 0$: perpendicular. $(4, 1) \cdot (1, 4) = 8$: not. Notice the pattern in the first two. Swapping the components of $(a, b)$ and changing one sign gives $(-b, a)$, and $(a, b) \cdot (-b, a) = -ab + ab = 0$ always. That is a quarter turn.
+    - question:
+        id: derivation-expand
+        type: choice
+        system: s2
+        prompt: |
+          $\lVert \mathbf{u} \rVert = 3$, $\lVert \mathbf{v} \rVert = 4$ and $\mathbf{u} \cdot \mathbf{v} = 2$. What is $\lVert \mathbf{u} + \mathbf{v} \rVert^2$?
+        options:
+          - "$25$"
+          - "$29$"
+          - "$49$"
+          - "$27$"
+        answer: 1
+        explanation: |
+          $(\mathbf{u} + \mathbf{v}) \cdot (\mathbf{u} + \mathbf{v}) = \mathbf{u} \cdot \mathbf{u} + 2\,\mathbf{u} \cdot \mathbf{v} + \mathbf{v} \cdot \mathbf{v} = 9 + 4 + 16 = 29$. If the vectors were perpendicular the middle term would be 0 and the answer 25, which is Pythagoras. If they pointed the same way the dot product would be 12 and the answer 49, which is $(3 + 4)^2$. The dot product is the one extra piece of information, beyond the two lengths, that decides the length of the sum.
+        hints:
+          - Write the squared length as the dot product of u + v with itself.
+          - Multiply out the brackets with the distributive rule.
+          - The cross term appears twice.
+    - text: |
+        **Lengths, angle and shadow.** Now take any two non-zero vectors, with an angle $\theta$ between them, where $0 \le \theta \le 180^\circ$. Split $\mathbf{v}$ into two parts: one along the line of $\mathbf{u}$, and one at right angles to it.
+
+        $$\mathbf{v} = \mathbf{v}_{\parallel} + \mathbf{v}_{\perp}.$$
+
+        The part along $\mathbf{u}$ is the shadow. Its signed length is $\lVert \mathbf{v} \rVert\cos\theta$: that is the meaning of the cosine, the across-part of an arrow at angle $\theta$ to a chosen direction. So $\mathbf{v}_{\parallel} = \lVert \mathbf{v} \rVert\cos\theta\;\hat{\mathbf{u}}$, where $\hat{\mathbf{u}} = \mathbf{u} / \lVert \mathbf{u} \rVert$ is the unit vector along $\mathbf{u}$. Now use the rules:
+
+        $$\mathbf{u} \cdot \mathbf{v} = \mathbf{u} \cdot \mathbf{v}_{\parallel} + \mathbf{u} \cdot \mathbf{v}_{\perp}.$$
+
+        The second term is 0, by the right-angle test. For the first, $\mathbf{u} \cdot \hat{\mathbf{u}} = \dfrac{\mathbf{u} \cdot \mathbf{u}}{\lVert \mathbf{u} \rVert} = \lVert \mathbf{u} \rVert$. Therefore
+
+        $$\mathbf{u} \cdot \mathbf{v} = \lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert\cos\theta.$$
+
+        The dot product, defined by components, equals the product of the two lengths and the cosine of the angle between them. The right-hand side makes no mention of axes. So if both arrows are turned together, their components all change, and the sum $u_1 v_1 + u_2 v_2$ does not.
+
+        The three cases of the intuition are the three signs of the cosine.
+
+        | Angle | $\cos\theta$ | $\mathbf{u} \cdot \mathbf{v}$ |
+        | --- | --- | --- |
+        | $0^\circ$, same direction | $1$ | $\lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert$, the largest possible |
+        | less than $90^\circ$ | positive | positive |
+        | $90^\circ$ | $0$ | $0$ |
+        | more than $90^\circ$ | negative | negative |
+        | $180^\circ$, opposite | $-1$ | $-\lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert$, the smallest possible |
+
+        Since the cosine lies between $-1$ and 1, the dot product can never be larger in size than the product of the lengths: $\lvert \mathbf{u} \cdot \mathbf{v} \rvert \le \lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert$. This will be proved again, without any picture, in the next lesson.
+
+        **The dot product as a weighted sum.** The shopping bill was $\mathbf{q} \cdot \mathbf{p}$, quantities dotted with prices. Whenever a list of amounts is combined with a list of weights, a dot product is being taken.
+
+        - The sum of a vector's components is its dot product with the vector of ones: $\mathbf{1} \cdot \mathbf{x} = x_1 + \dots + x_n$, and the mean is $\frac{1}{n}\,\mathbf{1} \cdot \mathbf{x}$.
+        - Component $i$ of a vector is its dot product with the standard basis vector: $\mathbf{e}_i \cdot \mathbf{v} = v_i$.
+        - A linear model's prediction for one input $\mathbf{x}$, with weights $\mathbf{w}$, is $\mathbf{w} \cdot \mathbf{x}$.
+
+        The last is the important one. A single **neuron** takes an input vector $\mathbf{x}$, forms
+
+        $$z = \mathbf{w} \cdot \mathbf{x} + b = w_1 x_1 + \dots + w_n x_n + b$$
+
+        with its own weight vector $\mathbf{w}$ and a number $b$ called the bias, and passes $z$ through a function such as the sigmoid. Now both readings of the dot product apply at once. As arithmetic, $z$ is a weighted sum of the inputs. As geometry, $\mathbf{w} \cdot \mathbf{x}$ is large when the input points the same way as the weights, zero when it is perpendicular to them, and negative when it points against them. **A neuron measures how well its input lines up with a direction it has learned.** A network is millions of these.
+
+        This is why you gave your `Vector` class an `@` operator for the dot product: it is the operation that numerical code performs more than any other.
+    - question:
+        id: order-perpendicular
+        type: order
+        system: s2
+        prompt: Put the steps in order to show that $\mathbf{u} \cdot \mathbf{v} = 0$ exactly when $\mathbf{u}$ and $\mathbf{v}$ are perpendicular.
+        steps:
+          - "Draw $\\mathbf{u}$ and $\\mathbf{v}$ from the origin. The third side of the triangle they form is $\\mathbf{u} - \\mathbf{v}$."
+          - "Expand: $\\lVert \\mathbf{u} - \\mathbf{v} \\rVert^2 = \\lVert \\mathbf{u} \\rVert^2 + \\lVert \\mathbf{v} \\rVert^2 - 2\\,\\mathbf{u} \\cdot \\mathbf{v}$."
+          - "By Pythagoras and its converse, the angle at the origin is a right angle exactly when $\\lVert \\mathbf{u} - \\mathbf{v} \\rVert^2 = \\lVert \\mathbf{u} \\rVert^2 + \\lVert \\mathbf{v} \\rVert^2$."
+          - "Comparing the two, that happens exactly when $-2\\,\\mathbf{u} \\cdot \\mathbf{v} = 0$."
+          - "So the vectors are perpendicular exactly when $\\mathbf{u} \\cdot \\mathbf{v} = 0$."
+        explanation: The triangle is set up first, so that its third side is known. Its squared length is expanded by the rules of the dot product. Pythagoras gives the condition for a right angle in terms of the three squared lengths, and comparing that with the expansion isolates the dot product.
+        hints:
+          - The third side must be named before its length can be expanded.
+          - Pythagoras is compared with the expansion, so both must already be written.
+          - The conclusion is last.
+  formal:
+    - text: |
+        **Dot product.** $\mathbf{u} \cdot \mathbf{v} = \sum_{i=1}^{n} u_i v_i$, a scalar.
+
+        **Rules.** $\mathbf{u} \cdot \mathbf{v} = \mathbf{v} \cdot \mathbf{u}$. $\ \mathbf{u} \cdot (\mathbf{v} + \mathbf{w}) = \mathbf{u} \cdot \mathbf{v} + \mathbf{u} \cdot \mathbf{w}$. $\ (c\,\mathbf{u}) \cdot \mathbf{v} = c\,(\mathbf{u} \cdot \mathbf{v})$. $\ \mathbf{v} \cdot \mathbf{v} = \lVert \mathbf{v} \rVert^2 \ge 0$, with equality only for $\mathbf{v} = \mathbf{0}$.
+
+        **Expansion.** $\lVert \mathbf{u} \pm \mathbf{v} \rVert^2 = \lVert \mathbf{u} \rVert^2 \pm 2\,\mathbf{u} \cdot \mathbf{v} + \lVert \mathbf{v} \rVert^2$.
+
+        **Orthogonality.** $\mathbf{u} \perp \mathbf{v}$ exactly when $\mathbf{u} \cdot \mathbf{v} = 0$. In the plane, $(-b, a)$ is perpendicular to $(a, b)$.
+
+        **Geometric form.** For non-zero vectors with angle $\theta$ between them, $\mathbf{u} \cdot \mathbf{v} = \lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert\cos\theta$. The shadow of $\mathbf{v}$ on $\mathbf{u}$ has signed length $\lVert \mathbf{v} \rVert\cos\theta = \dfrac{\mathbf{u} \cdot \mathbf{v}}{\lVert \mathbf{u} \rVert}$.
+
+        **Neuron.** $z = \mathbf{w} \cdot \mathbf{x} + b$.
+  drill:
+    - text: Seconds each. Multiply matching components and add. The answer is a number.
+    - question:
+        id: drill-dot-2d
+        type: numeric
+        system: s1
+        prompt: |
+          What is $(1, 2) \cdot (3, 4)$?
+        answer: "11"
+        explanation: 1 × 3 + 2 × 4.
+        hints:
+          - Multiply the first components, then the second components.
+          - Add the two products.
+    - question:
+        id: drill-dot-zero
+        type: numeric
+        system: s1
+        prompt: |
+          What is $(3, 1) \cdot (-1, 3)$?
+        answer: "0"
+        explanation: −3 + 3. The two vectors are perpendicular.
+        hints:
+          - 3 times minus 1, plus 1 times 3.
+          - The two products cancel.
+    - question:
+        id: drill-dot-3d
+        type: numeric
+        system: s1
+        prompt: |
+          What is $(2, 0, 1) \cdot (3, 5, 4)$?
+        answer: "10"
+        explanation: 6 + 0 + 4.
+        hints:
+          - There are three products to add.
+          - The middle product is 0.
+    - question:
+        id: drill-self
+        type: numeric
+        system: s1
+        prompt: |
+          What is $(3, 4) \cdot (3, 4)$?
+        answer: "25"
+        explanation: 9 + 16, the square of the length.
+        hints:
+          - A vector dotted with itself is the sum of the squares of its components.
+          - That is the square of its length.
+    - question:
+        id: drill-angle-60
+        type: numeric
+        system: s1
+        prompt: |
+          $\lVert \mathbf{u} \rVert = 2$, $\lVert \mathbf{v} \rVert = 3$, and the angle between them is $60^\circ$, where $\cos 60^\circ = \frac{1}{2}$. What is $\mathbf{u} \cdot \mathbf{v}$?
+        answer: "3"
+        explanation: 2 × 3 × ½.
+        hints:
+          - Multiply the two lengths and the cosine.
+          - Half of 6.
+    - question:
+        id: drill-angle-180
+        type: numeric
+        system: s1
+        prompt: |
+          $\lVert \mathbf{u} \rVert = 2$ and $\lVert \mathbf{v} \rVert = 3$, and they point in exactly opposite directions. What is $\mathbf{u} \cdot \mathbf{v}$?
+        answer: "-6"
+        explanation: The cosine of 180° is −1.
+        hints:
+          - The angle between them is 180 degrees.
+          - The cosine of that is minus 1.
+    - question:
+        id: drill-sign
+        type: choice
+        system: s1
+        prompt: |
+          $\mathbf{u} \cdot \mathbf{v} < 0$. What does that say about the angle between them?
+        options: ["It is less than $90^\\circ$", "It is exactly $90^\\circ$", "It is more than $90^\\circ$", "Nothing"]
+        answer: 2
+        explanation: The lengths are positive, so the sign comes from the cosine, which is negative beyond a right angle.
+        hints:
+          - The sign of the dot product is the sign of the cosine.
+          - For which angles is the cosine negative?
+    - question:
+        id: drill-scalar-out
+        type: numeric
+        system: s1
+        prompt: |
+          $\mathbf{u} \cdot \mathbf{v} = 7$. What is $(2\mathbf{u}) \cdot \mathbf{v}$?
+        answer: "14"
+        explanation: A scalar comes out of the dot product.
+        hints:
+          - Every term of the sum is doubled.
+          - Twice 7.
+    - question:
+        id: drill-distribute
+        type: numeric
+        system: s1
+        prompt: |
+          $\mathbf{u} \cdot \mathbf{v} = 3$ and $\mathbf{u} \cdot \mathbf{w} = -5$. What is $\mathbf{u} \cdot (\mathbf{v} + \mathbf{w})$?
+        answer: "-2"
+        explanation: The dot product distributes over addition.
+        hints:
+          - Split the bracket.
+          - 3 plus minus 5.
+    - question:
+        id: drill-quarter-turn
+        type: choice
+        system: s1
+        prompt: |
+          Which vector is perpendicular to $(2, 5)$?
+        options: ["$(5, 2)$", "$(-5, 2)$", "$(2, -5)$", "$(-2, -5)$"]
+        answer: 1
+        explanation: Swap the components and change one sign. 2 × (−5) + 5 × 2 = 0.
+        hints:
+          - Compute the dot product with each option.
+          - Swap the components and change one sign.
+    - question:
+        id: drill-shadow
+        type: numeric
+        system: s1
+        prompt: |
+          $\mathbf{v}$ has length 4 and makes an angle of $60^\circ$ with $\mathbf{u}$. How long is the shadow of $\mathbf{v}$ on the line of $\mathbf{u}$? ($\cos 60^\circ = \frac{1}{2}$.)
+        answer: "2"
+        explanation: The length times the cosine of the angle.
+        hints:
+          - The shadow is the length times the cosine.
+          - Half of 4.
+    - question:
+        id: predict-bill
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          quantities = [3, 2, 1]
+          prices = [40, 30, 60]
+          print(sum([q * p for q, p in zip(quantities, prices)]))
+        output: "240"
+        explanation: 120 + 60 + 60. A bill is the dot product of the quantities with the prices.
+        hints:
+          - Multiply each quantity by its price.
+          - Add the three products.
+    - question:
+        id: predict-dot
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          def dot(u, v):
+              return sum([a * b for a, b in zip(u, v)])
+
+          print(dot([3, 1], [-1, 3]), dot([3, 4], [3, 4]))
+        output: "0 25"
+        explanation: The first pair is perpendicular, −3 + 3. The second is a vector with itself, which gives the square of its length, 9 + 16.
+        hints:
+          - For the first pair the two products are −3 and 3.
+          - For the second, add 9 and 16.
+  work:
+    - text: Slower now. Say what the sign and the size of each dot product tell you before you use it.
+    - question:
+        id: work-find-perpendicular
+        type: numeric
+        system: s2
+        prompt: |
+          For which value of $x$ is $(2, x)$ perpendicular to $(3, -6)$?
+        answer: "1"
+        explanation: |
+          The dot product must be zero: $2 \cdot 3 + x \cdot (-6) = 6 - 6x = 0$, so $x = 1$. Check: $(2, 1) \cdot (3, -6) = 6 - 6 = 0$. Requiring a right angle is one linear equation in the unknown component.
+        hints:
+          - Perpendicular means the dot product is 0.
+          - Write the dot product in terms of x.
+          - Solve 6 − 6x = 0.
+    - question:
+        id: work-neuron
+        type: numeric
+        system: s2
+        prompt: |
+          A neuron has weights $\mathbf{w} = (0.5, -1, 2)$ and bias $b = -1$. Its input is $\mathbf{x} = (4, 1, 0.5)$. What is $z = \mathbf{w} \cdot \mathbf{x} + b$?
+        answer: "1"
+        explanation: |
+          $0.5 \cdot 4 + (-1) \cdot 1 + 2 \cdot 0.5 = 2 - 1 + 1 = 2$, and adding the bias gives $2 - 1 = 1$. The first and third inputs pushed the total up, since their weights are positive. The second pushed it down. The bias shifts the result by a fixed amount whatever the input is.
+        hints:
+          - Compute the three products first.
+          - They are 2, minus 1 and 1.
+          - Add the bias at the end.
+    - question:
+        id: write-dot
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `dot(u, v)`. `u` and `v` are lists of numbers of the same size. Return their dot product, the sum of the products of matching components.
+        starter: |
+          def dot(u, v):
+              # Replace the next line with your own.
+              return 0
+
+          print(dot([3, 2, 1], [40, 30, 60]))
+        solution: |
+          def dot(u, v):
+              return sum([a * b for a, b in zip(u, v)])
+
+          print(dot([3, 2, 1], [40, 30, 60]))
+        tests: |
+          assert dot([3, 2, 1], [40, 30, 60]) == 240, "3 * 40 + 2 * 30 + 1 * 60 is 240. You returned " + repr(dot([3, 2, 1], [40, 30, 60]))
+          assert dot([1, 2], [3, 4]) == 11, "1 * 3 + 2 * 4 is 11. You returned " + repr(dot([1, 2], [3, 4]))
+          assert dot([3, 1], [-1, 3]) == 0, "Perpendicular vectors have dot product 0. You returned " + repr(dot([3, 1], [-1, 3]))
+          assert dot([3, 4], [3, 4]) == 25, "A vector dotted with itself gives its squared length. You returned " + repr(dot([3, 4], [3, 4]))
+          assert dot([2, 3], [-2, -3]) == -13, "Opposite vectors have a negative dot product. You returned " + repr(dot([2, 3], [-2, -3]))
+          assert dot([5], [7]) == 35, "With one component it is ordinary multiplication"
+          assert dot([0, 1, 0, 0], [9, 8, 7, 6]) == 8, "Dotting with a standard basis vector picks out one component. You returned " + repr(dot([0, 1, 0, 0], [9, 8, 7, 6]))
+          assert dot([1, 1, 1, 1], [2, 3, 3, 8]) == 16, "Dotting with a vector of ones adds the components. You returned " + repr(dot([1, 1, 1, 1], [2, 3, 3, 8]))
+          assert output.strip() == "240", "The program should print 240"
+        wrong:
+          - "def dot(u, v):\n    return sum(u) * sum(v)\n\nprint(240)\n"
+          - "def dot(u, v):\n    return sum([a + b for a, b in zip(u, v)])\n\nprint(240)\n"
+          - "def dot(u, v):\n    return [a * b for a, b in zip(u, v)]\n\nprint(240)\n"
+          - "def dot(u, v):\n    return u[0] * v[0] + u[1] * v[1]\n\nprint(240)\n"
+          - "def dot(u, v):\n    return sum([abs(a * b) for a, b in zip(u, v)])\n\nprint(240)\n"
+        explanation: |
+          `zip` pairs the matching components, the comprehension multiplies each pair, and `sum` adds the products. The result is a number, not a list. The product of the two sums is a different thing: it multiplies every component of one vector by every component of the other, and only the matching pairs belong in a dot product. Signs must be kept, since a negative product is how the dot product reports two vectors pointing against each other. The tests with a standard basis vector and with a vector of ones show two everyday operations, picking out a component and adding up a list, as special cases.
+        hints:
+          - Pair the components with zip.
+          - Multiply each pair.
+          - Add the products with sum.
+    - question:
+        id: fix-perpendicular
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `perpendicular(u, v)` should return `True` when the two vectors are at right angles and `False` otherwise. The program should print `True False`. It prints `False False`. Fix it.
+        starter: |
+          def perpendicular(u, v):
+              return sum([a + b for a, b in zip(u, v)]) == 0
+
+          print(perpendicular([3, 1], [-1, 3]), perpendicular([4, 1], [1, 4]))
+        solution: |
+          def perpendicular(u, v):
+              return sum([a * b for a, b in zip(u, v)]) == 0
+
+          print(perpendicular([3, 1], [-1, 3]), perpendicular([4, 1], [1, 4]))
+        tests: |
+          assert perpendicular([3, 1], [-1, 3]) is True, "[3, 1] and [-1, 3] are perpendicular: -3 + 3 = 0"
+          assert perpendicular([2, 5], [5, -2]) is True, "[2, 5] and [5, -2] are perpendicular: 10 - 10 = 0"
+          assert perpendicular([4, 1], [1, 4]) is False, "[4, 1] and [1, 4] are not perpendicular: 4 + 4 = 8"
+          assert perpendicular([1, 0, 0], [0, 0, 1]) is True, "Two different axes of space are perpendicular"
+          assert perpendicular([1, 2, 3], [1, 1, -1]) is True, "[1, 2, 3] and [1, 1, -1] are perpendicular: 1 + 2 - 3 = 0"
+          assert perpendicular([1, 2], [-1, -2]) is False, "[1, 2] and [-1, -2] are opposite, not perpendicular, although their components add to 0"
+          assert perpendicular([2, 2], [3, 3]) is False, "Parallel vectors are not perpendicular"
+          assert output.strip() == "True False", "The program should print True False"
+        wrong:
+          - "def perpendicular(u, v):\n    return sum([a + b for a, b in zip(u, v)]) == 0\n\nprint(True, False)\n"
+          - "def perpendicular(u, v):\n    return sum([a * b for a, b in zip(u, v)]) != 0\n\nprint(True, False)\n"
+          - "def perpendicular(u, v):\n    return sum(u) * sum(v) == 0\n\nprint(True, False)\n"
+          - "def perpendicular(u, v):\n    return u[0] * v[1] - u[1] * v[0] == 0\n\nprint(True, False)\n"
+          - "def perpendicular(u, v):\n    return sum([a * b for a, b in zip(u, v)]) == 1\n\nprint(True, False)\n"
+        explanation: |
+          The test for a right angle is a **dot product** of zero, and a dot product multiplies matching components before adding. The starter added them, so it computed the sum of all the components of both vectors, which is zero for a pair such as `[1, 2]` and `[-1, -2]` that point in opposite directions and are certainly not perpendicular. One of the tests uses exactly that pair. Note the difference from the test for parallel vectors in the last lesson, which crossed the components, first with second: $u_1 v_2 - u_2 v_1 = 0$ means parallel, and $u_1 v_1 + u_2 v_2 = 0$ means perpendicular.
+        hints:
+          - Which quantity is zero for perpendicular vectors?
+          - A dot product multiplies matching components.
+          - Change the operation inside the comprehension.
+    - question:
+        id: write-neuron
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `fires(w, x, b)`. It models the simplest kind of neuron. Compute $z = \mathbf{w} \cdot \mathbf{x} + b$ and return 1 if $z > 0$, and 0 otherwise.
+
+          With weights `[1, 1]` and bias `-1.5` the neuron computes "and": it returns 1 only when both inputs are 1.
+        starter: |
+          def fires(w, x, b):
+              # Replace the next line with your own.
+              return 0
+
+          print([fires([1, 1], x, -1.5) for x in [[0, 0], [0, 1], [1, 0], [1, 1]]])
+        solution: |
+          def fires(w, x, b):
+              z = sum([wi * xi for wi, xi in zip(w, x)]) + b
+              if z > 0:
+                  return 1
+              return 0
+
+          print([fires([1, 1], x, -1.5) for x in [[0, 0], [0, 1], [1, 0], [1, 1]]])
+        tests: |
+          _inputs = [[0, 0], [0, 1], [1, 0], [1, 1]]
+          assert [fires([1, 1], x, -1.5) for x in _inputs] == [0, 0, 0, 1], "With weights [1, 1] and bias -1.5 the neuron is 'and': 0, 0, 0, 1. You returned " + repr([fires([1, 1], x, -1.5) for x in _inputs])
+          assert [fires([1, 1], x, -0.5) for x in _inputs] == [0, 1, 1, 1], "With bias -0.5 the same weights give 'or': 0, 1, 1, 1. You returned " + repr([fires([1, 1], x, -0.5) for x in _inputs])
+          assert [fires([-1, -1], x, 0.5) for x in _inputs] == [1, 0, 0, 0], "With weights [-1, -1] and bias 0.5 the neuron fires only for [0, 0]. You returned " + repr([fires([-1, -1], x, 0.5) for x in _inputs])
+          assert fires([0.5, -1, 2], [4, 1, 0.5], -1) == 1, "0.5 * 4 - 1 + 1 - 1 = 1, which is positive, so the answer is 1"
+          assert fires([0.5, -1, 2], [4, 1, 0.5], -2) == 0, "With bias -2 the total is exactly 0, which is not greater than 0, so the answer is 0"
+          assert fires([2], [3], -7) == 0, "2 * 3 - 7 is negative, so the answer is 0"
+          assert fires([1, 2, 3, 4], [0, 0, 0, 0], 0.1) == 1, "With a zero input only the bias is left, and 0.1 is positive"
+          assert output.strip() == "[0, 0, 0, 1]", "The program should print [0, 0, 0, 1]"
+        wrong:
+          - "def fires(w, x, b):\n    z = sum([wi * xi for wi, xi in zip(w, x)])\n    if z > 0:\n        return 1\n    return 0\n\nprint([0, 0, 0, 1])\n"
+          - "def fires(w, x, b):\n    z = sum([wi * xi for wi, xi in zip(w, x)]) + b\n    if z >= 0:\n        return 1\n    return 0\n\nprint([0, 0, 0, 1])\n"
+          - "def fires(w, x, b):\n    z = sum([wi * xi for wi, xi in zip(w, x)]) - b\n    if z > 0:\n        return 1\n    return 0\n\nprint([0, 0, 0, 1])\n"
+          - "def fires(w, x, b):\n    return sum([wi * xi for wi, xi in zip(w, x)]) + b\n\nprint([0, 0, 0, 1])\n"
+          - "def fires(w, x, b):\n    z = sum([wi + xi for wi, xi in zip(w, x)]) + b\n    if z > 0:\n        return 1\n    return 0\n\nprint([0, 0, 0, 1])\n"
+        explanation: |
+          The neuron is a dot product, a bias and a threshold. With weights $(1, 1)$ the dot product counts how many inputs are on: 0, 1, 1 or 2. A bias of $-1.5$ lets the total rise above zero only when the count is 2, which is "and". A bias of $-0.5$ lets it through when the count is at least 1, which is "or". The same weights give different logic with different biases, and the bias is what sets how much agreement with the weight vector is required before the neuron fires. Real networks replace the hard threshold with a smooth function such as the sigmoid, so that the output has a derivative and gradient descent has a slope to follow.
+        hints:
+          - Compute the dot product of w and x with zip and sum.
+          - Add the bias to get z.
+          - Return 1 if z is greater than 0, and 0 otherwise.
+    - question:
+        id: work-reports
+        type: choice
+        system: s2
+        prompt: |
+          The three news reports are $\mathbf{a} = (4, 1)$, $\mathbf{b} = (8, 2)$ and $\mathbf{c} = (1, 4)$. Their dot products with $\mathbf{a}$ are $\mathbf{a} \cdot \mathbf{a} = 17$, $\mathbf{a} \cdot \mathbf{b} = 34$ and $\mathbf{a} \cdot \mathbf{c} = 8$. What do these numbers show?
+        options:
+          - "$\\mathbf{b}$ is more like $\\mathbf{a}$ than $\\mathbf{a}$ is like itself."
+          - "The dot product grows with agreement in direction and also with length. $\\mathbf{b}$ scores 34 only because it is twice as long as $\\mathbf{a}$. To compare directions alone, the lengths must be divided out."
+          - "$\\mathbf{c}$ is perpendicular to $\\mathbf{a}$."
+          - "The dot product is not a useful measure of anything here."
+        answer: 1
+        explanation: |
+          $\mathbf{u} \cdot \mathbf{v} = \lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert\cos\theta$ has three factors. $\mathbf{b} = 2\mathbf{a}$ points exactly the same way as $\mathbf{a}$, with $\cos\theta = 1$, and its score is doubled purely by its length: a longer report with the same proportions of words. $\mathbf{c}$ has the same length as $\mathbf{a}$ and scores 8 out of a possible 17, so it leans partly along $\mathbf{a}$ and is far from perpendicular. As a measure of likeness the raw dot product mixes up direction and size. Dividing by both lengths leaves $\cos\theta$ alone, a measure that ignores size, and that idea has a lesson of its own two steps from here.
+        hints:
+          - Write the dot product as the two lengths times the cosine.
+          - How is b related to a?
+          - Which factor made the score for b larger?
+    - question:
+        id: work-rotation
+        type: choice
+        system: s2
+        prompt: |
+          Two vectors are both turned through the same angle about the origin. Their components all change. What happens to their dot product?
+        options:
+          - "It changes, since it is computed from the components."
+          - "It is unchanged, since it equals the product of the two lengths and the cosine of the angle between them, and turning both arrows together changes none of those."
+          - "It becomes zero."
+          - "It changes sign."
+        answer: 1
+        explanation: |
+          Take $\mathbf{u} = (1, 0)$ and $\mathbf{v} = (1, 1)$, with dot product 1. Turn both a quarter turn, sending $(a, b)$ to $(-b, a)$: they become $(0, 1)$ and $(-1, 1)$, with dot product $0 + 1 = 1$. The components changed and the sum of products did not. That is the content of the geometric formula: the dot product is a fact about the two arrows, and not about the axes used to write them down. It is what allows lengths and angles to be discussed at all in a space where no direction is special.
+        hints:
+          - Try it with (1, 0) and (1, 1), turned a quarter turn.
+          - A quarter turn sends (a, b) to (−b, a).
+          - Which quantities in the geometric formula change when both arrows are turned together?
+  connections:
+    - text: |
+        The puzzle asked why the recipe for a shopping bill, multiply matching entries and add, should detect right angles. Expanding the squared length of $\mathbf{u} - \mathbf{v}$ gave $\lVert \mathbf{u} \rVert^2 + \lVert \mathbf{v} \rVert^2 - 2\,\mathbf{u} \cdot \mathbf{v}$. Pythagoras holds for the triangle exactly when the last term is absent. So the dot product is the amount by which a triangle departs from being right-angled, and it is zero for perpendicular vectors and only for them.
+
+        Splitting one vector into a part along the other and a part at right angles then gave the full meaning: $\mathbf{u} \cdot \mathbf{v} = \lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert\cos\theta$, one length times the other's shadow. Positive when the arrows agree, negative when they oppose, and the same number however the pair is turned. And the bill itself was no accident: every weighted sum is a dot product, including the one at the heart of a neuron, $\mathbf{w} \cdot \mathbf{x} + b$, which measures how well an input lines up with a learned direction.
+
+        The dot product now supports everything this cluster still has to build, and each piece has a lesson. Length came from it, $\lVert \mathbf{v} \rVert = \sqrt{\mathbf{v} \cdot \mathbf{v}}$, and with length comes distance, the bound $\lvert \mathbf{u} \cdot \mathbf{v} \rvert \le \lVert \mathbf{u} \rVert\,\lVert \mathbf{v} \rVert$ proved without a picture, and other ways of measuring size: that is next, in [[m4.norms-and-distance]]. Dividing out the lengths to leave the angle is [[m4.angle-and-cosine-similarity]]. The shadow, made into a vector, is [[m4.projection-onto-a-vector]]. And a whole stack of dot products taken at once, one for each neuron of a layer, is the operation of [[m5.matrix-vector-product]].
