@@ -16,10 +16,11 @@ export const HISTORY_TURNS = 16;
 
 export const tutorModel = () => process.env.AXIOM_TUTOR_MODEL?.trim() || DEFAULT_MODEL;
 
-const EFFORTS = ["low", "medium", "high"] as const;
+// Medium is the least the tutor thinks. Low effort is never used.
+const EFFORTS = ["medium", "high"] as const;
 export function tutorEffort(): (typeof EFFORTS)[number] {
   const value = process.env.AXIOM_TUTOR_EFFORT?.trim() as (typeof EFFORTS)[number] | undefined;
-  return value && EFFORTS.includes(value) ? value : "low";
+  return value && EFFORTS.includes(value) ? value : "medium";
 }
 
 /** The most the tutor may spend in a calendar month. It stops answering once this is reached. */

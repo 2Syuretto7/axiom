@@ -91,12 +91,15 @@ describe("the tutor's cost", () => {
   });
   it("has modest defaults that the environment can change", () => {
     expect(tutorModel()).toBe("claude-opus-5-5");
-    expect(tutorEffort()).toBe("low");
+    expect(tutorEffort()).toBe("medium");
     expect(monthlyBudgetUsd()).toBe(20);
     process.env.AXIOM_TUTOR_MONTHLY_USD = "5";
-    process.env.AXIOM_TUTOR_EFFORT = "nonsense";
+    process.env.AXIOM_TUTOR_EFFORT = "low";
     expect(monthlyBudgetUsd()).toBe(5);
-    expect(tutorEffort()).toBe("low");
+    // Low effort is never used, even if asked for.
+    expect(tutorEffort()).toBe("medium");
+    process.env.AXIOM_TUTOR_EFFORT = "high";
+    expect(tutorEffort()).toBe("high");
     delete process.env.AXIOM_TUTOR_MONTHLY_USD;
     delete process.env.AXIOM_TUTOR_EFFORT;
   });

@@ -54,10 +54,11 @@ test("the tutor answers beside the lesson, knows the lesson and the editor, and 
   // What the model was sent: the teaching style, the learner's place in the curriculum, the lesson, and the editor.
   const sent = (await (await request.get(`${MOCK}/last`)).json()) as {
     url: string;
-    body: { model: string; system: { text: string; cache_control?: unknown }[]; messages: { role: string; content: string }[]; fallbacks: string };
+    body: { model: string; output_config: { effort: string }; system: { text: string; cache_control?: unknown }[]; messages: { role: string; content: string }[]; fallbacks: string };
   };
   expect(sent.url).toContain("/v1/messages");
   expect(sent.body.model).toBe("claude-opus-5-5");
+  expect(sent.body.output_config.effort).toBe("medium");
   const system = sent.body.system[0];
   expect(system.cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
   expect(system.text).toContain("Feynman");
