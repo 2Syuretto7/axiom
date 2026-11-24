@@ -127,7 +127,7 @@ test("a loop that never ends can be stopped, and Python recovers", async ({ page
   await withCode(page, "while True:\n    pass\n");
   await openCode(page, info.project.name);
   await page.getByRole("button", { name: /^Run/ }).click();
-  await page.getByRole("button", { name: "Stop" }).click();
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect(page.getByTestId("output")).toContainText("Stopped.");
   // The worker was replaced; a new run must still work.
   await page.locator(".cm-content").click();
