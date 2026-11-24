@@ -1,0 +1,994 @@
+concept: e3.shortest-paths-and-beam-search
+minutes: 100
+claim: You can find the shortest routes through a graph whose edges have lengths by always settling the nearest unsettled node, explain why that is right when no length is negative, implement it with a heap and recover the route, and search a space too large to explore by keeping only the best few candidates at each step, knowing what that can miss.
+recalls: [e3.topological-sort]
+uses: [e3.trees-and-heaps, e3.graphs-and-traversal, e3.dynamic-programming, e3.sorting, e3.amortised-analysis, e3.hash-tables, e3.stacks-and-queues, e1.complexity-and-big-o, e1.comprehensions-and-iterators, e0.dictionaries-and-sets, e0.lists-and-tuples, e0.loops, m1.logarithms]
+leads: [e6.topological-ordering-of-the-graph, e4.bits-integers-and-ieee-754-floating-point]
+starter: |
+  # Scratch space. Six towns and the roads between them, with lengths in kilometres.
+  # Breadth-first search finds the route from A to F with the fewest roads. How long is it?
+  from collections import deque
+
+  roads = {
+      "A": [("B", 4), ("C", 1)],
+      "B": [("A", 4), ("C", 2), ("D", 5)],
+      "C": [("A", 1), ("B", 2), ("D", 8), ("E", 10)],
+      "D": [("B", 5), ("C", 8), ("E", 2), ("F", 6)],
+      "E": [("C", 10), ("D", 2), ("F", 3)],
+      "F": [("D", 6), ("E", 3)],
+  }
+
+  hops = {"A": 0}
+  km = {"A": 0}
+  queue = deque(["A"])
+  while len(queue) > 0:
+      town = queue.popleft()
+      for other, length in roads[town]:
+          if other not in hops:
+              hops[other] = hops[town] + 1
+              km[other] = km[town] + length
+              queue.append(other)
+  print("to F:", hops["F"], "roads,", km["F"], "km")
+parts:
+  recall:
+    - text: |
+        [[e3.topological-sort]] ended at the edge of what an order fixed in advance can do. A graph with cycles has no node that is safely first. Today, in the last lesson of this cluster, you find shortest routes through such a graph, and then face graphs too large to search at all. Three quick pulls first.
+    - question:
+        id: recall-ready
+        type: choice
+        system: s1
+        concepts: [e3.topological-sort]
+        prompt: |
+          In Kahn's algorithm a job joins the queue
+        options:
+          - "the first time one of its needs is done"
+          - "when its count of unmet needs reaches zero"
+          - "in alphabetical order"
+          - "when the queue is empty"
+        answer: 1
+        explanation: A job is ready only when the last of its needs is done.
+        hints:
+          - How many of its needs must be done before a job can start?
+          - What number is kept for each job?
+    - question:
+        id: recall-heap
+        type: choice
+        system: s1
+        concepts: [e3.trees-and-heaps]
+        prompt: |
+          A heap of $n$ items lets you remove the smallest item in
+        options: ["$O(1)$", "$O(\\log n)$", "$O(n)$", "$O(n \\log n)$"]
+        answer: 1
+        explanation: The smallest is at the root, and repairing the heap after removing it takes one trip down the tree, whose height is about $\log_2 n$.
+        hints:
+          - Where is the smallest item of a heap?
+          - How tall is the tree?
+    - question:
+        id: recall-bfs
+        type: choice
+        system: s1
+        concepts: [e3.graphs-and-traversal]
+        prompt: |
+          Breadth-first search finds, for each node, the route from the start with the
+        options: ["least total length", "fewest edges", "most edges", "smallest names"]
+        answer: 1
+        explanation: It spreads in rings, so a node is first reached by a route with as few edges as possible. It knows nothing of lengths.
+        hints:
+          - In what order does breadth-first search reach the nodes?
+          - Does it ever look at how long an edge is?
+  puzzle:
+    - text: |
+        Six towns are joined by roads, and each road has a length in kilometres. A–B is 4, A–C is 1, C–B is 2, B–D is 5, C–D is 8, C–E is 10, D–E is 2, D–F is 6, and E–F is 3.
+
+        **What is the shortest way from A to F?**
+
+        You have a method for routes. Run the starter, which is the breadth-first search of [[e3.graphs-and-traversal]]. It reports a route of 3 roads, A to B to D to F, which is $4 + 5 + 6 = 15$ km.
+
+        But go A to C to B to D to E to F. That is five roads, and $1 + 2 + 5 + 2 + 3 = 13$ km. The route with the fewest roads is not the shortest. Breadth-first search counts every road as one step, and the direct road from A to B, at 4 km, is longer than the detour through C.
+
+        You could list every route and measure each. Among six towns that is possible. On the road map of a country, the routes between two cities outnumber the atoms in the universe.
+
+        And here is a second problem with the same shape and a far worse size. A language model writes a sentence one word at a time, and for each next word it has fifty thousand choices, each with a probability. The sentences of twenty words number $50000^{20}$. Somewhere among them is the most probable one.
+
+        **How do you find the shortest route without measuring every route? And what can be done when even the places are too many to visit?**
+  intuition:
+    - text: |
+        Imagine pouring water in at A, so that it runs along every road at the same speed, one kilometre a minute. The moment the water first arrives at a town is that town's shortest distance from A, in minutes, because the water tries every route at once and the first arrival is by the shortest.
+
+        Follow the water. It reaches C at minute 1, along the road of 1 km. Where next? Not B by the direct road, which takes 4 minutes. The water that reached C at minute 1 runs on and reaches B at minute 3. So B is reached at 3.
+
+        Notice how that was worked out. At each moment there are towns the water has **reached**, whose times are known for certain, and towns it has not. For each unreached town you can note the earliest arrival you know of so far, by some road out of a reached town. Those notes are provisional. A better way may turn up.
+
+        But one of the notes is safe: **the smallest**. The unreached town with the earliest noted arrival will really be reached then. Any other way to it would have to pass first through some other unreached town, and every one of those is reached later still. So nothing can beat it.
+
+        That gives the method. **Settle the unsettled town with the smallest noted distance. Then look along its roads, and improve the notes of its neighbours where the way through it is shorter. Repeat.** Step through it.
+    - figure: shortest-path
+    - text: |
+        The towns are settled in order of distance: A at 0, C at 1, B at 3, D at 8, E at 10, F at 13. Watch the note on B change from 4 to 3 when C is settled, and the note on F from 14 to 13 when E is.
+
+        This is breadth-first search with one change. There, the next node was the one that had waited longest, and a queue supplied it. Here, the next node is the one with the smallest distance, and you know the structure that supplies the smallest of a changing collection.
+  derivation:
+    - text: |
+        **Graphs with lengths.** A graph whose edges carry numbers is a **weighted graph**, and the numbers are **weights**: lengths, times, costs. In the adjacency list each neighbour is stored with the weight of the edge to it.
+
+        ```python
+        roads = {
+            "A": [("B", 4), ("C", 1)],
+            "B": [("A", 4), ("C", 2), ("D", 5)],
+            "C": [("A", 1), ("B", 2), ("D", 8), ("E", 10)],
+            "D": [("B", 5), ("C", 8), ("E", 2), ("F", 6)],
+            "E": [("C", 10), ("D", 2), ("F", 3)],
+            "F": [("D", 6), ("E", 3)],
+        }
+        ```
+
+        The **length of a path** is the sum of its weights, and the **distance** from one node to another is the least length of any path between them.
+
+        **The method.** Keep for every node a **tentative distance**: the length of the shortest path to it found so far. The start has 0 and every other node has infinity, meaning no path is known. Then repeat:
+
+        1. Among the nodes not yet settled, take the one with the smallest tentative distance, and **settle** it.
+        2. For each edge from it to a neighbour, see whether going through it gives the neighbour a smaller distance. If so, lower the neighbour's tentative distance. This is called **relaxing** the edge.
+
+        This is **Dijkstra's algorithm**, published by Edsger Dijkstra in 1959. Here it is on the six towns. Each row shows the tentative distances after the town on the left is settled, with settled values in bold.
+
+        | settled | A | B | C | D | E | F |
+        | --- | --- | --- | --- | --- | --- | --- |
+        | A | **0** | 4 | 1 | ∞ | ∞ | ∞ |
+        | C | **0** | 3 | **1** | 9 | 11 | ∞ |
+        | B | **0** | **3** | **1** | 8 | 11 | ∞ |
+        | D | **0** | **3** | **1** | **8** | 10 | 14 |
+        | E | **0** | **3** | **1** | **8** | **10** | 13 |
+        | F | **0** | **3** | **1** | **8** | **10** | **13** |
+
+        **Why the smallest is safe.** The whole method rests on one claim: when a node is settled, its tentative distance is its true distance. Here is the argument, and note where it uses a fact about the weights.
+
+        Let $u$ be the unsettled node with the smallest tentative distance, $d$. Consider any path at all from the start to $u$. It begins among the settled nodes and ends at $u$, which is unsettled, so somewhere it leaves the settled nodes for the first time, stepping to an unsettled node $x$. The part of the path up to $x$ has length at least the tentative distance of $x$, because the edge into $x$ from a settled node was relaxed when that node was settled. And the tentative distance of $x$ is at least $d$, since $d$ is the smallest. The rest of the path, from $x$ on to $u$, has length **at least zero**. So the whole path has length at least $d$. No path beats $d$.
+
+        The words "at least zero" are the assumption: **no edge has a negative weight**. With roads that is certain. If some edge could have a negative length, a path might wander off through far nodes and come back shorter, and settling the nearest first would be unsound.
+
+        Set this beside [[e3.topological-sort]]. There, a node could be dealt with when everything it depended on was done, and the arrows said what that was. Here there are no arrows to say so. The distances themselves supply the order: a node's distance depends only on nodes that are nearer, so taking the nodes nearest first is a topological order, discovered as the method runs.
+    - question:
+        id: derive-settle-order
+        type: order
+        system: s2
+        prompt: Dijkstra's algorithm runs on the six towns from A. Put the towns in the order in which they are settled.
+        steps:
+          - "A"
+          - "C"
+          - "B"
+          - "D"
+          - "E"
+          - "F"
+        explanation: |
+          Towns are settled in order of their distance from A: 0, 1, 3, 8, 10 and 13. After A, the notes are B 4 and C 1, so C is next. Settling C lowers B to 3 and notes D at 9 and E at 11, so B is next. Settling B lowers D to 8. Settling D lowers E to 10 and notes F at 14. Settling E lowers F to 13.
+        hints:
+          - The town settled next is always the unsettled one with the smallest tentative distance.
+          - After A is settled, which of its two neighbours is nearer?
+          - Settling C gives a shorter way to B than the direct road.
+    - text: |
+        **The code.** The step "take the unsettled node with the smallest tentative distance" is a job for the heap of [[e3.trees-and-heaps]]. The heap holds pairs `(distance, node)`, and since tuples compare by their first items, the smallest distance comes out first.
+
+        ```python
+        import heapq
+        import math
+
+        def shortest(roads, start):
+            dist = {town: math.inf for town in roads}
+            dist[start] = 0
+            heap = [(0, start)]
+            while len(heap) > 0:
+                d, town = heapq.heappop(heap)
+                if d == dist[town]:
+                    for other, length in roads[town]:
+                        if d + length < dist[other]:
+                            dist[other] = d + length
+                            heapq.heappush(heap, (d + length, other))
+            return dist
+        ```
+
+        One line needs explaining: `if d == dist[town]`. When a node's tentative distance is lowered, the natural thing would be to find its entry in the heap and change it. A heap offers no way to do that. So a **new** entry is pushed with the better distance, and the old one is left where it is. When B's note fell from 4 to 3, the heap held both `(4, "B")` and `(3, "B")`. The entry with 3 comes out first and B is settled. Later the entry with 4 comes out, and it is **stale**: its distance no longer matches `dist["B"]`. The test recognises it and passes over it.
+
+        **The cost.** Count as in [[e3.amortised-analysis]], by what each edge can cause. An edge is relaxed when its tail is settled, which happens once, and a relaxation pushes at most one entry. So the heap never holds more than $\lvert E \rvert$ entries, there are at most $\lvert E \rvert$ pushes and pops, and each costs the logarithm of the heap's size:
+
+        $$O\bigl((\lvert V \rvert + \lvert E \rvert) \log \lvert V \rvert\bigr).$$
+
+        A road map of ten million junctions is searched in a few seconds.
+
+        **One skeleton, three containers.** Look back over the cluster. Depth-first search keeps the nodes to explore in a stack and takes the newest. Breadth-first search keeps them in a queue and takes the oldest. Dijkstra's algorithm keeps them in a heap and takes the nearest. The loop around the container is the same. When every weight is 1, the nearest is the oldest, and Dijkstra's algorithm becomes breadth-first search.
+
+        **Recovering the route.** `dist` gives lengths, not routes. To get the route, record for each node the neighbour **through which its distance was last improved**:
+
+        ```python
+        if d + length < dist[other]:
+            dist[other] = d + length
+            came_from[other] = town
+        ```
+
+        When the method ends, `came_from` holds, for each node, the node before it on a shortest path. Start at the goal and follow `came_from` back to the start: F came from E, E from D, D from B, B from C, C from A. Reverse that and you have the route A, C, B, D, E, F.
+    - question:
+        id: derive-relax
+        type: numeric
+        system: s2
+        prompt: |
+          In the run on the six towns, A and then C have been settled. What is the tentative distance of E at that moment?
+        answer: "11"
+        explanation: |
+          Before C was settled E had no known path. C is at distance 1 and the road from C to E is 10 km long, so relaxing that road notes E at $1 + 10$. The note is provisional. When D is later settled at distance 8, the road from D to E, of 2 km, lowers it to 10, and that is E's true distance. A tentative distance only ever goes down, and becomes final when the node is settled.
+        hints:
+          - Which settled town has a road to E?
+          - Add that town's distance to the length of the road.
+          - C is at distance 1.
+    - text: |
+        **Too large to search.** Now the second half of the puzzle. A language model writes a sentence a word at a time. Given the words so far, it assigns every word of its vocabulary a probability of coming next. The probability of a whole sentence is the product of the probabilities of its words, each given the words before.
+
+        Draw this as a tree. The root is the empty sentence. Each node is a sentence so far, and each edge adds one word. With a vocabulary of fifty thousand, every node has fifty thousand children, and there are $50000^{20}$ sentences of twenty words. The task is to find a sentence of high probability.
+
+        This is a shortest-path problem in disguise. Give the edge that adds a word of probability $p$ the length $-\log p$. Probabilities lie between 0 and 1, so their logarithms are negative and $-\log p$ is positive: a likely word is a short edge and an unlikely word a long one. And since the logarithm of a product is the sum of the logarithms,
+
+        $$-\log(p_1 p_2 \cdots p_k) = (-\log p_1) + (-\log p_2) + \dots + (-\log p_k).$$
+
+        The most probable sentence is the **shortest path** from the root to a leaf, and no length is negative. Dijkstra's algorithm would find it.
+
+        But it cannot be run. Settling one node pushes fifty thousand entries, and the heap would hold more entries than any machine has memory for long before a sentence was finished. The graph is not too large to store, since it is never stored. It is too large to **explore**.
+
+        **Greedy.** The cheapest plan is to take the most probable next word every time. It is fast, with one sentence kept and one step of the model per word. And it can go wrong at the first word. In the figure below, a small model chooses a first word among "the", "a" and "one". "the" is the most probable, at 0.5. But after "the" the probability is spread over several continuations, the best being "cat" at 0.4, for a sentence of probability $0.5 \times 0.4 = 0.2$. After "a", at 0.4, the word "cat" is nearly certain, at 0.9, giving $0.4 \times 0.9 = 0.36$. The best sentence begins with the second-best word.
+
+        **Beam search.** The remedy lies between taking one and keeping all. **Keep the best $k$ sentences so far.** At each step, extend every one of the $k$ by every possible word, and from all those candidates keep the best $k$ again. The $k$ sentences kept are called the **beam**, and $k$ is the **beam width**. Set the width in the figure to 1, 2 and 3.
+    - figure: beam-search
+      props: { width: 1 }
+    - text: |
+        With a width of 1 the beam is greedy, and ends with "the cat" at 0.2. With a width of 2, "a" survives the first step alongside "the", and "a cat" is found at 0.36.
+
+        ```python
+        def beam_search(next_words, width, steps):
+            beam = [(1.0, [])]
+            for _ in range(steps):
+                candidates = []
+                for p, words in beam:
+                    for word, q in next_words(words).items():
+                        candidates.append((p * q, words + [word]))
+                candidates.sort(reverse=True)
+                beam = candidates[:width]
+            return beam
+        ```
+
+        `next_words(words)` stands for the model: given the words so far, it returns a dictionary from each possible next word to its probability. The beam begins with the empty sentence, of probability 1.
+
+        The cost is plain from the loops. Each step extends $k$ sentences by $V$ words: $k \cdot V$ candidates, sorted and cut to $k$. Over $n$ steps that is about $n \cdot k \cdot V$ candidates, where exploring everything needs $V^n$. A width of 5 costs five times what greedy costs.
+
+        What is given up is the guarantee. Beam search is breadth-first search with each ring of the tree cut down to its best $k$ nodes. A sentence dropped from the beam is gone, with everything that would have grown from it. Dijkstra's algorithm never discards a node and is always right. Beam search discards nearly everything and is usually good. No width short of keeping everything makes it certain.
+
+        Real systems make one change to the code above. A product of twenty probabilities is a very small number, and the product of a few hundred is too small for a float to hold at all. So they keep the **sum of the logarithms** of the probabilities in place of the product. The largest sum belongs to the largest product, and sums do not shrink towards zero.
+  formal:
+    - text: |
+        **Weighted graph.** A graph in which each edge has a number, its weight. The length of a path is the sum of the weights of its edges, and the distance between two nodes is the least length of a path between them.
+
+        **Dijkstra's algorithm.** Give the start the tentative distance 0 and every other node $\infty$. Repeatedly settle the unsettled node $u$ of least tentative distance, and for each edge from $u$ to $v$ of weight $w$, replace the tentative distance of $v$ by $\text{dist}(u) + w$ if that is smaller. If no weight is negative, each node's tentative distance when settled is its true distance. With a heap the cost is $O((\lvert V \rvert + \lvert E \rvert) \log \lvert V \rvert)$.
+
+        **Route.** If each node records the node from which its distance was last lowered, following the records back from a node gives a shortest path to it in reverse.
+
+        **Three searches.** Taking the next node from a stack, a queue or a heap ordered by distance gives depth-first search, breadth-first search and Dijkstra's algorithm.
+
+        **Probabilities as lengths.** With each edge of probability $p$ given the length $-\log p$, the path of greatest probability is the path of least length.
+
+        **Beam search.** Keep a set of at most $k$ partial solutions. At each step form every extension of every member, and keep the $k$ best. With $V$ extensions per member and $n$ steps the cost is about $n \cdot k \cdot V$. It is not guaranteed to find the best solution. $k = 1$ is the greedy method.
+  drill:
+    - text: Seconds each. The towns and roads are those of the puzzle, and the small language model is the one in the figure.
+    - question:
+        id: drill-first-note
+        type: numeric
+        system: s1
+        prompt: |
+          A has just been settled, and nothing else. What is the tentative distance of B?
+        answer: "4"
+        explanation: The only way known so far is the direct road from A, of 4 km.
+        hints:
+          - Which roads leave A?
+          - How long is the road from A to B?
+    - question:
+        id: drill-improved
+        type: numeric
+        system: s1
+        prompt: |
+          C has now been settled at distance 1. What is the tentative distance of B?
+        answer: "3"
+        explanation: Through C the way to B is $1 + 2$, which beats the direct road of 4.
+        hints:
+          - How long is the road from C to B?
+          - Add it to the distance of C, and compare with the old note.
+    - question:
+        id: drill-third
+        type: choice
+        system: s1
+        prompt: |
+          A and C are settled. The tentative distances are B 3, D 9 and E 11. Which town is settled next?
+        options: ["B", "D", "E", "F"]
+        answer: 0
+        explanation: The unsettled town with the smallest tentative distance.
+        hints:
+          - Which rule picks the next town?
+          - Which of the three notes is the smallest?
+    - question:
+        id: drill-dist-d
+        type: numeric
+        system: s1
+        prompt: |
+          What is the distance from A to D?
+        answer: "8"
+        explanation: A to C to B to D is $1 + 2 + 5$. The way through C alone is $1 + 8 = 9$.
+        hints:
+          - B is at distance 3. How long is the road from B to D?
+          - Compare with going from C straight to D.
+    - question:
+        id: drill-dist-f
+        type: numeric
+        system: s1
+        prompt: |
+          What is the distance from A to F?
+        answer: "13"
+        explanation: E is at distance 10 and the road from E to F is 3 km. Through D directly it would be $8 + 6 = 14$.
+        hints:
+          - F has roads from D and from E.
+          - Add each road's length to the distance of the town it comes from, and take the smaller.
+    - question:
+        id: drill-roads-on-route
+        type: numeric
+        system: s1
+        prompt: |
+          How many roads are on the shortest route from A to F?
+        answer: "5"
+        explanation: A, C, B, D, E, F. It passes through every town.
+        hints:
+          - F came from E, and E came from D.
+          - Follow the route back to A and count the roads.
+    - question:
+        id: drill-stale
+        type: choice
+        system: s1
+        prompt: |
+          The heap holds `(3, "B")` and `(4, "B")`. The first has been popped and B settled. When `(4, "B")` is popped, the code
+        options:
+          - "settles B again at distance 4"
+          - "sees that 4 is not `dist[\"B\"]`, which is 3, and passes over it"
+          - "raises an error"
+          - "pushes it back onto the heap"
+        answer: 1
+        explanation: The entry is stale. It records a distance that has since been improved, and the test `d == dist[town]` filters it out.
+        hints:
+          - What is dist["B"] by then?
+          - Which line of the code compares the popped distance with it?
+    - question:
+        id: drill-container
+        type: choice
+        system: s1
+        prompt: |
+          Replace the heap in Dijkstra's algorithm by a plain queue, and give every edge the weight 1. The method becomes
+        options: ["depth-first search", "breadth-first search", "merge sort", "binary search"]
+        answer: 1
+        explanation: With equal weights the nearest unsettled node is the one that has waited longest, which is what a queue delivers.
+        hints:
+          - Which search takes the node that has waited longest?
+          - With every edge of weight 1, what does distance count?
+    - question:
+        id: drill-the-cat
+        type: numeric
+        system: s1
+        prompt: |
+          The model gives "the" the probability 0.5 as a first word, and "cat" the probability 0.4 after "the". What is the probability of the sentence "the cat"?
+        answer: "0.2"
+        explanation: The probabilities of the words multiply.
+        hints:
+          - The probability of a sentence is the product of the probabilities of its words.
+          - Multiply the two numbers.
+    - question:
+        id: drill-a-cat
+        type: numeric
+        system: s1
+        prompt: |
+          The model gives "a" the probability 0.4 as a first word, and "cat" the probability 0.9 after "a". What is the probability of the sentence "a cat"?
+        answer: "0.36"
+        explanation: $0.4 \times 0.9$. It is more probable than "the cat", though "a" is the less probable first word.
+        hints:
+          - Multiply the two probabilities.
+          - Four tenths of nine tenths.
+    - question:
+        id: drill-candidates
+        type: numeric
+        system: s1
+        prompt: |
+          A beam of width 2 is extended by one word, and the model has 3 possible next words after any sentence. How many candidates are formed before the cut?
+        answer: "6"
+        explanation: Each of the 2 sentences in the beam is extended by each of the 3 words.
+        hints:
+          - How many ways can one sentence be extended?
+          - Multiply by the number of sentences in the beam.
+    - question:
+        id: drill-greedy-width
+        type: numeric
+        system: s1
+        prompt: |
+          What beam width gives the greedy method?
+        answer: "1"
+        explanation: Keeping only the single best sentence at each step is taking the most probable word each time.
+        hints:
+          - How many sentences does the greedy method keep?
+          - The width is the number of sentences kept.
+    - question:
+        id: predict-heap-tuples
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          import heapq
+
+          heap = []
+          for entry in [(4, "B"), (1, "C"), (3, "B"), (9, "D")]:
+              heapq.heappush(heap, entry)
+          first = heapq.heappop(heap)
+          second = heapq.heappop(heap)
+          print(first, second, len(heap))
+        output: "(1, 'C') (3, 'B') 2"
+        explanation: A heap of tuples gives them out smallest first, comparing by the first item. The entry (4, 'B') is still inside, stale, along with (9, 'D').
+        hints:
+          - Tuples are compared by their first items.
+          - Two of the four entries are removed.
+    - question:
+        id: predict-relax
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          import math
+
+          dist = {"A": 0, "B": 4, "C": 1, "D": math.inf}
+          for other, length in [("A", 1), ("B", 2), ("D", 8)]:
+              if dist["C"] + length < dist[other]:
+                  dist[other] = dist["C"] + length
+          print(dist["A"], dist["B"], dist["D"])
+        output: "0 3 9"
+        explanation: These are the roads out of C being relaxed. Going back to A through C would give 2, which is no improvement on 0. B improves from 4 to $1 + 2$. D improves from infinity to $1 + 8$.
+        hints:
+          - For each road, compare 1 plus its length with the present note.
+          - A note changes only if the new value is smaller.
+  work:
+    - text: Slower now. For each search, say what is kept, what is taken next, and what is thrown away.
+    - question:
+        id: write-shortest
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `shortest(roads, start)`. `roads` is a dictionary from each town to a list of pairs `(other, length)`, one for each road leaving it, and no length is negative. Return a dictionary giving the distance from `start` to every town, with `math.inf` for a town that cannot be reached. Use a heap of `(distance, town)` pairs.
+        starter: |
+          import heapq
+          import math
+
+          def shortest(roads, start):
+              dist = {town: math.inf for town in roads}
+              dist[start] = 0
+              # Fill in the rest.
+              return dist
+
+          roads = {
+              "A": [("B", 4), ("C", 1)],
+              "B": [("A", 4), ("C", 2), ("D", 5)],
+              "C": [("A", 1), ("B", 2), ("D", 8), ("E", 10)],
+              "D": [("B", 5), ("C", 8), ("E", 2), ("F", 6)],
+              "E": [("C", 10), ("D", 2), ("F", 3)],
+              "F": [("D", 6), ("E", 3)],
+          }
+          print(shortest(roads, "A")["F"])
+        solution: |
+          import heapq
+          import math
+
+          def shortest(roads, start):
+              dist = {town: math.inf for town in roads}
+              dist[start] = 0
+              heap = [(0, start)]
+              while len(heap) > 0:
+                  d, town = heapq.heappop(heap)
+                  if d == dist[town]:
+                      for other, length in roads[town]:
+                          if d + length < dist[other]:
+                              dist[other] = d + length
+                              heapq.heappush(heap, (d + length, other))
+              return dist
+
+          roads = {
+              "A": [("B", 4), ("C", 1)],
+              "B": [("A", 4), ("C", 2), ("D", 5)],
+              "C": [("A", 1), ("B", 2), ("D", 8), ("E", 10)],
+              "D": [("B", 5), ("C", 8), ("E", 2), ("F", 6)],
+              "E": [("C", 10), ("D", 2), ("F", 3)],
+              "F": [("D", 6), ("E", 3)],
+          }
+          print(shortest(roads, "A")["F"])
+        tests: |
+          _towns = {"A": [("B", 4), ("C", 1)], "B": [("A", 4), ("C", 2), ("D", 5)], "C": [("A", 1), ("B", 2), ("D", 8), ("E", 10)], "D": [("B", 5), ("C", 8), ("E", 2), ("F", 6)], "E": [("C", 10), ("D", 2), ("F", 3)], "F": [("D", 6), ("E", 3)]}
+          assert shortest(_towns, "A") == {"A": 0, "B": 3, "C": 1, "D": 8, "E": 10, "F": 13}, "From A the distances are A 0, B 3, C 1, D 8, E 10, F 13. You returned " + repr(shortest(_towns, "A"))
+          assert shortest(_towns, "F") == {"F": 0, "E": 3, "D": 5, "B": 10, "C": 12, "A": 13}, "From F the distances are F 0, E 3, D 5, B 10, C 12, A 13. You returned " + repr(shortest(_towns, "F"))
+          _apart = {"P": [("Q", 2)], "Q": [("P", 2)], "R": []}
+          assert shortest(_apart, "P") == {"P": 0, "Q": 2, "R": float("inf")}, "A town that cannot be reached keeps the distance math.inf. You returned " + repr(shortest(_apart, "P"))
+          assert shortest({"S": []}, "S") == {"S": 0}, "A single town is at distance 0 from itself. You returned " + repr(shortest({"S": []}, "S"))
+          _oneway = {"S": [("M", 1), ("G", 9)], "M": [("G", 2)], "G": []}
+          assert shortest(_oneway, "S") == {"S": 0, "M": 1, "G": 3}, "With one-way roads S to M of 1, M to G of 2 and S to G of 9, G is at distance 3. You returned " + repr(shortest(_oneway, "S"))
+          assert shortest(_oneway, "M") == {"S": float("inf"), "M": 0, "G": 2}, "On one-way roads, S cannot be reached from M. You returned " + repr(shortest(_oneway, "M"))
+          _long = {"S": [("G", 10), ("a", 1)], "a": [("b", 1)], "b": [("c", 1)], "c": [("d", 1)], "d": [("G", 1)], "G": []}
+          assert shortest(_long, "S")["G"] == 5, "Five roads of 1 km beat one road of 10 km. You returned " + repr(shortest(_long, "S")["G"])
+          _zero = {"S": [("T", 0), ("U", 5)], "T": [("U", 0)], "U": []}
+          assert shortest(_zero, "S") == {"S": 0, "T": 0, "U": 0}, "Roads of length 0 are allowed. You returned " + repr(shortest(_zero, "S"))
+          assert _towns["A"] == [("B", 4), ("C", 1)], "The dictionary of roads should be left unchanged"
+          assert output.strip() == "13", "The program should print 13"
+        wrong:
+          - |
+            import heapq
+            import math
+            from collections import deque
+
+            def shortest(roads, start):
+                dist = {town: math.inf for town in roads}
+                dist[start] = 0
+                queue = deque([start])
+                while len(queue) > 0:
+                    town = queue.popleft()
+                    for other, length in roads[town]:
+                        if dist[other] == math.inf:
+                            dist[other] = dist[town] + length
+                            queue.append(other)
+                return dist
+
+            print(13)
+          - |
+            import heapq
+            import math
+
+            def shortest(roads, start):
+                dist = {town: math.inf for town in roads}
+                dist[start] = 0
+                heap = [(0, start)]
+                while len(heap) > 0:
+                    d, town = heapq.heappop(heap)
+                    if d == dist[town]:
+                        for other, length in roads[town]:
+                            if length < dist[other]:
+                                dist[other] = length
+                                heapq.heappush(heap, (length, other))
+                return dist
+
+            print(13)
+          - |
+            import heapq
+            import math
+
+            def shortest(roads, start):
+                dist = {town: math.inf for town in roads}
+                dist[start] = 0
+                for other, length in roads[start]:
+                    dist[other] = length
+                return dist
+
+            print(13)
+          - |
+            import heapq
+            import math
+
+            def shortest(roads, start):
+                dist = {town: math.inf for town in roads}
+                dist[start] = 0
+                heap = [(0, start)]
+                while len(heap) > 0:
+                    d, town = heapq.heappop(heap)
+                    if d == dist[town]:
+                        for other, length in roads[town]:
+                            if dist[other] == math.inf:
+                                dist[other] = d + length
+                                heapq.heappush(heap, (d + length, other))
+                return dist
+
+            print(13)
+        explanation: |
+          The heap starts with the start at distance 0. Each pop yields the unsettled town with the smallest tentative distance, or a stale entry, which the test `d == dist[town]` passes over. Settling a town relaxes each road out of it: if the way through this town is shorter than the neighbour's present note, the note is lowered and a new entry pushed. Two faults are worth seeing. Giving a town its distance the first time it is found and never revising it, with a queue or with a heap, is breadth-first thinking: it fixes D at 9, by way of C, when the way through B gives 8. And comparing the length of the road alone, without the distance `d` already travelled, measures each town from its nearest neighbour and not from the start. A town never reached keeps the infinity it began with.
+        hints:
+          - "Start with heap = [(0, start)], and loop while the heap is not empty, popping the smallest pair into d and town."
+          - Go on only if d equals dist[town]. Otherwise the entry is stale.
+          - For each road out of the town, if d + length is smaller than dist[other], store it there and push the pair (d + length, other).
+    - question:
+        id: write-beam
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `beam_search(next_words, width, steps)`. `next_words(words)` plays the model: given the list of words so far, it returns a dictionary from each possible next word to its probability. Begin with the empty sentence, of probability 1. At each of `steps` steps, extend every sentence in the beam by every possible next word, multiplying the probabilities, and keep the `width` most probable. Return the final beam as a list of pairs `(probability, words)`, most probable first.
+        starter: |
+          first = {"the": 0.5, "a": 0.4, "one": 0.1}
+          second = {
+              "the": {"cat": 0.4, "dog": 0.35, "end": 0.25},
+              "a": {"cat": 0.9, "dog": 0.06, "end": 0.04},
+              "one": {"cat": 0.5, "dog": 0.3, "end": 0.2},
+          }
+
+          def next_words(words):
+              if len(words) == 0:
+                  return first
+              return second[words[0]]
+
+          def beam_search(next_words, width, steps):
+              beam = [(1.0, [])]
+              # Fill in the rest.
+              return beam
+
+          for width in [1, 2]:
+              p, words = beam_search(next_words, width, 2)[0]
+              print(width, " ".join(words), round(p, 2))
+        solution: |
+          first = {"the": 0.5, "a": 0.4, "one": 0.1}
+          second = {
+              "the": {"cat": 0.4, "dog": 0.35, "end": 0.25},
+              "a": {"cat": 0.9, "dog": 0.06, "end": 0.04},
+              "one": {"cat": 0.5, "dog": 0.3, "end": 0.2},
+          }
+
+          def next_words(words):
+              if len(words) == 0:
+                  return first
+              return second[words[0]]
+
+          def beam_search(next_words, width, steps):
+              beam = [(1.0, [])]
+              for _ in range(steps):
+                  candidates = []
+                  for p, words in beam:
+                      for word, q in next_words(words).items():
+                          candidates.append((p * q, words + [word]))
+                  candidates.sort(reverse=True)
+                  beam = candidates[:width]
+              return beam
+
+          for width in [1, 2]:
+              p, words = beam_search(next_words, width, 2)[0]
+              print(width, " ".join(words), round(p, 2))
+        tests: |
+          _first = {"the": 0.5, "a": 0.4, "one": 0.1}
+          _second = {"the": {"cat": 0.4, "dog": 0.35, "end": 0.25}, "a": {"cat": 0.9, "dog": 0.06, "end": 0.04}, "one": {"cat": 0.5, "dog": 0.3, "end": 0.2}}
+          def _model(words):
+              if len(words) == 0:
+                  return _first
+              return _second[words[0]]
+          def _show(beam):
+              return [(round(p, 6), list(words)) for p, words in beam]
+          assert _show(beam_search(_model, 1, 2)) == [(0.2, ["the", "cat"])], "With width 1 the beam ends as 'the cat' at 0.2. You returned " + repr(_show(beam_search(_model, 1, 2)))
+          assert _show(beam_search(_model, 2, 2)) == [(0.36, ["a", "cat"]), (0.2, ["the", "cat"])], "With width 2 the beam ends as 'a cat' at 0.36 and 'the cat' at 0.2. You returned " + repr(_show(beam_search(_model, 2, 2)))
+          assert _show(beam_search(_model, 3, 2)) == [(0.36, ["a", "cat"]), (0.2, ["the", "cat"]), (0.175, ["the", "dog"])], "With width 3 the beam ends as 'a cat', 'the cat' and 'the dog'. You returned " + repr(_show(beam_search(_model, 3, 2)))
+          assert _show(beam_search(_model, 2, 1)) == [(0.5, ["the"]), (0.4, ["a"])], "After one step with width 2 the beam is 'the' at 0.5 and 'a' at 0.4. You returned " + repr(_show(beam_search(_model, 2, 1)))
+          assert _show(beam_search(_model, 5, 0)) == [(1.0, [])], "With no steps the beam is the empty sentence at probability 1. You returned " + repr(_show(beam_search(_model, 5, 0)))
+          assert len(beam_search(_model, 100, 2)) == 9, "With a width larger than the number of sentences, all 9 two-word sentences are kept. You returned " + str(len(beam_search(_model, 100, 2)))
+          def _chain(words):
+              if len(words) % 2 == 0:
+                  return {"x": 0.6, "y": 0.3, "z": 0.1}
+              if words[len(words) - 1] == "y":
+                  return {"x": 0.05, "y": 0.9, "z": 0.05}
+              return {"x": 0.4, "y": 0.3, "z": 0.3}
+          def _reference(width, steps):
+              beam = [(1.0, [])]
+              for _k in range(steps):
+                  cands = []
+                  for p, words in beam:
+                      nxt = _chain(words)
+                      for word in nxt:
+                          cands.append((p * nxt[word], words + [word]))
+                  cands.sort(reverse=True)
+                  beam = cands[:width]
+              return beam
+          for _w in [1, 2, 3, 4]:
+              for _s in [2, 3, 4]:
+                  assert _show(beam_search(_chain, _w, _s)) == _show(_reference(_w, _s)), "On a second model, with width " + str(_w) + " and " + str(_s) + " steps, the beam should be " + repr(_show(_reference(_w, _s))) + ". You returned " + repr(_show(beam_search(_chain, _w, _s)))
+          assert output.strip().splitlines() == ["1 the cat 0.2", "2 a cat 0.36"], "The program should print 1 the cat 0.2 and then 2 a cat 0.36"
+        wrong:
+          - |
+            def beam_search(next_words, width, steps):
+                beam = [(1.0, [])]
+                for _ in range(steps):
+                    candidates = []
+                    for p, words in beam:
+                        for word, q in next_words(words).items():
+                            candidates.append((p * q, words + [word]))
+                    candidates.sort(reverse=True)
+                    beam = candidates[:1]
+                return beam
+
+            print("1 the cat 0.2")
+            print("2 a cat 0.36")
+          - |
+            def beam_search(next_words, width, steps):
+                beam = [(1.0, [])]
+                for _ in range(steps):
+                    candidates = []
+                    for p, words in beam:
+                        for word, q in next_words(words).items():
+                            candidates.append((p * q, words + [word]))
+                    candidates.sort()
+                    beam = candidates[:width]
+                return beam
+
+            print("1 the cat 0.2")
+            print("2 a cat 0.36")
+          - |
+            def beam_search(next_words, width, steps):
+                beam = [(1.0, [])]
+                for _ in range(steps):
+                    candidates = []
+                    for p, words in beam:
+                        best = sorted(next_words(words).items(), key=lambda pair: -pair[1])[:width]
+                        for word, q in best:
+                            candidates.append((p * q, words + [word]))
+                    candidates.sort(reverse=True)
+                    beam = candidates
+                return beam
+
+            print("1 the cat 0.2")
+            print("2 a cat 0.36")
+          - |
+            def beam_search(next_words, width, steps):
+                beam = [(1.0, [])]
+                for _ in range(steps):
+                    candidates = []
+                    for p, words in beam:
+                        for word, q in next_words(words).items():
+                            candidates.append((q, words + [word]))
+                    candidates.sort(reverse=True)
+                    beam = candidates[:width]
+                return beam
+
+            print("1 the cat 0.2")
+            print("2 a cat 0.36")
+          - |
+            def beam_search(next_words, width, steps):
+                beam = [(1.0, [])]
+                for _ in range(steps):
+                    candidates = []
+                    for p, words in beam:
+                        for word, q in next_words(words).items():
+                            candidates.append((p * q, words + [word]))
+                    candidates.sort(reverse=True)
+                    beam = candidates
+                return beam[:width]
+
+            print("1 the cat 0.2")
+            print("2 a cat 0.36")
+        explanation: |
+          Each step has three parts: extend, rank, cut. Every sentence in the beam is extended by every next word, its probability multiplied by the word's. The candidates are sorted with the largest probability first, which works because the pairs begin with the probability. The first `width` are kept. The cut must be made across **all** the candidates together. Keeping the best few continuations of each sentence separately lets the beam multiply at every step, and compares no sentence with its rivals. Ranking by the last word's probability alone forgets what the sentence cost to reach. And cutting only at the very end is not a beam search at all: it explores every sentence, which gives the true best here and is impossible at any real size. With width 1 the result is "the cat" at 0.2, the greedy answer. With width 2, "a" is still in the beam after the first step, and "a cat" at 0.36 is found.
+        hints:
+          - In each step, make an empty list of candidates, and for every pair (p, words) in the beam and every word and probability q from next_words(words), append (p * q, words + [word]).
+          - Sort the candidates with the largest first, using sort(reverse=True).
+          - The new beam is the first width candidates. After the last step, return the beam.
+    - question:
+        id: fix-route
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `route(roads, start, goal)` should return the shortest route from `start` to `goal` as a list of towns. You may assume the goal can be reached. For the six towns it should print `A C B D E F`, the route of 13 km. It prints `A C D F`, which is 15 km long. Fix it.
+        starter: |
+          import heapq
+          import math
+
+          def route(roads, start, goal):
+              dist = {town: math.inf for town in roads}
+              dist[start] = 0
+              came_from = {}
+              heap = [(0, start)]
+              while len(heap) > 0:
+                  d, town = heapq.heappop(heap)
+                  if d == dist[town]:
+                      for other, length in roads[town]:
+                          if d + length < dist[other]:
+                              dist[other] = d + length
+                              if other not in came_from:
+                                  came_from[other] = town
+                              heapq.heappush(heap, (d + length, other))
+              path = [goal]
+              while path[len(path) - 1] != start:
+                  path.append(came_from[path[len(path) - 1]])
+              path.reverse()
+              return path
+
+          roads = {
+              "A": [("B", 4), ("C", 1)],
+              "B": [("A", 4), ("C", 2), ("D", 5)],
+              "C": [("A", 1), ("B", 2), ("D", 8), ("E", 10)],
+              "D": [("B", 5), ("C", 8), ("E", 2), ("F", 6)],
+              "E": [("C", 10), ("D", 2), ("F", 3)],
+              "F": [("D", 6), ("E", 3)],
+          }
+          print(" ".join(route(roads, "A", "F")))
+        solution: |
+          import heapq
+          import math
+
+          def route(roads, start, goal):
+              dist = {town: math.inf for town in roads}
+              dist[start] = 0
+              came_from = {}
+              heap = [(0, start)]
+              while len(heap) > 0:
+                  d, town = heapq.heappop(heap)
+                  if d == dist[town]:
+                      for other, length in roads[town]:
+                          if d + length < dist[other]:
+                              dist[other] = d + length
+                              came_from[other] = town
+                              heapq.heappush(heap, (d + length, other))
+              path = [goal]
+              while path[len(path) - 1] != start:
+                  path.append(came_from[path[len(path) - 1]])
+              path.reverse()
+              return path
+
+          roads = {
+              "A": [("B", 4), ("C", 1)],
+              "B": [("A", 4), ("C", 2), ("D", 5)],
+              "C": [("A", 1), ("B", 2), ("D", 8), ("E", 10)],
+              "D": [("B", 5), ("C", 8), ("E", 2), ("F", 6)],
+              "E": [("C", 10), ("D", 2), ("F", 3)],
+              "F": [("D", 6), ("E", 3)],
+          }
+          print(" ".join(route(roads, "A", "F")))
+        tests: |
+          _towns = {"A": [("B", 4), ("C", 1)], "B": [("A", 4), ("C", 2), ("D", 5)], "C": [("A", 1), ("B", 2), ("D", 8), ("E", 10)], "D": [("B", 5), ("C", 8), ("E", 2), ("F", 6)], "E": [("C", 10), ("D", 2), ("F", 3)], "F": [("D", 6), ("E", 3)]}
+          assert route(_towns, "A", "F") == ["A", "C", "B", "D", "E", "F"], "The shortest route from A to F is A, C, B, D, E, F. You returned " + repr(route(_towns, "A", "F"))
+          assert route(_towns, "A", "B") == ["A", "C", "B"], "The shortest route from A to B goes through C. You returned " + repr(route(_towns, "A", "B"))
+          assert route(_towns, "A", "D") == ["A", "C", "B", "D"], "The shortest route from A to D is A, C, B, D. You returned " + repr(route(_towns, "A", "D"))
+          assert route(_towns, "F", "A") == ["F", "E", "D", "B", "C", "A"], "The shortest route from F to A is F, E, D, B, C, A. You returned " + repr(route(_towns, "F", "A"))
+          assert route(_towns, "C", "C") == ["C"], "The route from a town to itself is that town alone. You returned " + repr(route(_towns, "C", "C"))
+          assert route(_towns, "A", "C") == ["A", "C"], "The shortest route from A to C is the direct road. You returned " + repr(route(_towns, "A", "C"))
+          _tri = {"S": [("a", 1), ("G", 5)], "a": [("S", 1), ("G", 10)], "G": [("S", 5), ("a", 10)]}
+          assert route(_tri, "S", "G") == ["S", "G"], "With roads S to a of 1, a to G of 10 and S to G of 5, the shortest route is the direct road. You returned " + repr(route(_tri, "S", "G"))
+          assert output.strip() == "A C B D E F", "The program should print A C B D E F"
+        wrong:
+          - |
+            import heapq
+            import math
+
+            def route(roads, start, goal):
+                dist = {town: math.inf for town in roads}
+                dist[start] = 0
+                came_from = {}
+                heap = [(0, start)]
+                while len(heap) > 0:
+                    d, town = heapq.heappop(heap)
+                    if d == dist[town]:
+                        for other, length in roads[town]:
+                            if d + length < dist[other]:
+                                dist[other] = d + length
+                                came_from[other] = town
+                                heapq.heappush(heap, (d + length, other))
+                path = [goal]
+                while path[len(path) - 1] != start:
+                    path.append(came_from[path[len(path) - 1]])
+                return path
+
+            print("A C B D E F")
+          - |
+            import heapq
+            import math
+            from collections import deque
+
+            def route(roads, start, goal):
+                came_from = {}
+                seen = {start}
+                queue = deque([start])
+                while len(queue) > 0:
+                    town = queue.popleft()
+                    for other, length in roads[town]:
+                        if other not in seen:
+                            seen.add(other)
+                            came_from[other] = town
+                            queue.append(other)
+                path = [goal]
+                while path[len(path) - 1] != start:
+                    path.append(came_from[path[len(path) - 1]])
+                path.reverse()
+                return path
+
+            print("A C B D E F")
+          - |
+            import heapq
+            import math
+
+            def route(roads, start, goal):
+                path = [start]
+                while path[len(path) - 1] != goal:
+                    town = path[len(path) - 1]
+                    best = None
+                    for other, length in roads[town]:
+                        if other not in path and (best is None or length < best[1]):
+                            best = (other, length)
+                    if best is None:
+                        return path
+                    path.append(best[0])
+                return path
+
+            print("A C B D E F")
+        explanation: |
+          `came_from` must record the town through which a distance was **last** improved, because the last improvement is the one that set the final distance. The faulty line records only the first. D was first reached from C, with a note of 9, and later improved through B to 8, but its record still said C. F was first noted from D and later improved through E, and still said D. So the distances were right, 13 for F, and the route traced back was a different and longer one. Every time `dist[other]` is lowered, `came_from[other]` must change with it: the two are one fact and must be updated together. Tracing the route without reversing it gives the towns from goal to start. Breadth-first search gives the route with the fewest roads. Walking from the start along the shortest road each time is the greedy method, which is right on these six towns by luck and takes a road of 1 into a road of 10 on the last test.
+        hints:
+          - Print dist and came_from for D. Through which town was D's final distance of 8 found?
+          - came_from is set the first time a town is reached. What should happen when a better way is found later?
+          - Whenever dist[other] is lowered, set came_from[other] to the town it was lowered through.
+    - question:
+        id: work-negative
+        type: choice
+        system: s2
+        prompt: |
+          Three nodes: S to A has weight 2, S to B has weight 5, and B to A has weight $-4$, all one-way. Dijkstra's algorithm from S settles A first, at distance 2. What is the true distance to A, and what went wrong?
+        options:
+          - "2. Nothing went wrong."
+          - "1, by way of B: $5 - 4$. A was settled as final because every other way to it had to pass through B, which is farther, and the argument assumed that the rest of such a path cannot shorten it. A negative edge breaks exactly that step."
+          - "$-4$, since that is the smallest weight."
+          - "There is no shortest path when a weight is negative."
+        answer: 1
+        explanation: |
+          The proof said: any other path to the nearest unsettled node must first reach some other unsettled node, which is at least as far, and then continue for a length that is at least zero. Here the continuation from B to A has length $-4$, so being farther at B does not prevent being nearer at A. The method has already settled A at 2 and never revisits a settled node, so it reports the wrong distance. Lengths of roads and times are never negative, and neither is $-\log p$ for a probability, which is why the method serves so widely. Where negative weights do arise, as with gains and losses of money, a slower method is used that relaxes every edge again and again until nothing changes.
+        hints:
+          - What is the length of the path from S to B to A?
+          - Which unsettled node did the proof say any other path must pass through, and what did it assume about the rest of the path?
+          - Is the length from B to A at least zero?
+    - question:
+        id: work-beam-cost
+        type: numeric
+        system: s2
+        prompt: |
+          A model has a vocabulary of 50000 words. A beam search of width 4 writes a sentence of 20 words. At each step, every sentence in the beam is extended by every word of the vocabulary. How many candidates are formed in all? Ignore the first step's being smaller.
+        answer: "4000000"
+        explanation: |
+          Each step forms $4 \times 50000 = 200000$ candidates, and there are 20 steps, so 4 million in all. Set that against the $50000^{20}$ sentences there are, a number of 94 digits. Beam search looks at a part of the tree so small that it is hard to express, and in practice it often finds a sentence close to the best, because most of the tree is made of sentences that go wrong early and are rightly dropped. The price is paid in the cases the figure showed, where the best sentence starts badly. Doubling the width doubles the cost and recovers some of those.
+        hints:
+          - How many candidates are formed in one step?
+          - Multiply the width by the size of the vocabulary.
+          - Then multiply by the number of steps.
+    - question:
+        id: work-log-lengths
+        type: choice
+        system: s2
+        prompt: |
+          The most probable sentence is the one whose word probabilities have the greatest product. The lesson turned this into a shortest-path problem by giving a word of probability $p$ the length $-\log p$. Why does that work?
+        options:
+          - "Because logarithms make numbers smaller."
+          - "The logarithm of a product is the sum of the logarithms, so the length of a path is $-\\log$ of its probability. The logarithm is increasing, so a larger probability means a smaller length. And since $p \\le 1$, every length is at least zero, as Dijkstra's algorithm requires."
+          - "Because $-\\log p$ is always a whole number."
+          - "It does not work exactly. It is an approximation."
+        answer: 1
+        explanation: |
+          Three facts about the logarithm do all the work. It turns products into sums, and paths are measured by sums. It is increasing, so the order of probabilities is preserved, and the minus sign turns "largest" into "smallest". And the logarithm of a number between 0 and 1 is negative or zero, so $-\log p$ is never negative. The translation is exact. It has a practical side too: the product of several hundred probabilities is smaller than any float can hold and collapses to zero, while the sum of their logarithms is an ordinary number. You will meet $-\log p$ again as the quantity a language model is trained to make small, where it measures how surprised the model was by the word that actually came next.
+        hints:
+          - What does the logarithm do to a product?
+          - If one probability is larger than another, how do their logarithms compare?
+          - What is the sign of the logarithm of a number between 0 and 1?
+    - question:
+        id: work-three-searches
+        type: choice
+        system: s2
+        prompt: |
+          Depth-first search, breadth-first search and Dijkstra's algorithm share one loop: take a node from a container, look at its neighbours, and put some of them in. What does the choice of container decide, and where does beam search stand?
+        options:
+          - "Nothing. The three searches always visit nodes in the same order."
+          - "It decides which node is taken next: the newest from a stack, the oldest from a queue, the nearest from a heap. Beam search is the breadth-first kind, ring by ring, with a container that holds only the best $k$ of each ring and throws the rest away, trading the guarantee for the ability to run at all."
+          - "It decides how much memory is used, and nothing else."
+          - "A stack is for trees, a queue for graphs and a heap for sorted lists."
+        answer: 1
+        explanation: |
+          The loop is the same and the container sets the order of exploration, which sets what is found. A stack plunges, and finds some path. A queue spreads evenly, and finds paths of fewest edges. A heap keyed by distance spreads according to length, and finds shortest paths. All three keep every node they discover, and so are certain to reach whatever can be reached. Beam search gives that up. Its container has a fixed size, and a node that does not make the cut is forgotten together with all its descendants. That is the only way to search a tree with fifty thousand branches at every node, and it is why its answer is good and not guaranteed. Choosing a data structure, as the whole of this cluster has shown, is choosing what a program can do cheaply, and here it decides what the program can find.
+        hints:
+          - Which node does each container give out next?
+          - Does any of the first three ever throw a discovered node away?
+          - What happens to the descendants of a sentence dropped from the beam?
+  connections:
+    - text: |
+        The puzzle asked for the shortest way from A to F without measuring every route, and for what can be done when the places are too many to visit. Breadth-first search gave 15 km, because it counts roads and not kilometres. Settling always the nearest unsettled town, and improving the notes on its neighbours, gave 13 km by way of every town, and it is right because no road has a negative length: nothing farther away can offer a shorter way back. For the sentences of a language model, which form a tree too vast to explore, a beam keeps the best few at each step, at a cost of width times vocabulary per word, and without a guarantee.
+
+        This last lesson used the whole cluster. The graph is the adjacency list of [[e3.graphs-and-traversal]], a dictionary of arrays. The distances live in a hash table. The nearest town comes from the heap of [[e3.trees-and-heaps]], itself a tree stored in an array. The stale entries are paid for by the accounting of [[e3.amortised-analysis]], one push for each relaxation. The order of settling is the order of [[e3.topological-sort]], discovered on the way. The beam is cut by the sort of [[e3.sorting]]. And a tentative distance improved step by step from nearer nodes is a table of [[e3.dynamic-programming]], filled in order of distance.
+
+        One idea ran through all twelve lessons. A data structure is a decision about what to make cheap: a position, an insertion, a lookup by key, the smallest item, the next thing to explore. An algorithm is a way of arranging work so that nothing is done twice and nothing is examined that an earlier answer has ruled out. Halving, remembering, ordering and keeping only the best are the four moves, and you have now made each of them.
+
+        They are about to be put to use. A neural network is a graph of operations, evaluated in a topological order and differentiated in the reverse of it. Its numbers are held in arrays, laid out side by side in memory as in the first lesson of this cluster, and the grids of numbers called matrices will give the graph itself a new form, a table of which node is joined to which, that can be multiplied. The text a model reads is looked up in a hash table of its vocabulary, and the text it writes is found by the searches of this lesson. From here on, these structures stop being the subject and become the material.
