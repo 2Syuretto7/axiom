@@ -1,0 +1,713 @@
+concept: m5.change-of-basis
+minutes: 95
+claim: You can translate the coordinates of a vector from one basis to another with a matrix and its inverse, derive the matrix that describes a linear map in a new basis as a product of three matrices, read that product as translate, act and translate back, use a well-chosen basis to make a map diagonal and its powers trivial, and say which properties of a matrix belong to the map and which only to the choice of coordinates.
+recalls: [m5.basis-and-dimension]
+uses: [m5.identity-and-inverse, m5.matrix-multiplication-as-composition, m5.matrices-as-linear-maps, m5.transpose, m5.rank, m5.matrix-vector-product, m4.projection-onto-a-vector, m4.dot-product, m4.linear-independence, m10.taylor-approximation, m2.composition-and-inverses, e1.comprehensions-and-iterators, e0.functions, e0.loops, e0.lists-and-tuples]
+leads: [m5.determinant, m6.matrix-of-a-linear-map-and-similarity, m7.orthonormal-bases, m8.eigenvalues-and-eigenvectors, m8.diagonalisation]
+starter: |
+  # Scratch space. One matrix, applied again and again to the same vector.
+  A = [[2, 1], [1, 2]]
+  x = [1, 0]
+
+  for step in range(10):
+      x = [sum([a * b for a, b in zip(row, x)]) for row in A]
+      print(x)
+parts:
+  recall:
+    - text: |
+        [[m5.basis-and-dimension]] gave a town two surveyors, each with a valid system of addresses, and ended by asking how to pass from one system to the other, and what becomes of the matrix of a map when the system changes. Three quick pulls first.
+    - question:
+        id: recall-address
+        type: choice
+        system: s1
+        concepts: [m5.basis-and-dimension]
+        prompt: |
+          With basis $\mathbf{b}_1 = (2, 1)$ and $\mathbf{b}_2 = (-1, 1)$, which point has coordinates $(1, 2)$?
+        options: ['$(1, 2)$', '$(0, 3)$', '$(3, 0)$', '$(4, 1)$']
+        answer: 1
+        explanation: 1 × (2, 1) + 2 × (−1, 1) = (0, 3).
+        hints:
+          - Take 1 of the first basis vector and 2 of the second.
+          - Add them.
+    - question:
+        id: recall-inverse
+        type: choice
+        system: s1
+        concepts: [m5.identity-and-inverse]
+        prompt: |
+          $B$ is invertible and $B\mathbf{c} = \mathbf{v}$. What is $\mathbf{c}$?
+        options: ['$B\mathbf{v}$', '$B^{-1}\mathbf{v}$', '$B^{\mathsf{T}}\mathbf{v}$', '$\mathbf{v}$']
+        answer: 1
+        explanation: Multiply both sides on the left by the inverse of B.
+        hints:
+          - What undoes multiplication by B?
+          - Apply it to both sides.
+    - question:
+        id: recall-columns
+        type: choice
+        system: s1
+        concepts: [m5.matrices-as-linear-maps]
+        prompt: |
+          Column $j$ of the matrix of a linear map is
+        options: ["the image of the j-th unit vector", "the j-th input", "the sum of the outputs", "the j-th row of the inverse"]
+        answer: 0
+        explanation: The matrix records where the map sends each unit vector, one column to each.
+        hints:
+          - How was the matrix of a map built?
+          - Each column is one test run.
+  puzzle:
+    - text: |
+        Run the starter. It applies the matrix with rows $(2, 1)$ and $(1, 2)$ to the vector $(1, 0)$, and then to the result, and again, ten times.
+
+        $$(2, 1), \quad (5, 4), \quad (14, 13), \quad (41, 40), \quad \dots, \quad (29525, 29524).$$
+
+        The numbers grow fast, and by no obvious rule. Each step mixes the two components together, so neither can be followed on its own.
+
+        Now suppose you are asked for the result after a **hundred** steps. A hundred matrix products would do it. But stare at the list for a moment. The two components always differ by exactly 1. And their sums are 3, 9, 27, 81: powers of three.
+
+        So there is a simple pattern hiding in the mixture. Something is being tripled at every step, and something else is being left exactly alone. They are just not the two things you are looking at.
+
+        **What are the two quantities that this matrix treats so simply? How could you have found them? And what does the matrix look like to someone who measures with those quantities in the first place?**
+  intuition:
+    - text: |
+        The pattern suggests looking at the sum and the difference of the components. In vector terms: look along the directions $(1, 1)$ and $(1, -1)$. Apply the matrix to each.
+
+        $$A\,(1, 1) = (3, 3) = 3\,(1, 1), \qquad A\,(1, -1) = (1, -1).$$
+
+        The matrix sends $(1, 1)$ to three times itself, and leaves $(1, -1)$ where it is. Along those two directions it does not mix anything. It stretches one by 3 and the other by 1.
+
+        Those two vectors are independent, so they are a basis of the plane. Call a surveyor who uses them the second surveyor. To her, the starting vector $(1, 0)$ is half of $(1, 1)$ plus half of $(1, -1)$: its address is $(0.5, 0.5)$. And in her addresses, one step of the matrix is: **triple the first number, keep the second.** After ten steps the address is $(0.5 \times 3^{10},\; 0.5)$. After a hundred, $(0.5 \times 3^{100},\; 0.5)$. No matrix products at all.
+
+        To her, the map is the simplest kind there is, a stretch along her own grid lines, like the one in this figure along the usual axes.
+    - figure: linear-map
+      props: { map: stretch, amount: 1 }
+    - text: |
+        Each grid direction is scaled by its own factor and neither leaks into the other. That is what a diagonal matrix does.
+
+        So the same map has two descriptions. To the first surveyor, with the usual axes, it is the matrix with rows $(2, 1)$ and $(1, 2)$, which mixes. To the second, it is the diagonal matrix with entries 3 and 1, which does not. **The map did not change. The coordinates did.**
+
+        Two skills are needed to use this. One is translating a vector's address between the two systems, which the last lesson began. The other is translating the **matrix of a map**. Both come down to the matrix whose columns are the basis vectors, and its inverse. The figure below is the translation of addresses, for the town of the last lesson.
+    - figure: basis-grid
+      props: { c1: 1, c2: 2 }
+  derivation:
+    - text: |
+        **Translating a vector.** Let $\mathbf{b}_1, \dots, \mathbf{b}_n$ be a basis of $\mathbb{R}^n$, and let $B$ be the matrix with those vectors as its columns. A vector whose coordinates in this basis are $\mathbf{c} = (c_1, \dots, c_n)$ is the combination $c_1\mathbf{b}_1 + \dots + c_n\mathbf{b}_n$, which is $B\mathbf{c}$. So, writing $\mathbf{v}$ for the usual components,
+
+        $$\mathbf{v} = B\mathbf{c} \qquad \text{and} \qquad \mathbf{c} = B^{-1}\mathbf{v}.$$
+
+        **$B$ translates from the new coordinates to the usual ones. $B^{-1}$ translates from the usual ones to the new.** It is easy to get this backwards, because $B$ is made from the new basis and yet it produces the *old* coordinates. Remember what its columns are: the new basis vectors, written in the usual way. Feeding it the address $(1, 0)$ returns $\mathbf{b}_1$ in usual components, which is exactly what translating from new to usual should do.
+
+        $B$ is invertible because its columns are a basis. For the town, with $\mathbf{b}_1 = (2, 1)$ and $\mathbf{b}_2 = (-1, 1)$,
+
+        $$B = \begin{pmatrix} 2 & -1 \\ 1 & 1 \end{pmatrix}, \qquad B^{-1} = \frac{1}{3}\begin{pmatrix} 1 & 1 \\ -1 & 2 \end{pmatrix}.$$
+
+        The place $(0, 3)$ has address $B^{-1}(0, 3) = \frac{1}{3}(3, 6) = (1, 2)$, as in the figure.
+
+        To pass between two bases neither of which is the standard one, go through the usual coordinates: if $C$ holds a second basis, an address $\mathbf{c}$ in the first system becomes $C^{-1}B\,\mathbf{c}$ in the second.
+
+        **Translating a map.** Let $f$ be a linear map with the usual matrix $A$, so that $f(\mathbf{v}) = A\mathbf{v}$ in usual components. The second surveyor works entirely in her addresses. She hands over an address $\mathbf{c}$ and wants back the address of $f$ of that place. Follow the place through.
+
+        1. Her address $\mathbf{c}$ is the place $B\mathbf{c}$ in usual components.
+        2. The map sends that place to $A(B\mathbf{c})$.
+        3. The address of the result, in her system, is $B^{-1}(AB\mathbf{c})$.
+
+        So in her coordinates the map is multiplication by
+
+        $$M = B^{-1}AB.$$
+
+        Read it from right to left, as every product is read: **translate in, act, translate back.** Two matrices related in this way, $M = B^{-1}AB$ for some invertible $B$, are called **similar**. Similar matrices are one map seen in two coordinate systems.
+
+        **The columns of $M$.** The first lesson of this cluster built a matrix from a rule: column $j$ is the image of the $j$-th basis vector. That rule still holds, in any basis, if everything is expressed in that basis. Column $j$ of $M$ is $M\mathbf{e}_j = B^{-1}A\,B\mathbf{e}_j = B^{-1}(A\mathbf{b}_j)$:
+
+        $$\text{column } j \text{ of } M = \text{the coordinates, in the new basis, of } f(\mathbf{b}_j).$$
+
+        This is usually the quickest way to find $M$, and it explains the puzzle. For $A$ with rows $(2, 1)$ and $(1, 2)$ and the basis $\mathbf{b}_1 = (1, 1)$, $\mathbf{b}_2 = (1, -1)$:
+
+        - $A\mathbf{b}_1 = 3\,\mathbf{b}_1 + 0\,\mathbf{b}_2$, so the first column of $M$ is $(3, 0)$.
+        - $A\mathbf{b}_2 = 0\,\mathbf{b}_1 + 1\,\mathbf{b}_2$, so the second column is $(0, 1)$.
+
+        $$M = \begin{pmatrix} 3 & 0 \\ 0 & 1 \end{pmatrix}.$$
+
+        You can confirm it by the product. $B$ has columns $(1, 1)$ and $(1, -1)$, its inverse is $\frac{1}{2}$ times the same matrix, and $B^{-1}AB$ multiplies out to the diagonal matrix above.
+
+        **Why a diagonal description is worth having.** Solve $M = B^{-1}AB$ for $A$: multiply on the left by $B$ and on the right by $B^{-1}$, to get $A = BMB^{-1}$. Now square it.
+
+        $$A^2 = (BMB^{-1})(BMB^{-1}) = BM(B^{-1}B)MB^{-1} = BM^2B^{-1}.$$
+
+        The inner $B^{-1}B$ is the identity and drops out. The same happens at every join, however many factors there are:
+
+        $$A^n = BM^nB^{-1}.$$
+
+        And a power of a diagonal matrix is found by raising each diagonal entry to that power. So
+
+        $$A^{10}\,(1, 0) = B\,M^{10}\,B^{-1}(1, 0) = B\begin{pmatrix} 3^{10} & 0 \\ 0 & 1 \end{pmatrix}\begin{pmatrix} 0.5 \\ 0.5 \end{pmatrix} = B\begin{pmatrix} 29524.5 \\ 0.5 \end{pmatrix} = \begin{pmatrix} 29525 \\ 29524 \end{pmatrix}.$$
+
+        Translate in, act ten times in the easy coordinates, translate back. A hundred steps cost no more than ten. This is the general lesson of the puzzle: **a hard computation in one basis may be an easy one in another**, and the art is in finding the basis.
+    - question:
+        id: derivation-order
+        type: choice
+        system: s2
+        prompt: |
+          A map has the usual matrix $A$, and $B$ has a new basis as its columns. A student proposes $BAB^{-1}$ as the matrix of the map in the new coordinates. What is wrong?
+        options:
+          - "Nothing. $BAB^{-1}$ and $B^{-1}AB$ are equal."
+          - "Read right to left, $BAB^{-1}$ applies $B^{-1}$ to the incoming vector, treating a new address as if it were in usual coordinates. A new address must first be translated **to** usual coordinates, which is done by $B$. The matrix is $B^{-1}AB$."
+          - "The inverse should be a transpose."
+          - "$A$ should be on the right."
+        answer: 1
+        explanation: |
+          The matrix next to the incoming vector acts first. The input is an address in the new system, and $A$ understands only usual coordinates, so the first job is to convert new to usual. That is multiplication by $B$, whose columns are the new basis vectors in usual form. Then $A$ acts. Then the result is converted back with $B^{-1}$. The student's product is the right formula for a different question: given a map's matrix $M$ in the new coordinates, find its usual matrix, $A = BMB^{-1}$. The two products are equal only in special cases, since matrices do not commute.
+        hints:
+          - Which factor acts first on the incoming vector?
+          - In which coordinates does the incoming vector arrive?
+          - Which matrix converts new coordinates to usual ones?
+    - text: |
+        **Vectors that are only scaled.** The basis that worked had a special property: each of its vectors was sent by $A$ to a multiple of itself, $A\mathbf{b} = \lambda\,\mathbf{b}$. Such a vector, if not zero, is called an **eigenvector** of $A$, and the multiple $\lambda$ its **eigenvalue**. If a matrix has a basis made of eigenvectors, then in that basis column $j$ of $M$ is $\lambda_j$ times the $j$-th unit vector, and $M$ is diagonal with the eigenvalues on its diagonal.
+
+        In the puzzle the eigenvectors were guessed from a pattern. Finding them systematically, and knowing when enough exist, is a subject in itself and comes later. Not every matrix has such a basis. The shear sends only the horizontal direction to a multiple of itself, and one direction is not a basis of the plane. A quarter turn sends no direction of the plane to a multiple of itself at all.
+
+        **What belongs to the map, and what to the coordinates.** If $A$ and $M = B^{-1}AB$ are the same map in different coordinates, anything true of the map itself must be true of both tables.
+
+        - **Rank.** Multiplying by an invertible matrix changes no rank, since it can be undone, so $\text{rank}(M) = \text{rank}(A)$.
+        - **Invertibility.** If $A$ is invertible, so is $M$, with $M^{-1} = B^{-1}A^{-1}B$.
+        - **The sum of the diagonal entries.** For $A$ it is $2 + 2 = 4$, and for $M$ it is $3 + 1 = 4$. This is no accident. The sum of the diagonal is called the **trace**, and it is the same for similar matrices.
+
+        The individual entries, on the other hand, belong to the coordinates. So does being symmetric, and so does being diagonal. One more number will turn out to belong to the map: the factor by which it scales areas. Here that is $2 \times 2 - 1 \times 1 = 3$ for $A$ and $3 \times 1 = 3$ for $M$.
+
+        **The best-behaved bases.** Suppose the new basis vectors are perpendicular unit vectors, the columns of a matrix $Q$ with $Q^{\mathsf{T}}Q = I$. Then $Q^{-1} = Q^{\mathsf{T}}$, and translating a vector costs nothing but dot products:
+
+        $$\mathbf{c} = Q^{\mathsf{T}}\mathbf{v}, \qquad c_j = \mathbf{q}_j \cdot \mathbf{v}.$$
+
+        Each coordinate is the component of $\mathbf{v}$ along one basis vector, the projection you computed long before matrices. For a slanted basis that shortcut is wrong, and the full inverse is needed. The basis of the puzzle is perpendicular but not of unit length. Divide each vector by its length $\sqrt{2}$ and it becomes of this best kind.
+
+        **A change of basis you have already performed.** Polynomials of degree at most 2 have the basis $1, x, x^2$. They also have the basis $1, (x - 1), (x - 1)^2$. The polynomial $x^2$ has coordinates $(0, 0, 1)$ in the first. In the second,
+
+        $$x^2 = 1 + 2(x - 1) + (x - 1)^2,$$
+
+        so its coordinates are $(1, 2, 1)$. Those numbers are $p(1)$, $p'(1)$ and $\frac{1}{2}p''(1)$. **Taylor expansion about a point is a change of basis**, from powers of $x$ to powers of $x - a$, chosen because in the new basis the behaviour of the function near $a$ can be read off the first few coordinates.
+
+        **Coordinates inside a model.** A hidden layer of a network holds a vector of activations. Between two linear layers the product $W_2W_1$ can be rewritten
+
+        $$W_2W_1 = (W_2B)(B^{-1}W_1)$$
+
+        for **any** invertible $B$. The network computes the same function, yet every hidden number has changed: the hidden vector is now $B^{-1}$ times what it was, the same point in a different basis. So nothing in the function singles out one basis for that hidden space, and what an individual hidden coordinate "means" depends on a choice the function does not make. With a rectifier between the layers the freedom shrinks, because the rectifier acts on each coordinate separately and so cares which directions are the axes. Whether the individual coordinates of a model's inner vectors carry meaning, or only certain directions do, is a live question in understanding what such models have learned.
+    - question:
+        id: order-translate
+        type: order
+        system: s2
+        prompt: Put in order the steps by which a map with usual matrix $A$ acts on an address $\mathbf{c}$ given in the basis whose vectors are the columns of $B$, returning an address in that same basis.
+        steps:
+          - 'Start with the address $\mathbf{c}$ in the new basis.'
+          - 'Convert to usual coordinates by multiplying by $B$: the place is $B\mathbf{c}$.'
+          - 'Apply the map in usual coordinates: the place goes to $AB\mathbf{c}$.'
+          - 'Convert the result to the new basis by multiplying by $B^{-1}$: its address is $B^{-1}AB\mathbf{c}$.'
+          - 'So in the new basis the map is the single matrix $B^{-1}AB$.'
+        explanation: The matrix $A$ can only be applied to usual coordinates, so the address is translated before the map acts and translated back afterwards. Written as a product, the first step stands on the right, next to the vector, which is why the formula reads $B^{-1}AB$ and not the other way round.
+        hints:
+          - A acts on usual coordinates, so a translation must come before it.
+          - The translation back comes after the map has acted.
+          - The single matrix is named at the end.
+  formal:
+    - text: |
+        **Coordinates.** If the columns of $B$ are a basis of $\mathbb{R}^n$, the vector with coordinates $\mathbf{c}$ in that basis is $\mathbf{v} = B\mathbf{c}$, and $\mathbf{c} = B^{-1}\mathbf{v}$.
+
+        **Matrix of a map in a new basis.** If $f$ has the usual matrix $A$, its matrix in the basis $B$ is $M = B^{-1}AB$, and $A = BMB^{-1}$. Column $j$ of $M$ holds the coordinates, in the basis $B$, of $f(\mathbf{b}_j)$.
+
+        **Similar matrices.** $A$ and $M$ are similar if $M = B^{-1}AB$ for some invertible $B$. Similar matrices have the same rank and the same trace, and one is invertible exactly when the other is.
+
+        **Powers.** $A^n = BM^nB^{-1}$. If $M$ is diagonal with entries $\lambda_1, \dots, \lambda_n$, then $M^n$ is diagonal with entries $\lambda_1^n, \dots, \lambda_n^n$.
+
+        **Eigenvectors.** A non-zero $\mathbf{b}$ with $A\mathbf{b} = \lambda\,\mathbf{b}$ is an eigenvector of $A$ with eigenvalue $\lambda$. In a basis of eigenvectors the matrix of the map is diagonal.
+
+        **Perpendicular unit basis.** If $Q^{\mathsf{T}}Q = I$, then $\mathbf{c} = Q^{\mathsf{T}}\mathbf{v}$ and the matrix of the map is $Q^{\mathsf{T}}AQ$.
+  drill:
+    - text: Seconds each. B takes new coordinates to usual ones. Its inverse goes the other way.
+    - question:
+        id: drill-direction
+        type: choice
+        system: s1
+        prompt: |
+          The columns of $B$ are a new basis, and $\mathbf{v}$ holds the usual components of a vector. Its coordinates in the new basis are
+        options: ['$B\mathbf{v}$', '$B^{-1}\mathbf{v}$', '$B^{\mathsf{T}}\mathbf{v}$ always', '$\mathbf{v}$']
+        answer: 1
+        explanation: B converts new to usual, so its inverse converts usual to new.
+        hints:
+          - What does B do to the address (1, 0)?
+          - The other direction needs the inverse.
+    - question:
+        id: drill-first
+        type: numeric
+        system: s1
+        prompt: |
+          With basis $(1, 1)$ and $(1, -1)$, the vector $(3, 1)$ is $c_1\,(1, 1) + c_2\,(1, -1)$. What is $c_1$?
+        answer: "2"
+        explanation: c₁ + c₂ = 3 and c₁ − c₂ = 1. Adding, 2c₁ = 4.
+        hints:
+          - Write one equation for each component.
+          - Add the two equations.
+    - question:
+        id: drill-second
+        type: numeric
+        system: s1
+        prompt: |
+          With basis $(1, 1)$ and $(1, -1)$, the vector $(3, 1)$ is $c_1\,(1, 1) + c_2\,(1, -1)$. What is $c_2$?
+        answer: "1"
+        explanation: c₁ + c₂ = 3 and c₁ − c₂ = 1. Subtracting, 2c₂ = 2.
+        hints:
+          - Write one equation for each component.
+          - Subtract the second equation from the first.
+    - question:
+        id: drill-to-usual
+        type: numeric
+        system: s1
+        prompt: |
+          With basis $\mathbf{b}_1 = (2, 1)$ and $\mathbf{b}_2 = (-1, 1)$, a point has coordinates $(2, 0)$. What is its first component in the usual coordinates?
+        answer: "4"
+        explanation: 2 × (2, 1) + 0 × (−1, 1) = (4, 2).
+        hints:
+          - Take 2 of the first basis vector and none of the second.
+          - Read off the first component.
+    - question:
+        id: drill-formula
+        type: choice
+        system: s1
+        prompt: |
+          A map has the usual matrix $A$. Its matrix in the basis given by the columns of $B$ is
+        options: ['$BAB^{-1}$', '$B^{-1}AB$', '$AB$', '$B^{\mathsf{T}}A$']
+        answer: 1
+        explanation: Translate in with B, act with A, translate back with the inverse of B.
+        hints:
+          - The matrix that acts first stands on the right.
+          - The first job is to convert new coordinates to usual ones.
+    - question:
+        id: drill-read
+        type: choice
+        system: s1
+        prompt: |
+          In $B^{-1}AB\,\mathbf{c}$, what does the factor $B$ do?
+        options: ["It applies the map", "It converts the new coordinates c to usual coordinates", "It converts usual coordinates to new ones", "Nothing"]
+        answer: 1
+        explanation: It acts first, on the address c, and turns it into the usual components of the same place.
+        hints:
+          - Which factor is next to c?
+          - What are the columns of B?
+    - question:
+        id: drill-eigen
+        type: numeric
+        system: s1
+        prompt: |
+          $A\mathbf{b} = 3\mathbf{b}$. Then $A^2\mathbf{b} = k\,\mathbf{b}$ for which number $k$?
+        answer: "9"
+        explanation: A(Ab) = A(3b) = 3 Ab = 9b.
+        hints:
+          - Apply A to 3b.
+          - Scaling passes through a linear map.
+    - question:
+        id: drill-diagonal-power
+        type: choice
+        system: s1
+        prompt: |
+          $M$ is diagonal with entries 3 and 1. What is $M^{10}$?
+        options: ['Diagonal with entries 30 and 10', 'Diagonal with entries $3^{10}$ and 1', 'A matrix with all entries $3^{10}$', 'Diagonal with entries 13 and 11']
+        answer: 1
+        explanation: A diagonal matrix scales each coordinate on its own, so ten applications raise each factor to the tenth power.
+        hints:
+          - What does M do to the first coordinate each time?
+          - What does it do to the second?
+    - question:
+        id: drill-column
+        type: choice
+        system: s1
+        prompt: |
+          Column $j$ of $B^{-1}AB$ holds
+        options: ["the usual components of the j-th basis vector", "the coordinates, in the new basis, of A applied to the j-th basis vector", "row j of A", "the j-th unit vector"]
+        answer: 1
+        explanation: The matrix of a map in any basis records where the basis vectors go, expressed in that basis.
+        hints:
+          - What does the matrix do to the address of the j-th basis vector?
+          - The result is expressed in the new basis.
+    - question:
+        id: drill-own-basis
+        type: choice
+        system: s1
+        prompt: |
+          What are the coordinates of the basis vector $\mathbf{b}_1$ in its own basis $\mathbf{b}_1, \mathbf{b}_2$?
+        options: ['$(1, 0)$', '$(0, 1)$', 'The components of $\mathbf{b}_1$', '$(1, 1)$']
+        answer: 0
+        explanation: It is 1 of itself and 0 of the other.
+        hints:
+          - How much of the first basis vector is needed?
+          - How much of the second?
+    - question:
+        id: drill-orthonormal
+        type: choice
+        system: s1
+        prompt: |
+          The columns of $Q$ are perpendicular unit vectors. The coordinates of $\mathbf{v}$ in that basis are
+        options: ['$Q\mathbf{v}$', '$Q^{\mathsf{T}}\mathbf{v}$', '$\mathbf{v}$', 'not defined']
+        answer: 1
+        explanation: For such a matrix the inverse is the transpose, and each coordinate is a dot product of v with a basis vector.
+        hints:
+          - What is the inverse of Q?
+          - The rows of the transpose are the basis vectors.
+    - question:
+        id: drill-dot
+        type: numeric
+        system: s1
+        prompt: |
+          The perpendicular unit vectors $\mathbf{q}_1 = (0.6, 0.8)$ and $\mathbf{q}_2 = (-0.8, 0.6)$ are a basis. What is the first coordinate of $\mathbf{v} = (1, 0)$ in it?
+        answer: "0.6"
+        explanation: The first coordinate is the dot product of v with the first basis vector, 0.6 × 1 + 0.8 × 0.
+        hints:
+          - For a perpendicular unit basis each coordinate is a dot product.
+          - Dot v with the first basis vector.
+    - question:
+        id: drill-rank
+        type: choice
+        system: s1
+        prompt: |
+          $A$ has rank 2 and $B$ is invertible. The rank of $B^{-1}AB$ is
+        options: ["0", "1", "2", "It depends on B"]
+        answer: 2
+        explanation: Multiplying by an invertible matrix can be undone, so it neither loses nor creates rank. The rank belongs to the map.
+        hints:
+          - Can multiplying by an invertible matrix lose rank?
+          - Similar matrices describe the same map.
+    - question:
+        id: predict-mix
+        type: predict
+        system: s1
+        prompt: The first three steps of the puzzle. What does this show?
+        code: |
+          A = [[2, 1], [1, 2]]
+          x = [1, 0]
+
+          for step in range(3):
+              x = [sum([a * b for a, b in zip(row, x)]) for row in A]
+              print(x)
+        output: |
+          [2, 1]
+          [5, 4]
+          [14, 13]
+        explanation: Each step sends (p, q) to (2p + q, p + 2q). The first step gives the first column of A. Then 4 + 1 and 2 + 2, then 10 + 4 and 5 + 8.
+        hints:
+          - The first application to (1, 0) gives the first column.
+          - Each new component uses both old ones.
+    - question:
+        id: predict-easy
+        type: predict
+        system: s1
+        prompt: The same three steps in the basis (1, 1), (1, −1), translated back each time. What does this show?
+        code: |
+          c = [0.5, 0.5]
+
+          for step in range(3):
+              c = [3 * c[0], 1 * c[1]]
+              print(c, [c[0] + c[1], c[0] - c[1]])
+        output: |
+          [1.5, 0.5] [2.0, 1.0]
+          [4.5, 0.5] [5.0, 4.0]
+          [13.5, 0.5] [14.0, 13.0]
+        explanation: In these coordinates a step triples the first number and keeps the second. Translating back, c₁ (1, 1) + c₂ (1, −1) has components c₁ + c₂ and c₁ − c₂, which reproduce 2, 1 and 5, 4 and 14, 13.
+        hints:
+          - Only the first coordinate changes, and it is tripled.
+          - The second list is the sum and the difference of the two coordinates.
+  work:
+    - text: Slower now. For every product, say in which coordinates each factor expects its input.
+    - question:
+        id: write-in-basis
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `in_basis(A, B, B_inverse)`. `A` is the usual matrix of a linear map, `B` has the vectors of a new basis as its columns, and `B_inverse` is the inverse of `B`, already computed. Return the matrix of the same map in the new basis, as a list of rows.
+
+          `matmul` is given.
+        starter: |
+          def matmul(P, Q):
+              return [[sum([P[i][k] * Q[k][j] for k in range(len(Q))]) for j in range(len(Q[0]))] for i in range(len(P))]
+
+          def in_basis(A, B, B_inverse):
+              # Replace the next line with your own.
+              return A
+
+          print(in_basis([[2, 1], [1, 2]], [[1, 1], [1, -1]], [[0.5, 0.5], [0.5, -0.5]]))
+        solution: |
+          def matmul(P, Q):
+              return [[sum([P[i][k] * Q[k][j] for k in range(len(Q))]) for j in range(len(Q[0]))] for i in range(len(P))]
+
+          def in_basis(A, B, B_inverse):
+              return matmul(B_inverse, matmul(A, B))
+
+          print(in_basis([[2, 1], [1, 2]], [[1, 1], [1, -1]], [[0.5, 0.5], [0.5, -0.5]]))
+        tests: |
+          def _close(got, want):
+              return len(got) == len(want) and all([len(g) == len(w) and all([abs(p - q) < 1e-9 for p, q in zip(g, w)]) for g, w in zip(got, want)])
+          assert _close(in_basis([[2, 1], [1, 2]], [[1, 1], [1, -1]], [[0.5, 0.5], [0.5, -0.5]]), [[3, 0], [0, 1]]), "In the basis [1, 1], [1, -1] the matrix of the puzzle is diagonal with entries 3 and 1"
+          assert _close(in_basis([[2, 1], [1, 2]], [[1, 0], [0, 1]], [[1, 0], [0, 1]]), [[2, 1], [1, 2]]), "In the standard basis the matrix is unchanged"
+          assert _close(in_basis([[1, 1], [0, 1]], [[2, 0], [0, 1]], [[0.5, 0], [0, 1]]), [[1, 0.5], [0, 1]]), "The shear, in the basis [2, 0], [0, 1], has rows [1, 0.5] and [0, 1]"
+          assert _close(in_basis([[1, 1], [0, 1]], [[1, 0], [0, 2]], [[1, 0], [0, 0.5]]), [[1, 2], [0, 1]]), "The shear, in the basis [1, 0], [0, 2], has rows [1, 2] and [0, 1]"
+          assert _close(in_basis([[4, 1], [2, 3]], [[1, 1], [1, -2]], [[2 / 3, 1 / 3], [1 / 3, -1 / 3]]), [[5, 0], [0, 2]]), "Rows [4, 1] and [2, 3] become diagonal with entries 5 and 2 in the basis [1, 1], [1, -2]"
+          assert _close(in_basis([[0, -1], [1, 0]], [[0, 1], [1, 0]], [[0, 1], [1, 0]]), [[0, 1], [-1, 0]]), "With the two axes exchanged, the quarter turn anticlockwise reads as a quarter turn clockwise"
+          assert _close(in_basis([[1, 2], [3, 4]], [[2, -1], [1, 1]], [[1 / 3, 1 / 3], [-1 / 3, 2 / 3]]), [[14 / 3, 2 / 3], [16 / 3, 1 / 3]]), "Rows [1, 2] and [3, 4] in the basis of the town, [2, 1] and [-1, 1]"
+          assert output.strip() == "[[3.0, 0.0], [0.0, 1.0]]", "The program should print [[3.0, 0.0], [0.0, 1.0]]"
+        wrong:
+          - |
+            def matmul(P, Q):
+                return [[sum([P[i][k] * Q[k][j] for k in range(len(Q))]) for j in range(len(Q[0]))] for i in range(len(P))]
+
+            def in_basis(A, B, B_inverse):
+                return matmul(B, matmul(A, B_inverse))
+
+            print([[3.0, 0.0], [0.0, 1.0]])
+          - |
+            def matmul(P, Q):
+                return [[sum([P[i][k] * Q[k][j] for k in range(len(Q))]) for j in range(len(Q[0]))] for i in range(len(P))]
+
+            def in_basis(A, B, B_inverse):
+                return matmul(A, B)
+
+            print([[3.0, 0.0], [0.0, 1.0]])
+          - |
+            def matmul(P, Q):
+                return [[sum([P[i][k] * Q[k][j] for k in range(len(Q))]) for j in range(len(Q[0]))] for i in range(len(P))]
+
+            def in_basis(A, B, B_inverse):
+                return matmul(B_inverse, A)
+
+            print([[3.0, 0.0], [0.0, 1.0]])
+          - |
+            def matmul(P, Q):
+                return [[sum([P[i][k] * Q[k][j] for k in range(len(Q))]) for j in range(len(Q[0]))] for i in range(len(P))]
+
+            def in_basis(A, B, B_inverse):
+                return matmul(A, matmul(B_inverse, B))
+
+            print([[3.0, 0.0], [0.0, 1.0]])
+          - |
+            def matmul(P, Q):
+                return [[sum([P[i][k] * Q[k][j] for k in range(len(Q))]) for j in range(len(Q[0]))] for i in range(len(P))]
+
+            def in_basis(A, B, B_inverse):
+                T = [[B[j][i] for j in range(len(B))] for i in range(len(B))]
+                return matmul(T, matmul(A, B))
+
+            print([[3.0, 0.0], [0.0, 1.0]])
+        explanation: |
+          The body is the formula $B^{-1}AB$, with the factors in the order of the story: $B$ on the right converts an incoming address to usual coordinates, $A$ acts, and $B^{-1}$ on the left converts the result back. Since brackets may be moved, `matmul(matmul(B_inverse, A), B)` is equally good. The order of the factors may not be moved. The reversed product $BAB^{-1}$ answers the opposite question, and it agrees with the right one only by accident, as when $B$ is a multiple of its own inverse. Using the transpose in place of the inverse is correct only when the new basis vectors are perpendicular unit vectors. The basis of the puzzle is perpendicular without having unit length, which is why the test with it tells the two apart.
+        hints:
+          - Which matrix must act first on an address given in the new basis?
+          - The product is the inverse of B, then A, then B, written left to right.
+          - Use matmul twice.
+    - question:
+        id: write-power
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A matrix $A$ becomes diagonal in the basis given by the columns of `B`, with diagonal entries listed in `d`. So $A = BMB^{-1}$, where $M$ is diagonal with entries `d`. Write `power_apply(B, B_inverse, d, n, x)` to return $A^n\mathbf{x}$ as a list, for a whole number `n` that is 0 or more, **without multiplying any two matrices together**.
+
+          Translate `x` into the new basis, scale each coordinate by the right power of its diagonal entry, and translate back.
+        starter: |
+          def power_apply(B, B_inverse, d, n, x):
+              # Replace the next line with your own.
+              return x
+
+          print(power_apply([[1, 1], [1, -1]], [[0.5, 0.5], [0.5, -0.5]], [3, 1], 10, [1, 0]))
+        solution: |
+          def power_apply(B, B_inverse, d, n, x):
+              c = [sum([a * v for a, v in zip(row, x)]) for row in B_inverse]
+              c = [value * factor ** n for value, factor in zip(c, d)]
+              return [sum([a * v for a, v in zip(row, c)]) for row in B]
+
+          print(power_apply([[1, 1], [1, -1]], [[0.5, 0.5], [0.5, -0.5]], [3, 1], 10, [1, 0]))
+        tests: |
+          def _close(got, want):
+              return len(got) == len(want) and all([abs(g - w) < 1e-6 for g, w in zip(got, want)])
+          _B = [[1, 1], [1, -1]]
+          _Bi = [[0.5, 0.5], [0.5, -0.5]]
+          assert _close(power_apply(_B, _Bi, [3, 1], 10, [1, 0]), [29525, 29524]), "Ten steps of the puzzle from [1, 0] give [29525, 29524]"
+          assert _close(power_apply(_B, _Bi, [3, 1], 1, [1, 0]), [2, 1]), "One step from [1, 0] gives the first column of the matrix, [2, 1]"
+          assert _close(power_apply(_B, _Bi, [3, 1], 3, [1, 0]), [14, 13]), "Three steps from [1, 0] give [14, 13]"
+          assert _close(power_apply(_B, _Bi, [3, 1], 0, [7, -2]), [7, -2]), "No steps leave the vector as it was"
+          assert _close(power_apply(_B, _Bi, [3, 1], 2, [0, 1]), [4, 5]), "Two steps from [0, 1] give [4, 5]"
+          assert _close(power_apply(_B, _Bi, [3, 1], 5, [1, -1]), [1, -1]), "[1, -1] is left alone by every step"
+          assert _close(power_apply(_B, _Bi, [3, 1], 4, [1, 1]), [81, 81]), "[1, 1] is tripled by each step, so four steps give [81, 81]"
+          assert _close(power_apply([[1, 1], [1, -2]], [[2 / 3, 1 / 3], [1 / 3, -1 / 3]], [5, 2], 3, [1, 0]), [86, 78]), "For rows [4, 1] and [2, 3], three steps from [1, 0] give [86, 78]"
+          assert _close(power_apply([[1, 0], [0, 1]], [[1, 0], [0, 1]], [2, 0.5], 4, [1, 16]), [16, 1]), "A matrix that is already diagonal scales each component by the fourth power of its entry"
+          assert output.strip() == "[29525.0, 29524.0]", "The program should print [29525.0, 29524.0]"
+        wrong:
+          - |
+            def power_apply(B, B_inverse, d, n, x):
+                c = [sum([a * v for a, v in zip(row, x)]) for row in B]
+                c = [value * factor ** n for value, factor in zip(c, d)]
+                return [sum([a * v for a, v in zip(row, c)]) for row in B_inverse]
+
+            print([29525.0, 29524.0])
+          - |
+            def power_apply(B, B_inverse, d, n, x):
+                c = [sum([a * v for a, v in zip(row, x)]) for row in B_inverse]
+                c = [value * factor * n for value, factor in zip(c, d)]
+                return [sum([a * v for a, v in zip(row, c)]) for row in B]
+
+            print([29525.0, 29524.0])
+          - |
+            def power_apply(B, B_inverse, d, n, x):
+                c = [sum([a * v for a, v in zip(row, x)]) for row in B_inverse]
+                c = [value * factor ** n for value, factor in zip(c, d)]
+                return c
+
+            print([29525.0, 29524.0])
+          - |
+            def power_apply(B, B_inverse, d, n, x):
+                return [value * factor ** n for value, factor in zip(x, d)]
+
+            print([29525.0, 29524.0])
+          - |
+            def power_apply(B, B_inverse, d, n, x):
+                c = [sum([a * v for a, v in zip(row, x)]) for row in B_inverse]
+                c = [value * d[0] ** n for value in c]
+                return [sum([a * v for a, v in zip(row, c)]) for row in B]
+
+            print([29525.0, 29524.0])
+        explanation: |
+          Three lines, for the three factors of $A^n = BM^nB^{-1}$, taken from right to left. $B^{-1}$ translates $\mathbf{x}$ into the basis where the map is diagonal. There each coordinate is simply multiplied by its own entry, $n$ times over, so by that entry to the power $n$. Then $B$ translates back. The cost is two matrix-vector products and a few powers, whatever $n$ is: a million steps cost what one step costs. Scaling the components of $\mathbf{x}$ directly would be right only if $A$ were diagonal to begin with. It is not, and the whole point is that the scaling happens to the coordinates in the **other** basis. Long-run questions about a repeated linear process, such as what happens to a quantity updated by the same matrix at every step of training, are answered in this way: by the sizes of the diagonal entries in the right basis.
+        hints:
+          - Apply B_inverse to x to get the coordinates in the new basis.
+          - Multiply each coordinate by its own diagonal entry raised to the power n.
+          - Apply B to the result.
+    - question:
+        id: fix-orthonormal
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `coordinates(Q, v)` should return the coordinates of `v` in a basis of perpendicular unit vectors, which are the **columns** of the matrix `Q`. Each coordinate is the dot product of `v` with one basis vector. For the basis $(0.6, 0.8)$, $(-0.8, 0.6)$ and the vector $(1, 0)$ the program should print `[0.6, -0.8]`. It prints `[0.6, 0.8]`. Fix it.
+        starter: |
+          def coordinates(Q, v):
+              return [sum([a * b for a, b in zip(row, v)]) for row in Q]
+
+          print(coordinates([[0.6, -0.8], [0.8, 0.6]], [1, 0]))
+        solution: |
+          def coordinates(Q, v):
+              columns = [[row[j] for row in Q] for j in range(len(Q[0]))]
+              return [sum([a * b for a, b in zip(column, v)]) for column in columns]
+
+          print(coordinates([[0.6, -0.8], [0.8, 0.6]], [1, 0]))
+        tests: |
+          def _close(got, want):
+              return len(got) == len(want) and all([abs(g - w) < 1e-9 for g, w in zip(got, want)])
+          _Q = [[0.6, -0.8], [0.8, 0.6]]
+          assert _close(coordinates(_Q, [1, 0]), [0.6, -0.8]), "[1, 0] has dot product 0.6 with [0.6, 0.8] and -0.8 with [-0.8, 0.6]"
+          assert _close(coordinates(_Q, [0.6, 0.8]), [1, 0]), "The first basis vector has coordinates [1, 0]"
+          assert _close(coordinates(_Q, [-0.8, 0.6]), [0, 1]), "The second basis vector has coordinates [0, 1]"
+          assert _close(coordinates(_Q, [0, 5]), [4, 3]), "[0, 5] has dot product 4 with [0.6, 0.8] and 3 with [-0.8, 0.6]"
+          assert _close(coordinates([[1, 0], [0, 1]], [7, -2]), [7, -2]), "In the standard basis the coordinates are the components"
+          assert _close(coordinates([[0, -1], [1, 0]], [3, 4]), [4, -3]), "With basis vectors [0, 1] and [-1, 0], the vector [3, 4] has coordinates [4, -3]"
+          assert _close(coordinates([[0, 0, 1], [1, 0, 0], [0, 1, 0]], [1, 2, 3]), [2, 3, 1]), "With basis vectors [0, 1, 0], [0, 0, 1], [1, 0, 0], the vector [1, 2, 3] has coordinates [2, 3, 1]"
+          assert output.strip() == "[0.6, -0.8]", "The program should print [0.6, -0.8]"
+        wrong:
+          - |
+            def coordinates(Q, v):
+                return [sum([a * b for a, b in zip(row, v)]) for row in Q]
+
+            print([0.6, -0.8])
+          - |
+            def coordinates(Q, v):
+                columns = [[row[j] for row in Q] for j in range(len(Q[0]))]
+                return [sum([a * b for a, b in zip(column, v)]) for column in columns][::-1]
+
+            print([0.6, -0.8])
+          - |
+            def coordinates(Q, v):
+                columns = [[row[j] for row in Q] for j in range(len(Q[0]))]
+                return [abs(sum([a * b for a, b in zip(column, v)])) for column in columns]
+
+            print([0.6, -0.8])
+          - |
+            def coordinates(Q, v):
+                return [sum([a * b for a, b in zip(row, v)]) * (1 if i == 0 else -1) for i, row in enumerate(Q)]
+
+            print([0.6, -0.8])
+        explanation: |
+          The starter dotted `v` with the **rows** of `Q`, which computes $Q\mathbf{v}$. The basis vectors are the columns, and the coordinates are $Q^{\mathsf{T}}\mathbf{v}$: the dot product of $\mathbf{v}$ with each column. $Q$ converts coordinates in the new basis to usual ones, and its inverse, which for perpendicular unit columns is the transpose, converts the other way. For a turn, applying $Q$ where $Q^{\mathsf{T}}$ was meant turns the vector the wrong way round, and the answer is off by a sign in one place: wrong, and plausible enough to pass a glance. The error is invisible for a symmetric $Q$, such as a reflection. The check that never fails is to rebuild the vector: the coordinates times the basis vectors, added up, must give back $\mathbf{v}$.
+        hints:
+          - Are the basis vectors the rows of Q or its columns?
+          - Which product does the starter compute, Q times v or the transpose of Q times v?
+          - Collect the columns of Q and dot v with each.
+    - question:
+        id: work-hundred
+        type: choice
+        system: s2
+        prompt: |
+          For the matrix of the puzzle, what is $A^{100}\,(1, 0)$?
+        options:
+          - '$(3^{100},\; 0)$'
+          - '$\left(\dfrac{3^{100} + 1}{2},\; \dfrac{3^{100} - 1}{2}\right)$'
+          - '$(2^{100},\; 1)$'
+          - '$(3^{100},\; 3^{100})$'
+        answer: 1
+        explanation: |
+          In the basis $(1, 1)$, $(1, -1)$ the vector $(1, 0)$ has coordinates $(0.5, 0.5)$. A hundred steps triple the first coordinate a hundred times and leave the second: $(0.5 \times 3^{100},\; 0.5)$. Translating back, the usual components are the sum and the difference of the two coordinates. The components differ by exactly 1 and add up to $3^{100}$, the pattern seen in the first few steps. As the steps go on, the part along $(1, 1)$ swamps the part along $(1, -1)$, and the vector points ever more nearly along $(1, 1)$. Repeated application of a matrix pulls almost every vector towards the direction with the largest factor.
+        hints:
+          - Find the coordinates of (1, 0) in the basis (1, 1), (1, −1).
+          - What does one step do to each coordinate?
+          - Translate back by taking the sum and the difference.
+    - question:
+        id: work-find-m
+        type: numeric
+        system: s2
+        prompt: |
+          $A$ has rows $(4, 1)$ and $(2, 3)$. In the basis $\mathbf{b}_1 = (1, 1)$, $\mathbf{b}_2 = (1, -2)$ its matrix $M$ is diagonal. What is the entry of $M$ in row 1, column 1?
+        answer: "5"
+        explanation: |
+          Column 1 of $M$ holds the coordinates of $A\mathbf{b}_1$ in the new basis. $A\,(1, 1) = (5, 5) = 5\,\mathbf{b}_1 + 0\,\mathbf{b}_2$, so the first column is $(5, 0)$. Likewise $A\,(1, -2) = (2, -4) = 2\,\mathbf{b}_2$, so the second column is $(0, 2)$. $M$ is diagonal with entries 5 and 2. No inverse was needed, because each basis vector was sent to a multiple of itself. Check with the trace: $4 + 3 = 7 = 5 + 2$.
+        hints:
+          - Apply A to the first basis vector.
+          - Express the result as a combination of the two basis vectors.
+          - The coefficient of the first basis vector is the entry wanted.
+    - question:
+        id: work-taylor
+        type: choice
+        system: s2
+        prompt: |
+          Polynomials of degree at most 2 have the basis $1, x, x^2$ and also the basis $1, (x - 1), (x - 1)^2$. The polynomial $p(x) = 3 + x^2$ has coordinates $(3, 0, 1)$ in the first. What are its coordinates in the second?
+        options:
+          - '$(3, 0, 1)$'
+          - '$(4, 2, 1)$'
+          - '$(3, 2, 1)$'
+          - '$(4, 0, 1)$'
+        answer: 1
+        explanation: |
+          The coordinates in the basis of powers of $x - 1$ are the Taylor coefficients at 1: $p(1) = 4$, $p'(1) = 2$, and $\frac{1}{2}p''(1) = 1$. Check by expanding: $4 + 2(x - 1) + (x - 1)^2 = 4 + 2x - 2 + x^2 - 2x + 1 = 3 + x^2$. The polynomial is the same object. Only the basis used to describe it has changed, from one suited to behaviour near 0 to one suited to behaviour near 1. In the second basis, the first two coordinates alone, $4 + 2(x - 1)$, are the tangent line at 1.
+        hints:
+          - What are p(1) and p′(1)?
+          - The third coordinate is half the second derivative.
+          - Expand the candidate and compare with 3 + x².
+    - question:
+        id: work-hidden
+        type: choice
+        system: s2
+        prompt: |
+          A model computes $W_2W_1\mathbf{x}$ with a hidden vector $\mathbf{h} = W_1\mathbf{x}$. Someone replaces $W_1$ by $B^{-1}W_1$ and $W_2$ by $W_2B$, for an invertible matrix $B$. What changes?
+        options:
+          - "The output changes, since both weight matrices changed."
+          - "The output is unchanged, since $(W_2B)(B^{-1}W_1) = W_2W_1$. The hidden vector becomes $B^{-1}\\mathbf{h}$: the same information in a different basis."
+          - "Nothing at all changes, including the hidden vector."
+          - "The model stops working unless $B$ is the identity."
+        answer: 1
+        explanation: |
+          The inner $B\,B^{-1}$ is the identity and drops out, so the function from input to output is exactly as before. The hidden vector is now $B^{-1}W_1\mathbf{x} = B^{-1}\mathbf{h}$, the coordinates of the old hidden vector in the basis given by the columns of $B$. Two models with entirely different weights and entirely different hidden numbers compute one function. So the question "what does the third hidden number represent?" has no answer fixed by the function: it depends on a basis the function does not choose. A rectifier between the layers restricts the allowed $B$ to those that only reorder or positively rescale the coordinates, which is the reason individual neurons are sometimes, and not always, meaningful.
+        hints:
+          - Multiply the two new matrices together.
+          - What is the hidden vector of the new model, in terms of the old one?
+          - Is the output a different function of the input?
+  connections:
+    - text: |
+        A matrix applied ten times produced numbers that grew by no visible rule, until you looked at their sum and their difference. Along $(1, 1)$ the matrix triples, and along $(1, -1)$ it does nothing. In the basis made of those two vectors the map is a diagonal matrix, and a hundred steps are as easy as one.
+
+        The machinery is short. The matrix $B$ whose columns are a basis converts coordinates in that basis to usual ones, and $B^{-1}$ converts back, as [[m5.basis-and-dimension]] began to show. A map with usual matrix $A$ is, in the new coordinates, $B^{-1}AB$: translate in, act, translate back. Its columns are the images of the new basis vectors, expressed in the new basis, which is the rule from the first lesson of this cluster freed from the standard axes. When the basis vectors are perpendicular and of unit length, the inverse is the transpose and coordinates are dot products, the subject of [[m7.orthonormal-bases]].
+
+        The idea reaches well past this example. A basis whose vectors a map merely scales makes the map diagonal. Finding such vectors, deciding when there are enough of them, and using them are [[m8.eigenvalues-and-eigenvectors]] and [[m8.diagonalisation]]. The general theory of one map with many matrices is [[m6.matrix-of-a-linear-map-and-similarity]]. And you saw that Taylor expansion was a change of basis all along, and that the hidden vectors of a network come with no preferred basis.
+
+        One observation from today has not been explained. Some numbers attached to a matrix did not change when the basis did. The rank was one, for a clear reason. The sum of the diagonal was another. And a third appeared without comment: for the mixing matrix, $2 \times 2 - 1 \times 1 = 3$, and for its diagonal form, $3 \times 1 = 3$. That is $ad - bc$ again, the number that decided whether a $2 \times 2$ matrix could be inverted. It evidently belongs to the map and not to the table. What is it measuring? The shear leaned the unit square over and kept its area. The stretch doubled it. The map that crushed the plane sent it to zero. One signed number records what a map does to area, and to volume in higher dimensions, and it is zero exactly when the map cannot be undone. It closes this cluster, and it is the next lesson, [[m5.determinant]].
