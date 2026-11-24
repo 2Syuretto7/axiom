@@ -1,0 +1,787 @@
+concept: e5.numerical-error-analysis-in-practice
+minutes: 100
+claim: You can say how far apart neighbouring floats are near any number, explain why subtracting nearly equal numbers destroys accuracy and rewrite a formula to avoid it, explain why the order of a long sum matters, tell apart error caused by a sensitive problem from error caused by a poor method and estimate the digits lost from a condition number, and choose the step of a numerical derivative by balancing the error of the approximation against the error of rounding.
+recalls: [e5.log-sum-exp-and-stable-formulations]
+uses: [e5.linear-algebra-routines, e5.random-number-generation, e5.strides-and-memory-layout, e5.arrays-dtype-and-shape, e5.axis-operations-and-reductions, e5.vectorisation, m10.taylor-approximation, m10.derivative-as-slope-and-rate, m10.maxima-and-minima, m10.second-derivative-and-curvature, m1.quadratics, m0.estimation-and-orders-of-magnitude, m0.powers-and-roots, e0.values-types-and-variables, e0.functions]
+leads: [m12.functions-of-several-variables]
+starter: |
+  # Scratch space. Ten million copies of 0.1, added up twice.
+  import numpy as np
+
+  x = np.full(10 ** 7, 0.1, dtype=np.float32)
+
+  print("x.sum()          ", x.sum())
+  print("np.cumsum(x)[-1] ", np.cumsum(x)[-1])
+parts:
+  recall:
+    - text: |
+        [[e5.log-sum-exp-and-stable-formulations]] dealt with floats that were too large or too small, and ended on a failure of another kind: `np.log(1 + 1e-17)` gave `0.0`, with every number of an ordinary size. Three quick pulls first.
+    - question:
+        id: recall-shift
+        type: choice
+        system: s1
+        concepts: [e5.log-sum-exp-and-stable-formulations]
+        prompt: |
+          Before taking the exponentials of a row of scores, the stable softmax subtracts one number from all of them. Which?
+        options: ["The smallest score of the row", "The largest score of the row", "The mean of the row", "1000"]
+        answer: 1
+        explanation: With the largest score moved to 0, every exponential is at most 1 and the total is at least 1.
+        hints:
+          - Which score must end up at zero so that nothing can overflow?
+          - Every other score should end up below it.
+    - question:
+        id: recall-taylor
+        type: choice
+        system: s1
+        concepts: [m10.taylor-approximation]
+        prompt: |
+          For a small step $h$, $f(x + h) \approx f(x) + h\,f'(x) + \dots$ What is the next term?
+        options: ['$\tfrac{h^2}{2} f''''(x)$', '$h^2 f''(x)$', '$\tfrac{h}{2} f''''(x)$', '$h\, f''''(x)$']
+        answer: 0
+        explanation: The second-order term of the Taylor approximation is the second derivative times the square of the step, divided by 2.
+        hints:
+          - It involves the second derivative.
+          - The step is squared, and there is a factorial underneath.
+    - question:
+        id: recall-residual
+        type: choice
+        system: s1
+        concepts: [e5.linear-algebra-routines]
+        prompt: |
+          `x = np.linalg.solve(A, b)`. What is the residual of this answer?
+        options: ["`A @ x - b`", "`x - b`", "`np.linalg.det(A)`", "`A - x`"]
+        answer: 0
+        explanation: It is what is left over when the answer is put back into the equations.
+        hints:
+          - Put the answer back into the equations.
+          - What is left over?
+  puzzle:
+    - text: |
+        The starter makes an array of ten million copies of 0.1, stored as `float32`, and adds them up in two ways.
+
+        The first way is `x.sum()`.
+
+        The second is `np.cumsum(x)`, the running total you met in the vectorisation lesson: the first entry, then the first two added, then the first three, and so on. Its last entry is the total of everything.
+
+        Both are adding the same ten million numbers. Ten million tenths make one million.
+
+        Run it.
+
+        `x.sum()` prints 1 000 000.1, which is as right as a `float32` can show. **The running total prints 1 087 937.** It is wrong by nearly 88 thousand, almost nine per cent.
+
+        Nothing overflowed. Nothing underflowed. No `nan` and no `inf` appeared. Each number is a tenth, the true total is a million, and every one of the ten million additions was carried out as accurately as a `float32` can carry out an addition. And the answer is wrong in its second digit.
+
+        **How can ten million accurate additions give an answer that is nine per cent off? Why does `sum`, adding the same numbers, get it right? And if an error of this size can appear with no warning, how do you ever know how far to trust a number that a program prints?**
+  intuition:
+    - text: |
+        The last lesson ended by saying what floats are. Now look at it closely, since everything follows from it.
+
+        A `float64` stores a number in scientific notation, in binary, with 53 binary digits of precision: about **16 significant decimal digits**. A `float32` has 24 binary digits: about **7 decimal digits**. That is the whole budget, and it is the same whether the number is tiny or huge.
+
+        Think of writing every number with exactly 7 significant digits. Near 1 you can write 1.000000 and then 1.000001. The step between neighbours is a millionth. Near a million you can write 1 000 000 and then 1 000 001: the step is 1. Near a million million, the step is a million. **The numbers you can write are not evenly spaced. They are dense near zero and sparse far out, and the gap between neighbours is always about the same fraction of the number itself.**
+
+        Floats are exactly like that, with the gaps set by powers of 2. The figure shows the gap between neighbouring floats near different numbers. Step through the sizes.
+    - figure: float-gaps
+      props: { power: 0 }
+    - text: |
+        Near 1 the gap between neighbouring `float64` values is about $2.2 \times 10^{-16}$. That number has a name, **machine epsilon**, written $\varepsilon$, and it is the yardstick for everything in this lesson. Near any other number $x$ the gap is about $\varepsilon$ times the size of $x$. Near $10^{16}$ the gap is 2, so there is no float for $10^{16} + 1$, and adding 1 does nothing at all.
+
+        The result of every operation must be a float. If the true result falls in a gap, it is **rounded** to the nearer end. So every operation commits an error of at most half a gap: a relative error of at most $\varepsilon/2$, about one part in $10^{16}$. That is superb accuracy. If that were the whole story there would be no lesson.
+
+        Now switch the figure to `float32` and go to a million.
+    - figure: float-gaps
+      props: { power: 6, single: true }
+    - text: |
+        Near a million, neighbouring `float32` values are 0.0625 apart. That is the puzzle.
+
+        Follow the running total. For the first few thousand additions all is well: the total is small, the gaps are tiny, and 0.1 lands almost where it should. But the total grows, and the gaps grow with it. By the time the total has passed half a million, the only values it can take are multiples of 0.0625. Add 0.1 to it. The true result falls between two floats, 0.0625 above and 0.125 above. It is nearer the second. **So the total moves up by 0.125.** A quarter too much. The next addition does the same, and the next, for millions of additions in a row. Every one of them is rounded correctly. Every one is in error by a quarter of what was added, and all the errors point the same way.
+
+        A grocer weighing out sweets on bathroom scales has this trouble. The scales read to the nearest half kilo, which is very fine accuracy for weighing a person. Drop one sweet on while someone is standing there and the reading either does not move or jumps by half a kilo. Add sweets one at a time and read the scales each time, and the total you write down is nonsense. The scales are not at fault. **A large number cannot register a small addition**, and a running total is a large number being asked to register ten million small ones.
+
+        How does `x.sum()` avoid it? It does not keep one running total. It adds the numbers in pairs, then adds those results in pairs, then those. A tenth to a tenth, then two tenths to two tenths, four tenths to four tenths. **At every addition the two numbers being added are about the same size**, so neither is lost in the other's gaps. The sweets are weighed in bags of equal weight, and bags against bags. This is called pairwise summation.
+
+        So the order of a sum matters. In the real numbers, addition can be done in any order. In floats it cannot: $(a + b) + c$ and $a + (b + c)$ are both rounded, at different places, and can differ.
+
+        There is a second way in which good arithmetic gives bad answers, and it is the more important one. Take $1 + 10^{-15}$. In floats this is rounded, to a number that is right to 16 digits. Now subtract 1. The exact answer would be $10^{-15}$. The float answer is $1.11 \times 10^{-15}$: **eleven per cent wrong**, from two operations each accurate to 16 digits.
+
+        Look at what happened to the digits.
+
+        ```
+          1.000000000000001110   (the float nearest to 1 + 1e-15)
+        − 1.000000000000000000
+        = 0.000000000000001110
+        ```
+
+        The first fifteen digits of the two numbers were the same, and they cancelled. They were the **good** digits. What is left is the tail end, where the rounding was. The subtraction itself was exact. It committed no error. It **exposed** an error that was already there, sixteen places down, by removing everything in front of it. This is called **cancellation**, and it is the cause of most of the numerical disasters you will meet. The failure of `np.log(1 + 1e-17)` was an extreme case: there the small part fell wholly inside a gap, and not one digit of it survived.
+  derivation:
+    - text: |
+        **Gaps.** `np.finfo(np.float64).eps` is $\varepsilon \approx 2.2 \times 10^{-16}$, and for `float32` it is about $1.2 \times 10^{-7}$. `np.spacing(x)` is the gap from `x` to the next float above it, and is about $\varepsilon\,|x|$.
+
+        | near | gap in `float64` | gap in `float32` |
+        |---|---|---|
+        | 1 | $2.2 \times 10^{-16}$ | $1.2 \times 10^{-7}$ |
+        | $10^{6}$ | $1.2 \times 10^{-10}$ | 0.0625 |
+        | $10^{16}$ | 2 | about $10^{9}$ |
+
+        **Comparing.** Since nearly every result is rounded, two computations of the same quantity rarely agree to the last digit: `0.1 + 0.2 == 0.3` is `False`. Compare with `np.isclose(a, b)`, or `np.allclose` for whole arrays, which accept a small relative difference.
+
+        **Cancellation, measured.** Suppose $a$ and $b$ each carry a relative error of about $\varepsilon$, so absolute errors of about $\varepsilon |a|$ and $\varepsilon |b|$. Their difference $a - b$ inherits an absolute error of about $\varepsilon\,(|a| + |b|)$. As a fraction of the answer, that is
+
+        $$\text{relative error of } a - b \;\approx\; \varepsilon\, \frac{|a| + |b|}{|a - b|}.$$
+
+        If $a$ and $b$ are of different sizes or opposite signs, the fraction is about 1 and nothing is lost. If they agree in their first $k$ digits, the fraction is about $10^k$, and **$k$ digits of accuracy are gone.** In the example, 1 and $1 + 10^{-15}$ agree to 15 digits, so 15 of the 16 are lost, and one survives.
+
+        **The cure is algebra.** You cannot make the subtraction more accurate, since it is already exact. You rewrite the formula so that the nearly equal quantities are never formed.
+
+        *A difference of roots.* For large $a$, $\sqrt{a + 1} - \sqrt{a}$ subtracts two nearly equal numbers. Multiply above and below by the sum of the roots, and the difference of squares on top is exactly 1:
+
+        $$\sqrt{a + 1} - \sqrt{a} = \frac{(a + 1) - a}{\sqrt{a + 1} + \sqrt{a}} = \frac{1}{\sqrt{a + 1} + \sqrt{a}}.$$
+
+        The right-hand side has only an addition of positive numbers. At $a = 10^{12}$ the left gives $5.00004 \times 10^{-7}$, right to four digits. The right gives $4.999999999999 \times 10^{-7}$, right to sixteen.
+
+        *A variance.* You computed a variance, two lessons ago, as the mean of the squares less the square of the mean. On paper that equals the mean of the squared distances from the mean. In floats, take the four numbers 1, 2, 3, 4 with a thousand million added to each. Their variance is plainly 1.25, the same as that of 1, 2, 3, 4. The mean of the squares and the square of the mean are both about $10^{18}$, they agree in all 16 of their digits, and their difference comes out as `0.0`. The other form, `((x - x.mean()) ** 2).mean()`, subtracts first, **while the numbers are still exact**, and gives 1.25. Data with a large mean and a small spread is ordinary: times in seconds since 1970, positions on a map, the weights of a network late in training.
+
+        The pattern in both: do the cancelling subtraction on exact quantities, or on paper, and never on rounded ones.
+
+        **Sums.** Adding $n$ numbers one after another makes $n$ rounding errors, each about $\varepsilon$ times the running total at that moment. If they all lean the same way, as in the puzzle, the error grows in proportion to $n$. Pairwise summation keeps the partial totals small for as long as possible and balances them, and its error grows only as $\log n$. `x.sum()`, `x.mean()` and the other reductions of NumPy add pairwise along the block. A running total in a Python loop does not, and neither does `cumsum`, which is asked for every partial total and so has no choice.
+
+        Two practical consequences. Accumulate in `float64` even when the data is `float32`: its gaps are five hundred million times finer. And when adding numbers of very different sizes by hand, add the small ones first, so that they can amount to something before they meet the large ones.
+    - question:
+        id: derivation-cancel
+        type: choice
+        system: s2
+        prompt: |
+          `(1.0 + 1e-15) - 1.0` gives about `1.11e-15`, eleven per cent away from the true answer, though the addition and the subtraction are each correct to within one part in $10^{16}$. Where did the error come from?
+        options:
+          - "The subtraction was rounded badly."
+          - "The addition rounded $1 + 10^{-15}$ to the nearest float, an error of about $10^{-16}$, negligible beside 1. The subtraction, which is exact, then removed the leading 1 and left a result of size $10^{-15}$, beside which that same $10^{-16}$ is a tenth. The absolute error did not grow. The quantity it is compared with shrank fifteen digits."
+          - "The number $10^{-15}$ is too small to be a float."
+          - "Python subtracts in `float32`."
+        answer: 1
+        explanation: |
+          An error is large or small only in relation to the thing it is an error in. After the addition, an absolute error of $10^{-16}$ sat inside a number of size 1: one part in $10^{16}$. After the subtraction the same absolute error sits inside a number of size $10^{-15}$: one part in ten. No operation was inaccurate. The subtraction of two nearly equal numbers stripped away the digits that were right and promoted the digit that was wrong to the front. The number $10^{-15}$ is itself a perfectly good float. It is the sum $1 + 10^{-15}$ that is not, since near 1 the floats are $2.2 \times 10^{-16}$ apart.
+        hints:
+          - How large is the rounding error of the addition, as an absolute amount?
+          - How large is the result of the subtraction?
+          - What is the first as a fraction of the second?
+    - text: |
+        **The problem or the method?** There are two quite different reasons for a bad answer, and telling them apart is the heart of the subject.
+
+        The first is a **poor method**: a formula that loses digits where a rearrangement of it would not. The difference of roots, the variance, the running total and the unshifted softmax are all of this kind. The answer was well determined by the data, and the method spoilt it. A method that does not do this is called **stable**.
+
+        The second is a **sensitive problem**: one where a small change in the data makes a large change in the true answer. Then no method can help, since the data itself is known only to within rounding. The measure of this is the **condition number**: the factor by which the problem can magnify a small relative change in its input.
+
+        $$\text{relative error in the answer} \;\lesssim\; \text{condition number} \times \text{relative error in the data}.$$
+
+        With data good to $\varepsilon \approx 10^{-16}$, a condition number of $10^k$ can leave an error of $10^{k - 16}$. **A condition number of $10^k$ costs $k$ of your 16 digits.**
+
+        Go back to the ten equations of the lesson on linear algebra routines. The answer from `solve` was right to only four digits, and its residual was at rounding level. Both facts are now explained. The residual measures the **method**: the computed $\mathbf{x}$ solves, exactly, a system whose data differs from yours only in the sixteenth digit, and that is all a method can promise. The condition number of that matrix, from `np.linalg.cond`, was $1.6 \times 10^{13}$, and it measures the **problem**: thirteen digits lost, three or four left. The method was stable and the problem was ill-conditioned. Cancellation is the same thing in miniature: subtraction of nearly equal numbers is an ill-conditioned problem, with condition number $(|a| + |b|) / |a - b|$, and the cure was never a better subtraction but a different formula that does not pose that problem.
+
+        So when an answer is poor, ask which it is. If the method, rewrite it. If the problem, then either ask a different question, or get better data, or accept the digits you have, and in every case know how many those are.
+
+        **A numerical derivative.** Here both kinds of error appear in one formula, pulling in opposite directions. To estimate $f'(x)$ without knowing a formula for it, take the slope over a small step:
+
+        $$f'(x) \approx \frac{f(x + h) - f(x)}{h}.$$
+
+        *The error of the approximation.* By the Taylor approximation, $f(x + h) = f(x) + h f'(x) + \tfrac{h^2}{2} f''(x) + \dots$, so
+
+        $$\frac{f(x + h) - f(x)}{h} = f'(x) + \frac{h}{2} f''(x) + \dots$$
+
+        The slope over a step differs from the true slope by about $\tfrac{h}{2}|f''(x)|$. This has nothing to do with floats. It is the price of using a finite step, called the **truncation error**, and it shrinks as $h$ shrinks.
+
+        *The error of rounding.* The top line subtracts two nearly equal numbers, and the smaller $h$ is, the more nearly equal they are. Each value of $f$ carries a rounding error of about $\varepsilon |f(x)|$. The difference carries about twice that, and it is then divided by $h$: an error of about $2\varepsilon |f(x)| / h$, which **grows** as $h$ shrinks.
+
+        *The total.*
+
+        $$E(h) \approx \frac{h}{2}\,|f''(x)| + \frac{2\,\varepsilon\,|f(x)|}{h}.$$
+
+        One term rises with $h$ and the other falls. You know how to find the least value of such a thing: set the derivative with respect to $h$ to zero. $\tfrac12 |f''| - 2\varepsilon |f| / h^2 = 0$ gives
+
+        $$h = 2\sqrt{\varepsilon\,|f| / |f''|} \;\sim\; \sqrt{\varepsilon} \approx 10^{-8},$$
+
+        when $f$ and $f''$ are of ordinary size, and the error at that best step is itself about $\sqrt{\varepsilon}$: $10^{-8}$. **The forward difference can deliver at most half of the sixteen digits.** For $f = \exp$ at $x = 1$, measured:
+
+        | $h$ | error of the estimate |
+        |---|---|
+        | $10^{-1}$ | $1.4 \times 10^{-1}$ |
+        | $10^{-4}$ | $1.4 \times 10^{-4}$ |
+        | $10^{-8}$ | $7 \times 10^{-9}$ |
+        | $10^{-12}$ | $4 \times 10^{-4}$ |
+        | $10^{-16}$ | 2.7, the whole derivative |
+
+        At $h = 10^{-16}$ the step falls inside a gap: $x + h$ **is** $x$, the top line is 0, and the estimate is 0.
+
+        **A better formula.** Step both ways:
+
+        $$f'(x) \approx \frac{f(x + h) - f(x - h)}{2h}.$$
+
+        In the Taylor approximations of $f(x + h)$ and $f(x - h)$ the terms in $h^2$ are the same and cancel in the difference, so the truncation error is about $\tfrac{h^2}{6}|f'''(x)|$, far smaller. The rounding error is as before. Balancing them gives a best step near $\varepsilon^{1/3} \approx 10^{-5}$ and an error near $10^{-11}$. This **central difference** is the one to use, with a step of about $10^{-5}$ times the size of $x$, or times 1 if $x$ is small. Its chief use in machine learning is as a check: when you have derived a formula for a derivative, or a program has computed one for you, compare it with the central difference. If they agree to seven or more digits, the formula is right.
+    - question:
+        id: order-step
+        type: order
+        system: s2
+        prompt: Put in order what happens to the forward-difference estimate of a derivative as the step $h$ is made smaller and smaller, starting from $h = 0.1$.
+        steps:
+          - 'At $h = 0.1$ the estimate is poor: the slope over so wide a step differs from the slope at the point by about $\tfrac{h}{2}|f''''|$.'
+          - 'As $h$ shrinks, the error shrinks in proportion to it: ten times smaller for each factor of ten.'
+          - 'Near $h = 10^{-8}$ the falling truncation error meets the rising rounding error, and the total is at its least, about $10^{-8}$.'
+          - 'Below that, the two values of $f$ agree in more and more digits, cancellation takes over, and the error grows as $h$ shrinks.'
+          - 'At $h = 10^{-16}$ the step is smaller than the gap between floats near $x$, so $x + h$ is $x$, and the estimate is exactly 0.'
+        explanation: Two errors with opposite appetites. Truncation wants a small step, and dominates while the step is large. Rounding wants a large step, and dominates once the step is small. The total has its least value where they are equal, which for the forward difference is near the square root of machine epsilon. Pushing the step lower in pursuit of accuracy makes things worse, and in the end there is no step at all.
+        hints:
+          - Which error is the larger when the step is wide?
+          - The errors balance at one particular step, and the total is least there.
+          - What is x + h when h is smaller than the gap between floats?
+  formal:
+    - text: |
+        **Floats.** A `float64` has 53 binary digits of precision and a `float32` has 24. The gap between neighbouring floats near $x$ is about $\varepsilon |x|$, with $\varepsilon = 2^{-52} \approx 2.2 \times 10^{-16}$ for `float64` and $2^{-23} \approx 1.2 \times 10^{-7}$ for `float32`.
+
+        **Rounding.** The computed result of one arithmetic operation is the float nearest the exact result: a relative error of at most $\varepsilon / 2$.
+
+        **Cancellation.** If $a$ and $b$ have relative errors of about $\varepsilon$, then $a - b$ has relative error of about $\varepsilon\,(|a| + |b|) / |a - b|$.
+
+        **Summation.** Adding $n$ terms in sequence has an error bound proportional to $n\varepsilon$. Adding them pairwise has one proportional to $\varepsilon \log n$.
+
+        **Conditioning.** The condition number $\kappa$ of a problem is the largest ratio of the relative change in its answer to a small relative change in its data. A stable method returns the exact answer for data within about $\varepsilon$ of that given, so its answer has relative error up to about $\kappa\,\varepsilon$.
+
+        **Differences.** The forward difference $\tfrac{f(x + h) - f(x)}{h}$ has error about $\tfrac{h}{2}|f''| + \tfrac{2\varepsilon |f|}{h}$, least near $h \approx \sqrt{\varepsilon}$. The central difference $\tfrac{f(x + h) - f(x - h)}{2h}$ has error about $\tfrac{h^2}{6}|f'''| + \tfrac{\varepsilon |f|}{h}$, least near $h \approx \varepsilon^{1/3}$.
+  drill:
+    - text: |
+        Seconds each. Floats are `float64` unless a question says otherwise.
+    - question:
+        id: drill-eps
+        type: choice
+        system: s1
+        prompt: |
+          About how far apart are neighbouring `float64` values near 1?
+        options: ['$2.2 \times 10^{-16}$', '$1.2 \times 10^{-7}$', '$10^{-308}$', '0.1']
+        answer: 0
+        explanation: This gap is machine epsilon for `float64`.
+        hints:
+          - A float64 carries about 16 decimal digits.
+          - The gap near 1 is one unit in the last of them.
+    - question:
+        id: drill-digits64
+        type: numeric
+        system: s1
+        prompt: |
+          About how many significant decimal digits does a `float64` carry?
+        answer: "16"
+        explanation: Fifty-three binary digits are worth about sixteen decimal ones.
+        hints:
+          - It carries 53 binary digits.
+          - Every ten binary digits are worth about three decimal ones.
+    - question:
+        id: drill-digits32
+        type: numeric
+        system: s1
+        prompt: |
+          About how many significant decimal digits does a `float32` carry?
+        answer: "7"
+        explanation: Twenty-four binary digits are worth about seven decimal ones.
+        hints:
+          - Its machine epsilon is about 10 to the power −7.
+          - It is less than half of what a float64 carries.
+    - question:
+        id: drill-big
+        type: choice
+        system: s1
+        prompt: |
+          What is `1e16 + 1.0 == 1e16`?
+        options: ["`True`", "`False`", "An error", "`nan`"]
+        answer: 0
+        explanation: Near $10^{16}$ neighbouring floats are 2 apart, so adding 1 lands back on the same float.
+        hints:
+          - How far apart are floats near 10 to the power 16?
+          - Is there a float half way between two neighbours?
+    - question:
+        id: drill-tenths
+        type: choice
+        system: s1
+        prompt: |
+          What is `0.1 + 0.2 == 0.3`?
+        options: ["`True`", "`False`", "An error", "`nan`"]
+        answer: 1
+        explanation: None of the three is exactly a float, and the rounded sum is not the float nearest to 0.3.
+        hints:
+          - Can one tenth be written exactly in binary?
+          - Rounded results rarely agree to the last digit.
+    - question:
+        id: drill-compare
+        type: choice
+        system: s1
+        prompt: |
+          Which is the sound way to test whether two computed floats `a` and `b` are the same quantity?
+        options: ["`a == b`", "`np.isclose(a, b)`", "`a is b`", "`str(a) == str(b)`"]
+        answer: 1
+        explanation: It allows the small relative difference that rounding makes inevitable.
+        hints:
+          - Two computations of one quantity rarely agree to the last digit.
+          - Which test allows a small difference?
+    - question:
+        id: drill-absorbed
+        type: choice
+        system: s1
+        prompt: |
+          What is `(1.0 + 1e-16) - 1.0`?
+        options: ["`1e-16`", "`0.0`", "`1.1e-16`", "`nan`"]
+        answer: 1
+        explanation: The amount added is less than half the gap between floats near 1, so the sum rounds back to exactly 1.
+        hints:
+          - The gap between floats near 1 is about 2.2 times 10 to the power −16.
+          - To which float does the sum round?
+    - question:
+        id: drill-dangerous
+        type: choice
+        system: s1
+        prompt: |
+          Which operation on two rounded numbers can destroy most of their accuracy?
+        options: ["Multiplying them", "Adding two positive numbers", "Subtracting two nearly equal numbers", "Dividing one by the other"]
+        answer: 2
+        explanation: The digits they share cancel, and what remains is mostly their rounding errors.
+        hints:
+          - Which operation removes the leading digits?
+          - What is left when the leading digits are gone?
+    - question:
+        id: drill-order
+        type: choice
+        system: s1
+        prompt: |
+          What are `(1e16 + 1.0) - 1e16` and `(1e16 - 1e16) + 1.0`?
+        options: ["`1.0` and `1.0`", "`0.0` and `1.0`", "`0.0` and `0.0`", "`1.0` and `0.0`"]
+        answer: 1
+        explanation: In the first the 1 is added to a huge number and lost in its gap. In the second the huge numbers cancel exactly first, and then the 1 is added to 0.
+        hints:
+          - What is 1e16 + 1.0, as a float?
+          - In the second, what is in the brackets?
+    - question:
+        id: drill-gap-scale
+        type: choice
+        system: s1
+        prompt: |
+          The gap between neighbouring floats near a number $x$ is roughly proportional to what?
+        options: ["Nothing. It is the same everywhere", "The size of $x$", "The square of $x$", "One over $x$"]
+        answer: 1
+        explanation: A float keeps a fixed number of significant digits, so the last of them is worth a fixed fraction of the number.
+        hints:
+          - A float carries a fixed number of significant digits.
+          - What is the last digit of a large number worth, compared with that of a small one?
+    - question:
+        id: drill-cond
+        type: numeric
+        system: s1
+        prompt: |
+          A problem has condition number $10^{5}$ and is solved by a stable method in `float64`. About how many of the 16 digits are lost?
+        answer: "5"
+        explanation: A condition number of 10 to the power k costs about k digits.
+        hints:
+          - The condition number multiplies the relative error of the data.
+          - Each factor of ten costs one digit.
+    - question:
+        id: drill-truncation
+        type: choice
+        system: s1
+        prompt: |
+          The truncation error of the forward difference $\tfrac{f(x+h) - f(x)}{h}$ is roughly proportional to what?
+        options: ["$h$", "$h^2$", "$1/h$", "It does not depend on $h$"]
+        answer: 0
+        explanation: The first term left over from the Taylor approximation is half the step times the second derivative.
+        hints:
+          - What is the first term of the Taylor approximation that the formula leaves out, after dividing by h?
+          - It has one power of the step.
+    - question:
+        id: drill-best-step
+        type: choice
+        system: s1
+        prompt: |
+          For a function of ordinary size in `float64`, about which step gives the forward difference its smallest error?
+        options: ["$10^{-1}$", "$10^{-8}$", "$10^{-16}$", "$10^{-300}$"]
+        answer: 1
+        explanation: The best step is near the square root of machine epsilon, where truncation and rounding errors are equal.
+        hints:
+          - The best step is about the square root of machine epsilon.
+          - Machine epsilon is about 10 to the power −16.
+    - question:
+        id: drill-sum
+        type: choice
+        system: s1
+        prompt: |
+          `x` is a `float32` array of ten million small positive numbers. Which gives the more accurate total?
+        options: ["`x.sum()`, which adds pairwise", "`np.cumsum(x)[-1]`, a running total", "They are always identical", "A Python loop with `total += v`"]
+        answer: 0
+        explanation: Pairwise adding keeps the numbers being added of similar size, so small ones are not lost in the gaps of a large running total.
+        hints:
+          - What happens to a small number added to a large running total?
+          - Which method adds numbers of similar size to one another?
+    - question:
+        id: predict-gaps
+        type: predict
+        system: s1
+        prompt: Equality, order and gaps. What does this show?
+        code: |
+          import numpy as np
+
+          print(0.1 + 0.2 == 0.3, np.isclose(0.1 + 0.2, 0.3))
+          print((1e16 + 1.0) - 1e16, (1e16 - 1e16) + 1.0)
+          print(np.spacing(1.0) == np.finfo(np.float64).eps, np.spacing(1e16))
+        output: |
+          False True
+          0.0 1.0
+          True 2.0
+        explanation: The rounded sum of a tenth and two tenths is not the float nearest three tenths, though it is close. Added to ten thousand million million, a 1 is lost in the gap, and added after the large numbers have cancelled it survives. The gap near 1 is machine epsilon, and near ten thousand million million it is 2.
+        hints:
+          - Rounded results rarely agree to the last digit.
+          - How far apart are floats near 1e16?
+          - Machine epsilon is defined as the gap near 1.
+    - question:
+        id: predict-variance
+        type: predict
+        system: s1
+        prompt: One variance, two formulas, and a `float32`. What does this show?
+        code: |
+          import numpy as np
+
+          y = np.array([1.0, 2.0, 3.0, 4.0]) + 1e9
+          print((y ** 2).mean() - y.mean() ** 2)
+          print(((y - y.mean()) ** 2).mean())
+          big = np.float32(16777216.0)
+          print(big + np.float32(1.0) == big)
+        output: |
+          0.0
+          1.25
+          True
+        explanation: The mean of the squares and the square of the mean are both about a million million million and agree in every digit a float keeps, so their difference is nothing. Subtracting the mean first leaves −1.5, −0.5, 0.5 and 1.5 exactly, whose squares average 1.25. And 16 777 216 is 2 to the power 24, where the gap between `float32` values becomes 2, so adding 1 changes nothing.
+        hints:
+          - How large are the two numbers subtracted in the first formula, and in how many digits do they agree?
+          - What are the four numbers after the mean is subtracted?
+          - A float32 carries 24 binary digits.
+  work:
+    - text: Slower now. For each computation, find the subtraction of nearly equal numbers, or the small number being added to a large one, before you trust a digit of it.
+    - question:
+        id: write-root-gap
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `root_gap(a)` to return $\sqrt{a + 1} - \sqrt{a}$ for a float `a` that is 0 or more, accurately to nearly full precision however large `a` is.
+
+          Rewrite the expression so that no two nearly equal numbers are subtracted.
+        starter: |
+          import numpy as np
+
+          def root_gap(a):
+              # Replace the next line with your own.
+              return np.sqrt(a + 1.0) - np.sqrt(a)
+
+          print(root_gap(1e12))
+        solution: |
+          import numpy as np
+
+          def root_gap(a):
+              return 1.0 / (np.sqrt(a + 1.0) + np.sqrt(a))
+
+          print(root_gap(1e12))
+        tests: |
+          def _rel(got, want):
+              return abs(float(got) - want) / want
+          assert _rel(root_gap(1e12), 4.99999999999875e-07) < 1e-12, "At a million million the result is 4.99999999999875e-07, to twelve digits and more"
+          assert _rel(root_gap(1e16), 5e-09) < 1e-12, "At ten thousand million million the result is 5e-09, not 0"
+          assert _rel(root_gap(1e6), 0.0004999998750000625) < 1e-12, "At a million the result is about 0.000499999875"
+          assert _rel(root_gap(0.0), 1.0) < 1e-12, "At 0 the result is 1"
+          assert _rel(root_gap(3.0), 0.2679491924311227) < 1e-12, "At 3 the result is 2 less the square root of 3"
+          assert _rel(root_gap(8.0), 0.1715728752538099) < 1e-12, "At 8 the result is 3 less the square root of 8"
+          assert _rel(float(output.strip()), 4.99999999999875e-07) < 1e-12, "The program should print 4.99999999999875e-07, to twelve digits and more"
+        wrong:
+          - |
+            import numpy as np
+
+            def root_gap(a):
+                return np.sqrt(a + 1.0) - np.sqrt(a)
+
+            print(4.99999999999875e-07)
+          - |
+            import numpy as np
+
+            def root_gap(a):
+                return 0.5 / np.sqrt(a + 0.5)
+
+            print(root_gap(1e12))
+          - |
+            import numpy as np
+
+            def root_gap(a):
+                return 1.0 / (np.sqrt(a + 1.0) - np.sqrt(a))
+
+            print(4.99999999999875e-07)
+          - |
+            import numpy as np
+
+            def root_gap(a):
+                return 1.0 / (2.0 * np.sqrt(a + 1.0))
+
+            print(4.99999999999875e-07)
+          - |
+            import numpy as np
+
+            def root_gap(a):
+                return 1.0 / np.sqrt(a + 1.0) + np.sqrt(a)
+
+            print(4.99999999999875e-07)
+        explanation: |
+          At a million million the two roots are 1 000 000.000 000 5 and 1 000 000, which agree in their first twelve or thirteen digits, so the direct subtraction keeps three or four. Multiply above and below by the sum of the roots. The top becomes a difference of squares, $(a + 1) - a$, which is exactly 1 on paper, so it is written as 1 and never computed. What remains is one over a **sum** of positive numbers, and adding positive numbers loses nothing. An approximation such as one over twice the root is good for large $a$ and wrong for small, where the exact rewriting is right everywhere. The cancellation was done by you, in algebra, on exact quantities, and the floats were given only the harmless part.
+        hints:
+          - Multiply and divide by the sum of the two roots.
+          - What is the difference of the squares of the two roots, exactly?
+          - The result is 1 over a sum, with no subtraction left.
+    - question:
+        id: write-derivative
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `derivative(f, x)` to estimate $f'(x)$ for a function `f` of one float, by the **central difference** with the step $h = 10^{-5} \times \max(1, |x|)$.
+        starter: |
+          import numpy as np
+
+          def derivative(f, x):
+              # Replace the next line with your own.
+              return 0.0
+
+          print(round(derivative(np.exp, 1.0), 6))
+        solution: |
+          import numpy as np
+
+          def derivative(f, x):
+              h = 1e-5 * max(1.0, abs(x))
+              return (f(x + h) - f(x - h)) / (2 * h)
+
+          print(round(derivative(np.exp, 1.0), 6))
+        tests: |
+          import numpy as _np
+          def _off(got, want):
+              return abs(float(got) - want) / max(1.0, abs(want))
+          assert _off(derivative(_np.exp, 1.0), float(_np.e)) < 1e-9, "The derivative of exp at 1 is e, to nine digits"
+          assert _off(derivative(_np.sin, 0.5), float(_np.cos(0.5))) < 1e-9, "The derivative of sin at 0.5 is cos 0.5, to nine digits"
+          assert _off(derivative(lambda t: t ** 3, 2.0), 12.0) < 1e-9, "The derivative of the cube at 2 is 12, to nine digits"
+          assert _off(derivative(lambda t: t * t, 1e4), 2e4) < 1e-9, "The derivative of the square at 10 000 is 20 000, which needs the step to grow with x"
+          assert _off(derivative(lambda t: 3.0 * t + 1.0, -7.0), 3.0) < 1e-9, "The derivative of 3t + 1 is 3 everywhere"
+          assert _off(derivative(_np.log, 2.0), 0.5) < 1e-9, "The derivative of log at 2 is a half, to nine digits"
+          assert _off(derivative(lambda t: 5.0, 3.0), 0.0) < 1e-9, "The derivative of a constant is 0"
+          assert output.strip() == "2.718282", "The program should print 2.718282"
+        wrong:
+          - |
+            import numpy as np
+
+            def derivative(f, x):
+                h = 1e-5 * max(1.0, abs(x))
+                return (f(x + h) - f(x)) / h
+
+            print("2.718282")
+          - |
+            import numpy as np
+
+            def derivative(f, x):
+                h = 1e-13
+                return (f(x + h) - f(x - h)) / (2 * h)
+
+            print("2.718282")
+          - |
+            import numpy as np
+
+            def derivative(f, x):
+                h = 1e-5 * max(1.0, abs(x))
+                return (f(x + h) - f(x - h)) / h
+
+            print("2.718282")
+          - |
+            import numpy as np
+
+            def derivative(f, x):
+                h = 1e-5
+                return (f(x + h) - f(x - h)) / (2 * h)
+
+            print(round(derivative(np.exp, 1.0), 6))
+          - |
+            import numpy as np
+
+            def derivative(f, x):
+                h = 1e-2 * max(1.0, abs(x))
+                return (f(x + h) - f(x - h)) / (2 * h)
+
+            print("2.718282")
+          - |
+            import numpy as np
+
+            def derivative(f, x):
+                h = 1e-5 * max(1.0, abs(x))
+                return (f(x + h) - f(x)) / (2 * h)
+
+            print("2.718282")
+        explanation: |
+          Step both ways and divide by the whole distance between the two points, which is $2h$. The terms in $h^2$ of the two Taylor approximations cancel, leaving a truncation error of about $h^2/6$ times the third derivative: with $h = 10^{-5}$, about $10^{-11}$. The rounding error is about $\varepsilon / h$, also $10^{-11}$. The two are balanced, which is why this step was chosen. The forward difference with the same step has a truncation error of $h/2$, about $10^{-6}$, five digits worse. A step of $10^{-13}$ makes the truncation error vanish and the rounding error enormous. A step of $10^{-2}$ does the reverse. And the step must scale with $x$: near 10 000 the floats are $2 \times 10^{-12}$ apart, so a step of $10^{-5}$ is resolved to only seven digits, and the estimate inherits that. You will use this function, in effect, every time you check a derivative you have worked out by hand.
+        hints:
+          - The central difference uses the values of f one step ahead and one step behind.
+          - How far apart are those two points?
+          - Compute the step from x first, then one line for the slope.
+    - question:
+        id: fix-spread
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `spread(x)` should return the variance of the entries of a plain `float64` array. It uses the formula "the mean of the squares less the square of the mean". For the four numbers 1, 2, 3, 4 with a thousand million added to each, the variance is 1.25, and the program prints `0.0`. Fix the function so that it is accurate however large the mean of the data is, without calling `var` or `std`.
+        starter: |
+          import numpy as np
+
+          def spread(x):
+              return (x ** 2).mean() - x.mean() ** 2
+
+          print(spread(np.array([1.0, 2.0, 3.0, 4.0]) + 1e9))
+        solution: |
+          import numpy as np
+
+          def spread(x):
+              return ((x - x.mean()) ** 2).mean()
+
+          print(spread(np.array([1.0, 2.0, 3.0, 4.0]) + 1e9))
+        tests: |
+          import numpy as _np
+          _d = _np.array([1.0, 2.0, 3.0, 4.0])
+          for _shift in [0.0, 1e4, 1e8, 1e9, -1e9, 1e12]:
+              assert abs(float(spread(_d + _shift)) - 1.25) < 1e-9, "The variance of 1, 2, 3, 4 is 1.25 whatever number is added to all four"
+          assert abs(float(spread(_np.array([5.0, 5.0, 5.0])))) < 1e-12, "Equal entries have variance 0"
+          assert abs(float(spread(_np.array([0.0, 10.0]))) - 25.0) < 1e-9, "The variance of 0 and 10 is 25"
+          assert abs(float(spread(_np.array([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]))) - 4.0) < 1e-9, "The variance of 2, 4, 4, 4, 5, 5, 7, 9 is 4"
+          _x = _d + 1e9
+          spread(_x)
+          assert _x.tolist() == [1000000001.0, 1000000002.0, 1000000003.0, 1000000004.0], "The array passed in must not be changed"
+          assert "var(" not in source and "std(" not in source, "Do not call var or std"
+          assert output.strip() == "1.25", "The program should print 1.25"
+        wrong:
+          - |
+            import numpy as np
+
+            def spread(x):
+                return (x ** 2).mean() - x.mean() ** 2
+
+            print(1.25)
+          - |
+            import numpy as np
+
+            def spread(x):
+                return abs((x ** 2).mean() - x.mean() ** 2)
+
+            print(1.25)
+          - |
+            import numpy as np
+
+            def spread(x):
+                return ((x - x.mean()) ** 2).sum()
+
+            print(1.25)
+          - |
+            import numpy as np
+
+            def spread(x):
+                return (x - x.mean()).mean() ** 2
+
+            print(1.25)
+          - |
+            import numpy as np
+
+            def spread(x):
+                y = x.astype(np.float32)
+                return ((y - y.mean()) ** 2).mean()
+
+            print(1.25)
+          - |
+            import numpy as np
+
+            def spread(x):
+                return ((x - x[0]) ** 2).mean()
+
+            print(1.25)
+        explanation: |
+          With a mean of a thousand million, the mean of the squares and the square of the mean are both about $10^{18}$, and the gap between floats there is over a hundred. Their true difference, 1.25, is far smaller than one gap, so the two round to the same float or to neighbours, and the result is 0, or 128, or a negative number, and never 1.25. The condition number of that subtraction is about $10^{18}$, more than all sixteen digits. Subtract the mean **first**. The entries and their mean are exact, or nearly, and their differences, $-1.5$ to $1.5$, are small numbers computed without loss. Squaring and averaging small numbers is harmless. The two formulas are equal for real numbers and one of them is unusable for floats. Taking the absolute value hides a negative result without repairing it, and converting to `float32` throws away nine more digits before starting.
+        hints:
+          - How large are the two numbers being subtracted, and how far apart are floats of that size?
+          - Which form of the variance subtracts before squaring?
+          - Subtract the mean from every entry, then square, then average.
+    - question:
+        id: work-puzzle
+        type: choice
+        system: s2
+        prompt: |
+          In the puzzle, the running total of ten million copies of 0.1 in `float32` came to 1 087 937, and `x.sum()` gave 1 000 000.1. What accounts for the difference?
+        options:
+          - "`cumsum` makes arithmetic mistakes that `sum` does not."
+          - "Once the running total has passed about half a million, neighbouring `float32` values are 0.0625 or more apart, so the total can move only in such steps. Adding 0.1 lands between two floats and is rounded to the nearer, which is 0.125 further on. Each addition is rounded correctly, each overshoots by a quarter, and the errors all point one way for millions of steps. `sum` adds pairwise, so the two numbers added are always of similar size and nothing is lost in the gaps."
+          - "0.1 cannot be stored in a `float32`."
+          - "`sum` converts to `float64` and `cumsum` does not."
+        answer: 1
+        explanation: |
+          Every addition in both methods is done to the full accuracy of a `float32`. The difference is in what is being added to what. A running total is a large number, with wide gaps, taking in a small one, and the small one is rounded to a whole number of gaps: here 2 gaps of 0.0625 where 1.6 was wanted. A consistent rounding repeated millions of times is a drift and not a scatter. Pairwise summation arranges the same additions as a tree, so that at every level the two partners have been built from the same number of terms. The stored value of 0.1 is itself slightly off, by about one part in a hundred million, which accounts for the final 0.1 in the good answer and for none of the 87 937.
+        hints:
+          - How far apart are float32 values near a million?
+          - To which float does the total move when 0.1 is added?
+          - In pairwise adding, how do the sizes of the two numbers compare?
+    - question:
+        id: work-condition
+        type: numeric
+        system: s2
+        prompt: |
+          A system of equations has a matrix with condition number about $10^{10}$. It is solved in `float64` by `np.linalg.solve`, and the residual is at rounding level. About how many significant digits of the solution can be trusted?
+        answer: "6"
+        explanation: |
+          The method is stable, as the residual shows: the answer is exact for data that differs from yours in about the sixteenth digit. The problem then magnifies that by its condition number. Ten of the sixteen digits are lost, and about 16 less 10 remain. No rearrangement of the elimination would recover them, since the loss belongs to the problem and not to the method. If six digits are not enough, the remedies are to pose the problem differently so that the matrix is better conditioned, or to compute in higher precision, or to obtain data that is itself more accurate than rounding.
+        hints:
+          - How many digits does a float64 carry?
+          - How many digits does a condition number of 10 to the power 10 cost?
+          - Subtract.
+    - question:
+        id: work-step
+        type: choice
+        system: s2
+        prompt: |
+          A student estimates a derivative with the forward difference and, wanting the best possible accuracy, uses $h = 10^{-15}$. The result is right to barely one digit. Why, and what step would have served?
+        options:
+          - "The step is too large. A smaller one, such as $10^{-30}$, is needed."
+          - "The truncation error, about $h/2$ times the second derivative, is indeed tiny for so small a step. But $f(x + h)$ and $f(x)$ then agree in about fifteen of their sixteen digits, and their difference, divided by $h$, carries a rounding error of about $2\\varepsilon |f| / h$, which is about 0.4. The total error is least where the two are equal, near $h = 10^{-8}$, or with the central difference near $10^{-5}$."
+          - "The forward difference is wrong for every step."
+          - "Python cannot represent $10^{-15}$."
+        answer: 1
+        explanation: |
+          Two errors, one falling with the step and one rising. The instinct that a smaller step is more accurate is true of the mathematics and false of the arithmetic. With $\varepsilon \approx 2 \times 10^{-16}$ and $h = 10^{-15}$, the rounding term $2\varepsilon/h$ is of order 1 in relative terms: the estimate is mostly noise. Going smaller still, to a step below the gap between floats, gives exactly 0. The best step for the forward difference is about the square root of machine epsilon, where each error is about $10^{-8}$, and the central difference, whose truncation error falls as the square of the step, does a thousand times better with a larger step. This trade is the model for a great many choices in numerical work: the parameter that reduces one error increases another, and the craft is in the balance.
+        hints:
+          - What is the truncation error for so small a step?
+          - In how many digits do f(x + h) and f(x) agree, and what does their difference then consist of?
+          - At what step are the two errors equal?
+    - question:
+        id: work-which
+        type: choice
+        system: s2
+        prompt: |
+          Three results in this cluster were poorer than expected: (a) the solution of the ten equations was right to four digits, with a perfect residual. (b) The variance of data with a large mean came out as 0. (c) The mean of a hundred uniform draws was 0.03 away from one half. Which kind of error is each?
+        options:
+          - "All three are rounding errors, cured by more digits."
+          - "(a) is a sensitive problem: the matrix has condition number $10^{13}$, and no method in sixteen digits can do better. (b) is a poor method: the answer is well determined, and a rearranged formula gives it in full. (c) is neither. It is sampling error, the price of using a hundred draws, which shrinks as $1/\\sqrt{n}$ and not at all with more digits."
+          - "(a) is a poor method, (b) is a sensitive problem, and (c) is rounding."
+          - "All three are mistakes in NumPy."
+        answer: 1
+        explanation: |
+          The first question to ask of any disappointing number is where its error comes from, since the remedies have nothing in common. An ill-conditioned problem needs a different question or better data. An unstable method needs different algebra. A sampling error needs more samples, a hundred times more for each digit. And a truncation error, as in the numerical derivative, needs a better approximation or a better-chosen step. Computing in higher precision helps the first two a little and the last two not at all. A practitioner who cannot tell these apart will spend a week improving the wrong thing.
+        hints:
+          - For (a), was the residual small, and what was the condition number?
+          - For (b), did a different formula give the right answer from the same data?
+          - For (c), would more digits of precision have moved the mean closer to one half?
+  connections:
+    - text: |
+        Ten million tenths, added as a running total in `float32`, came to 1 087 937. Floats keep a fixed number of significant digits, about 16 for `float64` and 7 for `float32`, so the gap between neighbours grows with the size of the number. Past half a million the total could move only in steps of 0.0625, and every 0.1 was rounded up to 0.125. `sum` adds in pairs of similar size and has no such trouble. In floats the order of a sum matters.
+
+        Each operation is accurate to one part in $10^{16}$, and that is not the same as the answer being so. **Subtracting nearly equal numbers** removes the digits they share and leaves their rounding errors in front. The cure is algebra done beforehand: a difference of roots rewritten as one over a sum, a variance computed from distances to the mean, and, in [[e5.log-sum-exp-and-stable-formulations]], a logarithm of a sum with its largest term taken out.
+
+        A poor answer has one of four sources, with four different remedies. A **sensitive problem**, measured by its condition number, which costs a digit for each factor of ten: that was the matrix of ten equations. An **unstable method**, cured by rearranging. **Truncation**, the price of replacing a limit by something finite. And **sampling**, which shrinks only as $1/\sqrt{n}$. The numerical derivative set two of them against each other, and the best step was the one that balanced them: about $10^{-8}$ for the forward difference, about $10^{-5}$ for the central one.
+
+        That closes the cluster. You began with a list of lists and you now have the array as working scientists use it: its block, shape, dtype and strides, selection and broadcasting, reductions along axes, the linear algebra you once wrote by hand, sums over named indices, randomness that can be replayed, and formulas arranged so that floats cannot spoil them. Every later cluster computes with these.
+
+        And the last tool you built points straight at what comes next. `derivative(f, x)` finds the slope of a function of **one** number. But look at what you have been computing with: a loss that depends on a whole table of weights, a softmax of a row of scores, a quadratic form of a vector. These are functions of many numbers at once, thousands or millions. Nudge one input and hold the rest still, and you get one slope. Nudge another, and you get another. There is a slope for every input, and training a model means finding all of them and stepping downhill. What does "slope" even mean when there are a million directions to move in? What does such a function look like, and how can it be pictured? That is the next lesson, [[m12.functions-of-several-variables]].
