@@ -1,0 +1,882 @@
+concept: e3.topological-sort
+minutes: 80
+claim: You can describe tasks and their prerequisites as a directed graph, find an order in which nothing comes before what it needs by repeatedly taking a task with no unmet needs, show that this costs $O(\lvert V \rvert + \lvert E \rvert)$, explain why it succeeds exactly when there is no cycle, and use such an order to compute over a graph of dependencies.
+recalls: [e3.amortised-analysis]
+uses: [e3.graphs-and-traversal, e3.trees-and-heaps, e3.dynamic-programming, e3.stacks-and-queues, e3.hash-tables, e3.sorting, e1.recursion, e1.comprehensions-and-iterators, e1.complexity-and-big-o, e0.dictionaries-and-sets, e0.lists-and-tuples, e0.loops, e0.functions]
+leads: [e3.shortest-paths-and-beam-search]
+starter: |
+  # Scratch space. Six jobs of a machine-learning project. needs[job] lists what must be done first.
+  # This plan looks through all the jobs for one that can be done now, does it, and starts again.
+  needs = {
+      "data": [],
+      "clean": ["data"],
+      "split": ["clean"],
+      "model": [],
+      "train": ["split", "model"],
+      "test": ["train", "split"],
+  }
+
+  done = []
+  looks = 0
+  while len(done) < len(needs):
+      for job in sorted(needs):
+          looks += 1
+          if job not in done and all([need in done for need in needs[job]]):
+              done.append(job)
+              break
+  print(done)
+  print(looks, "looks")
+parts:
+  recall:
+    - text: |
+        [[e3.amortised-analysis]] left you with a habit of counting: do not ask how long one trip round a loop can take, ask how many times any one item is handled in the whole run. Today's method is counted that way. It also settles a question left open when you filled tables: in what order? Three quick pulls first.
+    - question:
+        id: recall-amortised
+        type: choice
+        system: s1
+        concepts: [e3.amortised-analysis]
+        prompt: |
+          In a queue made of two stacks, one dequeue may move many items. Why do $n$ operations still cost only $O(n)$ in all?
+        options:
+          - "Because moves are faster than pushes"
+          - "Because each item is moved at most once in its whole life"
+          - "Because the queue is usually short"
+          - "Because dequeues are rare"
+        answer: 1
+        explanation: Follow one item. It is pushed, moved once and popped, a fixed number of steps whatever else happens.
+        hints:
+          - Follow a single item from arrival to departure.
+          - Can an item ever move back to the first stack?
+    - question:
+        id: recall-directed
+        type: choice
+        system: s1
+        concepts: [e3.graphs-and-traversal]
+        prompt: |
+          In a directed graph, each edge
+        options:
+          - "has a length"
+          - "has a direction, from one node to another"
+          - "joins a node to itself"
+          - "can be crossed either way"
+        answer: 1
+        explanation: A directed edge is an arrow. A one-way street is the usual picture, and so is "must be learnt before".
+        hints:
+          - Think of a one-way street.
+          - What does an arrow have that a plain line does not?
+    - question:
+        id: recall-fill-order
+        type: choice
+        system: s1
+        concepts: [e3.dynamic-programming]
+        prompt: |
+          A table is filled bottom up. The order of filling must make sure that
+        options:
+          - "the largest entries are filled first"
+          - "whatever an entry needs has been filled before it"
+          - "each row is filled from right to left"
+          - "no entry is filled twice"
+        answer: 1
+        explanation: An entry is computed from earlier entries, so those must already be there.
+        hints:
+          - What does the recurrence for an entry refer to?
+          - What goes wrong if those entries are still empty?
+  puzzle:
+    - text: |
+        A machine-learning project has six jobs. The **data** must be collected before it is **cleaned**. Cleaned data is **split** into a part for training and a part for testing. A **model** must be written, which needs nothing. To **train**, you need the split and the model. To **test**, you need the trained model and the split.
+
+        **In what order can one person do the six jobs?**
+
+        With six, you can see an answer: data, clean, split, model, train, test. So can the starter, which looks through the jobs for one whose needs are all done, does it, and starts looking again. Run it. It finds an order in 21 looks, and each look itself searches the list of jobs done.
+
+        Now make it real. The lessons of this course are joined by several hundred arrows saying "this before that". A program of ten thousand files states for each file which others it uses, and they must be built in an order that respects every one of those statements. A neural network is a web of many thousands of operations, each needing the results of others. A spreadsheet has a million cells whose formulas refer to each other. In every case the starter's plan of looking through everything, again and again, costs about the square of the number of jobs or worse.
+
+        And there is a worse possibility. Suppose someone has written that A needs B, B needs C, and C needs A. Then there is **no** order. The starter would search for ever.
+
+        **How do you find an order for a hundred thousand jobs in one pass? And how can a program tell that no order exists?**
+  intuition:
+    - text: |
+        Draw the jobs as nodes, and an arrow from each job to every job that needs it. Then an acceptable order is a way of writing the nodes in a row so that **every arrow points forwards**.
+
+        Which job can be written first? One with **no arrow coming in**. It needs nothing. Here there are two, data and model.
+
+        Write one down. Now imagine it erased from the picture, together with the arrows leaving it. Those arrows were needs, and they have been met. Perhaps some other node now has no arrow coming in. It has become ready.
+
+        That is the whole method: **take any node with no incoming arrow, write it down, erase it and its outgoing arrows, and repeat.** Step through it. Where two jobs are ready, the figure takes the one earlier in the alphabet.
+    - figure: topo-order
+    - text: |
+        The figure's order is data, clean, model, split, train, test. Taking model first would have been as good. There is usually more than one acceptable order, and the method finds one of them.
+
+        Two details turn this into a fast program. First, nothing need actually be erased. Keep for each job a **count of the needs not yet met**. Finishing a job lowers the count of each job it points to, and a job whose count reaches zero is ready. Second, keep the ready jobs in a queue, so that no searching is ever done. Each arrow is then looked at exactly once, at the moment its tail is finished.
+  derivation:
+    - text: |
+        **The terms.** A directed graph with no cycle is called a **directed acyclic graph**, or **DAG**. A **topological order** of a directed graph is a list of all its nodes in which, for every arrow from $u$ to $v$, $u$ comes before $v$. The number of arrows coming into a node is its **in-degree**, and that is the count of unmet needs.
+
+        **Two ways to write the graph down.** The puzzle gave, for each job, what it **needs**: its incoming arrows. The method wants, for each job, what it **unlocks**: its outgoing arrows, the adjacency list of [[e3.graphs-and-traversal]]. One pass turns the first into the second.
+
+        ```python
+        from collections import deque
+
+        def order(needs):
+            waiting = {job: len(needs[job]) for job in needs}
+            unlocks = {job: [] for job in needs}
+            for job in needs:
+                for need in needs[job]:
+                    unlocks[need].append(job)
+
+            ready = deque([job for job in needs if waiting[job] == 0])
+            done = []
+            while len(ready) > 0:
+                job = ready.popleft()
+                done.append(job)
+                for other in unlocks[job]:
+                    waiting[other] -= 1
+                    if waiting[other] == 0:
+                        ready.append(other)
+            return done
+        ```
+
+        `waiting[job]` is the number of needs of `job` not yet done. `ready` holds the jobs whose count is zero and which have not yet been written down. This is known as **Kahn's algorithm**.
+
+        Look at its shape. It is the breadth-first search of [[e3.graphs-and-traversal]], with one change: a node joins the queue not when it is first **seen** but when it has been seen from **every** direction, that is, when its last need is met.
+
+        **Is the order right?** A job is appended to `ready` only when its count reaches zero. The count starts at the number of its needs and falls by one each time one of them is written into `done`. So when a job becomes ready, every one of its needs is already in `done`, and it is written after them all. Every arrow points forwards.
+
+        **The cost.** Follow the items, as in [[e3.amortised-analysis]]. Each job enters the queue once and leaves once. Each arrow is looked at once, in the inner loop, when its tail leaves the queue. Building `unlocks` handles each arrow once more. So the cost is
+
+        $$O(\lvert V \rvert + \lvert E \rvert),$$
+
+        with $\lvert V \rvert$ jobs and $\lvert E \rvert$ arrows. A hundred thousand jobs with half a million arrows are ordered in well under a second.
+    - question:
+        id: derive-kahn-trace
+        type: order
+        system: s2
+        prompt: The method runs on the six jobs of the puzzle. When several jobs are ready, the one earliest in the alphabet is taken. Put the jobs in the order they are written down.
+        steps:
+          - "data"
+          - "clean"
+          - "model"
+          - "split"
+          - "train"
+          - "test"
+        explanation: |
+          At the start data and model are ready, and data is earlier in the alphabet. Finishing data makes clean ready, and clean comes before model. Finishing clean makes split ready, and now model is the earlier of the two. Then split, which lowers the count of train to zero, since model is already done, and the count of test to one. Then train, and last test.
+        hints:
+          - At the start, which jobs need nothing? Take the one earlier in the alphabet.
+          - After data, the ready jobs are clean and model.
+          - train needs both split and model, so it becomes ready only when the second of them is done.
+    - text: |
+        **When there is no order.** Suppose the needs contain a cycle: A needs B, B needs C, C needs A. No order can exist, since each of the three would have to come before itself.
+
+        What does the method do? None of the three ever reaches a count of zero, because each waits on another of the three. They never enter the queue. The queue empties, the loop ends, and `done` is **short**.
+
+        So the method reports a cycle by itself: when it finishes, compare `len(done)` with the number of jobs.
+
+        Is that test exact? It must be shown that when there is **no** cycle, nothing is left behind. Suppose some jobs are left when the queue empties. Each of them has a count above zero, so it has an unmet need, which is another leftover job. Start at any leftover job and walk backwards to one of its unmet needs, and from there to one of its, and so on. The walk never has to stop, since every leftover job has an unmet need. But there are only finitely many jobs, so the walk must come to a job it has visited before. That closes a cycle. So
+
+        $$\text{jobs are left over} \iff \text{the graph has a cycle}.$$
+
+        A directed graph has a topological order exactly when it is a DAG, and one pass both finds the order and proves there is one.
+
+        This is how a package installer tells you that two libraries each require the other, and how a spreadsheet detects a formula that refers to itself by a roundabout way.
+
+        **The other way: needs first.** There is a second method, and you have in fact already used it. To do a job: first do everything it needs, then do the job, and never do anything twice.
+
+        ```python
+        def do(job, needs, seen, done):
+            if job in seen:
+                return
+            seen.add(job)
+            for need in needs[job]:
+                do(need, needs, seen, done)
+            done.append(job)
+        ```
+
+        Call `do` on every job and `done` is a topological order. This is the depth-first search of [[e3.graphs-and-traversal]], run along the arrows backwards, with each job written down as the search **leaves** it.
+
+        And it is exactly the memoised recursion of [[e3.dynamic-programming]]. There, `seen` was the dictionary of answers, the needs of an entry were the smaller entries in its recurrence, and "written down" meant "computed". A memoised recursion computes its entries in a topological order of their dependencies, without anyone having to say what the order is. That is why top-down dynamic programming needs no thought about the order of filling, and why bottom-up needs some: bottom up, **you** must supply a topological order.
+
+        The recursive method is shorter. It does not detect cycles unless more is added, and on a long chain of needs it runs out of room for waiting calls. Kahn's algorithm has neither fault.
+
+        **Computing along the order.** A topological order is seldom the goal. It is what lets you **compute** something for every node from the values of the nodes it depends on, each once.
+
+        Suppose each job takes some hours, and there are as many workers as you like, so that jobs not depending on each other can be done at once. When can each job finish at the earliest? A job starts when the **last** of its needs finishes:
+
+        $$\text{finish}(j) = \text{hours}(j) + \max_{n \,\in\, \text{needs}(j)} \text{finish}(n),$$
+
+        with the maximum taken as 0 for a job with no needs. Take the jobs in a topological order and every value on the right is ready when wanted. This is a table filled in dependency order, dynamic programming on a graph that is not a grid.
+
+        The same pattern runs a neural network. Its operations form a DAG. To compute the output, the operations are evaluated in a topological order, each from the results of its inputs. And to find how the output depends on every number inside, which is how a network learns, the same graph is walked in the **reverse** of that order, so that everything which depends on a node has been dealt with before the node itself. You will build exactly that.
+    - question:
+        id: derive-finish
+        type: numeric
+        system: s2
+        prompt: |
+          The jobs take these hours: data 2, clean 3, split 1, model 4, train 8, test 1. With as many workers as needed, at what hour does **train** finish at the earliest, counting from 0?
+        answer: "14"
+        explanation: |
+          Work in a topological order. data finishes at 2, clean at $2 + 3 = 5$, split at $5 + 1 = 6$, and model, which needs nothing, at 4. train needs split and model, and can start when the later of them finishes, at hour 6, so it finishes at $6 + 8$. The model was ready at 4 and had to wait: the chain through the data decides the time. test then finishes at 15, though the six jobs contain 19 hours of work, because the model was written while the data was being prepared.
+        hints:
+          - Find when data, clean and split finish, each starting when the one before ends.
+          - When does model finish? Which of split and model is the later?
+          - train starts when the later of its two needs finishes, and runs for 8 hours.
+  formal:
+    - text: |
+        **DAG.** A directed graph with no cycle.
+
+        **Topological order.** A list of all the nodes of a directed graph in which every arrow goes from an earlier node to a later one. It exists exactly when the graph is a DAG, and is in general not unique.
+
+        **In-degree.** The number of arrows coming into a node. The in-degrees of a graph add up to its number of arrows.
+
+        **Kahn's algorithm.** Compute every in-degree. Put the nodes of in-degree 0 in a queue. Repeatedly remove a node from the queue, append it to the order, and lower the in-degree of each node it points to, adding to the queue any that reach 0. Cost $O(\lvert V \rvert + \lvert E \rvert)$. If the order ends with fewer than $\lvert V \rvert$ nodes, the graph has a cycle, and otherwise the order is topological.
+
+        **Depth-first method.** Visit each node once. On visiting a node, first visit everything it needs, then append it. On a DAG the result is a topological order.
+
+        **Computing on a DAG.** A value defined for each node in terms of the values of the nodes it depends on can be computed for all nodes in $O(\lvert V \rvert + \lvert E \rvert)$ by taking the nodes in topological order.
+  drill:
+    - text: Seconds each. The six jobs are those of the puzzle. clean needs data, split needs clean, train needs split and model, test needs train and split, and data and model need nothing.
+    - question:
+        id: drill-sources
+        type: numeric
+        system: s1
+        prompt: |
+          How many of the six jobs are ready at the very start?
+        answer: "2"
+        explanation: data and model need nothing.
+        hints:
+          - A job is ready when it has no needs.
+          - Which jobs have an empty list of needs?
+    - question:
+        id: drill-indegree-train
+        type: numeric
+        system: s1
+        prompt: |
+          What is the in-degree of train?
+        answer: "2"
+        explanation: It needs split and model, so two arrows come in.
+        hints:
+          - The in-degree is the number of arrows coming in.
+          - How many things does train need?
+    - question:
+        id: drill-arrows
+        type: numeric
+        system: s1
+        prompt: |
+          How many arrows has the graph of the six jobs?
+        answer: "6"
+        explanation: One for each need. The lists of needs have 0, 1, 1, 0, 2 and 2 entries.
+        hints:
+          - Each need of each job is one arrow.
+          - Add the lengths of the six lists of needs.
+    - question:
+        id: drill-after-data
+        type: choice
+        system: s1
+        prompt: |
+          data has just been done, and nothing else. Which jobs are ready now?
+        options: ["clean only", "clean and model", "clean, model and split", "model only"]
+        answer: 1
+        explanation: model was ready from the start, and clean needed only data. split still waits for clean.
+        hints:
+          - Which jobs were ready before data was done and are still not done?
+          - Which job needed only data?
+    - question:
+        id: drill-after-split
+        type: numeric
+        system: s1
+        prompt: |
+          data, clean and split have been done, and model has not. How many unmet needs has train?
+        answer: "1"
+        explanation: Its count began at 2 and fell by one when split was done. It still waits for model.
+        hints:
+          - train needs split and model.
+          - Which of the two has been done?
+    - question:
+        id: drill-valid-one
+        type: choice
+        system: s1
+        prompt: |
+          Which of these is a topological order of the six jobs?
+        options:
+          - "data, clean, split, test, model, train"
+          - "model, data, clean, split, train, test"
+          - "data, split, clean, model, train, test"
+          - "train, data, clean, split, model, test"
+        answer: 1
+        explanation: Every job in it comes after all its needs. The first option tests before training, the third splits before cleaning, and the fourth trains before anything exists.
+        hints:
+          - Check that test comes after train, and train after both split and model.
+          - Check the chain data, clean, split.
+    - question:
+        id: drill-cycle-ready
+        type: numeric
+        system: s1
+        prompt: |
+          A needs B, B needs C, and C needs A. How many of the three are ready at the start?
+        answer: "0"
+        explanation: Each has one unmet need, so none has a count of zero, and the queue starts empty.
+        hints:
+          - What is the count of unmet needs for each?
+          - A job is ready only when its count is zero.
+    - question:
+        id: drill-cycle-done
+        type: numeric
+        system: s1
+        prompt: |
+          Five jobs: P needs nothing, Q needs P, and X, Y and Z need each other in a ring. How many jobs does Kahn's algorithm write down before its queue is empty?
+        answer: "2"
+        explanation: P and then Q. The three in the ring never reach a count of zero.
+        hints:
+          - Which jobs can ever have all their needs met?
+          - The three jobs in the ring wait on each other for ever.
+    - question:
+        id: drill-chain-orders
+        type: numeric
+        system: s1
+        prompt: |
+          Four jobs form a chain: each needs the one before it. How many topological orders are there?
+        answer: "1"
+        explanation: Every pair of jobs is forced into one order, so only the chain itself will do.
+        hints:
+          - Is there ever a moment when two jobs are ready together?
+          - With one ready job at every step, how much choice is there?
+    - question:
+        id: drill-free-orders
+        type: numeric
+        system: s1
+        prompt: |
+          Three jobs have no needs at all. How many topological orders are there?
+        answer: "6"
+        explanation: With no arrows every order is acceptable, and three things can be arranged in $3 \times 2 \times 1$ ways.
+        hints:
+          - With no arrows, which orders are ruled out?
+          - In how many ways can three things be put in a row?
+    - question:
+        id: drill-cost
+        type: choice
+        system: s1
+        prompt: |
+          Kahn's algorithm on a graph with $\lvert V \rvert$ nodes and $\lvert E \rvert$ arrows costs
+        options: ["$O(\\lvert V \\rvert^2)$", "$O(\\lvert V \\rvert + \\lvert E \\rvert)$", "$O(\\lvert V \\rvert \\log \\lvert V \\rvert)$", "$O(\\lvert V \\rvert \\cdot \\lvert E \\rvert)$"]
+        answer: 1
+        explanation: Each node enters and leaves the queue once, and each arrow is looked at once.
+        hints:
+          - How many times does a node enter the queue?
+          - How many times is each arrow looked at?
+    - question:
+        id: predict-waiting
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          needs = {
+              "data": [],
+              "clean": ["data"],
+              "split": ["clean"],
+              "model": [],
+              "train": ["split", "model"],
+              "test": ["train", "split"],
+          }
+          waiting = {job: len(needs[job]) for job in needs}
+          print(waiting["train"], sum(waiting.values()), [job for job in needs if waiting[job] == 0])
+        output: "2 6 ['data', 'model']"
+        explanation: train has two needs. The counts add up to the number of arrows, 6. The jobs with a count of zero are the ones that can start at once.
+        hints:
+          - waiting holds the length of each job's list of needs.
+          - The sum of all the counts is the number of arrows in the graph.
+    - question:
+        id: predict-cycle
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          from collections import deque
+
+          needs = {"a": [], "b": ["a", "d"], "c": ["b"], "d": ["c"], "e": ["a"]}
+          waiting = {job: len(needs[job]) for job in needs}
+          unlocks = {job: [] for job in needs}
+          for job in needs:
+              for need in needs[job]:
+                  unlocks[need].append(job)
+          ready = deque([job for job in needs if waiting[job] == 0])
+          done = []
+          while len(ready) > 0:
+              job = ready.popleft()
+              done.append(job)
+              for other in unlocks[job]:
+                  waiting[other] -= 1
+                  if waiting[other] == 0:
+                      ready.append(other)
+          print(done, len(done) == len(needs))
+        output: "['a', 'e'] False"
+        explanation: Only a is ready at the start. Finishing it readies e, and lowers the count of b to 1, where it stays, because b needs d, d needs c and c needs b. Those three form a cycle and are never written down, so the order is short and the comparison is False.
+        hints:
+          - Which jobs need nothing? What does finishing that job make ready?
+          - Follow the needs of b, then of d, then of c.
+  work:
+    - text: Slower now. For each graph, say which way the arrows point and what a count of zero means, before you trace or write anything.
+    - question:
+        id: write-order
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `order(needs)`. `needs` is a dictionary from each job to the list of jobs that must be done before it, and every job mentioned is a key. Return a list of all the jobs in an order in which each comes after everything it needs. If no such order exists, because the needs go round in a cycle, return `None`. Use counts of unmet needs and a queue, so that each need is looked at once.
+        starter: |
+          from collections import deque
+
+          def order(needs):
+              # Replace the next line with your own.
+              return list(needs)
+
+          needs = {
+              "test": ["train", "split"],
+              "train": ["split", "model"],
+              "model": [],
+              "split": ["clean"],
+              "clean": ["data"],
+              "data": [],
+          }
+          print(order(needs))
+        solution: |
+          from collections import deque
+
+          def order(needs):
+              waiting = {job: len(needs[job]) for job in needs}
+              unlocks = {job: [] for job in needs}
+              for job in needs:
+                  for need in needs[job]:
+                      unlocks[need].append(job)
+              ready = deque([job for job in needs if waiting[job] == 0])
+              done = []
+              while len(ready) > 0:
+                  job = ready.popleft()
+                  done.append(job)
+                  for other in unlocks[job]:
+                      waiting[other] -= 1
+                      if waiting[other] == 0:
+                          ready.append(other)
+              if len(done) < len(needs):
+                  return None
+              return done
+
+          needs = {
+              "test": ["train", "split"],
+              "train": ["split", "model"],
+              "model": [],
+              "split": ["clean"],
+              "clean": ["data"],
+              "data": [],
+          }
+          print(order(needs))
+        tests: |
+          def _check(needs, name):
+              got = order({job: list(needs[job]) for job in needs})
+              assert got is not None, "For " + name + " an order exists, and you returned None"
+              assert sorted(got) == sorted(needs), "For " + name + " the order should hold every job exactly once. You returned " + repr(got)
+              place = {job: k for k, job in enumerate(got)}
+              for job in needs:
+                  for need in needs[job]:
+                      assert place[need] < place[job], "For " + name + ", " + repr(need) + " must come before " + repr(job) + ". You returned " + repr(got)
+          _check({"test": ["train", "split"], "train": ["split", "model"], "model": [], "split": ["clean"], "clean": ["data"], "data": []}, "the six jobs of the puzzle")
+          _check({"a": ["b"], "b": ["c", "d"], "c": [], "d": []}, "a needs b, and b needs c and d")
+          _check({"z": [], "y": ["z"], "x": ["y"], "w": ["x"]}, "the chain z, y, x, w")
+          _check({"p": [], "q": [], "r": []}, "three jobs with no needs")
+          _check({"only": []}, "a single job")
+          _check({}, "no jobs at all")
+          _check({"shoes": ["socks", "trousers"], "socks": [], "trousers": ["pants"], "pants": [], "belt": ["trousers"], "coat": ["shirt", "belt"], "shirt": []}, "getting dressed")
+          _check({k: [j for j in range(k) if (k - j) % 3 == 1] for k in range(30)}, "thirty numbered jobs")
+          assert order({"a": ["c"], "b": ["a"], "c": ["b"]}) is None, "a needs c, c needs b and b needs a: there is no order, so the answer is None. You returned " + repr(order({"a": ["c"], "b": ["a"], "c": ["b"]}))
+          assert order({"p": [], "q": ["p"], "x": ["z"], "y": ["x"], "z": ["y"]}) is None, "When some jobs form a cycle the answer is None, even if other jobs can be done. You returned " + repr(order({"p": [], "q": ["p"], "x": ["z"], "y": ["x"], "z": ["y"]}))
+          assert order({"self": ["self"]}) is None, "A job that needs itself can never be done, so the answer is None. You returned " + repr(order({"self": ["self"]}))
+          _lines = output.strip().splitlines()
+          assert len(_lines) == 1 and _lines[0].startswith("[") and "'test'" in _lines[0], "The program should print the order of the six jobs as a list"
+        wrong:
+          - |
+            from collections import deque
+
+            def order(needs):
+                waiting = {job: len(needs[job]) for job in needs}
+                unlocks = {job: [] for job in needs}
+                for job in needs:
+                    for need in needs[job]:
+                        unlocks[need].append(job)
+                ready = deque([job for job in needs if waiting[job] == 0])
+                done = []
+                while len(ready) > 0:
+                    job = ready.popleft()
+                    done.append(job)
+                    for other in unlocks[job]:
+                        waiting[other] -= 1
+                        if waiting[other] == 0:
+                            ready.append(other)
+                return done
+
+            print(['data', 'model', 'clean', 'split', 'train', 'test'])
+          - |
+            from collections import deque
+
+            def order(needs):
+                return sorted(needs, key=lambda job: len(needs[job]))
+
+            print(['data', 'model', 'clean', 'split', 'train', 'test'])
+          - |
+            from collections import deque
+
+            def order(needs):
+                waiting = {job: len(needs[job]) for job in needs}
+                ready = deque([job for job in needs if waiting[job] == 0])
+                done = []
+                while len(ready) > 0:
+                    job = ready.popleft()
+                    done.append(job)
+                    for other in needs:
+                        if job in needs[other] and other not in done and other not in ready:
+                            ready.append(other)
+                if len(done) < len(needs):
+                    return None
+                return done
+
+            print(['data', 'model', 'clean', 'split', 'train', 'test'])
+          - |
+            from collections import deque
+
+            def order(needs):
+                waiting = {job: len(needs[job]) for job in needs}
+                ready = deque([job for job in needs if waiting[job] == 0])
+                done = []
+                while len(ready) > 0:
+                    job = ready.popleft()
+                    done.append(job)
+                    for need in needs[job]:
+                        waiting[need] -= 1
+                        if waiting[need] == 0:
+                            ready.append(need)
+                if len(done) < len(needs):
+                    return None
+                return done
+
+            print(['data', 'model', 'clean', 'split', 'train', 'test'])
+        explanation: |
+          First the graph is turned round: `needs` lists the arrows coming into each job, and the method wants the arrows going out, so one pass builds `unlocks`. `waiting` counts each job's unmet needs. The jobs with a count of zero start in the queue. Each job taken from the queue is written down and lowers the count of every job it unlocks, and a job is added to the queue at the moment its count reaches zero, not before. Adding a job as soon as **one** of its needs is done puts train straight after model, before the data exists. Sorting the jobs by how many needs they have looks plausible and is wrong, because a job with one need can depend on a job with two. At the end, a short list means some jobs never reached zero, which happens exactly when there is a cycle. The order printed for the six jobs depends on the order of the dictionary, and any order that respects the arrows is correct.
+        hints:
+          - Build waiting, the number of needs of each job, and unlocks, which lists for each job the jobs that need it.
+          - Start a queue with the jobs whose count is 0. Take a job from the queue, append it to the result, and subtract 1 from the count of each job it unlocks.
+          - Add a job to the queue only when its count reaches 0. At the end, if fewer jobs were written down than there are, return None.
+    - question:
+        id: write-finish-times
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Each job takes some hours, and there are as many workers as needed, so a job can start as soon as the last of its needs has finished. Write `finish_times(needs, hours)` to return a dictionary giving, for every job, the earliest hour at which it can finish, counting from 0. The jobs may appear in `needs` in any order, and there is no cycle. Compute each job's time once.
+        starter: |
+          def finish_times(needs, hours):
+              # Replace the next line with your own.
+              return dict(hours)
+
+          needs = {
+              "test": ["train", "split"],
+              "train": ["split", "model"],
+              "model": [],
+              "split": ["clean"],
+              "clean": ["data"],
+              "data": [],
+          }
+          hours = {"data": 2, "clean": 3, "split": 1, "model": 4, "train": 8, "test": 1}
+          print(finish_times(needs, hours)["test"])
+        solution: |
+          def finish_of(job, needs, hours, finish):
+              if job not in finish:
+                  start = 0
+                  for need in needs[job]:
+                      start = max(start, finish_of(need, needs, hours, finish))
+                  finish[job] = start + hours[job]
+              return finish[job]
+
+          def finish_times(needs, hours):
+              finish = {}
+              for job in needs:
+                  finish_of(job, needs, hours, finish)
+              return finish
+
+          needs = {
+              "test": ["train", "split"],
+              "train": ["split", "model"],
+              "model": [],
+              "split": ["clean"],
+              "clean": ["data"],
+              "data": [],
+          }
+          hours = {"data": 2, "clean": 3, "split": 1, "model": 4, "train": 8, "test": 1}
+          print(finish_times(needs, hours)["test"])
+        tests: |
+          _needs = {"test": ["train", "split"], "train": ["split", "model"], "model": [], "split": ["clean"], "clean": ["data"], "data": []}
+          _hours = {"data": 2, "clean": 3, "split": 1, "model": 4, "train": 8, "test": 1}
+          assert finish_times(_needs, _hours) == {"data": 2, "clean": 5, "split": 6, "model": 4, "train": 14, "test": 15}, "For the six jobs the finishing hours are data 2, clean 5, split 6, model 4, train 14, test 15. You returned " + repr(finish_times(_needs, _hours))
+          _forward = {"data": [], "clean": ["data"], "split": ["clean"], "model": [], "train": ["split", "model"], "test": ["train", "split"]}
+          assert finish_times(_forward, _hours) == {"data": 2, "clean": 5, "split": 6, "model": 4, "train": 14, "test": 15}, "The answer should not depend on the order in which the jobs are listed. You returned " + repr(finish_times(_forward, _hours))
+          assert finish_times({"a": []}, {"a": 7}) == {"a": 7}, "One job of 7 hours finishes at 7. You returned " + repr(finish_times({"a": []}, {"a": 7}))
+          assert finish_times({"a": [], "b": [], "c": []}, {"a": 3, "b": 9, "c": 1}) == {"a": 3, "b": 9, "c": 1}, "Jobs with no needs all start at 0. You returned " + repr(finish_times({"a": [], "b": [], "c": []}, {"a": 3, "b": 9, "c": 1}))
+          assert finish_times({"c": ["b"], "b": ["a"], "a": []}, {"a": 1, "b": 2, "c": 3}) == {"a": 1, "b": 3, "c": 6}, "A chain of 1, 2 and 3 hours finishes at 1, 3 and 6. You returned " + repr(finish_times({"c": ["b"], "b": ["a"], "a": []}, {"a": 1, "b": 2, "c": 3}))
+          assert finish_times({"end": ["slow", "fast"], "slow": [], "fast": []}, {"slow": 10, "fast": 1, "end": 2}) == {"slow": 10, "fast": 1, "end": 12}, "A job waits for the last of its needs. With needs finishing at 10 and 1, a job of 2 hours finishes at 12. You returned " + repr(finish_times({"end": ["slow", "fast"], "slow": [], "fast": []}, {"slow": 10, "fast": 1, "end": 2}))
+          _wide = {"z": ["y1", "y2"], "y1": ["x1", "x2"], "y2": ["x1", "x2"], "x1": ["w"], "x2": ["w"], "w": []}
+          _one = {"z": 1, "y1": 1, "y2": 1, "x1": 1, "x2": 1, "w": 1}
+          assert finish_times(_wide, _one) == {"w": 1, "x1": 2, "x2": 2, "y1": 3, "y2": 3, "z": 4}, "Six jobs of 1 hour in four layers finish at 1, 2, 2, 3, 3 and 4. You returned " + repr(finish_times(_wide, _one))
+          assert _needs == {"test": ["train", "split"], "train": ["split", "model"], "model": [], "split": ["clean"], "clean": ["data"], "data": []}, "The dictionary of needs should be left unchanged"
+          assert output.strip() == "15", "The program should print 15"
+        wrong:
+          - |
+            def finish_times(needs, hours):
+                finish = {}
+                for job in needs:
+                    start = 0
+                    for need in needs[job]:
+                        start = max(start, finish.get(need, 0))
+                    finish[job] = start + hours[job]
+                return finish
+
+            print(15)
+          - |
+            def finish_of(job, needs, hours, finish):
+                if job not in finish:
+                    start = 0
+                    for need in needs[job]:
+                        start = start + finish_of(need, needs, hours, finish)
+                    finish[job] = start + hours[job]
+                return finish[job]
+
+            def finish_times(needs, hours):
+                finish = {}
+                for job in needs:
+                    finish_of(job, needs, hours, finish)
+                return finish
+
+            print(15)
+          - |
+            def finish_times(needs, hours):
+                finish = {}
+                for job in needs:
+                    start = 0
+                    for need in needs[job]:
+                        start = max(start, hours[need])
+                    finish[job] = start + hours[job]
+                return finish
+
+            print(15)
+          - |
+            def finish_of(job, needs, hours, finish):
+                if job not in finish:
+                    start = 0
+                    for need in needs[job]:
+                        if start == 0 or finish_of(need, needs, hours, finish) < start:
+                            start = finish_of(need, needs, hours, finish)
+                    finish[job] = start + hours[job]
+                return finish[job]
+
+            def finish_times(needs, hours):
+                finish = {}
+                for job in needs:
+                    finish_of(job, needs, hours, finish)
+                return finish
+
+            print(15)
+        explanation: |
+          A job finishes its own hours after the latest of its needs finishes. The solution is a memoised recursion: `finish_of` computes a job's time from the times of its needs, and the dictionary `finish` makes sure each is computed once. The recursion visits needs before the jobs that need them, so it works through the graph in a topological order whatever order the dictionary lists them in. A plain loop over the dictionary, using 0 for any need not yet computed, is right only when the dictionary happens to be in a topological order, and here test is listed first. Adding the needs' times where the maximum is wanted treats the workers as one person, and counts shared needs twice over. Taking the earliest need lets a job start before everything it requires exists. The chain data, clean, split, train, test adds up to 15 hours and decides the whole project: it is called the critical path, and shortening any job outside it gains nothing.
+        hints:
+          - A job's finishing hour is its own hours plus the largest finishing hour among its needs, or plus 0 if it has none.
+          - Write a helper that returns a job's finishing hour, calling itself for each need, and stores the result in a dictionary so that each job is computed once.
+          - In finish_times, make an empty dictionary, call the helper for every job, and return the dictionary.
+    - question:
+        id: fix-kahn
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `order(needs)` should return the jobs in an order in which each comes after all its needs. It should print `data model clean split train test`. It prints `data model clean train split test train test`, with train before split and two jobs repeated. Fix it.
+        starter: |
+          from collections import deque
+
+          def order(needs):
+              waiting = {job: len(needs[job]) for job in needs}
+              unlocks = {job: [] for job in needs}
+              for job in needs:
+                  for need in needs[job]:
+                      unlocks[need].append(job)
+              ready = deque([job for job in needs if waiting[job] == 0])
+              done = []
+              while len(ready) > 0:
+                  job = ready.popleft()
+                  done.append(job)
+                  for other in unlocks[job]:
+                      waiting[other] -= 1
+                      ready.append(other)
+              return done
+
+          needs = {
+              "data": [],
+              "clean": ["data"],
+              "split": ["clean"],
+              "model": [],
+              "train": ["split", "model"],
+              "test": ["train", "split"],
+          }
+          print(" ".join(order(needs)))
+        solution: |
+          from collections import deque
+
+          def order(needs):
+              waiting = {job: len(needs[job]) for job in needs}
+              unlocks = {job: [] for job in needs}
+              for job in needs:
+                  for need in needs[job]:
+                      unlocks[need].append(job)
+              ready = deque([job for job in needs if waiting[job] == 0])
+              done = []
+              while len(ready) > 0:
+                  job = ready.popleft()
+                  done.append(job)
+                  for other in unlocks[job]:
+                      waiting[other] -= 1
+                      if waiting[other] == 0:
+                          ready.append(other)
+              return done
+
+          needs = {
+              "data": [],
+              "clean": ["data"],
+              "split": ["clean"],
+              "model": [],
+              "train": ["split", "model"],
+              "test": ["train", "split"],
+          }
+          print(" ".join(order(needs)))
+        tests: |
+          def _check(needs, name):
+              got = order({job: list(needs[job]) for job in needs})
+              assert sorted(got) == sorted(needs), "For " + name + " the order should hold every job exactly once. You returned " + repr(got)
+              place = {job: k for k, job in enumerate(got)}
+              for job in needs:
+                  for need in needs[job]:
+                      assert place[need] < place[job], "For " + name + ", " + repr(need) + " must come before " + repr(job) + ". You returned " + repr(got)
+          _check({"data": [], "clean": ["data"], "split": ["clean"], "model": [], "train": ["split", "model"], "test": ["train", "split"]}, "the six jobs")
+          _check({"a": ["b"], "b": ["c", "d"], "c": [], "d": []}, "a needs b, and b needs c and d")
+          _check({"p": [], "q": ["p"], "r": ["p", "q"], "s": ["p", "q", "r"]}, "four jobs each needing all before it")
+          _check({"x": [], "y": [], "z": ["x", "y"]}, "z needs x and y")
+          _check({"m": []}, "a single job")
+          assert output.strip() == "data model clean split train test", "The program should print data model clean split train test"
+        wrong:
+          - |
+            from collections import deque
+
+            def order(needs):
+                waiting = {job: len(needs[job]) for job in needs}
+                unlocks = {job: [] for job in needs}
+                for job in needs:
+                    for need in needs[job]:
+                        unlocks[need].append(job)
+                ready = deque([job for job in needs if waiting[job] == 0])
+                done = []
+                while len(ready) > 0:
+                    job = ready.popleft()
+                    if job not in done:
+                        done.append(job)
+                    for other in unlocks[job]:
+                        waiting[other] -= 1
+                        if other not in done and other not in ready:
+                            ready.append(other)
+                return done
+
+            print("data model clean split train test")
+          - |
+            from collections import deque
+
+            def order(needs):
+                waiting = {job: len(needs[job]) for job in needs}
+                unlocks = {job: [] for job in needs}
+                for job in needs:
+                    for need in needs[job]:
+                        unlocks[need].append(job)
+                ready = deque([job for job in needs if waiting[job] == 0])
+                done = []
+                while len(ready) > 0:
+                    job = ready.popleft()
+                    done.append(job)
+                    for other in unlocks[job]:
+                        waiting[other] -= 1
+                        if waiting[other] <= 1:
+                            ready.append(other)
+                return done
+
+            print("data model clean split train test")
+          - |
+            from collections import deque
+
+            def order(needs):
+                return sorted(needs)
+
+            print("data model clean split train test")
+        explanation: |
+          The faulty line adds a job to the queue every time **one** of its needs is done. train is queued when model is done, while it still waits for split, and is written down too early. It is queued again when split is done, and written down a second time. The count `waiting[other]` is kept up to date and then ignored. A job is ready only when that count reaches zero, which happens exactly once, when the last of its needs is done: so the test `if waiting[other] == 0` cures the wrong order and the repeats together. Refusing to queue a job that is already queued or done removes the repeats and leaves train before split. This is the one place where the method differs from breadth-first search, which queues a node the first time it is seen.
+        hints:
+          - Why is train written down before split? What was train still waiting for at that moment?
+          - The count waiting[other] is lowered and never consulted.
+          - Add a job to the queue only when its count of unmet needs has reached 0.
+    - question:
+        id: work-count-orders
+        type: numeric
+        system: s2
+        prompt: |
+          How many different topological orders have the six jobs of the puzzle?
+        answer: "4"
+        explanation: |
+          Five of the jobs are forced into a chain: data, clean, split, train, test. clean needs data, split needs clean, train needs split, and test needs train. The only freedom is where model goes, and its one constraint is to come before train. It can be placed first, or after data, or after clean, or after split: four places, four orders. In general the number of orders measures how loosely the arrows constrain the jobs. A chain has one, and jobs with no arrows have every arrangement. Jobs that can go in either order are also jobs that two workers could do at the same time.
+        hints:
+          - Which jobs are forced into a single chain by their needs?
+          - Which job is outside the chain, and what is its only constraint?
+          - In how many positions can it be placed before train?
+    - question:
+        id: work-leftover
+        type: choice
+        system: s2
+        prompt: |
+          Kahn's algorithm stops with its queue empty and 40 of 100 jobs never written down. Why must the needs contain a cycle?
+        options:
+          - "Because 40 is even."
+          - "Each of the 40 has an unmet need, and that need is itself one of the 40, since everything written down has been counted off. Walk from any leftover job to an unmet need of it, and on to a need of that. The walk can always continue and has only 40 jobs to visit, so it must return to a job it has visited, which closes a cycle."
+          - "Because the queue should never be empty."
+          - "It need not. The algorithm may simply have taken the jobs in a bad order."
+        answer: 1
+        explanation: |
+          A job is left over only if its count never reached zero, so at least one of its needs was never written down, and that need is a leftover job too. The leftover jobs therefore each point back to another of their number. Follow those pointers and you can never be stuck, yet you have only finitely many jobs to step on, so some job is stepped on twice, and the steps between its two visits are a cycle of needs. The order in which ready jobs are taken cannot matter: taking a ready job never makes another job less ready. So a short result is proof of a cycle, and a full result is proof that there is none.
+        hints:
+          - What must be true of a job whose count never reached zero?
+          - Is the job it waits for written down, or left over?
+          - Keep walking from a job to something it waits for. What must eventually happen among finitely many jobs?
+    - question:
+        id: work-backward
+        type: choice
+        system: s2
+        prompt: |
+          A network computes $s = a + b$, then $t = b + 1$, then $y = s \times t$. To find how much $y$ changes when $b$ changes, the effect is passed backwards along the arrows: $y$ tells $s$ and $t$ how much each matters, and they in turn tell their inputs. $b$ feeds both $s$ and $t$. In what order must the nodes be handled?
+        options:
+          - "In any order, since the arrows show where everything goes."
+          - "In the reverse of a topological order: $y$ first, then $s$ and $t$, and $b$ only after both, because $b$'s total is the sum of what arrives from $s$ and from $t$, and it must be complete before $b$ is dealt with."
+          - "In a topological order, $a$ and $b$ first, as when computing $y$."
+          - "In alphabetical order."
+        answer: 1
+        explanation: |
+          Going forwards, a node can be computed when all its inputs are ready, which is a topological order. Going backwards the arrows are turned round: a node can be dealt with when everything that **uses** it has reported how much it matters. That is a topological order of the reversed graph, which is the reverse of a topological order of the original. $b$ has two users, and handling it after hearing from only one of them would pass on half the story. This is the count of unmet needs again, with "needs" meaning the nodes that use this one. When you build a system that differentiates a computation automatically, its backward pass will begin by computing exactly this order.
+        hints:
+          - Which nodes use b?
+          - What must have happened to both of them before b's total is known?
+          - Going backwards, which node has nothing waiting on it at the start?
+  connections:
+    - text: |
+        The puzzle asked for an order in which to do jobs that depend on each other, found in one pass, and for a way to tell when no order exists. Count each job's unmet needs. Put the jobs with none in a queue. Take a job, write it down, and lower the count of each job it unlocks, queueing any that reach zero. Each job and each arrow is handled once, so the cost is $O(\lvert V \rvert + \lvert E \rvert)$. If jobs remain when the queue is empty, they wait on each other in a cycle and no order exists.
+
+        The parts were all in your hands. The queue and the loop are the breadth-first search of [[e3.graphs-and-traversal]], with a node admitted on its last sighting in place of its first. The count of the cost is the item-by-item accounting of [[e3.amortised-analysis]]. And the order is what [[e3.dynamic-programming]] took for granted: a memoised recursion follows a topological order of its sub-problems without being told to, and a table filled bottom up needs one supplied.
+
+        You computed finishing times by taking each job after its needs, with a maximum over the arrows coming in. Replace the maximum by a minimum and the same pass finds **shortest** routes through a DAG, where the arrows carry lengths. That works because a DAG has an order in which every node is settled before anything that depends on it.
+
+        A road map has no such order. Its roads run both ways and its routes go round in circles, so there is no node that is safely first, and no order that can be fixed in advance. Yet shortest routes on a map are found billions of times a day. The method discovers an order as it goes, by always settling next the place that is **nearest**, and to find the nearest it uses the heap you built in [[e3.trees-and-heaps]]. And when the map is too vast to search, as the space of all sentences a language model might write is, a search is used that keeps only the few most promising routes at each step. Both are in the next lesson, the last of this cluster: [[e3.shortest-paths-and-beam-search]].
