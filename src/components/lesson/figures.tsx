@@ -1301,6 +1301,404 @@ function QuantifierGrid(props: Props) {
   );
 }
 
+/* Calculus figures share one small plotting kit: a window on the plane, mapped to a 440 by 280 drawing. */
+type View = { x0: number; x1: number; y0: number; y1: number };
+const dp = (n: number, places = 4) => {
+  const scale = 10 ** places;
+  const rounded = Math.round(n * scale) / scale;
+  return String(rounded === 0 ? 0 : rounded).replace("-", "−");
+};
+const scales = (v: View) => ({
+  sx: (x: number) => 40 + ((x - v.x0) / (v.x1 - v.x0)) * 380,
+  sy: (y: number) => 260 - ((clamp(y, v.y0 - (v.y1 - v.y0), v.y1 + (v.y1 - v.y0)) - v.y0) / (v.y1 - v.y0)) * 240,
+});
+const curvePoints = (f: (x: number) => number, v: View, from = v.x0, to = v.x1) => {
+  const { sx, sy } = scales(v);
+  return Array.from({ length: 121 }, (_, i) => {
+    const x = from + ((to - from) * i) / 120;
+    return `${sx(x).toFixed(1)},${sy(f(x)).toFixed(1)}`;
+  }).join(" ");
+};
+function Axes({ view }: { view: View }) {
+  const { sx, sy } = scales(view);
+  const ax = clamp(0, view.x0, view.x1);
+  const ay = clamp(0, view.y0, view.y1);
+  return (
+    <>
+      <line x1={sx(view.x0)} x2={sx(view.x1)} y1={sy(ay)} y2={sy(ay)} className="fig-axis" />
+      <line x1={sx(ax)} x2={sx(ax)} y1={sy(view.y0)} y2={sy(view.y1)} className="fig-axis" />
+      <text x={sx(view.x0)} y={sy(ay) + 14} className="fig-small">
+        {fmt(view.x0)}
+      </text>
+      <text x={sx(view.x1)} y={sy(ay) + 14} textAnchor="end" className="fig-small">
+        {fmt(view.x1)}
+      </text>
+      <text x={sx(ax) - 6} y={sy(view.y1) + 10} textAnchor="end" className="fig-small">
+        {fmt(view.y1)}
+      </text>
+    </>
+  );
+}
+
+const APPROACH = [1, 0.5, 0.1, 0.01, 0.001];
+const LIMIT_CASES: Record<string, { name: string; at: number; f: (x: number) => number; view: View; limit: number | null; atPoint: string }> = {
+  hole: {
+    name: "f(x) = (x² − 1) ÷ (x − 1)",
+    at: 1,
+    f: (x) => (x * x - 1) / (x - 1),
+    view: { x0: -1, x1: 3, y0: 0, y1: 4 },
+    limit: 2,
+    atPoint: "At x = 1 itself the formula says 0 ÷ 0 and has no value.",
+  },
+  sinc: {
+    name: "f(x) = sin x ÷ x",
+    at: 0,
+    f: (x) => Math.sin(x) / x,
+    view: { x0: -4, x1: 4, y0: -0.5, y1: 1.5 },
+    limit: 1,
+    atPoint: "At x = 0 itself the formula says 0 ÷ 0 and has no value.",
+  },
+  jump: {
+    name: "f(x) = 1 for x < 2 and 3 for x ≥ 2",
+    at: 2,
+    f: (x) => (x < 2 ? 1 : 3),
+    view: { x0: 0, x1: 4, y0: 0, y1: 4 },
+    limit: null,
+    atPoint: "At x = 2 itself the value is 3.",
+  },
+};
+
+/** Values of a function on both sides of a point, taken closer and closer, with the point itself left out. */
+function LimitApproach(props: Props) {
+  const which = typeof props.fn === "string" && props.fn in LIMIT_CASES ? props.fn : "hole";
+  const c = LIMIT_CASES[which];
+  const [k, setK] = useState(clamp(Math.round(num(props.closeness, 1)), 0, 4));
+  const d = APPROACH[k];
+  const { sx, sy } = scales(c.view);
+  const left = c.f(c.at - d);
+  const right = c.f(c.at + d);
+  return (
+    <Frame
+      title="Approaching a point from both sides"
+      summary={`${c.name}. At x = ${dp(c.at - d)} it is ${dp(left)} and at x = ${dp(c.at + d)} it is ${dp(right)}. ${c.atPoint} ${
+        c.limit === null
+          ? `From the left the values stay at ${dp(left)} and from the right at ${dp(right)}. They do not close in on one number, so there is no limit at ${c.at}.`
+          : `The nearer x is to ${c.at}, the nearer f(x) is to ${c.limit}: the limit is ${c.limit}.`
+      }`}
+      controls={<Stepper label="closeness" value={k} onChange={setK} min={0} max={4} />}
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`Graph of ${c.name} near x = ${c.at}, with points at distance ${d} on each side`}>
+        <Axes view={c.view} />
+        <polyline points={curvePoints(c.f, c.view, c.view.x0, c.at - 0.0001)} className="fig-line" />
+        <polyline points={curvePoints(c.f, c.view, c.at + 0.0001, c.view.x1)} className="fig-line" />
+        <line x1={sx(c.at)} x2={sx(c.at)} y1={sy(c.view.y0)} y2={sy(c.view.y1)} className="fig-guide" />
+        {c.limit === null ? null : <circle cx={sx(c.at)} cy={sy(c.limit)} r="5" className="fig-ghost" style={{ fill: "var(--bg)", stroke: "var(--text-secondary)" }} />}
+        <circle cx={sx(c.at - d)} cy={sy(left)} r="5" className="fig-accent" />
+        <circle cx={sx(c.at + d)} cy={sy(right)} r="5" className="fig-accent" />
+      </svg>
+    </Frame>
+  );
+}
+
+const CURVES: Record<string, { name: string; f: (x: number) => number; d: (x: number) => number; view: View; low: number; high: number }> = {
+  square: { name: "x²", f: (x) => x * x, d: (x) => 2 * x, view: { x0: -3, x1: 3, y0: -1, y1: 9 }, low: -2, high: 2 },
+  cube: { name: "x³", f: (x) => x ** 3, d: (x) => 3 * x * x, view: { x0: -2, x1: 2, y0: -8, y1: 8 }, low: -1.5, high: 1 },
+  recip: { name: "1 ÷ x", f: (x) => 1 / x, d: (x) => -1 / (x * x), view: { x0: 0.2, x1: 4, y0: 0, y1: 5 }, low: 0.5, high: 3 },
+  sin: { name: "sin x", f: Math.sin, d: Math.cos, view: { x0: -1, x1: 7, y0: -1.5, y1: 1.5 }, low: 0, high: 6 },
+  exp: { name: "eˣ", f: Math.exp, d: Math.exp, view: { x0: -2, x1: 2.5, y0: -0.5, y1: 8 }, low: -1.5, high: 1 },
+  ln: { name: "ln x", f: Math.log, d: (x) => 1 / x, view: { x0: 0.2, x1: 6, y0: -2, y1: 2.5 }, low: 0.5, high: 5 },
+};
+
+/** A chord of a curve whose second end slides towards the first, so that its slope closes in on the slope of the tangent. */
+function Secant(props: Props) {
+  const which = typeof props.fn === "string" && props.fn in CURVES ? props.fn : "square";
+  const c = CURVES[which];
+  const [a, setA] = useState(clamp(num(props.at, 1), c.low, c.high));
+  const [k, setK] = useState(clamp(Math.round(num(props.closeness, 0)), 0, 4));
+  const h = APPROACH[k];
+  const rise = c.f(a + h) - c.f(a);
+  const chord = rise / h;
+  const slope = c.d(a);
+  const { sx, sy } = scales(c.view);
+  const through = (m: number) => (x: number) => c.f(a) + m * (x - a);
+  return (
+    <Frame
+      title="From a chord to a tangent"
+      summary={`f(x) = ${c.name}. From x = ${dp(a)} to x = ${dp(a + h)} the curve ${rise >= 0 ? "rises" : "falls"} ${dp(Math.abs(rise))} over a run of ${dp(h)}, so the chord has slope ${dp(chord)}. The tangent at x = ${dp(a)} has slope ${dp(slope)}. Shrinking the run brings the chord's slope as near to that as you like.`}
+      controls={
+        <>
+          <Slider label="point a" value={a} onChange={setA} min={c.low} max={c.high} step={0.25} />
+          <Stepper label="closeness" value={k} onChange={setK} min={0} max={4} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`The curve y = ${c.name} with a chord from x = ${dp(a)} to x = ${dp(a + h)} and the tangent at x = ${dp(a)}`}>
+        <Axes view={c.view} />
+        <polyline points={curvePoints(c.f, c.view)} className="fig-line" />
+        <polyline points={curvePoints(through(slope), c.view)} className="fig-guide" fill="none" />
+        <polyline points={curvePoints(through(chord), c.view)} className="fig-accent-line" fill="none" style={{ strokeWidth: 2 }} />
+        <circle cx={sx(a)} cy={sy(c.f(a))} r="5" className="fig-accent" />
+        <circle cx={sx(a + h)} cy={sy(c.f(a + h))} r="5" className="fig-accent" />
+      </svg>
+    </Frame>
+  );
+}
+
+/** Two machines in a row. Each multiplies small changes by its own local rate, and the rates multiply. */
+function ChainRates(props: Props) {
+  const [tenths, setTenths] = useState(clamp(Math.round(num(props.x, 1.2) * 10), 5, 20));
+  const x = tenths / 10;
+  const u = x * x;
+  const y = u ** 3;
+  const inner = 2 * x;
+  const outer = 3 * u * u;
+  const box = (cx: number, label: string, value: string) => (
+    <g>
+      <rect x={cx - 52} y="70" width="104" height="70" className="fig-cell" />
+      <text x={cx} y="98" textAnchor="middle" className="fig-small">
+        {label}
+      </text>
+      <text x={cx} y="124" textAnchor="middle" className="fig-mono">
+        {value}
+      </text>
+    </g>
+  );
+  const arrow = (x1: number, x2: number, yy: number, text: string) => (
+    <g>
+      <line x1={x1} x2={x2} y1={yy} y2={yy} className="fig-accent-line" style={{ strokeWidth: 2 }} />
+      <polygon points={`${x2},${yy} ${x2 - 9},${yy - 5} ${x2 - 9},${yy + 5}`} className="fig-accent" />
+      <text x={(x1 + x2) / 2} y={yy - 9} textAnchor="middle" className="fig-small">
+        {text}
+      </text>
+    </g>
+  );
+  return (
+    <Frame
+      title="Rates multiply along a chain"
+      summary={`u = x² and y = u³. At x = ${dp(x)}: u = ${dp(u)} and y = ${dp(y)}. A small change in x is multiplied by ${dp(inner)} on its way to u, and a small change in u is multiplied by ${dp(outer)} on its way to y. So y changes ${dp(inner)} × ${dp(outer)} = ${dp(inner * outer)} times as fast as x.`}
+      controls={<Slider label="x in tenths" value={tenths} onChange={setTenths} min={5} max={20} />}
+    >
+      <svg viewBox="0 0 440 220" role="img" aria-label={`Three boxes for x, u and y joined by arrows carrying the rates ${dp(inner)} and ${dp(outer)}`}>
+        {box(70, "x", dp(x))}
+        {box(220, "u = x²", dp(u))}
+        {box(370, "y = u³", dp(y))}
+        {arrow(124, 166, 105, `× ${dp(inner, 2)}`)}
+        {arrow(274, 316, 105, `× ${dp(outer, 2)}`)}
+        {arrow(70, 370, 180, `altogether × ${dp(inner * outer, 2)}`)}
+        <line x1="70" x2="70" y1="140" y2="180" className="fig-guide" />
+      </svg>
+    </Frame>
+  );
+}
+
+/** A curve with its tangent, read for height, slope and bending at one point. */
+function Bend(props: Props) {
+  const view: View = { x0: -2.5, x1: 2.5, y0: -5, y1: 5 };
+  const f = (x: number) => x ** 3 - 3 * x;
+  const [a, setA] = useState(clamp(num(props.at, 1), -2, 2));
+  const slope = 3 * a * a - 3;
+  const second = 6 * a;
+  const { sx, sy } = scales(view);
+  const bending =
+    second > 0
+      ? "The slope is increasing, so the curve bends upwards and lies above its tangent near here."
+      : second < 0
+        ? "The slope is decreasing, so the curve bends downwards and lies below its tangent near here."
+        : "The bending changes direction here. This is a point of inflection, and the curve crosses its tangent.";
+  const flat = slope !== 0 ? "" : second > 0 ? " With slope 0 and upward bending, this is a local minimum." : " With slope 0 and downward bending, this is a local maximum.";
+  return (
+    <Frame
+      title="Slope and bending"
+      summary={`f(x) = x³ − 3x at x = ${dp(a)}: height ${dp(f(a))}, slope f′ = ${dp(slope)}, second derivative f″ = ${dp(second)}. ${bending}${flat}`}
+      controls={<Slider label="point a" value={a} onChange={setA} min={-2} max={2} step={0.25} />}
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`The curve y = x³ − 3x with its tangent at x = ${dp(a)}`}>
+        <Axes view={view} />
+        <polyline points={curvePoints(f, view)} className="fig-line" />
+        <polyline points={curvePoints((x) => f(a) + slope * (x - a), view, a - 1, a + 1)} className="fig-accent-line" fill="none" style={{ strokeWidth: 2 }} />
+        <circle cx={sx(a)} cy={sy(f(a))} r="5" className="fig-accent" />
+      </svg>
+    </Frame>
+  );
+}
+
+const factorials = [1, 1, 2, 6, 24, 120, 720, 5040, 40320, 362880];
+const SERIES: Record<string, { name: string; f: (x: number) => number; coeff: (k: number) => number; view: View; low: number; high: number; note: string }> = {
+  sin: { name: "sin x", f: Math.sin, coeff: (k) => (k % 2 === 0 ? 0 : (k % 4 === 1 ? 1 : -1) / factorials[k]), view: { x0: -7, x1: 7, y0: -2.5, y1: 2.5 }, low: -6, high: 6, note: "" },
+  cos: { name: "cos x", f: Math.cos, coeff: (k) => (k % 2 === 1 ? 0 : (k % 4 === 0 ? 1 : -1) / factorials[k]), view: { x0: -7, x1: 7, y0: -2.5, y1: 2.5 }, low: -6, high: 6, note: "" },
+  exp: { name: "eˣ", f: Math.exp, coeff: (k) => 1 / factorials[k], view: { x0: -3, x1: 3, y0: -1, y1: 10 }, low: -3, high: 3, note: "" },
+  ln: {
+    name: "ln(1 + x)",
+    f: (x) => Math.log(1 + x),
+    coeff: (k) => (k === 0 ? 0 : (k % 2 === 1 ? 1 : -1) / k),
+    view: { x0: -0.9, x1: 2.5, y0: -2.5, y1: 2.5 },
+    low: -0.75,
+    high: 2.25,
+    note: " For this function the polynomials only help between −1 and 1. Beyond 1, raising the degree makes them worse.",
+  },
+};
+
+/** A function and its Taylor polynomial about 0, degree by degree. */
+function Taylor(props: Props) {
+  const which = typeof props.fn === "string" && props.fn in SERIES ? props.fn : "sin";
+  const s = SERIES[which];
+  const [degree, setDegree] = useState(clamp(Math.round(num(props.degree, 1)), 0, 9));
+  const [x, setX] = useState(clamp(num(props.x, 2), s.low, s.high));
+  const poly = (t: number) => {
+    let total = 0;
+    for (let k = degree; k >= 0; k--) total = total * t + s.coeff(k);
+    return total;
+  };
+  const { sx, sy } = scales(s.view);
+  return (
+    <Frame
+      title="Taylor polynomials"
+      summary={`The polynomial of degree ${degree} for ${s.name} about 0. At x = ${dp(x)} it gives ${dp(poly(x))}, and the function itself is ${dp(s.f(x))}: the error is ${dp(Math.abs(poly(x) - s.f(x)))}. Near 0 the two agree closely, and a higher degree keeps them together further out.${s.note}`}
+      controls={
+        <>
+          <Stepper label="degree" value={degree} onChange={setDegree} min={0} max={9} />
+          <Slider label="x" value={x} onChange={setX} min={s.low} max={s.high} step={0.25} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`The graph of ${s.name} and its Taylor polynomial of degree ${degree}`}>
+        <Axes view={s.view} />
+        <polyline points={curvePoints(s.f, s.view)} className="fig-line" />
+        <polyline points={curvePoints(poly, s.view)} className="fig-accent-line" fill="none" style={{ strokeWidth: 2 }} />
+        <line x1={sx(x)} x2={sx(x)} y1={sy(s.f(x))} y2={sy(poly(x))} className="fig-guide" />
+        <circle cx={sx(x)} cy={sy(s.f(x))} r="4" className="fig-line" />
+        <circle cx={sx(x)} cy={sy(poly(x))} r="4" className="fig-accent" />
+      </svg>
+    </Frame>
+  );
+}
+
+/** Gradient descent on f(x) = x²: step against the slope, with a step size that helps or ruins it. */
+function Descent(props: Props) {
+  const view: View = { x0: -4, x1: 4, y0: 0, y1: 16 };
+  const [hundredths, setHundredths] = useState(clamp(Math.round(num(props.rate, 0.1) * 20) * 5, 5, 110));
+  const [steps, setSteps] = useState(clamp(Math.round(num(props.steps, 5)), 0, 12));
+  const rate = hundredths / 100;
+  const factor = 1 - 2 * rate;
+  const xs = Array.from({ length: steps + 1 }, (_, i) => 3 * factor ** i);
+  const last = xs[steps];
+  const { sx, sy } = scales(view);
+  const verdict =
+    rate === 0.5
+      ? "The factor is 0, so one step lands exactly on the minimum."
+      : rate === 1
+        ? "The factor is −1, so x jumps between 3 and −3 for ever and never improves."
+        : Math.abs(factor) < 1
+          ? `The distance from the minimum is multiplied by ${dp(Math.abs(factor))} at each step, so the steps close in on 0${factor < 0 ? ", jumping from side to side" : ""}.`
+          : `Each step overshoots and lands further away than it started: the distance is multiplied by ${dp(Math.abs(factor))}. The method diverges.`;
+  return (
+    <Frame
+      title="Stepping downhill"
+      summary={`f(x) = x², starting at x = 3, with step size ${dp(rate)}. Each step replaces x by x − ${dp(rate)} × 2x, which is ${dp(factor)} times x. After ${steps} step${steps === 1 ? "" : "s"}, x = ${dp(last)} and f(x) = ${dp(last * last)}. ${verdict}`}
+      controls={
+        <>
+          <Slider label="step size in hundredths" value={hundredths} onChange={setHundredths} min={5} max={110} step={5} />
+          <Stepper label="steps" value={steps} onChange={setSteps} min={0} max={12} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`A parabola with ${steps + 1} points marking the steps of gradient descent with step size ${dp(rate)}`}>
+        <Axes view={view} />
+        <polyline points={curvePoints((t) => t * t, view)} className="fig-line" />
+        <polyline points={xs.map((t) => `${sx(clamp(t, -4, 4)).toFixed(1)},${sy(Math.min(t * t, 16)).toFixed(1)}`).join(" ")} className="fig-guide" fill="none" />
+        {xs.map((t, i) => (Math.abs(t) <= 4 ? <circle key={i} cx={sx(t)} cy={sy(t * t)} r={i === steps ? 5 : 3} className={i === steps ? "fig-accent" : "fig-line"} /> : null))}
+      </svg>
+    </Frame>
+  );
+}
+
+const AREAS: Record<string, { name: string; f: (x: number) => number; a: number; b: number; bName: string; exact: number; view: View }> = {
+  square: { name: "y = x²", f: (x) => x * x, a: 0, b: 3, bName: "3", exact: 9, view: { x0: 0, x1: 3.2, y0: 0, y1: 9.5 } },
+  line: { name: "y = 2x + 1", f: (x) => 2 * x + 1, a: 0, b: 3, bName: "3", exact: 12, view: { x0: 0, x1: 3.2, y0: 0, y1: 7.5 } },
+  sin: { name: "y = sin x", f: Math.sin, a: 0, b: Math.PI, bName: "π", exact: 2, view: { x0: 0, x1: 3.3, y0: 0, y1: 1.3 } },
+  recip: { name: "y = 1 ÷ x", f: (x) => 1 / x, a: 1, b: Math.E, bName: "e", exact: 1, view: { x0: 0.8, x1: 2.9, y0: 0, y1: 1.2 } },
+};
+const RULES = ["left ends", "midpoints", "right ends"];
+
+/** The area under a curve as a sum of rectangles, which improves as the rectangles are made narrower. */
+function Riemann(props: Props) {
+  const which = typeof props.fn === "string" && props.fn in AREAS ? props.fn : "square";
+  const c = AREAS[which];
+  const [doublings, setDoublings] = useState(clamp(Math.round(num(props.doublings, 2)), 0, 6));
+  const [rule, setRule] = useState(clamp(Math.round(num(props.rule, 0)), 0, 2));
+  const n = 2 ** doublings;
+  const width = (c.b - c.a) / n;
+  const heights = Array.from({ length: n }, (_, i) => c.f(c.a + (i + rule / 2) * width));
+  const total = heights.reduce((sum, hgt) => sum + hgt * width, 0);
+  const { sx, sy } = scales(c.view);
+  return (
+    <Frame
+      title="Area as a sum of rectangles"
+      summary={`${n} rectangle${n === 1 ? "" : "s"} under ${c.name} from ${c.a} to ${c.bName}, with heights taken at the ${RULES[rule]}, total ${dp(total)}. The exact area is ${dp(c.exact)}. The error is ${dp(Math.abs(total - c.exact))}. Doubling the number of rectangles shrinks the error.`}
+      controls={
+        <>
+          <Stepper label="doublings" value={doublings} onChange={setDoublings} min={0} max={6} />
+          <button type="button" className="btn btn-secondary btn-small" aria-label="Change rule" onClick={() => setRule((rule + 1) % 3)}>
+            Heights at {RULES[rule]}
+          </button>
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`${n} rectangles under the curve ${c.name}`}>
+        {heights.map((hgt, i) => (
+          <rect key={i} x={sx(c.a + i * width)} y={sy(hgt)} width={Math.max(0.5, sx(c.a + (i + 1) * width) - sx(c.a + i * width) - (n > 16 ? 0 : 1))} height={sy(0) - sy(hgt)} className="fig-fill" />
+        ))}
+        <Axes view={c.view} />
+        <polyline points={curvePoints(c.f, c.view, c.a, c.b)} className="fig-accent-line" fill="none" style={{ strokeWidth: 2 }} />
+      </svg>
+    </Frame>
+  );
+}
+
+/** The area gathered under a rate, and the fact that it grows at exactly that rate. */
+function Accumulation(props: Props) {
+  const rate = (t: number) => 3 - t;
+  const area = (t: number) => 3 * t - (t * t) / 2;
+  const [quarters, setQuarters] = useState(clamp(Math.round(num(props.x, 2) * 4), 0, 20));
+  const x = quarters / 4;
+  const top: View = { x0: 0, x1: 5, y0: -2.5, y1: 3.5 };
+  const sx = (t: number) => 40 + (t / 5) * 380;
+  const syTop = (v: number) => 130 - ((v - top.y0) / (top.y1 - top.y0)) * 120;
+  const syBottom = (v: number) => 270 - (v / 5) * 110;
+  const state =
+    x < 3
+      ? "The rate is positive, so the total is rising."
+      : x === 3
+        ? "The rate is zero, so the total has stopped rising: it is at its greatest, 4.5."
+        : "The rate is negative. Area below the axis is subtracted, so the total is falling.";
+  const line = (pts: [number, number][], sy: (v: number) => number) => pts.map(([t, v]) => `${sx(t).toFixed(1)},${sy(v).toFixed(1)}`).join(" ");
+  return (
+    <Frame
+      title="A total and its rate"
+      summary={`The rate is f(t) = 3 − t. The area gathered from 0 to x = ${dp(x)} is A(x) = ${dp(area(x))}. At this moment A is changing at the rate f(${dp(x)}) = ${dp(rate(x))}. ${state}`}
+      controls={<Slider label="x in quarters" value={quarters} onChange={setQuarters} min={0} max={20} />}
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`Above, the line f(t) = 3 − t with the area from 0 to ${dp(x)} shaded. Below, the graph of the area gathered so far.`}>
+        <polygon points={line(x <= 3 ? [[0, 0], [0, 3], [x, rate(x)], [x, 0]] : [[0, 0], [0, 3], [3, 0]], syTop)} className="fig-fill" />
+        {x > 3 ? <polygon points={line([[3, 0], [x, rate(x)], [x, 0]], syTop)} className="fig-fill" opacity="0.45" /> : null}
+        <line x1={sx(0)} x2={sx(5)} y1={syTop(0)} y2={syTop(0)} className="fig-axis" />
+        <polyline points={line([[0, 3], [5, -2]], syTop)} className="fig-line" />
+        <circle cx={sx(x)} cy={syTop(rate(x))} r="4" className="fig-accent" />
+        <text x={sx(5)} y={syTop(0) - 6} textAnchor="end" className="fig-small">
+          rate f(t)
+        </text>
+        <line x1={sx(0)} x2={sx(5)} y1={syBottom(0)} y2={syBottom(0)} className="fig-axis" />
+        <polyline points={line(Array.from({ length: 41 }, (_, i) => [i / 8, area(i / 8)] as [number, number]), syBottom)} className="fig-line" />
+        <line x1={sx(x)} x2={sx(x)} y1={syTop(top.y1)} y2={syBottom(0)} className="fig-guide" />
+        <circle cx={sx(x)} cy={syBottom(area(x))} r="5" className="fig-accent" />
+        <text x={sx(5)} y={syBottom(0) - 6} textAnchor="end" className="fig-small">
+          total A(x)
+        </text>
+      </svg>
+    </Frame>
+  );
+}
+
 const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "place-value": PlaceValue,
   "number-line": NumberLine,
@@ -1327,6 +1725,14 @@ const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "epsilon-band": EpsilonBand,
   "remainder-classes": RemainderClasses,
   "quantifier-grid": QuantifierGrid,
+  "limit-approach": LimitApproach,
+  secant: Secant,
+  "chain-rates": ChainRates,
+  bend: Bend,
+  taylor: Taylor,
+  descent: Descent,
+  riemann: Riemann,
+  accumulation: Accumulation,
 };
 
 export function Figure({ name, props }: { name: string; props?: Props }) {

@@ -1,0 +1,643 @@
+concept: m10.integral-as-accumulation
+minutes: 95
+claim: You can explain a definite integral as the limit of sums of many thin slices, read it as a total gathered from a rate and as a signed area, compute simple integrals from geometry and from the summation formulas, use linearity and additivity, find an average value, and estimate an integral numerically with left, right, midpoint and trapezium sums.
+recalls: [m10.maxima-and-minima]
+uses: [m10.derivative-as-slope-and-rate, m10.limits-and-continuity, m10.taylor-approximation, m10.second-derivative-and-curvature, m2.summation-and-product-notation, m2.sequences-and-series, m3.induction-and-strong-induction, m1.straight-lines-and-slope, m0.ratio-and-proportion, e0.functions, e0.loops, e0.lists-and-tuples, e1.comprehensions-and-iterators, e1.modules-and-imports]
+leads: [m10.fundamental-theorem-of-calculus, m10.integration-techniques, m11.the-riemann-integral, m12.multiple-integrals-and-change-of-variables]
+starter: |
+  # Scratch space. A stone falls with speed 10t metres per second.
+  # Chop 3 seconds into n slices and pretend the speed is steady in each.
+  for n in [3, 6, 30, 300, 3000]:
+      width = 3 / n
+      low = sum([10 * (i * width) * width for i in range(n)])
+      high = sum([10 * ((i + 1) * width) * width for i in range(n)])
+      print(n, low, high)
+parts:
+  recall:
+    - text: |
+        [[m10.maxima-and-minima]] closed the first half of this cluster. Every lesson so far went from a function to its rate of change. Position gave velocity, and an error curve gave the slope that gradient descent follows. Today the direction reverses: from a rate, back to a total. Three quick pulls first.
+    - question:
+        id: recall-stationary
+        type: numeric
+        system: s1
+        concepts: [m10.maxima-and-minima]
+        prompt: |
+          At which $x$ is $f(x) = x^2 - 10x$ least?
+        answer: "5"
+        explanation: |
+          $f'(x) = 2x - 10$ is zero at 5, and $f'' = 2 > 0$.
+        hints:
+          - Set the derivative to zero.
+          - The derivative is 2x minus 10.
+    - question:
+        id: recall-velocity
+        type: numeric
+        system: s1
+        unit: metres per second
+        concepts: [m10.derivative-as-slope-and-rate]
+        prompt: |
+          A stone has fallen $s(t) = 5t^2$ metres after $t$ seconds. What is its speed at $t = 3$?
+        answer: "30"
+        explanation: |
+          $s'(t) = 10t$.
+        hints:
+          - Speed is the derivative of distance.
+          - Differentiate 5t squared.
+    - question:
+        id: recall-sum
+        type: numeric
+        system: s1
+        concepts: [m2.summation-and-product-notation]
+        prompt: |
+          What is $\displaystyle\sum_{i=1}^{4} i$?
+        answer: "10"
+        explanation: |
+          $1 + 2 + 3 + 4$, or $\frac{4 \cdot 5}{2}$.
+        hints:
+          - Add the whole numbers from 1 to 4.
+          - Or use n(n + 1)/2.
+  puzzle:
+    - text: |
+        A car's odometer is broken, but its speedometer works. If the car holds a steady 20 metres a second for 3 seconds, there is nothing to it: distance is speed times time, 60 metres.
+
+        Now a stone is dropped. Its speed is not steady. After $t$ seconds it is falling at $10t$ metres a second: at rest when released, 10 after one second, 30 after three. **How far has it fallen in 3 seconds?**
+
+        "Speed times time" is no longer an answer, because it is not clear **which** speed to use. The speed at the start, 0, gives 0 metres, which is absurd. The speed at the end, 30, gives 90 metres, which assumes the stone was at full speed from the instant it was let go.
+
+        You have met this difficulty before, in the opposite direction. In the second lesson of this cluster the distance was known and the speed at an instant was wanted, and "distance divided by time" failed because an instant has no duration. That was resolved by a limit. This one will be too.
+
+        **Using nothing but "distance is speed times time", how can the distance be found when the speed keeps changing?**
+  intuition:
+    - text: |
+        Over three whole seconds the speed changes a great deal. Over a thousandth of a second it hardly changes at all. So chop the three seconds into short slices, and in each slice pretend the speed is steady. Then "speed times time" applies to each slice, and the total distance is the sum of the slices.
+
+        Try it coarsely, with three slices of one second.
+
+        - Use the speed at the **start** of each slice: 0, 10 and 20. The distance is $0 + 10 + 20 = 30$ metres. This is too small, since in each slice the stone was really moving faster than at the slice's start.
+        - Use the speed at the **end** of each slice: 10, 20 and 30. The distance is $60$ metres. This is too large.
+
+        The truth is trapped between 30 and 60. Now use six slices of half a second. The starts give 37.5 and the ends give 52.5. The trap has narrowed. The starter carries on: with 3000 slices the two estimates are 44.985 and 45.015.
+
+        They are closing in on **45 metres**. And $5 \cdot 3^2 = 45$: this is the stone of the second lesson, whose distance was $5t^2$. We have recovered the distance from the speed.
+
+        There is a picture that makes this much easier to think about. Draw the graph of speed against time. One slice contributes speed times duration: a height times a width. That is the area of a thin rectangle standing under the graph. The sum over all slices is the total area of the rectangles, and as the slices narrow, the rectangles fill out the region under the graph exactly.
+
+        **The distance covered is the area under the graph of speed.** For the stone the region is a triangle with base 3 and height 30, and its area is $\frac{1}{2} \cdot 3 \cdot 30 = 45$.
+
+        The figure shows the same construction for a curved graph, $y = x^2$ from 0 to 3, where no formula for a triangle will help. Double the number of rectangles a few times, and switch where the heights are taken.
+    - figure: riemann
+      props: { fn: square, doublings: 2, rule: 0 }
+    - text: |
+        With heights at the left ends the rectangles stay under the curve, and the total is too small. With heights at the right ends they poke above it, and the total is too large. Both close in on 9 as the rectangles narrow. With heights at the midpoints the total is close to 9 almost at once. The reason for that will come at the end of the derivation.
+  derivation:
+    - text: |
+        **The sums.** Take a function $f$ on an interval from $a$ to $b$. Cut the interval into $n$ slices of equal width
+
+        $$\Delta x = \frac{b - a}{n},$$
+
+        with cut points $x_i = a + i\,\Delta x$, so that $x_0 = a$ and $x_n = b$. The Greek capital delta means "a small change in". Taking the height of each rectangle at the left end of its slice, or at the right end, gives the two sums
+
+        $$L_n = \sum_{i=0}^{n-1} f(x_i)\,\Delta x, \qquad R_n = \sum_{i=1}^{n} f(x_i)\,\Delta x.$$
+
+        Each is called a **Riemann sum**, after Bernhard Riemann. Each term is a height times a width.
+
+        **The stone, exactly.** Here $f(t) = 10t$, $a = 0$ and $b = 3$, so $\Delta t = \frac{3}{n}$ and $t_i = \frac{3i}{n}$.
+
+        $$R_n = \sum_{i=1}^{n} 10 \cdot \frac{3i}{n} \cdot \frac{3}{n} = \frac{90}{n^2}\sum_{i=1}^{n} i = \frac{90}{n^2} \cdot \frac{n(n + 1)}{2} = 45\left(1 + \frac{1}{n}\right).$$
+
+        The sum $1 + 2 + \dots + n = \frac{n(n+1)}{2}$ is the one you proved by induction. The same calculation with the left ends gives $L_n = 45\left(1 - \frac{1}{n}\right)$. Check: $n = 3$ gives 30 and 60, and $n = 6$ gives 37.5 and 52.5, as before.
+
+        The true distance lies between $L_n$ and $R_n$ for **every** $n$. As $n \to \infty$ both tend to 45. Only one number is trapped between them for every $n$, and it is 45. The limit has turned an approximation that is never exactly right into an exact answer, just as it did for the derivative.
+
+        **A curved example.** For $f(x) = x^2$ on $[0, 3]$, with $x_i = \frac{3i}{n}$:
+
+        $$R_n = \sum_{i=1}^{n} \left(\frac{3i}{n}\right)^2 \frac{3}{n} = \frac{27}{n^3}\sum_{i=1}^{n} i^2 = \frac{27}{n^3} \cdot \frac{n(n+1)(2n+1)}{6} = \frac{9}{2}\left(1 + \frac{1}{n}\right)\left(2 + \frac{1}{n}\right).$$
+
+        As $n \to \infty$ this tends to $\frac{9}{2} \cdot 1 \cdot 2 = 9$. The area under the parabola from 0 to 3 is exactly 9, a result no formula of elementary geometry provides.
+
+        **Definition.** The **definite integral** of $f$ from $a$ to $b$ is the limit of its Riemann sums as the slices are made narrower:
+
+        $$\int_a^b f(x)\,dx = \lim_{n \to \infty} \sum_{i=1}^{n} f(x_i)\,\Delta x.$$
+
+        Every part of the notation is a reminder of the sum it came from. The sign $\int$ is a stretched letter S, for sum. The $f(x)$ is the height of a slice and the $dx$ is its width, the $\Delta x$ after the limit has been taken. The numbers $a$ and $b$ are the **limits of integration**, where the slices start and stop. The function being integrated is the **integrand**. For any continuous $f$ the limit exists, and it is the same whether heights are taken at left ends, right ends or anywhere else in each slice. That fact is proved in the course on analysis, in [[m11.the-riemann-integral]]. In this notation,
+
+        $$\int_0^3 10t\,dt = 45, \qquad \int_0^3 x^2\,dx = 9.$$
+
+        The letter used for the variable does not matter. It is a dummy, like the $i$ in a sum.
+
+        **What an integral measures.** An integral adds up a quantity that is spread over an interval. It always has the units of the height times the units of the width.
+
+        | Rate | Integrated over | Total |
+        | --- | --- | --- |
+        | speed, metres per second | time | distance, metres |
+        | flow, litres per minute | time | volume, litres |
+        | power, watts | time | energy, joules |
+        | tokens generated per second | time | tokens |
+        | density, grams per centimetre | length | mass, grams |
+
+        **Signed area.** A height can be negative. If the graph dips below the axis, $f(x_i)\,\Delta x$ is negative for those slices, and they are **subtracted**. An integral is the area above the axis minus the area below it.
+
+        This is what you want. Take the ball thrown upward, with velocity $v(t) = 20 - 10t$. For the first 2 seconds the velocity is positive and the ball rises. The area is a triangle, $\frac{1}{2} \cdot 2 \cdot 20 = 20$. From 2 to 3 seconds the velocity is negative and the ball comes down: a triangle below the axis of area $\frac{1}{2} \cdot 1 \cdot 10 = 5$. So
+
+        $$\int_0^3 (20 - 10t)\,dt = 20 - 5 = 15,$$
+
+        and the ball is 15 metres above where it started, which agrees with its height $20t - 5t^2$ at $t = 3$. The integral of velocity is the **change in position**, with backward motion counted as negative. The ground it has covered, 25 metres, is a different question.
+    - question:
+        id: derivation-limit
+        type: choice
+        system: s2
+        prompt: |
+          For the stone, $L_n = 45\left(1 - \frac{1}{n}\right)$ and $R_n = 45\left(1 + \frac{1}{n}\right)$, and the true distance $D$ satisfies $L_n \le D \le R_n$ for every $n$. Why does this force $D = 45$ exactly?
+        options:
+          - "Because 45 is the average of $L_n$ and $R_n$."
+          - "Because if $D$ differed from 45 by some amount $\\varepsilon > 0$, then for $n > \\frac{45}{\\varepsilon}$ both $L_n$ and $R_n$ would be within $\\varepsilon$ of 45, and $D$ could not lie between them."
+          - "Because with a large enough $n$ the sums become equal."
+          - "Because the stone falls 45 metres in the experiment."
+        answer: 1
+        explanation: |
+          $L_n$ and $R_n$ each differ from 45 by $\frac{45}{n}$, which can be made smaller than any $\varepsilon$ by taking $n$ large. A value of $D$ that was not 45 would be left outside the interval from $L_n$ to $R_n$ once that interval had shrunk enough, which contradicts $L_n \le D \le R_n$. The sums are never equal to each other for any $n$. The exactness comes from the limit, by the same argument about tolerances that you learned for sequences.
+        hints:
+          - How far is each sum from 45?
+          - Suppose D were 45.1. Find an n for which the right sum is below 45.1.
+          - The sums are never equal, so the third option cannot be the reason.
+    - text: |
+        **Rules that come straight from the sums.** Each of these is true of a finite sum, and survives the limit.
+
+        *Linearity.* A constant factor comes out, and the integral of a sum is the sum of the integrals:
+
+        $$\int_a^b \bigl(c\,f(x) + g(x)\bigr)\,dx = c\int_a^b f(x)\,dx + \int_a^b g(x)\,dx.$$
+
+        *Additivity over intervals.* Gathering from $a$ to $b$ and then from $b$ to $c$ is gathering from $a$ to $c$:
+
+        $$\int_a^b f(x)\,dx + \int_b^c f(x)\,dx = \int_a^c f(x)\,dx.$$
+
+        *Conventions.* An interval of no width gathers nothing, $\int_a^a f = 0$. And running backwards reverses the sign, $\int_b^a f = -\int_a^b f$, since then $\Delta x$ is negative.
+
+        *Comparison.* If $f(x) \le g(x)$ on the whole interval, then $\int_a^b f \le \int_a^b g$. In particular, if $m \le f(x) \le M$, then $m(b - a) \le \int_a^b f \le M(b - a)$.
+
+        Linearity already lets you compute new integrals from old ones. Using $\int_0^3 x^2\,dx = 9$ and $\int_0^3 1\,dx = 3$:
+
+        $$\int_0^3 (2x^2 + 5)\,dx = 2 \cdot 9 + 5 \cdot 3 = 33.$$
+
+        **Average value.** The average of $n$ numbers is their sum divided by $n$. A function on an interval takes infinitely many values, and the integral is the right replacement for the sum:
+
+        $$\text{average of } f \text{ on } [a, b] = \frac{1}{b - a}\int_a^b f(x)\,dx.$$
+
+        It is the height of the rectangle on the same base with the same area. The stone's average speed over 3 seconds is $\frac{45}{3} = 15$ metres a second. An average weighted by how likely each value is will be called an **expectation**, and for quantities that vary continuously it will be an integral.
+
+        **Computing an integral numerically.** The definition is also an algorithm. Choose $n$, add up the slices.
+
+        ```python
+        def left_sum(f, a, b, n):
+            width = (b - a) / n
+            return sum([f(a + i * width) * width for i in range(n)])
+        ```
+
+        How good is it? For $x^2$ on $[0, 3]$, the exact answer is 9.
+
+        | $n$ | Left ends | Right ends | Midpoints | Trapezia |
+        | --- | --- | --- | --- | --- |
+        | 4 | $5.906$ | $12.656$ | $8.859$ | $9.281$ |
+        | 8 | $7.383$ | $10.758$ | $8.965$ | $9.070$ |
+        | 16 | $8.174$ | $9.861$ | $8.991$ | $9.018$ |
+
+        The left and right sums have errors of about 3, then 1.6, then 0.8. Each doubling of $n$ **halves** the error: it is proportional to $\frac{1}{n}$. The reason is that each rectangle misses a thin triangle-like sliver of area about $\frac{1}{2} f'(x)\,\Delta x^2$, and there are $n$ of them.
+
+        The **midpoint rule** takes the height at the middle of each slice, $f\bigl(a + (i + \frac{1}{2})\Delta x\bigr)$. Its errors are 0.14, 0.035 and 0.009. Each doubling divides the error by **four**: it is proportional to $\frac{1}{n^2}$. The reason is the one that made the central difference so good in the lesson on Taylor polynomials. On one half of the slice the rectangle is too tall, on the other half too short, and to first order the two errors cancel. What is left comes from the bending of the curve, the second derivative.
+
+        The **trapezium rule** joins the tops with straight lines, replacing each rectangle by a trapezium of area $\frac{f(x_i) + f(x_{i+1})}{2}\,\Delta x$. It is the average of the left and right sums, and its error is also proportional to $\frac{1}{n^2}$. Its advantage is practical: it needs only the values at the cut points, so it works on **measured data**, where you have a table of readings and cannot ask for the value at a midpoint.
+
+        These methods are slow next to what comes in the following lesson, but they have one great strength. They work for **any** function you can evaluate, including those for which no formula for the integral exists.
+    - question:
+        id: order-riemann
+        type: order
+        system: s2
+        prompt: Put the steps in order to find $\int_0^2 x\,dx$ from the definition, using right ends.
+        steps:
+          - "Cut $[0, 2]$ into $n$ slices of width $\\Delta x = \\frac{2}{n}$, with right ends $x_i = \\frac{2i}{n}$."
+          - "Write the sum of height times width: $\\sum_{i=1}^{n} \\frac{2i}{n} \\cdot \\frac{2}{n}$."
+          - "Take the constants outside: $\\frac{4}{n^2} \\sum_{i=1}^{n} i$."
+          - "Use $\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$ to get $2\\left(1 + \\frac{1}{n}\\right)$."
+          - "Let $n \\to \\infty$: the integral is 2."
+        explanation: The slices and their right ends come first, since the sum is built from them. The sum is then simplified by taking out everything that does not depend on i, the known formula removes the summation, and the limit is taken last. The answer, 2, is the area of a triangle with base 2 and height 2.
+        hints:
+          - The width and the cut points must be fixed before the sum can be written.
+          - The summation formula is applied to the sum of i alone, after the constants are outside.
+          - The limit comes last.
+  formal:
+    - text: |
+        **Riemann sum.** With $\Delta x = \frac{b - a}{n}$ and $x_i = a + i\,\Delta x$: $\ \sum_{i=1}^{n} f(x_i)\,\Delta x$, or the same with heights taken elsewhere in each slice.
+
+        **Definite integral.** $\displaystyle\int_a^b f(x)\,dx = \lim_{n \to \infty} \sum_{i=1}^{n} f(x_i)\,\Delta x$. It exists for every continuous $f$. It is the signed area between the graph and the axis: area above counts positive, area below negative.
+
+        **Rules.**
+
+        | Rule | Statement |
+        | --- | --- |
+        | Linearity | $\int_a^b (c f + g) = c\int_a^b f + \int_a^b g$ |
+        | Additivity | $\int_a^b f + \int_b^c f = \int_a^c f$ |
+        | Conventions | $\int_a^a f = 0$ and $\int_b^a f = -\int_a^b f$ |
+        | Comparison | $f \le g$ on $[a, b]$ implies $\int_a^b f \le \int_a^b g$ |
+        | Constant | $\int_a^b c\,dx = c(b - a)$ |
+
+        **Average value.** $\dfrac{1}{b - a}\displaystyle\int_a^b f(x)\,dx$.
+
+        **Numerical rules** with $n$ slices: left and right sums have error proportional to $\frac{1}{n}$. The midpoint rule $\sum f\bigl(a + (i + \frac{1}{2})\Delta x\bigr)\Delta x$ and the trapezium rule $\sum \frac{f(x_i) + f(x_{i+1})}{2}\Delta x$ have error proportional to $\frac{1}{n^2}$.
+  drill:
+    - text: Seconds each. An integral is an area with a sign. Draw the region in your head.
+    - question:
+        id: drill-constant
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\displaystyle\int_0^4 3\,dx$?
+        answer: "12"
+        explanation: A rectangle of height 3 and width 4.
+        hints:
+          - The region is a rectangle.
+          - Height times width.
+    - question:
+        id: drill-triangle
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\displaystyle\int_0^4 x\,dx$?
+        answer: "8"
+        explanation: A triangle with base 4 and height 4. Half of 4 times 4.
+        hints:
+          - The region under y = x is a triangle.
+          - Half the base times the height.
+    - question:
+        id: drill-trapezium
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\displaystyle\int_1^3 2x\,dx$?
+        answer: "8"
+        explanation: A trapezium of width 2 whose parallel sides are 2 and 6. Their average is 4.
+        hints:
+          - The heights at the two ends are 2 and 6.
+          - Average the two heights and multiply by the width.
+    - question:
+        id: drill-width
+        type: numeric
+        system: s1
+        prompt: |
+          The interval $[1, 4]$ is cut into 6 equal slices. What is $\Delta x$?
+        answer: "0.5"
+        explanation: The length of the interval, 3, divided by the number of slices.
+        hints:
+          - How long is the interval?
+          - Divide by 6.
+    - question:
+        id: drill-left-sum
+        type: numeric
+        system: s1
+        prompt: |
+          $f(x) = x$ on $[0, 2]$ with $n = 2$ slices. What is the left sum $L_2$?
+        answer: "1"
+        explanation: The slices have width 1 and left ends 0 and 1. The heights are 0 and 1.
+        hints:
+          - The left ends are 0 and 1.
+          - Add the heights and multiply by the width, 1.
+    - question:
+        id: drill-right-sum
+        type: numeric
+        system: s1
+        prompt: |
+          $f(x) = x$ on $[0, 2]$ with $n = 2$ slices. What is the right sum $R_2$?
+        answer: "3"
+        explanation: The right ends are 1 and 2. The true integral, 2, lies between the left sum and the right sum.
+        hints:
+          - The right ends are 1 and 2.
+          - Add the heights and multiply by the width, 1.
+    - question:
+        id: drill-odd
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\displaystyle\int_{-2}^{2} x\,dx$?
+        answer: "0"
+        explanation: The triangle below the axis on the left cancels the equal triangle above it on the right.
+        hints:
+          - The graph is below the axis for negative x.
+          - Area below the axis is subtracted.
+    - question:
+        id: drill-signed
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\displaystyle\int_0^5 (3 - t)\,dt$?
+        answer: "2.5"
+        explanation: |
+          A triangle above the axis from 0 to 3, of area $\frac{1}{2} \cdot 3 \cdot 3 = 4.5$, minus a triangle below it from 3 to 5, of area $\frac{1}{2} \cdot 2 \cdot 2 = 2$.
+        hints:
+          - The line crosses the axis at t = 3.
+          - Find the two triangles, and subtract the one below the axis.
+    - question:
+        id: drill-additivity
+        type: numeric
+        system: s1
+        prompt: |
+          $\displaystyle\int_0^2 f(x)\,dx = 5$ and $\displaystyle\int_2^6 f(x)\,dx = -1$. What is $\displaystyle\int_0^6 f(x)\,dx$?
+        answer: "4"
+        explanation: Gathering from 0 to 2 and then from 2 to 6 is gathering from 0 to 6.
+        hints:
+          - The two intervals join end to end.
+          - Add the two integrals.
+    - question:
+        id: drill-linearity
+        type: numeric
+        system: s1
+        prompt: |
+          $\displaystyle\int_0^1 f(x)\,dx = 5$ and $\displaystyle\int_0^1 g(x)\,dx = 2$. What is $\displaystyle\int_0^1 \bigl(3f(x) - g(x)\bigr)\,dx$?
+        answer: "13"
+        explanation: Constants come out and sums split. Three times 5, minus 2.
+        hints:
+          - Use linearity.
+          - Three times the first integral, minus the second.
+    - question:
+        id: drill-reverse
+        type: numeric
+        system: s1
+        prompt: |
+          $\displaystyle\int_0^2 f(x)\,dx = 5$. What is $\displaystyle\int_2^0 f(x)\,dx$?
+        answer: "-5"
+        explanation: Swapping the limits reverses the sign.
+        hints:
+          - The slices now run backwards.
+          - Each width is negative.
+    - question:
+        id: drill-average
+        type: numeric
+        system: s1
+        prompt: |
+          $\displaystyle\int_0^3 x^2\,dx = 9$. What is the average value of $x^2$ on $[0, 3]$?
+        answer: "3"
+        explanation: The integral divided by the length of the interval.
+        hints:
+          - Divide the integral by the width of the interval.
+          - The interval has length 3.
+    - question:
+        id: drill-under-over
+        type: choice
+        system: s1
+        prompt: |
+          $f$ is increasing on $[a, b]$. How does the left sum compare with the integral?
+        options: ["It is too small", "It is too large", "It is exact", "It depends on $n$"]
+        answer: 0
+        explanation: On each slice an increasing function is lowest at the left end, so every rectangle stays under the graph.
+        hints:
+          - Where on a slice is an increasing function smallest?
+          - Each rectangle takes its height from that point.
+    - question:
+        id: predict-left-sum
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          def left_sum(f, a, b, n):
+              width = (b - a) / n
+              return sum([f(a + i * width) * width for i in range(n)])
+
+          print(left_sum(lambda x: x, 0, 2, 4), left_sum(lambda x: 3, 1, 5, 2))
+        output: "1.5 12.0"
+        explanation: In the first call the width is 0.5 and the heights are 0, 0.5, 1 and 1.5, giving 0 + 0.25 + 0.5 + 0.75. The true integral is 2, and the left sum of an increasing function falls short. In the second the function is constant, so the two rectangles of width 2.0 and height 3 give the exact area.
+        hints:
+          - In the first call the left ends are 0, 0.5, 1 and 1.5.
+          - Each term is a height times the width 0.5.
+    - question:
+        id: predict-running-total
+        type: predict
+        system: s1
+        prompt: The list holds a speed, in metres per second, for each of four seconds. What does this show?
+        code: |
+          speeds = [0, 10, 20, 30]
+          total = 0
+          totals = []
+          for v in speeds:
+              total = total + v * 1
+              totals.append(total)
+          print(totals)
+        output: "[0, 10, 30, 60]"
+        explanation: Each pass adds one slice, a speed times a duration of 1 second, and records the distance so far. The list of running totals is the accumulated distance as a function of time, not just its final value.
+        hints:
+          - Follow total through the four passes.
+          - After the third pass it is 0 + 10 + 20.
+  work:
+    - text: Slower now. Say what each slice stands for, and what units the total has.
+    - question:
+        id: work-midpoint-by-hand
+        type: numeric
+        system: s2
+        prompt: |
+          Estimate $\displaystyle\int_0^2 x^2\,dx$ by the midpoint rule with $n = 2$ slices.
+        answer: "2.5"
+        explanation: |
+          The slices are $[0, 1]$ and $[1, 2]$, with midpoints 0.5 and 1.5. The heights are 0.25 and 2.25, and each width is 1, so the sum is 2.5. The exact value is $\frac{8}{3} = 2.667$. With the same two slices the left sum is 1 and the right sum is 5: the midpoint rule is far closer than either.
+        hints:
+          - Find the midpoint of each slice.
+          - Square each midpoint to get the heights.
+          - Each slice has width 1.
+    - question:
+        id: work-displacement
+        type: choice
+        system: s2
+        prompt: |
+          A ball has velocity $v(t) = 20 - 10t$ metres per second. Between $t = 0$ and $t = 4$, which statement is correct?
+        options:
+          - "$\\int_0^4 v\\,dt = 40$, and the ball is 40 metres above its start."
+          - "$\\int_0^4 v\\,dt = 0$: the ball is back where it started, although it has travelled 40 metres in all."
+          - "$\\int_0^4 v\\,dt = 0$, so the ball has not moved."
+          - "$\\int_0^4 v\\,dt = -20$."
+        answer: 1
+        explanation: |
+          The velocity is positive until $t = 2$ and negative after. The triangle above the axis has area $\frac{1}{2} \cdot 2 \cdot 20 = 20$, and the triangle below, from 2 to 4, also has area 20. The integral is $20 - 20 = 0$. The ball rose 20 metres and fell 20 metres. The integral of velocity gives the net change in position, and the total ground covered is the integral of the **speed**, $\lvert v \rvert$, which counts both triangles as positive. A zero integral does not mean a zero function.
+        hints:
+          - Where does the velocity change sign?
+          - Find the areas of the two triangles.
+          - Area below the axis is subtracted.
+    - question:
+        id: work-tokens
+        type: numeric
+        system: s2
+        unit: tokens
+        prompt: |
+          A model's output rate is logged every 10 seconds: at $t = 0, 10, 20, 30$ seconds it reads 100, 120, 140 and 100 tokens per second. Use the trapezium rule to estimate the total number of tokens produced in the 30 seconds.
+        answer: "3600"
+        explanation: |
+          Each 10-second slice contributes its width times the average of the readings at its two ends: $10 \cdot 110 + 10 \cdot 130 + 10 \cdot 120 = 1100 + 1300 + 1200$. The units are seconds times tokens per second, which is tokens. With measured data there is no function to evaluate at a midpoint, and the trapezium rule uses exactly what is in the log.
+        hints:
+          - There are three slices, each 10 seconds wide.
+          - For each slice, average the readings at its two ends.
+          - The averages are 110, 130 and 120.
+    - question:
+        id: write-midpoint-sum
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `midpoint_sum(f, a, b, n)`. It estimates $\int_a^b f(x)\,dx$ with $n$ slices of equal width, taking the height of each rectangle at the **midpoint** of its slice:
+
+          $$\sum_{i=0}^{n-1} f\bigl(a + (i + \tfrac{1}{2})\,\Delta x\bigr)\,\Delta x, \qquad \Delta x = \frac{b - a}{n}.$$
+        starter: |
+          def midpoint_sum(f, a, b, n):
+              # Replace the next line with your own.
+              return 0
+
+          print(midpoint_sum(lambda x: x * x, 0, 3, 4))
+        solution: |
+          def midpoint_sum(f, a, b, n):
+              width = (b - a) / n
+              return sum([f(a + (i + 0.5) * width) * width for i in range(n)])
+
+          print(midpoint_sum(lambda x: x * x, 0, 3, 4))
+        tests: |
+          import math as _m
+          _sq = lambda x: x * x
+          assert abs(midpoint_sum(lambda x: 3, 1, 5, 2) - 12) < 1e-12, "A constant 3 over [1, 5] has integral 12. You returned " + repr(midpoint_sum(lambda x: 3, 1, 5, 2))
+          assert abs(midpoint_sum(_sq, 0, 3, 1) - 6.75) < 1e-12, "With one slice on [0, 3] the midpoint is 1.5, so the estimate is 2.25 * 3 = 6.75. You returned " + repr(midpoint_sum(_sq, 0, 3, 1))
+          assert abs(midpoint_sum(_sq, 0, 3, 4) - 8.859375) < 1e-12, "With four slices the estimate for x^2 on [0, 3] is 8.859375. You returned " + repr(midpoint_sum(_sq, 0, 3, 4))
+          assert abs(midpoint_sum(lambda x: 2 * x + 1, 0, 3, 3) - 12) < 1e-12, "The midpoint rule is exact for a straight line: 2x + 1 over [0, 3] gives 12. You returned " + repr(midpoint_sum(lambda x: 2 * x + 1, 0, 3, 3))
+          assert abs(midpoint_sum(lambda x: x, 1, 3, 2) - 4) < 1e-12, "x over [1, 3] has integral 4. Remember that the slices start at a. You returned " + repr(midpoint_sum(lambda x: x, 1, 3, 2))
+          assert abs(midpoint_sum(_sq, 0, 3, 1000) - 9) < 1e-5, "With 1000 slices the estimate should be very close to 9. You returned " + repr(midpoint_sum(_sq, 0, 3, 1000))
+          assert abs(midpoint_sum(_m.sin, 0, _m.pi, 1000) - 2) < 1e-5, "The area under one arch of the sine is 2. You returned " + repr(midpoint_sum(_m.sin, 0, _m.pi, 1000))
+          assert output.strip() == "8.859375", "The program should print 8.859375"
+        wrong:
+          - "def midpoint_sum(f, a, b, n):\n    width = (b - a) / n\n    return sum([f(a + i * width) * width for i in range(n)])\n\nprint(8.859375)\n"
+          - "def midpoint_sum(f, a, b, n):\n    width = (b - a) / n\n    return sum([f(a + (i + 1) * width) * width for i in range(n)])\n\nprint(8.859375)\n"
+          - "def midpoint_sum(f, a, b, n):\n    width = (b - a) / n\n    return sum([f((i + 0.5) * width) * width for i in range(n)])\n\nprint(8.859375)\n"
+          - "def midpoint_sum(f, a, b, n):\n    width = (b - a) / n\n    return sum([f(a + (i + 0.5) * width) for i in range(n)])\n\nprint(8.859375)\n"
+          - "def midpoint_sum(f, a, b, n):\n    width = b - a\n    return sum([f(a + (i + 0.5) * width) * width for i in range(n)])\n\nprint(8.859375)\n"
+        explanation: |
+          Slice number $i$ runs from $a + i\,\Delta x$ to $a + (i + 1)\Delta x$, so its midpoint is $a + (i + \frac{1}{2})\Delta x$. Each term is the height there times the width. Two tests are worth remembering for any integration routine. A constant must give exactly height times width. And a straight line must be integrated exactly by the midpoint rule, because on each slice the rectangle's excess on one side of the midpoint equals its shortfall on the other. The test on $[1, 3]$ catches the commonest slip, forgetting to start from $a$. With four slices the answer 8.859 is already within 0.15 of the true 9, where the left sum with four slices was off by more than 3.
+        hints:
+          - First compute the width, (b - a) / n.
+          - The midpoint of slice i is a + (i + 0.5) * width.
+          - Add up f(midpoint) * width for i from 0 to n - 1.
+    - question:
+        id: fix-right-sum
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `right_sum(f, a, b, n)` should return the Riemann sum with heights taken at the **right** end of each slice. For $x^2$ on $[0, 3]$ with 4 slices it should print 12.65625. It prints 5.90625. Fix it.
+        starter: |
+          def right_sum(f, a, b, n):
+              width = (b - a) / n
+              return sum([f(a + i * width) * width for i in range(n)])
+
+          print(right_sum(lambda x: x * x, 0, 3, 4))
+        solution: |
+          def right_sum(f, a, b, n):
+              width = (b - a) / n
+              return sum([f(a + i * width) * width for i in range(1, n + 1)])
+
+          print(right_sum(lambda x: x * x, 0, 3, 4))
+        tests: |
+          _sq = lambda x: x * x
+          assert abs(right_sum(_sq, 0, 3, 4) - 12.65625) < 1e-12, "For x^2 on [0, 3] with 4 slices the right sum is 12.65625. You returned " + repr(right_sum(_sq, 0, 3, 4))
+          assert abs(right_sum(_sq, 0, 3, 1) - 27) < 1e-12, "With one slice the right end is 3, so the sum is 9 * 3 = 27. You returned " + repr(right_sum(_sq, 0, 3, 1))
+          assert abs(right_sum(lambda x: x, 0, 2, 2) - 3) < 1e-12, "For x on [0, 2] with 2 slices the right ends are 1 and 2, so the sum is 3. You returned " + repr(right_sum(lambda x: x, 0, 2, 2))
+          assert abs(right_sum(lambda x: x, 1, 3, 2) - 5) < 1e-12, "For x on [1, 3] with 2 slices the right ends are 2 and 3, so the sum is 5. You returned " + repr(right_sum(lambda x: x, 1, 3, 2))
+          assert abs(right_sum(lambda x: 3, 1, 5, 2) - 12) < 1e-12, "A constant 3 over [1, 5] gives exactly 12, with exactly n rectangles. You returned " + repr(right_sum(lambda x: 3, 1, 5, 2))
+          assert output.strip() == "12.65625", "The program should print 12.65625"
+        wrong:
+          - "def right_sum(f, a, b, n):\n    width = (b - a) / n\n    return sum([f(a + i * width) * width for i in range(n)])\n\nprint(12.65625)\n"
+          - "def right_sum(f, a, b, n):\n    width = (b - a) / n\n    return sum([f(a + i * width) * width for i in range(1, n)])\n\nprint(12.65625)\n"
+          - "def right_sum(f, a, b, n):\n    width = (b - a) / n\n    return sum([f(a + i * width) * width for i in range(n + 1)])\n\nprint(12.65625)\n"
+          - "def right_sum(f, a, b, n):\n    width = (b - a) / n\n    return sum([f(a + (i + 0.5) * width) * width for i in range(n)])\n\nprint(12.65625)\n"
+        explanation: |
+          The cut points are $x_0 = a, x_1, \dots, x_n = b$. The left ends of the $n$ slices are $x_0$ to $x_{n-1}$, which is `range(n)`. The right ends are $x_1$ to $x_n$, which is `range(1, n + 1)`. The starter used the first, so it computed the left sum, 5.90625, which lies below the true area 9 where the right sum lies above it. The two sums differ by one rectangle at each end: the right sum drops $f(a)\,\Delta x$ and gains $f(b)\,\Delta x$. Being off by one in the range of a sum is among the commonest mistakes in numerical code, and a test with a constant function is a quick check that there are exactly $n$ rectangles.
+        hints:
+          - Which values of i does range(n) produce, and which cut points are those?
+          - The right end of the first slice is a + width, and of the last is b.
+          - Let i run from 1 to n.
+    - question:
+        id: write-trapezium
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `trapezium(xs, ys)`. `xs` is a list of increasing positions and `ys` the measured value at each. Return the trapezium-rule estimate of the area under the measurements: for each neighbouring pair of points, the gap between the positions times the average of the two values.
+
+          The positions need not be equally spaced. With fewer than two points the area is 0.
+        starter: |
+          def trapezium(xs, ys):
+              # Replace the next line with your own.
+              return 0
+
+          print(trapezium([0, 10, 20, 30], [100, 120, 140, 100]))
+        solution: |
+          def trapezium(xs, ys):
+              total = 0
+              for i in range(len(xs) - 1):
+                  total = total + (xs[i + 1] - xs[i]) * (ys[i] + ys[i + 1]) / 2
+              return total
+
+          print(trapezium([0, 10, 20, 30], [100, 120, 140, 100]))
+        tests: |
+          assert trapezium([0, 10, 20, 30], [100, 120, 140, 100]) == 3600, "The three slices give 1100 + 1300 + 1200 = 3600. You returned " + repr(trapezium([0, 10, 20, 30], [100, 120, 140, 100]))
+          assert trapezium([0, 1, 3], [0, 2, 2]) == 5, "With unequal gaps: 1 * 1 + 2 * 2 = 5. You returned " + repr(trapezium([0, 1, 3], [0, 2, 2]))
+          assert trapezium([2, 6], [1, 3]) == 8, "One slice of width 4 with average height 2 has area 8. You returned " + repr(trapezium([2, 6], [1, 3]))
+          assert trapezium([0, 1, 2, 5], [1, 3, 5, 11]) == 30, "The rule is exact for the straight line 2x + 1: its integral from 0 to 5 is 30. You returned " + repr(trapezium([0, 1, 2, 5], [1, 3, 5, 11]))
+          assert trapezium([4], [9]) == 0, "A single point encloses no area"
+          assert trapezium([], []) == 0, "No points enclose no area"
+          assert output.strip() == "3600.0", "The program should print 3600.0"
+        wrong:
+          - "def trapezium(xs, ys):\n    total = 0\n    for i in range(len(xs) - 1):\n        total = total + (xs[i + 1] - xs[i]) * ys[i]\n    return total\n\nprint(3600.0)\n"
+          - "def trapezium(xs, ys):\n    total = 0\n    for i in range(len(xs) - 1):\n        total = total + (xs[i + 1] - xs[i]) * (ys[i] + ys[i + 1])\n    return total\n\nprint(3600.0)\n"
+          - "def trapezium(xs, ys):\n    if len(xs) < 2:\n        return 0\n    total = 0\n    for i in range(len(xs) - 1):\n        total = total + (xs[1] - xs[0]) * (ys[i] + ys[i + 1]) / 2\n    return total\n\nprint(3600.0)\n"
+          - "def trapezium(xs, ys):\n    if len(xs) < 2:\n        return 0\n    return (xs[-1] - xs[0]) * sum(ys) / len(ys)\n\nprint(3600.0)\n"
+          - "def trapezium(xs, ys):\n    total = 0\n    for i in range(len(xs) - 1):\n        total = total + (xs[i + 1] - xs[i]) * ys[i + 1]\n    return total\n\nprint(3600.0)\n"
+        explanation: |
+          Between two neighbouring readings the measurements are joined by a straight line, and the region under it is a trapezium: its width is the gap between the positions and its area is that width times the average of the two heights. The loop visits each neighbouring pair, so it runs over `len(xs) - 1` gaps, and with one point or none it does nothing and returns 0. Taking the width from the actual gap, and not from the first gap, is what lets the readings be unevenly spaced. Because the joining pieces are straight lines, the rule is exact whenever the true curve is a straight line, which gives a test with a known answer. The same function will later measure the area under a curve that scores a classifier.
+        hints:
+          - A list of k points has k - 1 gaps, so loop over range(len(xs) - 1).
+          - The width of gap i is xs[i + 1] - xs[i].
+          - Multiply it by (ys[i] + ys[i + 1]) / 2 and add to a running total.
+    - question:
+        id: work-error-rates
+        type: choice
+        system: s2
+        prompt: |
+          With $n = 100$ slices, a left sum has error about $0.03$ and a midpoint sum has error about $0.00001$. You increase $n$ to 1000. Roughly what are the new errors?
+        options:
+          - "Both ten times smaller: $0.003$ and $0.000001$."
+          - "The left sum's is about $0.003$ and the midpoint sum's about $0.0000001$."
+          - "Both a hundred times smaller."
+          - "The left sum's is about $0.0003$ and the midpoint sum's about $0.000001$."
+        answer: 1
+        explanation: |
+          The left sum's error is proportional to $\frac{1}{n}$: ten times the slices, a tenth of the error. The midpoint sum's is proportional to $\frac{1}{n^2}$: ten times the slices, a hundredth of the error. This is the same contrast as between the one-sided and central differences, and it has the same cause. A symmetric choice makes the first-order errors cancel, so the remaining error is of second order. Ten times the work buys one more correct figure from the left sum and two from the midpoint sum.
+        hints:
+          - Which power of n does each error depend on?
+          - Ten times as many slices divides 1/n by 10 and 1/n squared by 100.
+          - Compare with the forward and central differences.
+    - question:
+        id: work-average-loss
+        type: choice
+        system: s2
+        prompt: |
+          A quantity $q(t)$ is recorded continuously during a run from $t = 0$ to $t = T$. Which expression is its average over the run, and why?
+        options:
+          - "$\\frac{q(0) + q(T)}{2}$, the mean of the first and last values."
+          - "$\\int_0^T q(t)\\,dt$, the total."
+          - "$\\frac{1}{T}\\int_0^T q(t)\\,dt$: the total gathered over the run divided by its length, which is the limit of the ordinary average of $n$ equally spaced readings."
+          - "$\\frac{q(T) - q(0)}{T}$, the average rate of change."
+        answer: 2
+        explanation: |
+          Take $n$ equally spaced readings and average them: $\frac{1}{n}\sum q(t_i)$. Since $\Delta t = \frac{T}{n}$, this is $\frac{1}{T}\sum q(t_i)\,\Delta t$, a Riemann sum divided by $T$. As $n \to \infty$ it becomes $\frac{1}{T}\int_0^T q\,dt$. The first option uses two readings and ignores everything between. The second has the wrong units, the quantity times time. The last is the average of the **derivative** of $q$, a different thing. An average of a continuously varying quantity is an integral divided by the length of the interval, and every average over a continuous range that you meet later is built this way.
+        hints:
+          - Write the average of n equally spaced readings as a sum.
+          - Replace 1/n by Δt divided by T.
+          - What does the sum become as n grows?
+  connections:
+    - text: |
+        The puzzle asked how far a stone falls in 3 seconds when its speed, $10t$, is never steady. "Speed times time" still works, provided it is applied to slices so short that the speed has no room to change, and the slices are then added up. With $n$ slices the total lay between $45(1 - \frac{1}{n})$ and $45(1 + \frac{1}{n})$, and the limit pinned it at exactly 45 metres. That limit of sums is the integral, $\int_0^3 10t\,dt$, and in a picture it is the area under the graph of speed.
+
+        The same construction adds up any quantity spread over an interval: a flow into a volume, a power into an energy, a rate of output into a total. It gave the average of a continuously varying quantity, which the course will lean on in probability, when a sum over a list of outcomes becomes an integral over a continuous range of them. And it gave algorithms, the midpoint and trapezium rules, that work on any function or any table of measurements. What it means for the limit to exist is made precise in [[m11.the-riemann-integral]], and slicing in several directions at once comes in [[m12.multiple-integrals-and-change-of-variables]].
+
+        But notice how the two exact answers of this lesson were obtained. Each needed a formula for a sum, $\sum i$ or $\sum i^2$, and some algebra. For $\int_0^3 x^5\,dx$ you would need a formula for $\sum i^5$, and for $\int_0^1 e^x\,dx$ something else again. This does not look like a method.
+
+        Now look again at the stone. The speed was $10t$ and the distance came out as 45, which is $5t^2$ at $t = 3$. And the derivative of $5t^2$ is $10t$. Adding up the speed gave back the very function whose rate of change the speed is. For the parabola, the area under $x^2$ up to 3 was 9, which is $\frac{x^3}{3}$ at $x = 3$, and the derivative of $\frac{x^3}{3}$ is $x^2$. That is not a coincidence. Accumulating and taking a rate undo one another, and this fact turns the labour of summing slices into a one-line calculation. It is the central theorem of the subject, and the next lesson: [[m10.fundamental-theorem-of-calculus]].

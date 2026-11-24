@@ -1,0 +1,608 @@
+concept: m10.second-derivative-and-curvature
+minutes: 95
+claim: You can compute second and higher derivatives, read the second derivative as acceleration and as the bending of a graph, find where a curve is convex, concave or changes between them, improve the tangent-line approximation with a quadratic term, and estimate a second derivative numerically.
+recalls: [m10.derivatives-of-exp-log-and-trig]
+uses: [m10.derivative-as-slope-and-rate, m10.differentiation-rules, m10.chain-rule, m10.limits-and-continuity, m1.quadratics, m1.polynomials, m1.inequalities-and-absolute-value, m0.powers-and-roots, m3.cases-and-counterexamples, e0.functions, e0.loops, e0.lists-and-tuples, e1.comprehensions-and-iterators, e1.modules-and-imports]
+leads: [m10.taylor-approximation, m10.maxima-and-minima, m12.hessian-and-symmetry-of-mixed-partials, m19.convex-functions-and-their-conditions]
+starter: |
+  # Scratch space. The tangent line at 100 estimates square roots nearby.
+  # How does its error grow with the distance h from 100?
+  import math
+
+  for h in [1, 2, 4, 8]:
+      estimate = 10 + 0.05 * h
+      print(h, estimate, estimate - math.sqrt(100 + h))
+parts:
+  recall:
+    - text: |
+        [[m10.derivatives-of-exp-log-and-trig]] finished the table of derivatives. It also showed derivatives being taken of derivatives: the sine gives the cosine, which gives minus the sine. Today that second step gets a meaning of its own. Three quick pulls first.
+    - question:
+        id: recall-exp-chain
+        type: numeric
+        system: s1
+        concepts: [m10.derivatives-of-exp-log-and-trig]
+        prompt: |
+          $f(x) = e^{2x}$. What is $f'(0)$?
+        answer: "2"
+        explanation: The chain rule brings out the inner derivative 2, and the exponential is 1 at 0.
+        hints:
+          - The inner function is 2x.
+          - e to the power 0 is 1.
+    - question:
+        id: recall-cos
+        type: choice
+        system: s1
+        concepts: [m10.derivatives-of-exp-log-and-trig]
+        prompt: |
+          What is the derivative of $\cos x$?
+        options: ["$\\sin x$", "$-\\sin x$", "$-\\cos x$", "$\\cos x$"]
+        answer: 1
+        explanation: The cosine falls away from its maximum at 0, so its slope there turns negative.
+        hints:
+          - Sine and cosine swap, and one of them takes a minus sign.
+          - Is the cosine rising or falling just after 0?
+    - question:
+        id: recall-ln
+        type: choice
+        system: s1
+        concepts: [m10.derivatives-of-exp-log-and-trig]
+        prompt: |
+          What is the derivative of $\ln x$?
+        options: ["$\\ln x$", "$\\dfrac{1}{x}$", "$e^x$", "$x \\ln x$"]
+        answer: 1
+        explanation: The logarithm is the inverse of the exponential, and the rate of an inverse is a reciprocal.
+        hints:
+          - It is the one derivative no power of x can produce.
+          - A reciprocal.
+  puzzle:
+    - text: |
+        Two cars pass you side by side, and at that instant both speedometers read 60 kilometres an hour. Ten seconds later one is far ahead of the other.
+
+        At the instant they passed, the two cars had the same position and the same rate of change of position. In the language of this cluster, the two position functions had the same value and the same derivative at that moment. And still their futures were different. One driver had a foot on the accelerator and the other on the brake.
+
+        Here is the same thing as it appears in training a model. You are at a certain value of a weight, and the error there has slope $-2$. The tangent line promises: step forward by 1, and the error will fall by 2. You take the step. On one model the error falls by 1.9. On another it falls by 0.5. On a third it **rises**. All three had the same slope at the starting point.
+
+        The starter shows the effect in numbers. The tangent to the square root at 100 estimates $\sqrt{101}$ with an error of about 0.00012. At a distance of 2 the error is about 0.0005, at 4 about 0.002, at 8 about 0.008. Each time the distance doubles, the error is multiplied by four.
+
+        The tangent line is the best straight-line stand-in for a function at a point, and it tells the truth only **at** the point. As you move away it drifts from the curve.
+
+        **What decides how fast the tangent line goes wrong? What is the number that the two cars, and the three models, do not have in common?**
+  intuition:
+    - text: |
+        The cars differ in how their **speed is changing**. Speed is the rate of change of position, the derivative. The rate of change of speed is the derivative of the derivative. It has an everyday name: **acceleration**. One car has positive acceleration and the other negative.
+
+        For a general function the derivative of the derivative is called the **second derivative**. The first derivative is the slope. The second derivative is the rate at which the **slope** is changing as you move along.
+
+        Picture walking along a graph from left to right and watching the tangent line tilt. If the slope is increasing, the tangent is rotating anticlockwise: the curve is bending **upwards**, like a bowl. If the slope is decreasing, the tangent rotates clockwise and the curve bends **downwards**, like a dome. If the slope is not changing at all, the curve is not bending. It is a straight line.
+
+        So the second derivative measures **bending**. And bending is exactly what the tangent line leaves out. A tangent is straight. The more sharply the curve bends, the sooner it peels away from its tangent, and it peels away to the side the second derivative points to: above the tangent where the bending is upward, below where it is downward.
+
+        That answers the puzzle in outline. The three models have the same slope and different second derivatives. In the first the error curve is nearly straight. In the second it bends upward, so the true fall is less than the tangent promised. In the third it bends upward so sharply that within one step the curve has turned round and is climbing.
+
+        The figure shows $f(x) = x^3 - 3x$. Move the point and watch three things at once: the height, the slope of the tangent, and which side of the tangent the curve lies on.
+    - figure: bend
+      props: { at: 1 }
+    - text: |
+        To the right of 0 the curve lies above its tangents: it is bending upward, and the second derivative is positive. To the left of 0 it lies below them. At 0 itself the bending switches direction, and the curve crosses its tangent. The slope at 0 is $-3$, the steepest downhill slope anywhere on the curve: the slope stops decreasing there and starts increasing.
+  derivation:
+    - text: |
+        **Definition.** The **second derivative** of $f$ is the derivative of $f'$:
+
+        $$f''(x) = \bigl(f'\bigr)'(x).$$
+
+        In Leibniz's notation it is written $\dfrac{d^2y}{dx^2}$, which abbreviates $\dfrac{d}{dx}\!\left(\dfrac{dy}{dx}\right)$: differentiate, and differentiate again. Its units are output per unit input, per unit input: metres per second per second for an acceleration.
+
+        Nothing new is needed to compute one. Differentiate twice.
+
+        | $f(x)$ | $f'(x)$ | $f''(x)$ |
+        | --- | --- | --- |
+        | $x^3 - 3x$ | $3x^2 - 3$ | $6x$ |
+        | $20t - 5t^2$ | $20 - 10t$ | $-10$ |
+        | $e^{kx}$ | $k e^{kx}$ | $k^2 e^{kx}$ |
+        | $\sin x$ | $\cos x$ | $-\sin x$ |
+        | $\ln x$ | $\dfrac{1}{x}$ | $-\dfrac{1}{x^2}$ |
+        | $mx + c$ | $m$ | $0$ |
+
+        The second row is the ball thrown upward, from four lessons ago. Its velocity $20 - 10t$ changes sign at the top of the flight. Its acceleration is $-10$ throughout: gravity pulls it down at the same rate on the way up, at the top and on the way down. The last row says that a straight line has no bending, and the converse is true as well: a function whose second derivative is 0 everywhere is a straight line.
+
+        **Convex and concave.** Suppose $f''(x) > 0$ on an interval. Then $f'$ has a positive derivative there, so $f'$ is increasing: the slope grows from left to right. The graph bends upward, and $f$ is called **convex** on the interval (some books say concave up). If $f''(x) < 0$ the slope decreases, the graph bends downward, and $f$ is **concave** (concave down).
+
+        | Sign | Slope | Shape | Curve and tangent |
+        | --- | --- | --- | --- |
+        | $f'' > 0$ | increasing | convex, like a bowl | curve above its tangents |
+        | $f'' < 0$ | decreasing | concave, like a dome | curve below its tangents |
+        | $f'' = 0$ on an interval | constant | straight | curve is its tangent |
+
+        Notice that this is independent of whether the function is rising or falling. $e^x$ rises and is convex. $e^{-x}$ falls and is convex. $\ln x$ rises and is concave. All four combinations occur, and a full description of a curve at a point needs both signs: which way it is going, and which way it is bending.
+
+        A point where the bending changes direction, from convex to concave or the other way, is a **point of inflection**. There $f''$ changes sign, so if $f''$ is continuous it must be 0 there. The converse fails: $f(x) = x^4$ has $f''(0) = 0$, and the curve is convex on both sides, with no change of bending. A zero of $f''$ is a candidate for an inflection, and the sign on either side decides.
+
+        For $f(x) = x^3 - 3x$, $f''(x) = 6x$ is negative for $x < 0$ and positive for $x > 0$: concave, then convex, with an inflection at 0. That is what the figure showed.
+
+        **The quadratic approximation.** Now for the number that measures how fast the tangent goes wrong. The tangent line matches the function's value and slope at $a$. Let us do better, and look for a stand-in that also matches the **second derivative**. A straight line cannot, since its second derivative is 0. The simplest thing that can is a quadratic. Write the stand-in in terms of the step $h$ away from $a$:
+
+        $$q(h) = c_0 + c_1 h + c_2 h^2.$$
+
+        Its value at $h = 0$ is $c_0$. Its first derivative is $c_1 + 2c_2 h$, which is $c_1$ at 0. Its second derivative is $2c_2$. Matching these with $f(a)$, $f'(a)$ and $f''(a)$ gives $c_0 = f(a)$, $c_1 = f'(a)$ and $2c_2 = f''(a)$.
+
+        $$f(a + h) \approx f(a) + f'(a)\,h + \tfrac{1}{2} f''(a)\,h^2.$$
+
+        The $\frac{1}{2}$ is not a convention. It is there because differentiating $h^2$ twice produces a 2, which has to be cancelled.
+
+        The first two terms are the tangent line. So the new term is, to a very good approximation, **the error of the tangent line**:
+
+        $$\text{error of the linear approximation} \approx \tfrac{1}{2} f''(a)\,h^2.$$
+
+        This is the answer to the puzzle. The error is proportional to the second derivative, the bending, and to the **square** of the distance. Double the distance and the error quadruples, as the starter showed. For the square root at 100: $f''(x) = -\frac{1}{4}x^{-3/2}$, which is $-\dfrac{1}{4000}$ at 100, so the error at distance $h$ is about $-\dfrac{h^2}{8000}$. For $h = 1$ that is $-0.000125$. The tangent's estimate 10.05 was too high by that much, because the curve bends down, away from it. The corrected estimate is
+
+        $$\sqrt{101} \approx 10 + 0.05 - 0.000125 = 10.049875,$$
+
+        and the true value is $10.0498756\ldots$ Seven figures from three terms.
+
+        In the weight example, with slope $-2$ and a step of 1, the predicted change is $-2 + \frac{1}{2}f''$. With $f'' = 0.2$ the error falls by 1.9. With $f'' = 3$ it falls by 0.5. With $f'' = 6$ it rises by 1. **The second derivative sets the distance over which the slope can be trusted**, and therefore how large a step a method that follows the slope may safely take. Where the curvature is large, steps must be small.
+    - question:
+        id: derivation-half
+        type: choice
+        system: s2
+        prompt: |
+          The quadratic approximation is $f(a) + f'(a)h + \frac{1}{2}f''(a)h^2$. Why is the coefficient of $h^2$ equal to $\frac{1}{2}f''(a)$ and not $f''(a)$?
+        options:
+          - "By convention, to make the numbers smaller."
+          - "Because the second derivative of $c_2 h^2$ is $2c_2$, so for the stand-in's second derivative to equal $f''(a)$ we need $c_2 = \\frac{1}{2}f''(a)$."
+          - "Because the step is taken in two halves."
+          - "Because the tangent line already accounts for half of the bending."
+        answer: 1
+        explanation: |
+          The stand-in is built to agree with $f$ in value, slope and second derivative at the point. Differentiate $c_2 h^2$ once to get $2c_2 h$, and again to get $2c_2$. Setting $2c_2 = f''(a)$ gives the half. You can check it on a function that is its own quadratic approximation: for $f(x) = x^2$ at $a = 0$, $f'' = 2$ and the formula gives $\frac{1}{2} \cdot 2 \cdot h^2 = h^2$, which is exact. Without the half it would give $2h^2$.
+        hints:
+          - What is the second derivative of c times h squared?
+          - The stand-in must have the same second derivative as f at the point.
+          - Test both versions on f(x) = x squared at 0.
+    - text: |
+        **Convex functions.** A function with $f'' \ge 0$ everywhere is convex everywhere, and such functions are the best-behaved things one can ask to minimise. Three facts make them so.
+
+        *The curve lies above every tangent.* For every $a$ and every $x$, $\ f(x) \ge f(a) + f'(a)(x - a)$. You have met one case already. $e^x$ is convex, and its tangent at 0 is $1 + x$. So $e^x \ge 1 + x$ for all $x$, the inequality that was proved by other means in the last lesson.
+
+        *The curve lies below every chord.* The straight segment joining two points of the graph runs above the graph between them. At the midpoint: $f\!\left(\dfrac{a + b}{2}\right) \le \dfrac{f(a) + f(b)}{2}$. The function of an average is at most the average of the function.
+
+        *A level tangent marks the lowest point of all.* If $f'(a) = 0$, the first fact gives $f(x) \ge f(a)$ for every $x$. A convex function has no misleading dips: a point where the slope is zero is a minimum of the whole function, and a method that walks downhill cannot get stuck anywhere else.
+
+        $x^2$, $e^x$, $-\ln x$ and $\lvert x \rvert$ are convex. A full treatment waits until the course reaches optimisation. For now, keep the picture: a bowl.
+
+        **Estimating a second derivative by computer.** A second derivative is a difference of slopes, divided by the distance between them. Take the slope of the chord from $a$ to $a + h$, and the slope of the chord from $a - h$ to $a$, subtract, and divide by $h$:
+
+        $$\frac{1}{h}\left(\frac{f(a + h) - f(a)}{h} - \frac{f(a) - f(a - h)}{h}\right) = \frac{f(a + h) - 2f(a) + f(a - h)}{h^2}.$$
+
+        This is the **central second difference**. It compares the value at the point with the average of its two neighbours: if the neighbours average higher than the point, the curve is bending upward there. For a quadratic it is exact, whatever $h$.
+
+        ```python
+        def second_derivative(f, a):
+            h = 1e-4
+            return (f(a + h) - 2 * f(a) + f(a - h)) / (h * h)
+        ```
+
+        The step is larger than the $10^{-5}$ used for first derivatives, and for a reason you can now work out. The rounding error of the top, about $10^{-16}$ times the size of $f$, is divided by $h^2$, not by $h$. With $h = 10^{-5}$ that would be a division by $10^{-10}$, leaving only about six good digits. Second differences are more delicate than first differences, and third ones are worse.
+
+        **Higher derivatives.** There is no reason to stop at two. The third derivative $f'''$ is the derivative of $f''$, and the $n$th is written $f^{(n)}$, with the brackets to distinguish it from a power. A few patterns are worth knowing.
+
+        - Each differentiation lowers the degree of a polynomial by one. The $n$th derivative of $x^n$ is the constant $n \cdot (n-1) \cdots 2 \cdot 1 = n!$, and the next one is 0.
+        - $e^{kx}$ picks up a factor $k$ each time: its $n$th derivative is $k^n e^{kx}$. For $e^x$ every derivative is $e^x$.
+        - The sine goes round its cycle of four: $\sin, \cos, -\sin, -\cos, \sin, \dots$
+
+        The first derivative gave the best line through a point. The second gave the best parabola. The pattern continues, each further derivative allowing a polynomial stand-in of one higher degree, and where it leads is the subject of the next lesson.
+    - question:
+        id: order-inflection
+        type: order
+        system: s2
+        prompt: Put the steps in order to find where the curve $y = x^3 - 6x^2 + 5$ changes from concave to convex.
+        steps:
+          - "Differentiate once: $y' = 3x^2 - 12x$."
+          - "Differentiate again: $y'' = 6x - 12$."
+          - "Solve $y'' = 0$: the only candidate is $x = 2$."
+          - "Check the sign of $y''$ on each side: negative for $x < 2$, positive for $x > 2$."
+          - "Conclude: the curve is concave before 2 and convex after it, with a point of inflection at $x = 2$."
+        explanation: The second derivative is needed, so differentiate twice. Its zeros are only candidates for inflection points, so the sign on each side must be checked before anything is concluded. Here the sign does change, from negative to positive.
+        hints:
+          - The second derivative comes from differentiating twice, in order.
+          - A zero of the second derivative is only a candidate.
+          - The conclusion comes after the sign check.
+  formal:
+    - text: |
+        **Second derivative.** $f'' = (f')'$, also written $\dfrac{d^2y}{dx^2}$. Higher derivatives: $f'''$, and $f^{(n)}$ for the $n$th.
+
+        **Bending.** On an interval: $f'' > 0$ means $f'$ is increasing and $f$ is convex. $f'' < 0$ means $f'$ is decreasing and $f$ is concave. A point where the bending changes is a point of inflection, and there $f'' = 0$ if $f''$ is continuous. The converse is false: $x^4$ at 0.
+
+        **Quadratic approximation.** $f(a + h) \approx f(a) + f'(a)\,h + \frac{1}{2} f''(a)\,h^2$. The error of the tangent line is approximately $\frac{1}{2} f''(a)\,h^2$.
+
+        **Convex functions.** If $f'' \ge 0$ everywhere then, for all $a$, $b$, $x$: $\ f(x) \ge f(a) + f'(a)(x - a)$, $\ f\!\left(\frac{a + b}{2}\right) \le \frac{f(a) + f(b)}{2}$, and $f'(a) = 0$ implies that $f(a)$ is the least value of $f$.
+
+        **Central second difference.** $f''(a) \approx \dfrac{f(a + h) - 2f(a) + f(a - h)}{h^2}$.
+
+        | $f(x)$ | $f''(x)$ | Shape |
+        | --- | --- | --- |
+        | $x^2$ | $2$ | convex everywhere |
+        | $x^3$ | $6x$ | concave for $x < 0$, convex for $x > 0$ |
+        | $e^x$ | $e^x$ | convex everywhere |
+        | $\ln x$ | $-\dfrac{1}{x^2}$ | concave everywhere |
+        | $\sin x$ | $-\sin x$ | concave where $\sin x > 0$, convex where $\sin x < 0$ |
+        | $x^n$ | $n(n-1)x^{n-2}$ | depends on $n$ and the sign of $x$ |
+  drill:
+    - text: Seconds each. Differentiate twice, then read the sign.
+    - question:
+        id: drill-quartic
+        type: numeric
+        system: s1
+        prompt: |
+          $f(x) = x^4$. What is $f''(1)$?
+        answer: "12"
+        explanation: |
+          $f' = 4x^3$ and $f'' = 12x^2$.
+        hints:
+          - Differentiate once to get 4x cubed.
+          - Differentiate that again.
+    - question:
+        id: drill-cubic
+        type: numeric
+        system: s1
+        prompt: |
+          $f(x) = x^3 - 3x$. What is $f''(2)$?
+        answer: "12"
+        explanation: |
+          $f' = 3x^2 - 3$ and $f'' = 6x$, which is 12 at 2.
+        hints:
+          - The second derivative is 6x.
+          - Put 2 in.
+    - question:
+        id: drill-acceleration
+        type: numeric
+        system: s1
+        unit: metres per second per second
+        prompt: |
+          A ball is at height $s(t) = 20t - 5t^2$ metres. What is its acceleration $s''(t)$?
+        answer: "-10"
+        explanation: The velocity is 20 − 10t, and its rate of change is −10 at every moment.
+        hints:
+          - First find the velocity.
+          - Differentiate the velocity.
+    - question:
+        id: drill-sign-shape
+        type: choice
+        system: s1
+        prompt: |
+          $f''(x) > 0$ on an interval. What does the graph do there?
+        options:
+          - "It rises."
+          - "It bends upward, like a bowl."
+          - "It bends downward, like a dome."
+          - "It is a straight line."
+        answer: 1
+        explanation: A positive second derivative means the slope is increasing, which is upward bending. It says nothing about whether the function is rising or falling.
+        hints:
+          - The second derivative is the rate of change of the slope.
+          - If the slope keeps growing, which way does the curve bend?
+    - question:
+        id: drill-exp-second
+        type: numeric
+        system: s1
+        prompt: |
+          $f(x) = e^{2x}$. What is $f''(0)$?
+        answer: "4"
+        explanation: Each differentiation brings out a factor 2, so the second derivative is 4 times the function.
+        hints:
+          - The first derivative is 2 times e to the 2x.
+          - Differentiate once more.
+    - question:
+        id: drill-sine-second
+        type: choice
+        system: s1
+        prompt: |
+          What is the second derivative of $\sin x$?
+        options: ["$\\sin x$", "$\\cos x$", "$-\\sin x$", "$-\\cos x$"]
+        answer: 2
+        explanation: The sine gives the cosine, and the cosine gives minus the sine. The sine bends back towards the axis wherever it is away from it.
+        hints:
+          - Differentiate twice.
+          - The second step brings a minus sign.
+    - question:
+        id: drill-tangent-side
+        type: choice
+        system: s1
+        prompt: |
+          A curve is concave near a point. Where does it lie relative to its tangent there?
+        options: ["Above it", "Below it", "On it", "It crosses it"]
+        answer: 1
+        explanation: A concave curve bends downward, away from its tangent, so the tangent overestimates.
+        hints:
+          - Concave means the slope is decreasing.
+          - Picture a dome and a line resting on top of it.
+    - question:
+        id: drill-quadratic-estimate
+        type: numeric
+        system: s1
+        prompt: |
+          $f(0) = 1$, $f'(0) = 2$, $f''(0) = 6$. Estimate $f(0.1)$ with the quadratic approximation.
+        answer: "1.23"
+        explanation: |
+          $1 + 2(0.1) + \frac{1}{2} \cdot 6 \cdot (0.1)^2 = 1 + 0.2 + 0.03$.
+        hints:
+          - Value, plus slope times step, plus half the second derivative times the step squared.
+          - Half of 6 is 3, and 0.1 squared is 0.01.
+    - question:
+        id: drill-ln-second
+        type: numeric
+        system: s1
+        prompt: |
+          $f(x) = \ln x$. What is $f''(1)$?
+        answer: "-1"
+        explanation: |
+          $f' = x^{-1}$ and $f'' = -x^{-2}$. The logarithm is concave everywhere.
+        hints:
+          - Write the first derivative as a negative power.
+          - Use the power rule on it.
+    - question:
+        id: drill-fourth
+        type: numeric
+        system: s1
+        prompt: |
+          $f(x) = x^4$. What is its fourth derivative $f^{(4)}(x)$?
+        answer: "24"
+        explanation: |
+          $4x^3$, then $12x^2$, then $24x$, then 24, which is $4!$.
+        hints:
+          - Differentiate four times.
+          - Each step brings down the current exponent.
+    - question:
+        id: drill-inflection-converse
+        type: choice
+        system: s1
+        prompt: |
+          $f(x) = x^4$ has $f''(0) = 0$. Is 0 a point of inflection?
+        options:
+          - "Yes, since the second derivative is 0 there."
+          - "No. $f''(x) = 12x^2$ is positive on both sides, so the bending does not change."
+          - "Yes, since the tangent is level."
+          - "It cannot be decided."
+        answer: 1
+        explanation: An inflection needs the second derivative to change sign. A zero is only a candidate, and this one fails the check.
+        hints:
+          - What is the sign of 12x squared on each side of 0?
+          - An inflection is a change in the direction of bending.
+    - question:
+        id: predict-second-difference
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          def second(f, a, h):
+              return (f(a + h) - 2 * f(a) + f(a - h)) / (h * h)
+
+          print(second(lambda x: x * x * x, 2, 1), second(lambda x: x * x, 5, 1))
+        output: "12.0 2.0"
+        explanation: For the cube at 2 with h = 1 the top is 27 − 16 + 1 = 12. For the square at 5 it is 36 − 50 + 16 = 2. Both are exactly the second derivatives, 6x at 2 and the constant 2.
+        hints:
+          - For the cube, the three values are 27, 8 and 1.
+          - The middle value is doubled and subtracted.
+    - question:
+        id: predict-twice
+        type: predict
+        system: s1
+        prompt: The list holds the coefficients of a polynomial, constant term first. What does this show?
+        code: |
+          def d(coeffs):
+              return [k * coeffs[k] for k in range(1, len(coeffs))]
+
+          p = [5, 0, -6, 1]
+          print(d(p), d(d(p)))
+        output: "[0, -12, 3] [-12, 6]"
+        explanation: The polynomial is 5 − 6x² + x³. Its derivative is −12x + 3x², and the second derivative is −12 + 6x, which is 0 at x = 2, the inflection point.
+        hints:
+          - Which polynomial does the list stand for?
+          - Apply the rule once, then apply it to the result.
+  work:
+    - text: Slower now. Say what the sign of each second derivative means before you use it.
+    - question:
+        id: work-inflection
+        type: numeric
+        system: s2
+        prompt: |
+          At which $x$ does the curve $y = x^3 - 9x^2 + 4x$ have its point of inflection?
+        answer: "3"
+        explanation: |
+          $y' = 3x^2 - 18x + 4$ and $y'' = 6x - 18$, which is 0 at $x = 3$, negative before and positive after. The bending changes from downward to upward there. For any cubic the second derivative is a line, so there is exactly one inflection.
+        hints:
+          - Differentiate twice.
+          - Set the second derivative to zero.
+          - Check that its sign changes there.
+    - question:
+        id: work-quadratic-exp
+        type: numeric
+        system: s2
+        prompt: |
+          Use the quadratic approximation of $e^x$ at $a = 0$ to estimate $e^{0.2}$.
+        answer: "1.22"
+        explanation: |
+          Every derivative of $e^x$ is 1 at 0. So $e^h \approx 1 + h + \frac{1}{2}h^2$, and with $h = 0.2$: $1 + 0.2 + 0.02 = 1.22$. The true value is $1.2214\ldots$ The tangent line alone gives 1.2, wrong in the second decimal place. The quadratic term repairs it.
+        hints:
+          - What are the value, slope and second derivative of e to the x at 0?
+          - Half of the second derivative times the step squared.
+          - 0.2 squared is 0.04.
+    - question:
+        id: work-root-second-order
+        type: numeric
+        system: s2
+        prompt: |
+          For $f(x) = \sqrt{x}$: $f(25) = 5$, $f'(25) = 0.1$ and $f''(25) = -0.002$. Use the quadratic approximation to estimate $\sqrt{26}$.
+        answer: "5.099"
+        explanation: |
+          $5 + 0.1 \cdot 1 + \frac{1}{2} \cdot (-0.002) \cdot 1^2 = 5.1 - 0.001 = 5.099$. The true value is $5.09902\ldots$ The tangent's estimate 5.1 was too high because the square root is concave, and the correction is half the second derivative times the square of the step. Here $f''(25) = -\frac{1}{4} \cdot 25^{-3/2} = -\frac{1}{4 \cdot 125}$.
+        hints:
+          - Start from the tangent estimate, 5.1.
+          - Add half of the second derivative times the step squared.
+          - The step is 1.
+    - question:
+        id: write-second-derivative
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `second_derivative(f, a)`. It estimates $f''(a)$ by the central second difference with $h = 10^{-4}$:
+
+          $$\frac{f(a + h) - 2f(a) + f(a - h)}{h^2}.$$
+        starter: |
+          def second_derivative(f, a):
+              # Replace the next line with your own.
+              return 0
+
+          print(round(second_derivative(lambda x: x ** 3 - 3 * x, 2), 3))
+        solution: |
+          def second_derivative(f, a):
+              h = 1e-4
+              return (f(a + h) - 2 * f(a) + f(a - h)) / (h * h)
+
+          print(round(second_derivative(lambda x: x ** 3 - 3 * x, 2), 3))
+        tests: |
+          import math as _m
+          def _close(got, want, name):
+              assert abs(got - want) < 1e-5, "For " + name + " the second derivative is " + str(want) + " and you returned " + repr(got)
+          _close(second_derivative(lambda x: x ** 3 - 3 * x, 2), 12, "x^3 - 3x at 2")
+          _close(second_derivative(lambda x: x * x, 5), 2, "x^2 at 5")
+          _close(second_derivative(lambda x: 7 * x + 1, 3), 0, "a straight line")
+          _close(second_derivative(_m.exp, 0), 1, "e^x at 0")
+          _close(second_derivative(_m.sin, 1), -_m.sin(1), "sin x at 1")
+          _close(second_derivative(_m.log, 1), -1, "ln x at 1")
+          assert output.strip() == "12.0", "The program should print 12.0"
+        wrong:
+          - "def second_derivative(f, a):\n    h = 1e-4\n    return (f(a + h) - f(a - h)) / (2 * h)\n\nprint(12.0)\n"
+          - "def second_derivative(f, a):\n    h = 1e-4\n    return (f(a + h) - 2 * f(a) + f(a - h)) / h\n\nprint(12.0)\n"
+          - "def second_derivative(f, a):\n    h = 1e-4\n    return (f(a + h) - f(a) + f(a - h)) / (h * h)\n\nprint(12.0)\n"
+          - "def second_derivative(f, a):\n    h = 1e-4\n    return (f(a + h) + 2 * f(a) + f(a - h)) / (h * h)\n\nprint(12.0)\n"
+        explanation: |
+          The top compares the point with its two neighbours: $f(a + h) + f(a - h)$ is twice the neighbours' average, and subtracting $2f(a)$ asks how far that average lies above the point. Dividing by $h^2$ turns it into a rate of change of slope. A straight line gives exactly 0, since a point on a line is the average of its neighbours, and that is a good first test of any such routine. The formula is the difference of two chord slopes divided by the distance between the chords, which is why $h$ appears squared underneath.
+        hints:
+          - Three values of f are needed, at a + h, at a and at a - h.
+          - The middle value is multiplied by 2 and subtracted.
+          - Divide by h times h.
+    - question:
+        id: write-nth-derivative
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A polynomial is a list of coefficients, constant term first. Write `nth_derivative(coeffs, n)`, which returns the coefficient list of the polynomial differentiated `n` times. With `n = 0` it returns the list unchanged.
+
+          Differentiating a constant gives the empty list `[]`, and differentiating `[]` gives `[]` again. So for $x^4$, the list `[0, 0, 0, 0, 1]`, four differentiations give `[24]` and five give `[]`.
+        starter: |
+          def nth_derivative(coeffs, n):
+              # Replace the next line with your own.
+              return coeffs
+
+          print(nth_derivative([0, 0, 0, 0, 1], 4))
+        solution: |
+          def nth_derivative(coeffs, n):
+              for step in range(n):
+                  coeffs = [k * coeffs[k] for k in range(1, len(coeffs))]
+              return coeffs
+
+          print(nth_derivative([0, 0, 0, 0, 1], 4))
+        tests: |
+          _p = [5, 0, -6, 1]
+          assert nth_derivative(_p, 0) == [5, 0, -6, 1], "With n = 0 the polynomial is returned unchanged"
+          assert nth_derivative(_p, 1) == [0, -12, 3], "The derivative of 5 - 6x^2 + x^3 is -12x + 3x^2. You returned " + repr(nth_derivative(_p, 1))
+          assert nth_derivative(_p, 2) == [-12, 6], "The second derivative is -12 + 6x. You returned " + repr(nth_derivative(_p, 2))
+          assert nth_derivative(_p, 3) == [6], "The third derivative is 6. You returned " + repr(nth_derivative(_p, 3))
+          assert nth_derivative(_p, 4) == [], "The fourth derivative of a cubic is zero, the empty list. You returned " + repr(nth_derivative(_p, 4))
+          assert nth_derivative(_p, 9) == [], "Differentiating the empty list gives the empty list"
+          assert nth_derivative([0, 0, 0, 0, 1], 4) == [24], "The fourth derivative of x^4 is 24. You returned " + repr(nth_derivative([0, 0, 0, 0, 1], 4))
+          assert _p == [5, 0, -6, 1], "Do not change the list that was passed in"
+          assert output.strip() == "[24]", "The program should print [24]"
+        wrong:
+          - "def nth_derivative(coeffs, n):\n    return [k * coeffs[k] for k in range(1, len(coeffs))]\n\nprint([24])\n"
+          - "def nth_derivative(coeffs, n):\n    for step in range(n):\n        coeffs = [coeffs[k] for k in range(1, len(coeffs))]\n    return coeffs\n\nprint([24])\n"
+          - "def nth_derivative(coeffs, n):\n    for step in range(n):\n        coeffs = [k * coeffs[k] for k in range(len(coeffs))]\n    return coeffs\n\nprint([24])\n"
+          - "def nth_derivative(coeffs, n):\n    return [n * k * coeffs[k] for k in range(1, len(coeffs))]\n\nprint([24])\n"
+        explanation: |
+          The $n$th derivative is the derivative taken $n$ times, so the function is a loop round the one-line rule from three lessons ago. Each pass drops the constant term and multiplies each remaining coefficient by its exponent. The list shortens by one each time: a polynomial of degree $d$ has $d + 1$ coefficients, survives $d$ differentiations as a non-empty list, and vanishes on the next. For $x^4$ the passes multiply by 4, then 3, then 2, then 1, giving $4! = 24$. The comprehension builds a new list each time, so the caller's list is untouched.
+        hints:
+          - One differentiation is the comprehension [k * coeffs[k] for k in range(1, len(coeffs))].
+          - Repeat it n times with a loop.
+          - Assign the result back to coeffs inside the loop and return it at the end.
+    - question:
+        id: fix-quadratic-estimate
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `quadratic_estimate(value, slope, bend, h)` should return the quadratic approximation at a distance `h` from a point where the function has the given value, first derivative and second derivative. For $e^x$ at 0, all three are 1, and with $h = 0.2$ the result should be 1.22. It prints 1.24. Fix it.
+        starter: |
+          def quadratic_estimate(value, slope, bend, h):
+              return value + slope * h + bend * h ** 2
+
+          print(round(quadratic_estimate(1, 1, 1, 0.2), 4))
+        solution: |
+          def quadratic_estimate(value, slope, bend, h):
+              return value + slope * h + bend * h ** 2 / 2
+
+          print(round(quadratic_estimate(1, 1, 1, 0.2), 4))
+        tests: |
+          assert abs(quadratic_estimate(1, 1, 1, 0.2) - 1.22) < 1e-12, "For e^x at 0 with h = 0.2 the estimate is 1 + 0.2 + 0.02 = 1.22. You returned " + repr(quadratic_estimate(1, 1, 1, 0.2))
+          assert abs(quadratic_estimate(0, 0, 2, 3) - 9) < 1e-12, "For x^2 at 0 the value and slope are 0 and the second derivative is 2, so at h = 3 the estimate is exactly 9. You returned " + repr(quadratic_estimate(0, 0, 2, 3))
+          assert abs(quadratic_estimate(5, 0.1, -0.002, 1) - 5.099) < 1e-12, "For the square root at 25 with h = 1 the estimate is 5.099. You returned " + repr(quadratic_estimate(5, 0.1, -0.002, 1))
+          assert abs(quadratic_estimate(1, 2, 6, -0.1) - 0.83) < 1e-12, "With value 1, slope 2, second derivative 6 and h = -0.1 the estimate is 1 - 0.2 + 0.03 = 0.83. You returned " + repr(quadratic_estimate(1, 2, 6, -0.1))
+          assert abs(quadratic_estimate(4, 3, 0, 10) - 34) < 1e-12, "With no bending the estimate is the tangent line"
+          assert output.strip() == "1.22", "The program should print 1.22"
+        wrong:
+          - "def quadratic_estimate(value, slope, bend, h):\n    return value + slope * h + bend * h ** 2\n\nprint(1.22)\n"
+          - "def quadratic_estimate(value, slope, bend, h):\n    return value + slope * h + bend * h / 2\n\nprint(1.22)\n"
+          - "def quadratic_estimate(value, slope, bend, h):\n    return value + slope * h / 2 + bend * h ** 2 / 2\n\nprint(1.22)\n"
+          - "def quadratic_estimate(value, slope, bend, h):\n    return value + slope * h + (bend * h / 2) ** 2\n\nprint(1.22)\n"
+        explanation: |
+          The quadratic term is **half** the second derivative times the square of the step. The starter left out the half, which doubles the correction. The half is forced by the requirement that the stand-in have the right second derivative: $h^2$ differentiated twice gives 2. The sharpest test is the function $x^2$ itself at 0, where the value and slope are 0 and the second derivative is 2: the quadratic approximation of a quadratic must reproduce it exactly, $h^2$, and without the half it gives $2h^2$.
+        hints:
+          - Write down the quadratic approximation and compare the last term.
+          - What coefficient multiplies the second derivative?
+          - Divide the last term by 2.
+    - question:
+        id: work-convex-inequality
+        type: choice
+        system: s2
+        prompt: |
+          $f(x) = -\ln x$ is convex for $x > 0$, since $f''(x) = \dfrac{1}{x^2} > 0$. Its tangent at $x = 1$ is $y = -(x - 1)$. What does "a convex curve lies above its tangents" give?
+        options:
+          - "$\\ln x \\ge x - 1$ for all $x > 0$"
+          - "$\\ln x \\le x - 1$ for all $x > 0$, with equality only at $x = 1$"
+          - "$\\ln x = x - 1$ for all $x > 0$"
+          - "Nothing, since the logarithm is concave."
+        answer: 1
+        explanation: |
+          Convexity of $-\ln x$ gives $-\ln x \ge -(x - 1)$. Multiplying by $-1$ reverses the inequality: $\ln x \le x - 1$. The logarithm lies below its tangent at 1, as a concave function must. This one inequality is the engine of information theory: it is what proves that a certain measure of the difference between two probability distributions can never be negative. A fact about bending has become an inequality valid for every positive number.
+        hints:
+          - Write "curve at least tangent" for the function minus ln x.
+          - What happens to an inequality when both sides are multiplied by minus 1?
+          - Check with x = 2, where ln 2 is about 0.69.
+    - question:
+        id: work-step-and-curvature
+        type: choice
+        system: s2
+        prompt: |
+          At the current weight the error has slope $-2$ and second derivative 8. You plan a step of size $h$ in the downhill direction, so $h > 0$. By the quadratic approximation the change in the error is $-2h + 4h^2$. Which statement is correct?
+        options:
+          - "Any step size lowers the error, since the slope is negative."
+          - "The error is lowered only for $h < 0.5$, and the best step is $h = 0.25$, where the predicted fall is 0.25. A step of 1 would raise the error by 2."
+          - "The best step is $h = 2$, the size of the slope."
+          - "No step lowers the error, because the second derivative is positive."
+        answer: 1
+        explanation: |
+          $-2h + 4h^2 = 2h(2h - 1)$ is negative only for $0 < h < 0.5$. It is a quadratic in $h$, lowest where its own derivative $-2 + 8h$ is 0, at $h = 0.25$, where it equals $-0.5 + 0.25 = -0.25$. With $h = 1$ it is $+2$. The slope says which way to go, and the second derivative says how far the slope can be believed: the best step is the slope's size divided by the second derivative, $\frac{2}{8}$. High curvature demands small steps. Choosing a step size for a model is, at bottom, this calculation done without knowing the curvature exactly.
+        hints:
+          - For which h is -2h + 4h squared negative?
+          - Minimise that quadratic in h by setting its derivative to zero.
+          - Evaluate it at h = 1.
+  connections:
+    - text: |
+        The puzzle asked what the two cars, and the three models, did not have in common. It is the second derivative: the rate of change of the rate of change. For a moving object that is acceleration. For a graph it is bending, upward where it is positive and downward where it is negative. And for the tangent-line approximation it is the measure of how fast the truth departs from the line: the error is about half the second derivative times the square of the step.
+
+        That last fact was found by asking for a stand-in that matches one more derivative than the tangent does. A line matches value and slope. A parabola matches value, slope and bending, and is correspondingly more accurate. Nothing stops us from going on: a cubic that also matches the third derivative, a quartic for the fourth. Each new term corrects the error left by the ones before, and its coefficient is found in the same way as the $\frac{1}{2}$ was. Carried to its conclusion, this rebuilds a function from the list of its derivatives at a single point. That is the next lesson, [[m10.taylor-approximation]], and it is how `math.exp` and `math.sin` are computed.
+
+        The sign of the second derivative also settles a question that the first derivative leaves open. A level tangent, $f' = 0$, might be the bottom of a valley or the top of a hill. If the curve is bending upward there it is a valley, and if downward a hill. Finding the highest and lowest values of a function is what derivatives are most used for, and the full method is in [[m10.maxima-and-minima]].
+
+        Convex functions, the bowls, will matter more and more. They are the functions for which walking downhill is guaranteed to find the lowest point, and the course treats them properly in [[m19.convex-functions-and-their-conditions]]. And when a function has many inputs, as the error of a model does, bending has to be measured in every direction and between every pair of directions. The second derivative becomes a table of second derivatives, in [[m12.hessian-and-symmetry-of-mixed-partials]], and the calculation in the last question, the slope divided by the curvature, becomes the question of how to choose a learning rate.

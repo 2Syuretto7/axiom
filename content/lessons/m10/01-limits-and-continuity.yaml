@@ -1,0 +1,742 @@
+concept: m10.limits-and-continuity
+minutes: 100
+claim: You can say exactly what it means for a function to approach a value at a point, find limits by algebra and by squeezing, tell when a limit does not exist, decide whether a function is continuous at a point, and use continuity to trap a root between two inputs.
+recalls: [m3.reading-and-writing-epsilon-style-arguments, m2.sequences-and-series]
+uses: [m3.quantifiers-and-their-negation, m3.direct-proof, m1.inequalities-and-absolute-value, m1.quadratics, m1.polynomials, m2.functions-as-machines, m2.composition-and-inverses, m2.trigonometric-functions-on-the-unit-circle, m0.fractions, e0.functions, e0.loops, e0.booleans-and-conditionals, e1.comprehensions-and-iterators, e1.modules-and-imports]
+leads: [m10.derivative-as-slope-and-rate, m10.derivatives-of-exp-log-and-trig, m11.epsilon-delta-continuity-and-uniform-continuity, m11.intermediate-and-extreme-value-theorems]
+starter: |
+  # Scratch space. A stone falls 5 * t * t metres in t seconds.
+  # Average speed between 1 second and 1 + h seconds, for smaller and smaller h.
+  def fallen(t):
+      return 5 * t * t
+
+  for h in [1, 0.1, 0.01, 0.001]:
+      print(h, (fallen(1 + h) - fallen(1)) / h)
+parts:
+  recall:
+    - text: |
+        In [[m3.reading-and-writing-epsilon-style-arguments]] you learned to play a game: a challenger names a tolerance $\varepsilon$, and you answer with a point beyond which every term is within that tolerance of the limit. In [[m2.sequences-and-series]] the things that approached a limit were the terms of a sequence. Today the same game is played with a function. Three quick pulls first.
+    - question:
+        id: recall-order
+        type: choice
+        system: s1
+        concepts: [m3.reading-and-writing-epsilon-style-arguments]
+        prompt: |
+          In the definition of continuity at $a$, which comes first?
+        options:
+          - "$\\delta$, the tolerance on the input"
+          - "$\\varepsilon$, the tolerance on the output"
+          - "The point $x$"
+          - "They are all chosen together"
+        answer: 1
+        explanation: The challenger names the output tolerance first. Your input tolerance comes after it and may depend on it.
+        hints:
+          - Who moves first in the game, the challenger or you?
+          - The challenger demands an accuracy of output.
+    - question:
+        id: recall-delta
+        type: numeric
+        system: s1
+        concepts: [m3.reading-and-writing-epsilon-style-arguments]
+        prompt: |
+          For $f(x) = 4x - 1$ the choice $\delta = \dfrac{\varepsilon}{4}$ proves continuity. What is $\delta$ when $\varepsilon = 0.2$?
+        answer: "0.05"
+        explanation: The function multiplies errors by 4, so the input must be four times as accurate as the output.
+        hints:
+          - Divide the output tolerance by the factor.
+          - One quarter of 0.2.
+    - question:
+        id: recall-sequence-limit
+        type: numeric
+        system: s1
+        concepts: [m2.sequences-and-series]
+        prompt: |
+          What is the limit of the sequence $a_n = \dfrac{3n + 2}{n}$?
+        answer: "3"
+        explanation: |
+          $a_n = 3 + \dfrac{2}{n}$, and $\dfrac{2}{n}$ shrinks below every tolerance.
+        hints:
+          - Divide each term of the top by n.
+          - What happens to 2/n as n grows?
+  puzzle:
+    - text: |
+        Drop a stone from a tower. Near the Earth's surface it falls close to $5t^2$ metres in the first $t$ seconds: 5 metres after one second, 20 after two, 45 after three. It is plainly speeding up.
+
+        **How fast is it going at the instant $t = 1$?**
+
+        Speed is distance divided by time. That works for a stretch of time. Between $t = 1$ and $t = 2$ the stone falls $20 - 5 = 15$ metres in 1 second, so its **average** speed over that second is 15 metres per second. But it was going slower than that at the start of the second and faster at the end. To get nearer to the speed **at** $t = 1$, use a shorter stretch. The starter does this.
+
+        | from $t = 1$ to | distance fallen | time taken | average speed |
+        | --- | --- | --- | --- |
+        | 2 | 15 | 1 | 15 |
+        | 1.1 | 1.05 | 0.1 | 10.5 |
+        | 1.01 | 0.1005 | 0.01 | 10.05 |
+        | 1.001 | 0.010005 | 0.001 | 10.005 |
+
+        The averages are settling on 10. So take the shortest stretch of all, from $t = 1$ to $t = 1$. The stone falls 0 metres in 0 seconds, and its speed is
+
+        $$\frac{0}{0}.$$
+
+        That is not 10. It is not anything. In [[m0.fractions]] you saw why division by zero has no answer, and nothing has changed since.
+
+        So here is the difficulty. A speedometer shows a number at every instant, and nobody doubts that the stone has a speed at $t = 1$. Yet the only definition of speed we have, distance over time, breaks down exactly when the stretch of time shrinks to an instant. An instant has no duration, and in no duration nothing moves.
+
+        **What can it mean to say that the speed at an instant is 10, when the formula for speed has no value there?**
+  intuition:
+    - text: |
+        Give the average speed a name. Over the stretch from 1 to $1 + h$ it is
+
+        $$g(h) = \frac{5(1 + h)^2 - 5}{h}.$$
+
+        This is a function of $h$, the length of the stretch. It has a value for every $h$ except one: at $h = 0$ it is undefined. The table shows $g(1) = 15$, $g(0.1) = 10.5$, $g(0.01) = 10.05$.
+
+        The way out is to stop asking what $g$ **is** at 0 and ask what $g$ is **near** 0. Near 0 its values crowd round 10. They can be made as close to 10 as anyone demands, by taking $h$ close enough to 0, and they never need $h$ to be 0. The number 10 is determined entirely by the behaviour of $g$ around the gap. We say that **10 is the limit of $g(h)$ as $h$ approaches 0**.
+
+        This is the central idea of calculus, so look at it squarely. **A limit is a statement about the values of a function near a point. The value at the point, if there is one, plays no part.** The limit describes where the function is heading, and whether it arrives is a separate question.
+
+        A little algebra shows why the heading is 10. Expand the top:
+
+        $$g(h) = \frac{5(1 + 2h + h^2) - 5}{h} = \frac{10h + 5h^2}{h} = 10 + 5h \qquad (h \ne 0).$$
+
+        The cancelling of $h$ is allowed exactly because $h$ is not 0. So away from 0, $g$ is the plain straight line $10 + 5h$, with one point removed. A line with a hole in it. And it is perfectly clear where the hole is: at height 10.
+
+        The figure shows another function of the same kind, $f(x) = \dfrac{x^2 - 1}{x - 1}$, which is the line $x + 1$ with a hole at $x = 1$. Step the two points closer to the gap from both sides.
+    - figure: limit-approach
+      props: { fn: hole, closeness: 1 }
+    - text: |
+        Three things can happen as $x$ approaches a point $a$, and you should be able to picture each.
+
+        **The values close in on one number $L$**, from the left and from the right alike. Then the limit exists and equals $L$. The function may be undefined at $a$, as above. It may be defined there and equal to $L$. It may even be defined there and equal to something else, like a line with one point lifted off it. The limit is $L$ in all three cases.
+
+        **The values close in on different numbers from the two sides.** Think of a postage charge that is 1 rupee for anything under 2 kilograms and 3 rupees from 2 kilograms up. Approaching 2 from below, the charge is 1 all the way. From above it is 3. No single number is approached, so there is **no limit** at 2, although the function has a perfectly good value there.
+    - figure: limit-approach
+      props: { fn: jump, closeness: 1 }
+    - text: |
+        **The values close in on nothing at all.** $\dfrac{1}{x}$ near 0 grows beyond every bound. $\sin\!\left(\dfrac{1}{x}\right)$ near 0 swings between $-1$ and 1 faster and faster and never settles. No limit in either case.
+
+        When the first thing happens **and** the number approached is the value at the point, the function is called **continuous** there. Its graph passes through the point without a hole or a jump. Continuity is what you assumed without saying so every time you joined plotted points with a smooth curve, and every time you trusted that a small change in an input makes a small change in an output.
+  derivation:
+    - text: |
+        **The definition.** Everything said so far is in the words "as close as anyone demands" and "close enough". You know how to make such words exact. Let $f$ be defined near $a$, though perhaps not at $a$. We say that **$f(x)$ has the limit $L$ as $x$ approaches $a$**, and write
+
+        $$\lim_{x \to a} f(x) = L,$$
+
+        if
+
+        $$\forall \varepsilon > 0,\quad \exists \delta > 0,\quad \forall x,\quad 0 < \lvert x - a \rvert < \delta \;\Rightarrow\; \lvert f(x) - L \rvert < \varepsilon.$$
+
+        Compare it with the definition of continuity from the last lesson. Two things have changed. $f(a)$ has been replaced by a number $L$, which need have nothing to do with $f(a)$. And a new condition has appeared: $0 < \lvert x - a \rvert$. That says $x \ne a$. **The point itself is excluded.** The challenger may test any $x$ within $\delta$ of $a$, except $a$.
+
+        The game is the one you know. The challenger names $\varepsilon$, an accuracy demanded of the output. You answer with $\delta$, an accuracy of input that guarantees it. For a sequence your answer was a position $N$, "far enough along". For a function it is a distance $\delta$, "near enough".
+
+        > **Theorem.** $\displaystyle\lim_{x \to 1} \frac{x^2 - 1}{x - 1} = 2$.
+        >
+        > **Proof.** Let $\varepsilon > 0$ and choose $\delta = \varepsilon$. Let $0 < \lvert x - 1 \rvert < \delta$. Since $x \ne 1$ we may cancel: $\dfrac{x^2 - 1}{x - 1} = \dfrac{(x - 1)(x + 1)}{x - 1} = x + 1$. So
+        >
+        > $$\left\lvert \frac{x^2 - 1}{x - 1} - 2 \right\rvert = \lvert (x + 1) - 2 \rvert = \lvert x - 1 \rvert < \delta = \varepsilon. \qquad \blacksquare$$
+
+        Notice where $0 < \lvert x - 1 \rvert$ was used: it is what permitted the cancelling. The proof never looks at $x = 1$, and it could not, since the function is not defined there.
+
+        The puzzle is answered in the same way. $g(h) = 10 + 5h$ for $h \ne 0$, so $\lvert g(h) - 10 \rvert = 5\lvert h \rvert$, which is below $\varepsilon$ whenever $0 < \lvert h \rvert < \dfrac{\varepsilon}{5}$. The limit is 10. **The speed at an instant is defined to be this limit**: the number that the average speeds over shorter and shorter stretches close in on. It was never a distance over a time. It is the limit of distances over times. That one move, replacing an impossible division by the limit of possible ones, is the whole foundation of the next lesson.
+
+        **Limits from one side.** Write $\displaystyle\lim_{x \to a^-} f(x)$ for the limit when $x$ is only allowed to approach from below, $a - \delta < x < a$, and $\displaystyle\lim_{x \to a^+} f(x)$ from above. For the postage charge, the left limit at 2 is 1 and the right limit is 3.
+
+        > **Fact.** $\displaystyle\lim_{x \to a} f(x) = L$ exactly when both one-sided limits exist and both equal $L$.
+
+        So to show that a limit does **not** exist it is enough to find the two sides disagreeing. That is the negation in action: with $\varepsilon = 1$ for the postage charge, no $\delta$ works for any $L$, since within any $\delta$ of 2 there are points where the charge is 1 and points where it is 3, and no $L$ is within 1 of both. You proved exactly this for the sequence $(-1)^n$.
+
+        **The limit laws.** Nobody computes limits from the definition every time, any more than you multiply by repeated addition. The definition is used once, to prove a few laws, and then the laws do the work. Suppose $\displaystyle\lim_{x \to a} f(x) = L$ and $\displaystyle\lim_{x \to a} g(x) = M$. Then
+
+        | Law | Statement |
+        | --- | --- |
+        | Sum | $\lim\,(f + g) = L + M$ |
+        | Constant multiple | $\lim\,(c f) = cL$ |
+        | Product | $\lim\,(f g) = LM$ |
+        | Quotient | $\lim \dfrac{f}{g} = \dfrac{L}{M}$, provided $M \ne 0$ |
+
+        The proof of the sum law is the one you ordered line by line in the last lesson, with $\delta$ in place of $N$ and a minimum in place of a maximum.
+
+        > **Proof of the sum law.** Let $\varepsilon > 0$. There are $\delta_1$ and $\delta_2$ with $\lvert f(x) - L \rvert < \dfrac{\varepsilon}{2}$ whenever $0 < \lvert x - a \rvert < \delta_1$, and $\lvert g(x) - M \rvert < \dfrac{\varepsilon}{2}$ whenever $0 < \lvert x - a \rvert < \delta_2$. Let $\delta = \min(\delta_1, \delta_2)$ and let $0 < \lvert x - a \rvert < \delta$. Then
+        >
+        > $$\lvert (f(x) + g(x)) - (L + M) \rvert \le \lvert f(x) - L \rvert + \lvert g(x) - M \rvert < \frac{\varepsilon}{2} + \frac{\varepsilon}{2} = \varepsilon. \qquad \blacksquare$$
+
+        Two limits come straight from the definition: $\displaystyle\lim_{x \to a} c = c$ (any $\delta$ works) and $\displaystyle\lim_{x \to a} x = a$ (take $\delta = \varepsilon$). Feed those into the laws and you get every polynomial for nothing. For example
+
+        $$\lim_{x \to 2}\,(3x^2 - x + 4) = 3 \cdot 2 \cdot 2 - 2 + 4 = 14.$$
+
+        By the quotient law the same goes for a quotient of polynomials, **wherever the bottom is not 0**. So for all these functions the limit at $a$ is found by substituting $a$. That is not a triviality. It is a theorem about polynomials, and it has a name, which we come to in a moment.
+
+        **When substituting gives $\frac{0}{0}$.** This is the case that matters, because it is the case of the falling stone and of every rate of change. The quotient law is silent, since $M = 0$. The form $\frac{0}{0}$ is not an answer. It is a warning that more work is needed, and the limit may turn out to be anything.
+
+        The work is nearly always the same: **rewrite the function, for $x \ne a$, as one that has no trouble at $a$**. A limit ignores the point $a$, so two functions that agree everywhere except at $a$ have the same limit there.
+
+        - *Factor and cancel.* $\dfrac{x^2 - 9}{x - 3} = x + 3 \to 6$ as $x \to 3$.
+        - *Expand and cancel.* $\dfrac{(2 + h)^2 - 4}{h} = \dfrac{4h + h^2}{h} = 4 + h \to 4$ as $h \to 0$.
+        - *Multiply by a conjugate.* $\dfrac{\sqrt{x} - 2}{x - 4} = \dfrac{(\sqrt{x} - 2)(\sqrt{x} + 2)}{(x - 4)(\sqrt{x} + 2)} = \dfrac{x - 4}{(x - 4)(\sqrt{x} + 2)} = \dfrac{1}{\sqrt{x} + 2} \to \dfrac{1}{4}$ as $x \to 4$.
+
+        Three different limits, 6, 4 and $\frac{1}{4}$, all from the form $\frac{0}{0}$.
+    - question:
+        id: order-limit-proof
+        type: order
+        system: s2
+        prompt: Put the lines of the proof that $\displaystyle\lim_{x \to 3} \frac{x^2 - 9}{x - 3} = 6$ in order.
+        steps:
+          - "Let $\\varepsilon > 0$."
+          - "Choose $\\delta = \\varepsilon$."
+          - "Let $x$ satisfy $0 < \\lvert x - 3 \\rvert < \\delta$."
+          - "Since $x \\ne 3$, cancel: $\\dfrac{x^2 - 9}{x - 3} = x + 3$."
+          - "So the distance from 6 is $\\lvert (x + 3) - 6 \\rvert = \\lvert x - 3 \\rvert$."
+          - "And $\\lvert x - 3 \\rvert < \\delta = \\varepsilon$, which proves the limit."
+        explanation: The order of the lines is the order of the quantifiers. The tolerance is given, the input tolerance is chosen from it, and an arbitrary nearby point other than 3 is taken. Only then may the cancelling be done, because it needs x to differ from 3.
+        hints:
+          - The proof follows the quantifiers of the definition in order.
+          - The cancelling needs x to be different from 3, so x must have been introduced already.
+          - The final estimate uses the choice of delta.
+    - text: |
+        **The squeeze, and the most important limit in trigonometry.** Some limits will not yield to algebra. Take
+
+        $$\lim_{x \to 0} \frac{\sin x}{x},$$
+
+        with $x$ in radians. Substituting gives $\frac{0}{0}$, and there is nothing to factor. The second figure below shows the values heading for 1. To prove it we trap the function between two simpler ones.
+
+        > **Squeeze theorem.** If $l(x) \le f(x) \le u(x)$ for all $x$ near $a$ (other than $a$), and $l$ and $u$ both have the limit $L$ at $a$, then so has $f$.
+
+        The proof is two lines of epsilon: once $l(x)$ and $u(x)$ are both within $\varepsilon$ of $L$, anything between them is too.
+
+        Now the trap. Take an angle $x$ between 0 and $\dfrac{\pi}{2}$ on the unit circle. Three regions sit one inside the next: the triangle with corners at the centre, at $(1, 0)$ and at the point of the circle at angle $x$. The sector of the circle, the slice of pie, cut off by the angle. And the larger triangle whose third corner is on the tangent line at $(1, 0)$, at height $\tan x$. Their areas are
+
+        $$\tfrac{1}{2}\sin x \;\le\; \tfrac{1}{2}x \;\le\; \tfrac{1}{2}\tan x.$$
+
+        The middle one is where radians earn their keep: a full circle has angle $2\pi$ and area $\pi$, so a slice of angle $x$ has area $\frac{x}{2}$. Divide through by $\frac{1}{2}\sin x$, which is positive, and take reciprocals, which reverses the inequalities:
+
+        $$1 \le \frac{x}{\sin x} \le \frac{1}{\cos x} \qquad\text{so}\qquad \cos x \le \frac{\sin x}{x} \le 1.$$
+
+        Both sides are unchanged when $x$ is replaced by $-x$, so the trap holds on both sides of 0. As $x \to 0$, $\cos x \to 1$. The function is squeezed between something heading for 1 and the constant 1.
+
+        $$\lim_{x \to 0} \frac{\sin x}{x} = 1.$$
+
+        In words: **for a small angle in radians, the sine is nearly the angle itself**. $\sin(0.01) = 0.0099998\ldots$ This single limit is what will make the slope of the sine curve come out as the cosine, with no stray constants, and it is true only in radians. In degrees the limit is $\dfrac{\pi}{180}$.
+    - figure: limit-approach
+      props: { fn: sinc, closeness: 1 }
+    - text: |
+        **Continuity.** A function $f$ is **continuous at $a$** if
+
+        $$\lim_{x \to a} f(x) = f(a).$$
+
+        That short line makes three demands, and a function can fail any one of them.
+
+        1. $f(a)$ exists: the function is defined at $a$.
+        2. $\displaystyle\lim_{x \to a} f(x)$ exists: the two sides agree on a number.
+        3. The two are **equal**.
+
+        If you write the limit out in full with $L = f(a)$, the condition $0 < \lvert x - a \rvert$ becomes harmless, since at $x = a$ the distance $\lvert f(x) - f(a) \rvert$ is 0 anyway, and you recover word for word the epsilon-delta definition of continuity from the last lesson. The two definitions are the same.
+
+        A function is **continuous** if it is continuous at every point of its domain. The limit laws become laws of continuity at once: **sums, products, constant multiples and quotients of continuous functions are continuous**, wherever the bottom of the quotient is not 0. So every polynomial is continuous everywhere. That is the theorem behind "substitute $a$". So is a **composition** of continuous functions: if $g$ is continuous at $a$ and $f$ is continuous at $g(a)$, then $f \circ g$ is continuous at $a$. And $\sin$, $\cos$, the exponential and the logarithm are continuous wherever they are defined, facts we take on trust for now.
+
+        Where continuity fails, it fails in one of three ways.
+
+        | Kind | What happens at $a$ | Example |
+        | --- | --- | --- |
+        | Removable | The limit exists, but $f(a)$ is missing or is some other number | $\dfrac{x^2 - 1}{x - 1}$ at 1 |
+        | Jump | The one-sided limits exist and differ | the postage charge at 2 |
+        | Infinite or wild | A one-sided limit fails to exist | $\dfrac{1}{x}$ and $\sin\frac{1}{x}$ at 0 |
+
+        A removable discontinuity deserves its name: define the function at $a$ to be the limit, and the hole is filled. $\dfrac{\sin x}{x}$ with the value 1 assigned at 0 is a continuous function, and an important one.
+
+        **Limits at infinity, and infinite limits.** The same idea covers "as $x$ grows without bound". $\displaystyle\lim_{x \to \infty} f(x) = L$ means: for every $\varepsilon > 0$ there is an $X$ such that $\lvert f(x) - L \rvert < \varepsilon$ for all $x > X$. This is the definition for sequences with a real $x$ in place of the whole number $n$. So $\displaystyle\lim_{x \to \infty} \frac{1}{x} = 0$ and $\displaystyle\lim_{x \to \infty} \frac{3x + 2}{x} = 3$.
+
+        And when the values grow beyond every bound we write $\displaystyle\lim_{x \to 0^+} \frac{1}{x} = \infty$. Read that with care. It does not say the limit exists and equals a number called infinity. It says the limit does not exist, and reports the **manner** of its failure: for every bound $B$, however large, there is a $\delta$ such that $f(x) > B$ whenever $0 < x < \delta$. Infinity is not a number here. It is a quantified statement, as always.
+
+        **What continuity is good for: trapping a root.** Here is a property that looks too obvious to need saying.
+
+        > **Intermediate value theorem.** If $f$ is continuous on the interval from $a$ to $b$, and $y$ is any number between $f(a)$ and $f(b)$, then there is a $c$ between $a$ and $b$ with $f(c) = y$.
+
+        A continuous function cannot get from one value to another without passing through everything in between. If you were below sea level in the morning and above it in the evening, and you did not teleport, then at some moment you were exactly at sea level. The proof needs a property of the real numbers that we have not yet stated, and it waits for real analysis. The theorem is false for functions with jumps, the postage charge is never 2, and it is false over the rational numbers alone, where $x^2 - 2$ changes sign between 1 and 2 without ever being 0.
+
+        Its most useful case is $y = 0$. **If a continuous function is negative at one end of an interval and positive at the other, it has a root inside.** And that suggests a way to find the root, which you could have invented yourself. Look at the midpoint. The function there is negative, positive or zero. Whichever half of the interval still has a change of sign across it still contains a root. Keep that half, throw the other away, and repeat. Each step halves the width of the trap.
+
+        ```python
+        def bisect(f, lo, hi, tol):
+            while hi - lo > tol:
+                mid = (lo + hi) / 2
+                if f(lo) * f(mid) <= 0:
+                    hi = mid
+                else:
+                    lo = mid
+            return (lo + hi) / 2
+        ```
+
+        The test `f(lo) * f(mid) <= 0` asks whether the two values have opposite signs, or one is zero. For $f(x) = x^2 - 2$ on the interval from 1 to 2 this closes in on $\sqrt{2}$. Ten halvings shrink the trap about a thousandfold, since $2^{10} = 1024$, and fifty-two take it to the limit of what a `float` can tell apart. This is **bisection**. It is slow compared with what calculus will give you later, and it never fails. It is also your first example of a theorem about continuity turning directly into an algorithm.
+
+        **A warning about computing limits.** The starter estimated a limit by plugging in small values of $h$. That is a good way to guess and a bad way to know. Two things can go wrong. A table of values is finitely many cases, and you have known since the lesson on quantifiers what that is worth. And a `float` holds about sixteen significant digits, so when $h$ is tiny, $5(1 + h)^2$ and 5 agree in almost all their digits, and their difference keeps only the few that are left. Divide that damaged difference by a tiny $h$ and the damage is magnified. Try $h = 10^{-15}$ in the scratch space and you will get nonsense. Making $h$ smaller helps only up to a point, and then makes things worse. The limit is a mathematical object. A computer can approximate it, with care, and never reach it.
+    - question:
+        id: derivation-three-demands
+        type: choice
+        system: s2
+        prompt: |
+          A function is given by $f(x) = \dfrac{x^2 - 4}{x - 2}$ for $x \ne 2$, and $f(2) = 5$. Which statement is correct?
+        options:
+          - "$f$ is continuous at 2, because it is defined there."
+          - "The limit of $f$ at 2 does not exist, because substituting gives $\\frac{0}{0}$."
+          - "The limit of $f$ at 2 is 4, and $f(2) = 5$, so $f$ is not continuous at 2. Changing $f(2)$ to 4 would make it continuous."
+          - "The limit of $f$ at 2 is 5, because that is the value there."
+        answer: 2
+        explanation: |
+          For $x \ne 2$ the function equals $x + 2$, which approaches 4. The value at the point is irrelevant to the limit. The first two demands of continuity are met, the value exists and the limit exists, but the third is not: they differ. The discontinuity is removable, and it is removed by redefining $f(2)$ as 4.
+        hints:
+          - Simplify the formula for x different from 2.
+          - Does the limit depend on the value assigned at 2?
+          - Compare the limit with the value. Are they equal?
+  formal:
+    - text: |
+        **Limit of a function.** $\displaystyle\lim_{x \to a} f(x) = L$ if $\ \forall \varepsilon > 0,\ \exists \delta > 0,\ \forall x,\ 0 < \lvert x - a \rvert < \delta \Rightarrow \lvert f(x) - L \rvert < \varepsilon$. The point $a$ itself is excluded.
+
+        **One-sided limits.** As above, with $a - \delta < x < a$ (left, written $x \to a^-$) or $a < x < a + \delta$ (right, written $x \to a^+$). The limit exists exactly when both one-sided limits exist and agree.
+
+        **Limit laws.** If $\lim f = L$ and $\lim g = M$ at $a$, then $\lim (f + g) = L + M$, $\ \lim (cf) = cL$, $\ \lim (fg) = LM$, and $\lim \dfrac{f}{g} = \dfrac{L}{M}$ when $M \ne 0$.
+
+        **Squeeze theorem.** If $l \le f \le u$ near $a$ and $\lim l = \lim u = L$ at $a$, then $\lim f = L$.
+
+        **Continuity.** $f$ is continuous at $a$ if $\displaystyle\lim_{x \to a} f(x) = f(a)$: the value exists, the limit exists, and they are equal. Sums, products, quotients (bottom non-zero) and compositions of continuous functions are continuous. Polynomials are continuous everywhere.
+
+        **Limit at infinity.** $\displaystyle\lim_{x \to \infty} f(x) = L$ if $\ \forall \varepsilon > 0,\ \exists X,\ \forall x > X,\ \lvert f(x) - L \rvert < \varepsilon$.
+
+        **Intermediate value theorem.** A function continuous on the interval from $a$ to $b$ takes every value between $f(a)$ and $f(b)$.
+
+        | Limit | Value | Method |
+        | --- | --- | --- |
+        | $\displaystyle\lim_{x \to a} p(x)$, $p$ a polynomial | $p(a)$ | continuity |
+        | $\displaystyle\lim_{x \to 1} \frac{x^2 - 1}{x - 1}$ | 2 | factor and cancel |
+        | $\displaystyle\lim_{h \to 0} \frac{5(1 + h)^2 - 5}{h}$ | 10 | expand and cancel |
+        | $\displaystyle\lim_{x \to 4} \frac{\sqrt{x} - 2}{x - 4}$ | $\frac{1}{4}$ | conjugate |
+        | $\displaystyle\lim_{x \to 0} \frac{\sin x}{x}$ | 1 | squeeze |
+        | $\displaystyle\lim_{x \to \infty} \frac{1}{x}$ | 0 | definition |
+  drill:
+    - text: Seconds each. For every limit, ask first whether substituting simply works.
+    - question:
+        id: drill-substitute
+        type: numeric
+        system: s1
+        prompt: |
+          $\displaystyle\lim_{x \to 3}\,(x^2 + 2x)$
+        answer: "15"
+        explanation: A polynomial is continuous, so substitute. Nine plus six.
+        hints:
+          - Polynomials are continuous. What does that let you do?
+          - Put 3 in for x.
+    - question:
+        id: drill-factor
+        type: numeric
+        system: s1
+        prompt: |
+          $\displaystyle\lim_{x \to 5} \frac{x^2 - 25}{x - 5}$
+        answer: "10"
+        explanation: For $x \ne 5$ the fraction is $x + 5$, which approaches 10.
+        hints:
+          - The top is a difference of two squares.
+          - After cancelling, substitute.
+    - question:
+        id: drill-expand
+        type: numeric
+        system: s1
+        prompt: |
+          $\displaystyle\lim_{h \to 0} \frac{(3 + h)^2 - 9}{h}$
+        answer: "6"
+        explanation: The top is $6h + h^2$. Dividing by $h$ leaves $6 + h$, which approaches 6.
+        hints:
+          - Expand the square on top.
+          - Cancel h, which is not zero, and then let h shrink.
+    - question:
+        id: drill-point-excluded
+        type: choice
+        system: s1
+        prompt: |
+          $f(x) = 7$ for every $x \ne 2$, and $f(2) = 100$. What is $\displaystyle\lim_{x \to 2} f(x)$?
+        options: ["100", "7", "It does not exist", "53.5"]
+        answer: 1
+        explanation: The limit looks only at values near 2, never at 2 itself. Near 2 the function is 7.
+        hints:
+          - Which x does the definition exclude?
+          - What is the function at every nearby point?
+    - question:
+        id: drill-one-sided
+        type: choice
+        system: s1
+        prompt: |
+          $f(x) = 1$ for $x < 2$ and $f(x) = 3$ for $x \ge 2$. What is $\displaystyle\lim_{x \to 2^-} f(x)$?
+        options: ["1", "3", "2", "It does not exist"]
+        answer: 0
+        explanation: The minus sign means from the left, through values below 2, where the function is 1.
+        hints:
+          - The small minus sign means x is less than 2.
+          - What is the function for x below 2?
+    - question:
+        id: drill-two-sided
+        type: choice
+        system: s1
+        prompt: |
+          For the same function, 1 below 2 and 3 from 2 upwards, what is $\displaystyle\lim_{x \to 2} f(x)$?
+        options: ["1", "3", "2", "It does not exist"]
+        answer: 3
+        explanation: The left limit is 1 and the right limit is 3. They disagree, so there is no two-sided limit.
+        hints:
+          - Compare the limit from the left with the limit from the right.
+          - A limit needs both sides to agree.
+    - question:
+        id: drill-sinc
+        type: numeric
+        system: s1
+        prompt: |
+          $\displaystyle\lim_{x \to 0} \frac{\sin x}{x}$, with $x$ in radians.
+        answer: "1"
+        explanation: The squeeze between cos x and 1. For small angles the sine is nearly the angle.
+        hints:
+          - It was trapped between cos x and a constant.
+          - What does cos x approach at 0?
+    - question:
+        id: drill-infinity
+        type: numeric
+        system: s1
+        prompt: |
+          $\displaystyle\lim_{x \to \infty} \frac{4x + 1}{2x}$
+        answer: "2"
+        explanation: |
+          The fraction is $2 + \dfrac{1}{2x}$, and the second part shrinks to nothing.
+        hints:
+          - Split the fraction into two.
+          - What happens to 1 over 2x as x grows?
+    - question:
+        id: drill-continuous-demands
+        type: choice
+        system: s1
+        prompt: |
+          Which of these is **not** one of the three demands for $f$ to be continuous at $a$?
+        options:
+          - "$f(a)$ is defined."
+          - "The limit of $f$ at $a$ exists."
+          - "The limit equals $f(a)$."
+          - "$f(a)$ is not zero."
+        answer: 3
+        explanation: Continuity asks for a value, a limit, and their equality. The value may be any number, zero included.
+        hints:
+          - Recall the short line that defines continuity.
+          - Does it say anything about the size of the value?
+    - question:
+        id: drill-kind
+        type: choice
+        system: s1
+        prompt: |
+          What kind of discontinuity has $\dfrac{x^2 - 9}{x - 3}$ at $x = 3$?
+        options: ["Removable", "Jump", "Infinite", "None, it is continuous there"]
+        answer: 0
+        explanation: The limit exists and is 6, but the function has no value at 3. Assigning the value 6 fills the hole.
+        hints:
+          - Does the limit at 3 exist?
+          - Is the function defined at 3?
+    - question:
+        id: drill-ivt
+        type: choice
+        system: s1
+        prompt: |
+          $f$ is continuous, $f(1) = -3$ and $f(4) = 5$. What must be true?
+        options:
+          - "$f(2.5) = 1$"
+          - "$f$ has a root somewhere between 1 and 4."
+          - "$f$ is increasing between 1 and 4."
+          - "$f$ has exactly one root."
+        answer: 1
+        explanation: A continuous function that changes sign passes through 0. The theorem promises at least one root and says nothing about where, how many, or whether the function is increasing.
+        hints:
+          - What does the intermediate value theorem promise?
+          - Is 0 between the two values?
+    - question:
+        id: drill-halvings
+        type: numeric
+        system: s1
+        prompt: |
+          Bisection starts with a trap of width 1. What is its width after 3 halvings? Answer as a decimal.
+        answer: "0.125"
+        explanation: A half, a quarter, an eighth.
+        hints:
+          - Each step halves the width.
+          - Halve three times.
+    - question:
+        id: predict-table
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          def f(x):
+              return (x * x - 1) / (x - 1)
+
+          print([round(f(1 + h), 3) for h in [0.1, 0.01, 0.001]])
+        output: "[2.1, 2.01, 2.001]"
+        explanation: Away from 1 the function is x + 1. The values close in on 2 as the input closes in on 1, and the function is never asked for its value at 1.
+        hints:
+          - Simplify the formula for x different from 1.
+          - What is x + 1 at each of the three inputs?
+    - question:
+        id: predict-sides
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          def charge(kg):
+              return 1 if kg < 2 else 3
+
+          left = [charge(2 - h) for h in [0.1, 0.001]]
+          right = [charge(2 + h) for h in [0.1, 0.001]]
+          print(left, right, charge(2))
+        output: "[1, 1] [3, 3] 3"
+        explanation: From the left the values are all 1 and from the right all 3. The two sides disagree, so there is no limit at 2, although the function has the value 3 there.
+        hints:
+          - Is 2 minus a little less than 2?
+          - What does the function return when its input is exactly 2?
+  work:
+    - text: Slower now. When substituting gives 0 over 0, rewrite before you take the limit.
+    - question:
+        id: work-conjugate
+        type: numeric
+        system: s2
+        prompt: |
+          $\displaystyle\lim_{x \to 9} \frac{\sqrt{x} - 3}{x - 9}$. Answer as a fraction.
+        answer: "1/6"
+        explanation: |
+          Multiply top and bottom by $\sqrt{x} + 3$. The top becomes $x - 9$, which cancels with the bottom for $x \ne 9$, leaving $\dfrac{1}{\sqrt{x} + 3}$. That is continuous at 9, where it equals $\dfrac{1}{6}$. Equivalently, factor the bottom as $(\sqrt{x} - 3)(\sqrt{x} + 3)$.
+        hints:
+          - Substituting gives 0 over 0, so rewrite first.
+          - Multiply the top and the bottom by the square root of x plus 3.
+          - After cancelling, substitute 9.
+    - question:
+        id: work-stone
+        type: numeric
+        system: s2
+        unit: metres per second
+        prompt: |
+          The stone has fallen $5t^2$ metres after $t$ seconds. Its speed at the instant $t = 3$ is the limit of the average speeds $\dfrac{5(3 + h)^2 - 45}{h}$ as $h \to 0$. What is it?
+        answer: "30"
+        explanation: |
+          $5(3 + h)^2 - 45 = 5(9 + 6h + h^2) - 45 = 30h + 5h^2$. Dividing by $h \ne 0$ gives $30 + 5h$, which approaches 30. At $t = 1$ the speed was 10 and at $t = 3$ it is 30: the speed at time $t$ appears to be $10t$. The next lesson shows that this is no accident.
+        hints:
+          - Expand the square and multiply by 5.
+          - The 45s cancel. Then divide by h.
+          - Let h shrink to nothing in what is left.
+    - question:
+        id: work-make-continuous
+        type: numeric
+        system: s2
+        prompt: |
+          $f(x) = x^2 + 1$ for $x < 2$ and $f(x) = kx - 3$ for $x \ge 2$. For which value of $k$ is $f$ continuous at 2?
+        answer: "4"
+        explanation: |
+          The left limit is $2^2 + 1 = 5$. The right limit, which is also the value at 2, is $2k - 3$. Continuity needs them equal: $2k - 3 = 5$, so $k = 4$. With any other $k$ there is a jump at 2.
+        hints:
+          - Find the limit from the left by substituting into the first formula.
+          - Find the limit from the right in terms of k.
+          - Set the two equal and solve.
+    - question:
+        id: work-squeeze
+        type: choice
+        system: s2
+        prompt: |
+          What is $\displaystyle\lim_{x \to 0} x^2 \sin\!\left(\frac{1}{x}\right)$, and why?
+        options:
+          - "It does not exist, because $\\sin\\frac{1}{x}$ has no limit at 0."
+          - "It is 0, because $-x^2 \\le x^2 \\sin\\frac{1}{x} \\le x^2$ and both outer functions approach 0."
+          - "It is 1, because $\\dfrac{\\sin x}{x} \\to 1$."
+          - "It is 0, by the product law, since $x^2 \\to 0$."
+        answer: 1
+        explanation: |
+          The sine of anything lies between $-1$ and 1, so the product lies between $-x^2$ and $x^2$, and both of those approach 0. The squeeze gives 0. The product law cannot be used, because it needs **both** factors to have limits, and $\sin\frac{1}{x}$ has none. The answer in the last option is right and its reason is wrong, which in mathematics makes it wrong. The wild factor is tamed by the factor that shrinks.
+        hints:
+          - Between which two numbers does every sine lie?
+          - Multiply that inequality through by x squared.
+          - Does the product law apply when one factor has no limit?
+    - question:
+        id: write-slopes
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `average_rates(f, a)`. It returns a list of the three average rates of change of `f` between `a` and `a + h`,
+
+          $$\frac{f(a + h) - f(a)}{h},$$
+
+          for `h` equal to 0.1, 0.01 and 0.001, in that order, each rounded to 4 decimal places with `round`.
+
+          For the falling stone, `average_rates(fallen, 1)` should be `[10.5, 10.05, 10.005]`.
+        starter: |
+          def fallen(t):
+              return 5 * t * t
+
+          def average_rates(f, a):
+              # Replace the next line with your own.
+              return []
+
+          print(average_rates(fallen, 1))
+        solution: |
+          def fallen(t):
+              return 5 * t * t
+
+          def average_rates(f, a):
+              return [round((f(a + h) - f(a)) / h, 4) for h in [0.1, 0.01, 0.001]]
+
+          print(average_rates(fallen, 1))
+        tests: |
+          assert average_rates(lambda t: 5 * t * t, 1) == [10.5, 10.05, 10.005], "For the stone at t = 1 the three rates are 10.5, 10.05 and 10.005. You returned " + repr(average_rates(lambda t: 5 * t * t, 1))
+          assert average_rates(lambda t: 5 * t * t, 3) == [30.5, 30.05, 30.005], "For the stone at t = 3 the three rates are 30.5, 30.05 and 30.005"
+          assert average_rates(lambda x: 3 * x + 1, 7) == [3.0, 3.0, 3.0], "For a straight line of slope 3 every average rate is 3"
+          assert average_rates(lambda x: x * x * x, 2) == [12.61, 12.0601, 12.006], "For the cube at 2 the rates are 12.61, 12.0601 and 12.006. Check that the stretch runs from a to a + h"
+          assert len(average_rates(lambda x: x, 0)) == 3, "Return exactly three rates"
+          assert "[10.5, 10.05, 10.005]" in output, "The program should print the three rates for the stone"
+        wrong:
+          - "def fallen(t):\n    return 5 * t * t\n\ndef average_rates(f, a):\n    return [round(f(a + h) / h, 4) for h in [0.1, 0.01, 0.001]]\n\nprint([10.5, 10.05, 10.005])\n"
+          - "def fallen(t):\n    return 5 * t * t\n\ndef average_rates(f, a):\n    return [round((f(a + h) - f(a)), 4) for h in [0.1, 0.01, 0.001]]\n\nprint([10.5, 10.05, 10.005])\n"
+          - "def fallen(t):\n    return 5 * t * t\n\ndef average_rates(f, a):\n    return [round((f(h) - f(a)) / h, 4) for h in [0.1, 0.01, 0.001]]\n\nprint([10.5, 10.05, 10.005])\n"
+          - "def fallen(t):\n    return 5 * t * t\n\ndef average_rates(f, a):\n    return [10.5, 10.05, 10.005]\n\nprint([10.5, 10.05, 10.005])\n"
+        explanation: |
+          Each rate is a change in output divided by the change in input that caused it: $f(a + h) - f(a)$ over $h$. For the stone the three numbers are $10 + 5h$ for the three values of $h$, and they close in on 10. For a straight line every rate is the slope, whatever $h$ is, which is what makes a line a line. The function never divides by zero, because $h$ is never 0. It gives evidence for a limit and cannot give more: three values are three values. In the next lesson this quotient gets a name and its limit gets a definition.
+        hints:
+          - One rate is (f(a + h) - f(a)) / h.
+          - Build the list with a comprehension over the three values of h.
+          - Round each rate to 4 places inside the comprehension.
+    - question:
+        id: write-limit-exists
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `sides_agree(f, a)`. It looks at `f` just to the left and just to the right of `a`, at `a - h` and `a + h` with `h = 1e-6`, and returns `True` if the two values are within `1e-3` of each other and `False` otherwise. It must **never** call `f(a)` itself, since `f` may be undefined there.
+
+          This is a numerical test for whether the two one-sided limits agree. It is evidence and not proof.
+        starter: |
+          def sides_agree(f, a):
+              # Replace the next line with your own.
+              return True
+
+          def hole(x):
+              return (x * x - 1) / (x - 1)
+
+          def charge(kg):
+              return 1 if kg < 2 else 3
+
+          print(sides_agree(hole, 1), sides_agree(charge, 2))
+        solution: |
+          def sides_agree(f, a):
+              h = 1e-6
+              return abs(f(a + h) - f(a - h)) < 1e-3
+
+          def hole(x):
+              return (x * x - 1) / (x - 1)
+
+          def charge(kg):
+              return 1 if kg < 2 else 3
+
+          print(sides_agree(hole, 1), sides_agree(charge, 2))
+        tests: |
+          def _hole(x):
+              assert x != 1, "Your function called f at the point a itself. The limit must not look there, and here f is undefined at 1."
+              return (x * x - 1) / (x - 1)
+          def _step(x):
+              return 1 if x < 2 else 3
+          assert sides_agree(_hole, 1) is True, "The line with a hole at 1 has the same limit, 2, from both sides"
+          assert sides_agree(_step, 2) is False, "The charge is 1 just below 2 and 3 just above, so the sides disagree"
+          assert sides_agree(_step, 1) is True, "Away from the jump, at 1, the charge is the same on both sides"
+          assert sides_agree(lambda x: x * x, 3) is True, "A polynomial has the same limit from both sides"
+          assert sides_agree(lambda x: abs(x) / x, 0) is False, "abs(x) / x is -1 on the left of 0 and 1 on the right"
+          assert sides_agree(lambda x: 3 if x < 2 else 1, 2) is False, "A function that drops from 3 to 1 at 2 has sides that disagree. Compare the distance between the two values, not their signed difference."
+          assert sides_agree(lambda x: -1 if x < 5 else -1.0005, 5) is True, "Values within 0.001 of each other count as agreeing"
+          assert output.split() == ["True", "False"], "The program should print True and then False"
+        wrong:
+          - "def sides_agree(f, a):\n    return f(a) == f(a)\n\nprint(True, False)\n"
+          - "def sides_agree(f, a):\n    h = 1e-6\n    return abs(f(a + h) - f(a)) < 1e-3\n\nprint(True, False)\n"
+          - "def sides_agree(f, a):\n    h = 1e-6\n    return f(a + h) - f(a - h) < 1e-3\n\nprint(True, False)\n"
+          - "def sides_agree(f, a):\n    h = 1e-6\n    return abs(f(a + h) - f(a + 2 * h)) < 1e-3\n\nprint(True, False)\n"
+        explanation: |
+          The limit at $a$ exists exactly when the left and right limits exist and agree, so the function samples one point on each side and compares. The absolute value matters: without it a large drop across the point, a negative difference, would count as agreement. And the point $a$ is never touched, which is the whole spirit of a limit. Be clear about what this test cannot do. It samples one $h$. A function such as $\sin\frac{1}{x}$ can pass it by luck, and no finite number of samples can settle a statement that begins "for every $\varepsilon$". The algebra and the squeeze are what prove limits. The code tells you what to try to prove.
+        hints:
+          - Evaluate f at a - h and at a + h, with h equal to 1e-6.
+          - Compare the two values with abs, so the order of subtraction does not matter.
+          - Return whether that distance is below 1e-3.
+    - question:
+        id: fix-bisect
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `bisect(f, lo, hi, tol)` should trap a root of a continuous `f` that has opposite signs at `lo` and `hi`, and return the midpoint of a trap narrower than `tol`. This version keeps the **wrong half**: with $f(x) = x^2 - 2$ on the interval from 1 to 2 it returns a number very close to 2, where $f$ is 2 and not 0. Fix it so that it closes in on $\sqrt{2} = 1.41421\ldots$
+        starter: |
+          def bisect(f, lo, hi, tol):
+              while hi - lo > tol:
+                  mid = (lo + hi) / 2
+                  if f(lo) * f(mid) <= 0:
+                      lo = mid
+                  else:
+                      hi = mid
+              return (lo + hi) / 2
+
+          print(round(bisect(lambda x: x * x - 2, 1, 2, 1e-9), 5))
+        solution: |
+          def bisect(f, lo, hi, tol):
+              while hi - lo > tol:
+                  mid = (lo + hi) / 2
+                  if f(lo) * f(mid) <= 0:
+                      hi = mid
+                  else:
+                      lo = mid
+              return (lo + hi) / 2
+
+          print(round(bisect(lambda x: x * x - 2, 1, 2, 1e-9), 5))
+        tests: |
+          _r = bisect(lambda x: x * x - 2, 1, 2, 1e-9)
+          assert abs(_r - 2 ** 0.5) < 1e-6, "For x*x - 2 between 1 and 2 the root is 1.41421..., and you returned " + repr(_r)
+          _r = bisect(lambda x: 2 - x * x, 1, 2, 1e-9)
+          assert abs(_r - 2 ** 0.5) < 1e-6, "The same root must be found when the function goes from positive to negative. You returned " + repr(_r)
+          _r = bisect(lambda x: x * x * x - x - 1, 1, 2, 1e-9)
+          assert abs(_r ** 3 - _r - 1) < 1e-6, "For x^3 - x - 1 between 1 and 2 you returned " + repr(_r) + ", which is not a root"
+          _r = bisect(lambda x: x - 0.1, 0, 1, 1e-9)
+          assert abs(_r - 0.1) < 1e-6, "For x - 0.1 between 0 and 1 the root is 0.1, and you returned " + repr(_r)
+          assert output.strip() == "1.41421", "The program should print 1.41421"
+        wrong:
+          - "def bisect(f, lo, hi, tol):\n    while hi - lo > tol:\n        mid = (lo + hi) / 2\n        if f(mid) <= 0:\n            lo = mid\n        else:\n            hi = mid\n    return (lo + hi) / 2\n\nprint(1.41421)\n"
+          - "def bisect(f, lo, hi, tol):\n    while hi - lo > tol:\n        mid = (lo + hi) / 2\n        if f(lo) * f(mid) <= 0:\n            lo = mid\n        else:\n            hi = mid\n    return (lo + hi) / 2\n\nprint(1.41421)\n"
+          - "def bisect(f, lo, hi, tol):\n    return (lo + hi) / 2\n\nprint(1.41421)\n"
+        explanation: |
+          The test `f(lo) * f(mid) <= 0` says that the sign changes between `lo` and `mid`. By the intermediate value theorem a root lies in that left half, so the left half must be **kept**: `hi` moves down to `mid`. The broken version moved `lo` up instead, throwing away the half with the root and keeping a half across which the function need not change sign at all. Nothing then guarantees a root in the trap, and the trap shrinks towards a point that is no root. The invariant of the loop is the thing to hold on to: **the function has opposite signs, or a zero, at the two ends of the trap**. Each pass must preserve it. A version that tests only the sign of `f(mid)` works when the function rises through zero and fails when it falls through, which is why the product of the two values is used.
+        hints:
+          - When the sign changes between lo and mid, which half contains a root?
+          - To keep the left half, which end of the trap must move?
+          - Swap the two assignments.
+    - question:
+        id: work-float-limit
+        type: choice
+        system: s2
+        prompt: |
+          A program estimates $\displaystyle\lim_{h \to 0} \frac{5(1 + h)^2 - 5}{h}$ by computing the quotient for $h = 10^{-1}, 10^{-2}, \dots, 10^{-16}$. The results approach 10 down to about $h = 10^{-8}$, then get worse, and at $h = 10^{-16}$ the program prints 0.0. What is the best account of this?
+        options:
+          - "The limit is really 0, and the earlier values were misleading."
+          - "The limit does not exist."
+          - "The limit is 10. A float keeps about sixteen significant digits, so for tiny $h$ the two nearly equal numbers on top lose almost all their digits when subtracted, and at $10^{-16}$ the sum $1 + h$ is stored as exactly 1."
+          - "Python cannot divide by small numbers."
+        answer: 2
+        explanation: |
+          The algebra settles the limit: the quotient is $10 + 5h$ for every $h \ne 0$, and that approaches 10. The computer's trouble is with the subtraction. $5(1 + h)^2$ and 5 agree in more and more leading digits as $h$ shrinks, and a `float` has only about sixteen to give, so their difference is known to fewer and fewer. Dividing by $h$ then magnifies the damage. At $h = 10^{-16}$ the number $1 + h$ cannot be told apart from 1, the top is exactly 0, and the quotient is 0. A limit is defined by what happens for **every** small $h$, in exact arithmetic. A table of floating-point values is a hint, to be believed only while it agrees with the mathematics.
+        hints:
+          - Simplify the quotient by algebra, for h not equal to 0.
+          - How many significant digits does a float keep?
+          - What is 1 + 1e-16 when stored as a float?
+  connections:
+    - text: |
+        The puzzle asked what a speed at an instant could mean, when distance over time has no value for a stretch of no length. The answer is a limit: the number that the average speeds over shorter and shorter stretches close in on. The limit of a function is defined by the same game as the limit of a sequence, with a distance $\delta$ in place of a position $N$, and with one new rule that carries all the weight: the point itself is never looked at.
+
+        You have also seen how limits are found in practice. Continuity makes most of them a matter of substituting. The interesting ones are the forms $\frac{0}{0}$, and they give way to algebra, by factoring, expanding or a conjugate, or to a squeeze between two functions that are understood. And you have seen continuity put to work, in the intermediate value theorem and the bisection method that falls out of it.
+
+        Every quotient you met today of the shape
+
+        $$\frac{f(a + h) - f(a)}{h}$$
+
+        was the same thing in disguise: a change in output over the change in input that caused it, with the input change shrinking to nothing. Its limit is the most important limit there is. It is the speed of the stone, the slope of a curve, the rate at which a model's error responds when one of its numbers is nudged. It is called the derivative, and it is the subject of the next lesson, [[m10.derivative-as-slope-and-rate]]. The limit $\dfrac{\sin x}{x} \to 1$ will return when you find the slopes of the sine and cosine, in [[m10.derivatives-of-exp-log-and-trig]].
+
+        Two things were taken on trust today: the intermediate value theorem itself, and the continuity of the sine, the exponential and the logarithm. Both rest on a property of the real numbers that separates them from the rationals, and both are proved when the course returns to these foundations in [[m11.intermediate-and-extreme-value-theorems]] and [[m11.epsilon-delta-continuity-and-uniform-continuity]].
+
+        In machine learning, continuity is the assumption underneath everything. A model is trained by changing its numbers a little and seeing whether the error falls a little. That only makes sense if small changes in the numbers cause small changes in the error, which is continuity, and if the rate of that change can be measured, which is tomorrow's lesson. Where a model contains a jump, a rounding or a hard yes-or-no decision, training by small steps has nothing to hold on to, and a great deal of ingenuity in the subject goes into replacing jumps with continuous stand-ins.

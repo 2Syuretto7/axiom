@@ -1,0 +1,646 @@
+concept: m10.maxima-and-minima
+minutes: 100
+claim: You can find the largest and smallest values of a function by locating where its derivative is zero, classify each such point with the first or second derivative, handle endpoints and the difference between local and global, show that the mean minimises squared error, and minimise a function numerically by gradient descent with a sensible step size.
+recalls: [m10.taylor-approximation]
+uses: [m10.second-derivative-and-curvature, m10.derivative-as-slope-and-rate, m10.differentiation-rules, m10.chain-rule, m10.derivatives-of-exp-log-and-trig, m10.limits-and-continuity, m1.quadratics, m1.inequalities-and-absolute-value, m2.summation-and-product-notation, m2.sequences-and-series, m3.cases-and-counterexamples, e0.functions, e0.loops, e0.lists-and-tuples, e1.comprehensions-and-iterators, e1.modules-and-imports]
+leads: [m10.integral-as-accumulation, m19.gradient-descent, m12.gradient, m11.intermediate-and-extreme-value-theorems, m19.newton-and-quasi-newton-methods, m19.learning-rate-schedules-and-warm-up]
+starter: |
+  # Scratch space. Five measurements of one quantity. For each guess m,
+  # the total squared error says how badly m summarises them.
+  data = [2, 3, 3, 5, 7]
+
+  for m in [2, 3, 3.5, 4, 4.5, 5, 6]:
+      error = sum([(x - m) ** 2 for x in data])
+      print(m, error)
+parts:
+  recall:
+    - text: |
+        [[m10.taylor-approximation]] ended with a pattern: replace a function by a simple local stand-in, solve the problem for the stand-in, move there, and repeat. Newton's method used the tangent line to find where a function is zero. Today the target changes from zero to **smallest**. Three quick pulls first.
+    - question:
+        id: recall-newton
+        type: numeric
+        system: s1
+        concepts: [m10.taylor-approximation]
+        prompt: |
+          One Newton step for $f(x) = x^2 - 3$ from $x = 2$, where $f(2) = 1$ and $f'(2) = 4$. What is the new $x$?
+        answer: "1.75"
+        explanation: |
+          $2 - \frac{1}{4}$. The root is $\sqrt{3} = 1.732\ldots$
+        hints:
+          - The new x is the old x minus f divided by the derivative.
+          - A quarter is subtracted from 2.
+    - question:
+        id: recall-taylor-two
+        type: choice
+        system: s1
+        concepts: [m10.taylor-approximation]
+        prompt: |
+          At a point $a$ where $f'(a) = 0$, what does the Taylor polynomial of degree 2 reduce to?
+        options:
+          - "$f(a)$"
+          - "$f(a) + \\frac{1}{2}f''(a)h^2$"
+          - "$f(a) + f''(a)h$"
+          - "$\\frac{1}{2}f''(a)h^2$"
+        answer: 1
+        explanation: The middle term, the slope times the step, vanishes. What is left is the value plus the bending term.
+        hints:
+          - Write out value, plus slope times step, plus half the second derivative times the step squared.
+          - Put the slope equal to 0.
+    - question:
+        id: recall-convex
+        type: choice
+        system: s1
+        concepts: [m10.second-derivative-and-curvature]
+        prompt: |
+          $f''(x) > 0$ near a point. Where does the curve lie relative to its tangent there?
+        options: ["Above it", "Below it", "On it", "It crosses it"]
+        answer: 0
+        explanation: A positive second derivative means the slope is increasing, so the curve bends upward, away from its tangent.
+        hints:
+          - Positive second derivative means convex.
+          - Picture a bowl and a line touching it from underneath.
+  puzzle:
+    - text: |
+        You measure the same quantity five times and get 2, 3, 3, 5 and 7. You must report **one** number, $m$, to stand for all five.
+
+        Whatever you report, it will miss each measurement by some amount, $x_i - m$. A natural way to score a candidate is to square each miss, so that misses in either direction count and large misses count heavily, and add them up:
+
+        $$S(m) = (2 - m)^2 + (3 - m)^2 + (3 - m)^2 + (5 - m)^2 + (7 - m)^2.$$
+
+        The starter computes this for a few guesses. At $m = 3$ it is 21. At $m = 5$ it is also 21. At $m = 4$ it is 16.
+
+        **Which $m$ makes $S$ as small as possible? Is it 4 exactly, or something close to 4 that the starter's list happened to miss? And how could you be certain, when there are infinitely many candidates and you can only ever try some of them?**
+
+        This is the smallest example of what it means to train a model. The model here has one adjustable number. The score is its error on the data. Training is the search for the number that makes the error least.
+  intuition:
+    - text: |
+        Trying candidates can never settle the question, since between any two that you try there are others. A different kind of argument is needed, one that rules out **all but a few** candidates at a stroke.
+
+        Here it is. Stand at some value of $m$ and suppose the slope of $S$ there is not zero. Say it is negative: the graph is heading downhill to the right. Then a small step to the right makes $S$ smaller. So you were not at the lowest point. If the slope is positive, a small step to the left makes $S$ smaller, and again you were not at the lowest point.
+
+        So at the lowest point the slope can be neither negative nor positive. **At a smallest value, the derivative is zero.** The tangent is level. The same argument, turned upside down, applies to a largest value.
+
+        This turns an infinite search into a finite one. Instead of asking "which of infinitely many $m$ is best?", ask "at which $m$ is the slope zero?" That is an equation, and equations can be solved.
+
+        One caution before the calculation. The argument says that the lowest point has a level tangent. It does not say that every point with a level tangent is the lowest. A hilltop has a level tangent too. So does a point where the curve merely pauses on its way up. The level-tangent points are the **candidates**, and each must then be examined. For that you already have a tool: the second derivative says whether the curve at that point is a bowl or a dome.
+  derivation:
+    - text: |
+        **Definitions.** A point $a$ is a **local minimum** of $f$ if $f(a) \le f(x)$ for all $x$ near $a$, and a **global minimum** if $f(a) \le f(x)$ for every $x$ in the domain. Local and global **maxima** are defined with the inequality reversed. A point where $f'(a) = 0$ is a **stationary point**.
+
+        **The level-tangent rule.** If $f$ has a local maximum or minimum at a point $a$ inside its domain, and $f$ is differentiable there, then $f'(a) = 0$.
+
+        *Proof.* Suppose $a$ is a local minimum. For small positive $h$, $f(a + h) - f(a) \ge 0$, so the difference quotient $\frac{f(a + h) - f(a)}{h}$ is $\ge 0$, and its limit $f'(a)$ is $\ge 0$. For small negative $h$ the top is still $\ge 0$ and the bottom is negative, so the quotient is $\le 0$, and its limit $f'(a)$ is $\le 0$. A number that is both $\ge 0$ and $\le 0$ is 0. $\blacksquare$
+
+        **The puzzle.** Differentiate $S$ term by term. By the chain rule the derivative of $(x_i - m)^2$ with respect to $m$ is $2(x_i - m) \cdot (-1)$. So
+
+        $$S'(m) = -2\bigl[(2 - m) + (3 - m) + (3 - m) + (5 - m) + (7 - m)\bigr] = -2(20 - 5m).$$
+
+        This is zero when $5m = 20$: at $m = 4$, and nowhere else. There is one candidate. And $S''(m) = 10 > 0$ for every $m$, so $S$ is convex, a bowl, and the last lesson but one showed that a level tangent on a convex function marks the lowest point of all. **The answer is exactly 4.**
+
+        Look at what 4 is. It is $\frac{20}{5}$, the sum of the data divided by their number. Nothing in the argument depended on these five values. For any data $x_1, \dots, x_n$,
+
+        $$S(m) = \sum_{i=1}^{n} (x_i - m)^2, \qquad S'(m) = -2\sum_{i=1}^{n}(x_i - m) = -2\Bigl(\sum_{i=1}^{n} x_i - nm\Bigr),$$
+
+        which is zero exactly when $m = \dfrac{1}{n}\sum x_i$.
+
+        **The number that minimises the total squared error is the mean.** The average is not just a habit. It is the solution of an optimisation problem, and when you later fit a line or a network by least squares, you are solving the same problem with more adjustable numbers.
+
+        **Classifying stationary points.** In general $f$ is not convex, and each stationary point has to be examined. The Taylor polynomial of degree 2 does it. At a stationary point the slope term is zero, so
+
+        $$f(a + h) \approx f(a) + \tfrac{1}{2} f''(a)\,h^2.$$
+
+        Since $h^2 > 0$ for any step in either direction, the sign of $f''(a)$ decides everything.
+
+        | At a point with $f'(a) = 0$ | Nearby values | Conclusion |
+        | --- | --- | --- |
+        | $f''(a) > 0$ | above $f(a)$ on both sides | local minimum |
+        | $f''(a) < 0$ | below $f(a)$ on both sides | local maximum |
+        | $f''(a) = 0$ | undecided by this test | look further |
+
+        This is the **second-derivative test**. The third row is a real gap, and three functions show it. Each has $f'(0) = 0$ and $f''(0) = 0$. For $x^4$ the point 0 is a minimum. For $-x^4$ it is a maximum. For $x^3$ it is neither: the curve pauses and carries on upward.
+
+        When the test is silent, or when the second derivative is awkward to find, use the **first-derivative test**: look at the sign of $f'$ on each side.
+
+        | Sign of $f'$ before $a$ | Sign of $f'$ after $a$ | Conclusion |
+        | --- | --- | --- |
+        | negative | positive | falls then rises: local minimum |
+        | positive | negative | rises then falls: local maximum |
+        | same sign on both sides | | neither |
+
+        **A worked example.** Take $f(x) = x^3 - 3x$, the curve of the bending figure. $f'(x) = 3x^2 - 3 = 3(x - 1)(x + 1)$, which is zero at $x = -1$ and $x = 1$. $f''(x) = 6x$.
+
+        - At $x = -1$: $f'' = -6 < 0$. A local maximum, with value $f(-1) = 2$.
+        - At $x = 1$: $f'' = 6 > 0$. A local minimum, with value $f(1) = -2$.
+
+        Neither is global. The cubic rises without limit to the right and falls without limit to the left, so on the whole number line it has no largest or smallest value at all.
+
+        **A second example, from the second lesson of this cluster.** The ball at height $s(t) = 20t - 5t^2$. Its velocity $s'(t) = 20 - 10t$ is zero at $t = 2$, and $s'' = -10 < 0$, so that is a maximum: the top of the flight, at height $s(2) = 40 - 20 = 20$ metres. At the top the ball is, for an instant, not moving.
+    - question:
+        id: derivation-why-zero
+        type: choice
+        system: s2
+        prompt: |
+          $f$ is differentiable and $f'(a) = 3$. Why can $a$ not be a local minimum?
+        options:
+          - "Because 3 is an odd number."
+          - "Because a positive slope means that a small step to the left reaches a smaller value: $f(a - h) \\approx f(a) - 3h < f(a)$."
+          - "Because the second derivative must be negative there."
+          - "Because the function is not convex."
+        answer: 1
+        explanation: |
+          The tangent line says $f(a + h) \approx f(a) + 3h$. Take $h$ small and negative, a step to the left, and the value drops below $f(a)$. So there are points as near to $a$ as you like where $f$ is smaller, and $a$ is not a local minimum. With a negative slope the step to the right does the same. Only a slope of zero survives this argument, which is why the search for extremes begins with the equation $f'(x) = 0$.
+        hints:
+          - What does the tangent line predict for a small step to the left?
+          - A local minimum needs every nearby value to be at least as large.
+          - The second derivative is not needed for this argument.
+    - text: |
+        **Endpoints, and the search for a global extreme.** Often the input is restricted. A length cannot be negative, and a probability lies between 0 and 1. On a closed interval $[a, b]$ a continuous function always has a largest and a smallest value. That is a theorem of analysis which this course proves later, in [[m11.intermediate-and-extreme-value-theorems]]. The level-tangent rule applies only **inside** the interval. At an endpoint you cannot step both ways, so the argument fails, and an extreme can sit at an endpoint with a slope that is far from zero.
+
+        So on a closed interval the candidates for the global extremes are:
+
+        1. the stationary points inside the interval,
+        2. the two endpoints,
+        3. any points inside where the derivative does not exist, such as the corner of $\lvert x \rvert$.
+
+        Evaluate $f$ at each candidate and compare. No classification is needed.
+
+        For $f(x) = x^3 - 3x$ on $[0, 3]$: the stationary point inside is $x = 1$, since $-1$ lies outside. The candidates are 0, 1 and 3, with values $0$, $-2$ and $18$. The least value is $-2$ at $x = 1$, and the greatest is 18, at the **endpoint** $x = 3$, where the slope is 24.
+
+        **A design problem.** You have 20 metres of fencing for a rectangular plot. Which shape encloses the most area? If one side is $x$, the other is $10 - x$, and $x$ must lie in $[0, 10]$. The area is $A(x) = x(10 - x) = 10x - x^2$. $A'(x) = 10 - 2x$ is zero at $x = 5$. The candidates are 0, 5 and 10, with areas 0, 25 and 0. The square wins. The steps are always the same: name the quantity to be optimised, write it as a function of **one** variable, find its interval, and compare the candidates.
+
+        **When the equation cannot be solved.** For the mean, $S'(m) = 0$ was an equation in one unknown that could be solved by hand. The error of a real model depends on its adjustable numbers in a way that is far too tangled for that. But the reasoning of the intuition section still gives a method. If the slope is not zero, a small step **against** the slope lowers the function. So take that step, and repeat.
+
+        $$x \leftarrow x - \eta\, f'(x).$$
+
+        This is **gradient descent**, and $\eta$, the Greek letter eta, is the **step size**, or **learning rate**. The tangent-line approximation says why it works: the change in $f$ is about $f'(x) \cdot \bigl(-\eta f'(x)\bigr) = -\eta\, f'(x)^2$, which is negative whenever the slope is not zero. And the method stops by itself where $f'(x) = 0$, since there the step is zero.
+
+        ```python
+        def descend(df, x, rate, steps):
+            for step in range(steps):
+                x = x - rate * df(x)
+            return x
+        ```
+
+        Everything depends on $\eta$. Take the simplest bowl, $f(x) = x^2$, with $f'(x) = 2x$. The update is
+
+        $$x \leftarrow x - \eta \cdot 2x = (1 - 2\eta)\,x.$$
+
+        Each step **multiplies** $x$ by the fixed factor $1 - 2\eta$. After $n$ steps, $x$ is $(1 - 2\eta)^n$ times where it started: a geometric sequence. Try it. Start with the step size at 0.1, then raise it past 0.5, to 1, and beyond.
+    - figure: descent
+      props: { rate: 0.1, steps: 5 }
+    - text: |
+        The behaviour of a geometric sequence depends only on the size of its ratio.
+
+        | Step size $\eta$ | Factor $1 - 2\eta$ | What happens |
+        | --- | --- | --- |
+        | small, such as $0.05$ | $0.9$ | creeps towards 0, slowly |
+        | $0.25$ | $0.5$ | halves the distance each step |
+        | $0.5$ | $0$ | lands on the minimum in one step |
+        | $0.75$ | $-0.5$ | overshoots, but closes in, alternating sides |
+        | $1$ | $-1$ | jumps between $3$ and $-3$ for ever |
+        | above $1$ | below $-1$ | each step lands further away: it diverges |
+
+        Too small a step wastes time. Too large a step is a disaster. The method converges exactly when $\lvert 1 - 2\eta \rvert < 1$, that is, when $0 < \eta < 1$.
+
+        Where do those numbers come from? From the second derivative. For $f(x) = x^2$, $f'' = 2$. For a general function near a minimum at $a$, the Taylor polynomial gives $f'(x) \approx f''(a)(x - a)$, so one step multiplies the distance from the minimum by about
+
+        $$1 - \eta\, f''(a).$$
+
+        Convergence needs $\eta < \dfrac{2}{f''(a)}$, and the best choice, which makes the factor zero, is $\eta = \dfrac{1}{f''(a)}$. **The sharper the bowl, the smaller the step must be.** That is the result of the last question of the curvature lesson, seen again.
+
+        Put the best step size into the update and it reads
+
+        $$x \leftarrow x - \frac{f'(x)}{f''(x)}.$$
+
+        You have seen this shape. It is **Newton's method applied to $f'$**: to find where $f'$ is zero, subtract $f'$ divided by **its** derivative. Minimising with Newton's method uses the second derivative to choose the step, and gradient descent is what remains when the second derivative is too expensive to compute and a fixed $\eta$ is used in its place.
+
+        One more caution. Descent walks downhill from where it starts and stops at the first level place it reaches. On a bowl that is the global minimum. On a function with several valleys it is whichever valley the start happened to lie in. A local method finds local answers.
+    - question:
+        id: order-closed-interval
+        type: order
+        system: s2
+        prompt: Put the steps in order to find the greatest value of $f(x) = x^3 - 12x$ on the interval $[0, 5]$.
+        steps:
+          - "Differentiate: $f'(x) = 3x^2 - 12$."
+          - "Solve $f'(x) = 0$: $x = 2$ or $x = -2$."
+          - "Discard $x = -2$, which lies outside the interval."
+          - "List the candidates: the endpoints 0 and 5, and the stationary point 2."
+          - "Evaluate: $f(0) = 0$, $f(2) = -16$, $f(5) = 65$."
+          - "Conclude: the greatest value is 65, at the endpoint $x = 5$."
+        explanation: The stationary points come from the derivative, and only those inside the interval count. They join the two endpoints as candidates, the function is evaluated at each, and the comparison comes last. Here the greatest value is at an endpoint, where the slope is 63 and nowhere near zero.
+        hints:
+          - The derivative is needed before its zeros can be found.
+          - Stationary points outside the interval are thrown away before the candidates are listed.
+          - The conclusion comes after every candidate has been evaluated.
+  formal:
+    - text: |
+        **Extremes.** $a$ is a local minimum of $f$ if $f(a) \le f(x)$ for all $x$ near $a$, and a global minimum if $f(a) \le f(x)$ for all $x$ in the domain. Maxima reverse the inequality.
+
+        **Level-tangent rule.** If $f$ has a local extreme at an interior point $a$ and $f'(a)$ exists, then $f'(a) = 0$. The converse is false: $x^3$ at 0.
+
+        **Second-derivative test.** If $f'(a) = 0$: $f''(a) > 0$ gives a local minimum, $f''(a) < 0$ a local maximum, and $f''(a) = 0$ decides nothing.
+
+        **First-derivative test.** If $f'$ changes from negative to positive at $a$, a local minimum. From positive to negative, a local maximum. No change of sign, neither.
+
+        **Closed interval.** A continuous function on $[a, b]$ attains a greatest and a least value, each at an endpoint, a stationary point, or a point where $f'$ does not exist.
+
+        **Convex functions.** If $f'' \ge 0$ everywhere, every stationary point is a global minimum.
+
+        **Least squares.** $\sum_{i=1}^{n} (x_i - m)^2$ is least at $m = \frac{1}{n}\sum_{i=1}^{n} x_i$, the mean.
+
+        **Gradient descent.** $x \leftarrow x - \eta f'(x)$. Near a minimum $a$ with $f''(a) > 0$, each step multiplies the distance from $a$ by about $1 - \eta f''(a)$. It converges for $0 < \eta < \frac{2}{f''(a)}$, fastest at $\eta = \frac{1}{f''(a)}$, which is Newton's step $x \leftarrow x - \frac{f'(x)}{f''(x)}$.
+  drill:
+    - text: Seconds each. Set the derivative to zero, then ask what kind of point you have found.
+    - question:
+        id: drill-stationary-quadratic
+        type: numeric
+        system: s1
+        prompt: |
+          $f(x) = x^2 - 6x + 1$. At which $x$ is $f'(x) = 0$?
+        answer: "3"
+        explanation: |
+          $f'(x) = 2x - 6$, which is zero at 3. This is the vertex of the parabola, found without completing the square.
+        hints:
+          - Differentiate to get 2x minus 6.
+          - Solve for x.
+    - question:
+        id: drill-minimum-value
+        type: numeric
+        system: s1
+        prompt: |
+          What is the least value of $f(x) = x^2 - 6x + 1$?
+        answer: "-8"
+        explanation: |
+          The stationary point is $x = 3$, and $f(3) = 9 - 18 + 1$. Since $f'' = 2 > 0$ it is a minimum.
+        hints:
+          - The stationary point is at x = 3.
+          - Put 3 into the function.
+    - question:
+        id: drill-stationary-cubic
+        type: numeric
+        system: s1
+        prompt: |
+          $f(x) = x^3 - 12x$. What is the positive $x$ at which $f'(x) = 0$?
+        answer: "2"
+        explanation: |
+          $f'(x) = 3x^2 - 12 = 3(x^2 - 4)$, zero at $\pm 2$.
+        hints:
+          - The derivative is 3x squared minus 12.
+          - Solve x squared = 4.
+    - question:
+        id: drill-classify
+        type: choice
+        system: s1
+        prompt: |
+          $f'(a) = 0$ and $f''(a) = -5$. What is $a$?
+        options: ["A local minimum", "A local maximum", "A point of inflection", "It cannot be decided"]
+        answer: 1
+        explanation: A negative second derivative means the curve is a dome there, with nearby values below.
+        hints:
+          - Negative second derivative means concave.
+          - The top of a dome.
+    - question:
+        id: drill-classify-zero
+        type: choice
+        system: s1
+        prompt: |
+          $f'(a) = 0$ and $f''(a) = 0$. What is $a$?
+        options: ["A local minimum", "A local maximum", "Neither", "The second-derivative test cannot decide"]
+        answer: 3
+        explanation: The functions x⁴, −x⁴ and x³ all have this at 0, and give a minimum, a maximum and neither.
+        hints:
+          - Think of x to the fourth and x cubed at 0.
+          - The test needs a sign, and zero has none.
+    - question:
+        id: drill-ball
+        type: numeric
+        system: s1
+        unit: metres
+        prompt: |
+          A ball is at height $s(t) = 30t - 5t^2$ metres. What is its greatest height?
+        answer: "45"
+        explanation: |
+          $s'(t) = 30 - 10t$ is zero at $t = 3$, and $s(3) = 90 - 45$.
+        hints:
+          - The velocity is zero at the top.
+          - Find the time first, then the height at that time.
+    - question:
+        id: drill-mean
+        type: numeric
+        system: s1
+        prompt: |
+          Which $m$ minimises $(1 - m)^2 + (4 - m)^2 + (10 - m)^2$?
+        answer: "5"
+        explanation: The total squared error is least at the mean, 15 divided by 3.
+        hints:
+          - No differentiating is needed. Which summary of the data minimises squared error?
+          - Add the three numbers and divide by 3.
+    - question:
+        id: drill-endpoint
+        type: numeric
+        system: s1
+        prompt: |
+          What is the greatest value of $f(x) = x^2$ on the interval $[-1, 3]$?
+        answer: "9"
+        explanation: The only stationary point, 0, gives the least value. The greatest is at the endpoint 3.
+        hints:
+          - The candidates are the two endpoints and the stationary point at 0.
+          - Evaluate the function at each.
+    - question:
+        id: drill-descent-step
+        type: numeric
+        system: s1
+        prompt: |
+          $f(x) = x^2$, so $f'(x) = 2x$. Starting from $x = 4$ with step size $0.25$, what is $x$ after one step of gradient descent?
+        answer: "2"
+        explanation: |
+          $4 - 0.25 \cdot 8$. The factor is $1 - 2(0.25) = 0.5$.
+        hints:
+          - The slope at 4 is 8.
+          - Subtract the step size times the slope.
+    - question:
+        id: drill-direction
+        type: choice
+        system: s1
+        prompt: |
+          The slope of the error at the current weight is $+3$. Which way does gradient descent move the weight?
+        options: ["It increases it", "It decreases it", "It leaves it unchanged", "It depends on the step size"]
+        answer: 1
+        explanation: Descent subtracts the step size times the slope. A positive slope means the error rises to the right, so the weight moves left.
+        hints:
+          - The update subtracts a positive multiple of the slope.
+          - Uphill is to the right, so downhill is to the left.
+    - question:
+        id: drill-diverge
+        type: choice
+        system: s1
+        prompt: |
+          On $f(x) = x^2$, gradient descent multiplies $x$ by $1 - 2\eta$ at each step. What happens with $\eta = 1.5$?
+        options:
+          - "It converges slowly."
+          - "It lands on the minimum in one step."
+          - "The factor is $-2$, so each step doubles the distance from the minimum."
+          - "It stays where it is."
+        answer: 2
+        explanation: 1 − 3 = −2. A factor of size greater than 1 means the sequence grows without limit, flipping sides each time.
+        hints:
+          - Work out 1 minus 2 times 1.5.
+          - What does a geometric sequence do when its ratio has size greater than 1?
+    - question:
+        id: predict-descent
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          x = 3
+          for step in range(3):
+              x = x - 0.25 * 2 * x
+          print(x)
+        output: "0.375"
+        explanation: Each pass subtracts half of x, so x halves. 3 becomes 1.5, then 0.75, then 0.375. This is gradient descent on x squared with step size 0.25.
+        hints:
+          - What is 0.25 times 2?
+          - Each pass replaces x by half of itself.
+    - question:
+        id: predict-candidates
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          def f(x):
+              return x ** 3 - 3 * x
+
+          candidates = [0, 1, 3]
+          values = [f(x) for x in candidates]
+          print(values, min(values), max(values))
+        output: "[0, -2, 18] -2 18"
+        explanation: The candidates are the endpoints of the interval from 0 to 3 and the stationary point 1. The values are 0, 1 − 3 and 27 − 9. The least is at the stationary point and the greatest at an endpoint.
+        hints:
+          - Evaluate the function at 0, at 1 and at 3.
+          - 3 cubed is 27, and 3 times 3 is 9.
+  work:
+    - text: Slower now. In each problem, list the candidates before you compare them.
+    - question:
+        id: work-fence
+        type: numeric
+        system: s2
+        unit: square metres
+        prompt: |
+          A rectangular plot is built against a long wall, so only three sides need fencing. You have 40 metres of fence. If the two sides at right angles to the wall each have length $x$, the side parallel to the wall has length $40 - 2x$. What is the greatest area you can enclose?
+        answer: "200"
+        explanation: |
+          $A(x) = x(40 - 2x) = 40x - 2x^2$ for $x$ in $[0, 20]$. $A'(x) = 40 - 4x$ is zero at $x = 10$. The candidates 0, 10 and 20 give areas 0, 200 and 0. So the best plot is 10 by 20: the side along the wall is twice the others, and it is not a square. The free side changes the answer.
+        hints:
+          - Write the area as a function of x alone.
+          - Differentiate, and find where the derivative is zero.
+          - Evaluate the area at that x.
+    - question:
+        id: work-shrinkage
+        type: numeric
+        system: s2
+        prompt: |
+          A weight $w$ is chosen to minimise $f(w) = (w - 3)^2 + \frac{1}{2}w^2$. The first term rewards being close to 3, the value the data ask for. The second is a penalty for being large. Which $w$ is best?
+        answer: "2"
+        explanation: |
+          $f'(w) = 2(w - 3) + w = 3w - 6$, which is zero at $w = 2$. And $f''(w) = 3 > 0$, so $f$ is convex and this is the global minimum. Without the penalty the answer would be 3. The penalty pulls the weight towards 0, and it settles where the two pulls balance: at $w = 2$ the data term has slope $-2$ and the penalty has slope $+2$. Penalties of this kind are a standard way of keeping a model's weights small.
+        hints:
+          - Differentiate each term. The chain rule gives 2(w − 3) for the first.
+          - Collect the terms and set the sum to zero.
+          - Check the sign of the second derivative.
+    - question:
+        id: work-rate-limit
+        type: choice
+        system: s2
+        prompt: |
+          You run gradient descent on $f(x) = 3x^2$, for which $f'(x) = 6x$ and $f''(x) = 6$. For which step sizes $\eta$ does it converge to the minimum at 0?
+        options:
+          - "Any $\\eta > 0$"
+          - "$0 < \\eta < \\frac{1}{3}$"
+          - "$0 < \\eta < 1$"
+          - "$0 < \\eta < 6$"
+        answer: 1
+        explanation: |
+          The update is $x \leftarrow x - \eta \cdot 6x = (1 - 6\eta)x$. The sequence shrinks when $\lvert 1 - 6\eta \rvert < 1$, that is $-1 < 1 - 6\eta < 1$, which gives $0 < \eta < \frac{1}{3}$. That is $\frac{2}{f''}$. The step size 0.5, which was perfect for $x^2$, makes the factor $-2$ here and the method diverges. A step size is not good or bad in itself. It is good or bad **for a given curvature**, and the best one is $\frac{1}{f''} = \frac{1}{6}$.
+        hints:
+          - Write one step as x multiplied by a fixed factor.
+          - A geometric sequence shrinks when its ratio lies between −1 and 1.
+          - Solve the inequality for the step size.
+    - question:
+        id: write-descend
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `descend(df, x, rate, steps)`. Starting from `x`, it applies the gradient descent update
+
+          $$x \leftarrow x - \text{rate} \cdot f'(x)$$
+
+          `steps` times and returns the result. `df` is the derivative of the function being minimised. With `steps = 0` it returns `x` unchanged.
+        starter: |
+          def descend(df, x, rate, steps):
+              # Replace the next line with your own.
+              return x
+
+          print(round(descend(lambda x: 2 * (x - 4), 0, 0.1, 100), 6))
+        solution: |
+          def descend(df, x, rate, steps):
+              for step in range(steps):
+                  x = x - rate * df(x)
+              return x
+
+          print(round(descend(lambda x: 2 * (x - 4), 0, 0.1, 100), 6))
+        tests: |
+          _df = lambda x: 2 * x
+          assert descend(_df, 3, 0.25, 0) == 3, "With no steps x is returned unchanged"
+          assert descend(_df, 3, 0.25, 1) == 1.5, "On x^2 from 3 with rate 0.25, one step gives 3 - 0.25 * 6 = 1.5. You returned " + repr(descend(_df, 3, 0.25, 1))
+          assert descend(_df, 3, 0.25, 3) == 0.375, "Three such steps give 0.375. You returned " + repr(descend(_df, 3, 0.25, 3))
+          assert descend(_df, 3, 0.5, 1) == 0, "With rate 0.5 one step lands on the minimum of x^2. You returned " + repr(descend(_df, 3, 0.5, 1))
+          assert descend(_df, 3, 1, 2) == 3, "With rate 1 the point jumps to -3 and back to 3. You returned " + repr(descend(_df, 3, 1, 2))
+          assert abs(descend(lambda x: 2 * (x - 4), 0, 0.1, 200) - 4) < 1e-9, "Minimising (x - 4)^2 should approach 4. You returned " + repr(descend(lambda x: 2 * (x - 4), 0, 0.1, 200))
+          assert abs(descend(lambda x: 3 * x * x - 3, 2, 0.1, 200) - 1) < 1e-9, "Minimising x^3 - 3x from 2 should approach the local minimum at 1. You returned " + repr(descend(lambda x: 3 * x * x - 3, 2, 0.1, 200))
+          assert output.strip() == "4.0", "The program should print 4.0"
+        wrong:
+          - "def descend(df, x, rate, steps):\n    for step in range(steps):\n        x = x + rate * df(x)\n    return x\n\nprint(4.0)\n"
+          - "def descend(df, x, rate, steps):\n    for step in range(steps):\n        x = x - df(x)\n    return x\n\nprint(4.0)\n"
+          - "def descend(df, x, rate, steps):\n    if steps == 0:\n        return x\n    return x - rate * df(x)\n\nprint(4.0)\n"
+          - "def descend(df, x, rate, steps):\n    for step in range(steps):\n        x = x - rate * x\n    return x\n\nprint(4.0)\n"
+          - "def descend(df, x, rate, steps):\n    slope = df(x)\n    for step in range(steps):\n        x = x - rate * slope\n    return x\n\nprint(4.0)\n"
+        explanation: |
+          One line does the work: move against the slope, by an amount proportional to the slope. Far from the minimum the slope is large and the steps are long. Near it the slope fades and the steps shorten of their own accord, and at a stationary point the update changes nothing. The slope must be recomputed at the **new** point on every pass. For $(x - 4)^2$ with rate 0.1 the distance from 4 is multiplied by $1 - 0.2 = 0.8$ each step, and $0.8^{100}$ is about $2 \times 10^{-10}$. Notice the function itself was never needed, only its derivative. And notice the family resemblance to `newton` from the last lesson: the same loop, with a different step.
+        hints:
+          - One step is x = x - rate * df(x).
+          - Put it in a loop that runs steps times.
+          - Call df inside the loop, so that the slope is taken at the current x.
+    - question:
+        id: fix-fit-mean
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `slope(data, m)` should return the derivative, with respect to $m$, of the total squared error $\sum (x_i - m)^2$. `fit` is correct: it runs gradient descent on $m$ using that slope. For the puzzle's data the program should print 4.0, the mean. It prints a number in the billions below zero. Fix `slope`.
+        starter: |
+          def slope(data, m):
+              return 2 * sum([x - m for x in data])
+
+          def fit(data, rate, steps):
+              m = 0
+              for step in range(steps):
+                  m = m - rate * slope(data, m)
+              return m
+
+          print(round(fit([2, 3, 3, 5, 7], 0.05, 50), 6))
+        solution: |
+          def slope(data, m):
+              return -2 * sum([x - m for x in data])
+
+          def fit(data, rate, steps):
+              m = 0
+              for step in range(steps):
+                  m = m - rate * slope(data, m)
+              return m
+
+          print(round(fit([2, 3, 3, 5, 7], 0.05, 50), 6))
+        tests: |
+          _d = [2, 3, 3, 5, 7]
+          assert slope(_d, 0) == -40, "At m = 0 the slope is -2 * (2 + 3 + 3 + 5 + 7) = -40. You returned " + repr(slope(_d, 0))
+          assert slope(_d, 4) == 0, "At the mean the slope is 0. You returned " + repr(slope(_d, 4))
+          assert slope(_d, 5) == 10, "At m = 5 the slope is -2 * (20 - 25) = 10. You returned " + repr(slope(_d, 5))
+          assert slope([1], 3) == 4, "For the single value 1, the error (1 - m)^2 has slope -2(1 - m), which is 4 at m = 3. You returned " + repr(slope([1], 3))
+          assert abs(fit(_d, 0.05, 50) - 4) < 1e-9, "Descent should arrive at the mean, 4. You returned " + repr(fit(_d, 0.05, 50))
+          assert abs(fit([10, 20], 0.1, 200) - 15) < 1e-9, "For the data 10 and 20, descent should arrive at 15. You returned " + repr(fit([10, 20], 0.1, 200))
+          assert output.strip() == "4.0", "The program should print 4.0"
+        wrong:
+          - "def slope(data, m):\n    return 2 * sum([x - m for x in data])\n\ndef fit(data, rate, steps):\n    m = 0\n    for step in range(steps):\n        m = m - rate * slope(data, m)\n    return m\n\nprint(4.0)\n"
+          - "def slope(data, m):\n    return -sum([x - m for x in data])\n\ndef fit(data, rate, steps):\n    m = 0\n    for step in range(steps):\n        m = m - rate * slope(data, m)\n    return m\n\nprint(4.0)\n"
+          - "def slope(data, m):\n    return -2 * sum(data) - m\n\ndef fit(data, rate, steps):\n    m = 0\n    for step in range(steps):\n        m = m - rate * slope(data, m)\n    return m\n\nprint(4.0)\n"
+          - "def slope(data, m):\n    return -2 * sum([(x - m) ** 2 for x in data])\n\ndef fit(data, rate, steps):\n    m = 0\n    for step in range(steps):\n        m = m - rate * slope(data, m)\n    return m\n\nprint(4.0)\n"
+        explanation: |
+          The inner function of $(x_i - m)^2$ is $x_i - m$, and its derivative with respect to $m$ is $-1$. The chain rule carries that $-1$ outside: the slope is $-2\sum(x_i - m)$. The starter dropped it. A sign error in a derivative is the most destructive bug a training loop can have, because descent then walks **uphill**. Here each step multiplied the distance from the mean by 1.5, and after 50 steps a starting error of 4 had grown beyond a billion. With the sign right, the factor is $1 - 0.05 \cdot 10 = 0.5$ and the error halves each step. The check that would have caught it at once: at $m = 0$, below all the data, the error must be falling as $m$ increases, so the slope must be negative.
+        hints:
+          - Differentiate (x − m) squared with respect to m, using the chain rule.
+          - What is the derivative of the inner function x − m with respect to m?
+          - Below all the data, should the slope of the error be positive or negative?
+    - question:
+        id: write-least-on-interval
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `least_on_interval(f, a, b, stationary)`. `stationary` is a list of all the points where $f'$ is zero. Return the $x$ in the closed interval from `a` to `b` at which $f$ is least.
+
+          The candidates are `a`, `b` and those stationary points that lie inside the interval. Stationary points outside it must be ignored. You may assume there are no ties.
+        starter: |
+          def least_on_interval(f, a, b, stationary):
+              # Replace the next line with your own.
+              return a
+
+          print(least_on_interval(lambda x: x ** 3 - 3 * x, -3, 3, [-1, 1]))
+        solution: |
+          def least_on_interval(f, a, b, stationary):
+              best = a
+              for x in stationary + [b]:
+                  if a <= x <= b and f(x) < f(best):
+                      best = x
+              return best
+
+          print(least_on_interval(lambda x: x ** 3 - 3 * x, -3, 3, [-1, 1]))
+        tests: |
+          _f = lambda x: x ** 3 - 3 * x
+          assert least_on_interval(_f, 0, 3, [-1, 1]) == 1, "On [0, 3] the candidates 0, 1, 3 have values 0, -2, 18, so the answer is 1. You returned " + repr(least_on_interval(_f, 0, 3, [-1, 1]))
+          assert least_on_interval(_f, -3, 3, [-1, 1]) == -3, "On [-3, 3] the least value, -18, is at the endpoint -3. You returned " + repr(least_on_interval(_f, -3, 3, [-1, 1]))
+          assert least_on_interval(_f, 2, 3, [-1, 1]) == 2, "On [2, 3] no stationary point is inside, and f(2) = 2 is less than f(3) = 18. You returned " + repr(least_on_interval(_f, 2, 3, [-1, 1]))
+          assert least_on_interval(lambda x: -(x - 1) ** 2, 0, 3, [1]) == 3, "For -(x - 1)^2 on [0, 3] the least value, -4, is at the endpoint 3. You returned " + repr(least_on_interval(lambda x: -(x - 1) ** 2, 0, 3, [1]))
+          assert least_on_interval(lambda x: (x - 5) ** 2, 0, 3, [5]) == 3, "For (x - 5)^2 on [0, 3] the stationary point 5 is outside the interval, so the answer is the endpoint 3. You returned " + repr(least_on_interval(lambda x: (x - 5) ** 2, 0, 3, [5]))
+          assert least_on_interval(lambda x: 2 * x + 1, -4, 4, []) == -4, "A rising straight line is least at the left endpoint"
+          assert output.strip() == "-3", "The program should print -3"
+        wrong:
+          - "def least_on_interval(f, a, b, stationary):\n    best = stationary[0]\n    for x in stationary:\n        if f(x) < f(best):\n            best = x\n    return best\n\nprint(-3)\n"
+          - "def least_on_interval(f, a, b, stationary):\n    best = a\n    for x in stationary + [b]:\n        if f(x) < f(best):\n            best = x\n    return best\n\nprint(-3)\n"
+          - "def least_on_interval(f, a, b, stationary):\n    best = a\n    for x in stationary + [b]:\n        if a <= x <= b and f(x) < f(best):\n            best = x\n    return f(best)\n\nprint(-3)\n"
+          - "def least_on_interval(f, a, b, stationary):\n    best = a\n    for x in stationary:\n        if a <= x <= b and f(x) < f(best):\n            best = x\n    return best\n\nprint(-3)\n"
+          - "def least_on_interval(f, a, b, stationary):\n    best = a\n    for x in stationary + [b]:\n        if a <= x <= b and f(x) > f(best):\n            best = x\n    return best\n\nprint(-3)\n"
+        explanation: |
+          This is the closed-interval method as a program. The least value must occur at an endpoint or at a stationary point inside, so only those few inputs are ever evaluated. Start with `a` as the best so far, then offer each remaining candidate in turn and keep it if it lies in the interval and gives a smaller value. Two mistakes are common, and each is caught by one test. Forgetting the endpoints fails on $[-3, 3]$, where the cubic's least value is at $-3$. Forgetting to discard outside points fails on $(x - 5)^2$, whose only stationary point, 5, is not in $[0, 3]$. Calculus supplied the short list of candidates, and the comparison is then plain arithmetic.
+        hints:
+          - Start with best = a.
+          - Loop over the stationary points and b, and skip any x that is not between a and b.
+          - Replace best when f(x) is smaller than f(best), and return best, not its value.
+    - question:
+        id: work-newton-minimise
+        type: numeric
+        system: s2
+        prompt: |
+          To minimise $f(x) = x^4 - 32x$ you use Newton's step for a minimum, $x \leftarrow x - \dfrac{f'(x)}{f''(x)}$, starting from $x = 1$. Here $f'(x) = 4x^3 - 32$ and $f''(x) = 12x^2$. What is $x$ after one step? Give the exact value as a fraction or decimal.
+        answer: "10/3"
+        tolerance: "0.001"
+        explanation: |
+          $f'(1) = -28$ and $f''(1) = 12$, so $x = 1 + \frac{28}{12} = \frac{10}{3} \approx 3.33$. The true minimum is where $4x^3 = 32$, at $x = 2$. The first step has gone well past it. The stand-in was a parabola fitted at $x = 1$, where the curvature is 12, while at the minimum it is 48: the function is not close to its quadratic model that far away, so the first step overshoots. Further steps repair it: $2.46$, then $2.08$, then $2.003$, closing in faster and faster once the model becomes accurate. Newton's method is superb near the answer and can be clumsy far from it.
+        hints:
+          - Evaluate the first and second derivatives at x = 1.
+          - The step is minus the first divided by the second.
+          - Subtracting a negative number adds.
+    - question:
+        id: work-local-global
+        type: choice
+        system: s2
+        prompt: |
+          $f(x) = x^4 - 2x^2$ has $f'(x) = 4x(x - 1)(x + 1)$ and $f''(x) = 12x^2 - 4$. You run gradient descent with a small step size from $x = 0.1$, and again from $x = -0.1$. What happens?
+        options:
+          - "Both runs end at $x = 0$, the nearest stationary point."
+          - "The first ends at $x = 1$ and the second at $x = -1$. Both are minima with the same value, $-1$, and $x = 0$ is a local maximum that neither run approaches."
+          - "Both runs end at $x = 1$."
+          - "Neither run converges, because the function has three stationary points."
+        answer: 1
+        explanation: |
+          The stationary points are $-1$, 0 and 1. $f''(0) = -4$, so 0 is a local maximum, and $f''(\pm 1) = 8$, so both others are minima, with $f(\pm 1) = -1$. At $x = 0.1$ the slope is $4(0.1)(-0.9)(1.1) < 0$, so descent moves right and settles at 1. At $-0.1$ the slope is positive and it moves left to $-1$. Descent runs **away** from a maximum, even a nearby one, and which minimum it reaches depends on the side it started from. Here the two valleys are equally deep. In general they are not, and a descent method cannot tell you whether a deeper valley exists somewhere else.
+        hints:
+          - Classify each stationary point with the second derivative.
+          - What is the sign of the slope at 0.1, and so which way does descent move?
+          - Descent moves against the slope, so it moves away from a hilltop.
+  connections:
+    - text: |
+        The puzzle asked which single number best stands for 2, 3, 3, 5 and 7, when "best" means least total squared error. No amount of trying candidates could settle it. One argument did: at a lowest point the slope must be zero, since otherwise a small step one way or the other goes lower. That left a single candidate, the solution of $S'(m) = 0$, and it was the mean, exactly 4. The second derivative, positive everywhere, confirmed a bowl and so a global minimum.
+
+        That is the method of this lesson in miniature. Differentiate. Solve $f'(x) = 0$ for the candidates. Classify each by the sign of the second derivative, or by the change of sign of the first. On a closed interval, add the endpoints and compare values. And when the equation $f'(x) = 0$ cannot be solved, step against the slope again and again, with a step small enough for the curvature. That is gradient descent, and it is the algorithm that trains nearly every model you will meet. The same idea with many adjustable numbers in place of one is the subject of [[m12.gradient]] and then [[m19.gradient-descent]], and the choosing of step sizes grows into [[m19.learning-rate-schedules-and-warm-up]]. Newton's version, which uses the curvature, returns in [[m19.newton-and-quasi-newton-methods]].
+
+        Every lesson of this cluster so far has gone in one direction: from a function to its rate of change. Position gave velocity, an error curve gave its slope. There is an equally natural question that runs the other way. You know the velocity of a car at every moment, and want the distance it has covered. You know the rate at which water flows into a tank, and want the amount in it. You know a slope everywhere and want the curve. Going from a rate back to a total is the second half of calculus, and it begins in the next lesson, [[m10.integral-as-accumulation]], with a sum of a very large number of very small pieces.

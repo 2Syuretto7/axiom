@@ -1,0 +1,671 @@
+concept: m10.chain-rule
+minutes: 100
+claim: You can differentiate a composition of functions by multiplying the rates along the chain, prove the chain rule honestly, differentiate inverse functions and rational powers with it, and compute the derivative of a long chain by a forward pass for values and a pass that multiplies local rates.
+recalls: [m10.differentiation-rules]
+uses: [m10.derivative-as-slope-and-rate, m10.limits-and-continuity, m2.composition-and-inverses, m2.functions-as-machines, m1.exponent-laws, m1.polynomials, m0.ratio-and-proportion, m0.powers-and-roots, m3.direct-proof, e0.functions, e0.loops, e0.lists-and-tuples, e1.comprehensions-and-iterators, e1.classes-and-objects, e1.special-methods-and-operator-overloading]
+leads: [m10.derivatives-of-exp-log-and-trig, m12.multivariable-chain-rule, m13.reverse-mode-differentiation-and-its-cost, e6.gradient-checking, l5.backpropagation-on-an-arbitrary-graph]
+starter: |
+  # Scratch space. y = (2x + 1) ** 3 is a chain: first u = 2x + 1, then y = u ** 3.
+  def y(x):
+      u = 2 * x + 1
+      return u ** 3
+
+  h = 1e-5
+  for x in [0, 1, 2]:
+      print(x, (y(x + h) - y(x - h)) / (2 * h))
+parts:
+  recall:
+    - text: |
+        [[m10.differentiation-rules]] gave a rule for every way of building a function but one. Sums, constant multiples, products and quotients are done. What is left is feeding one function into another. Three quick pulls first.
+    - question:
+        id: recall-product
+        type: numeric
+        system: s1
+        concepts: [m10.differentiation-rules]
+        prompt: |
+          $u(1) = 2$, $u'(1) = 3$, $v(1) = 4$, $v'(1) = 5$. What is $(uv)'(1)$?
+        answer: "22"
+        explanation: |
+          $u'v + uv' = 3 \cdot 4 + 2 \cdot 5$.
+        hints:
+          - Each factor changes in turn while the other stands still.
+          - Add the two products.
+    - question:
+        id: recall-power
+        type: numeric
+        system: s1
+        concepts: [m10.differentiation-rules]
+        prompt: |
+          $f(u) = u^3$. What is $f'(5)$?
+        answer: "75"
+        explanation: The derivative is $3u^2$, and three times twenty-five is seventy-five.
+        hints:
+          - Bring the exponent down.
+          - Square 5 first.
+    - question:
+        id: recall-composition
+        type: numeric
+        system: s1
+        concepts: [m2.composition-and-inverses]
+        prompt: |
+          $g(x) = 2x + 1$ and $f(u) = u^3$. What is $(f \circ g)(1)$?
+        answer: "27"
+        explanation: The inner function acts first and gives 3. The outer function then cubes it.
+        hints:
+          - Apply g first.
+          - Then cube the result.
+  puzzle:
+    - text: |
+        Differentiate
+
+        $$y = (2x + 1)^3.$$
+
+        It looks like a cube, and the derivative of a cube is three times a square. So the natural answer is
+
+        $$3\,(2x + 1)^2.$$
+
+        Test it. At $x = 0$ this formula gives 3. Now multiply the bracket out, which nobody can argue with: $(2x + 1)^3 = 8x^3 + 12x^2 + 6x + 1$, with derivative $24x^2 + 24x + 6$. At $x = 0$ that is **6**. The starter agrees, printing 6 at 0, 54 at 1 and 150 at 2, where the natural answer would have 3, 27 and 75.
+
+        The natural answer is wrong, and wrong in a very particular way. It is too small by a factor of exactly 2, at every point. And 2 is the coefficient of $x$ inside the bracket.
+
+        Multiplying out was possible here. For $(2x + 1)^{100}$ it would produce 101 terms. For $\sqrt{x^2 + 1}$ there is nothing to multiply out. And for the functions that matter most there is no hope at all: the output of a neural network is the input passed through one function, and the result through another, and that through another, sometimes hundreds deep.
+
+        **Where does the factor of 2 come from, and what is the rule for differentiating one function inside another?**
+  intuition:
+    - text: |
+        The power rule says that $u^3$ changes $3u^2$ times as fast **as $u$ does**. The mistake was to forget those last three words. In $(2x + 1)^3$ the thing being cubed is $u = 2x + 1$, and we want the rate of change with respect to $x$, not with respect to $u$. And $u$ does not move at the same speed as $x$. It moves twice as fast.
+
+        Think of money. Suppose one euro buys 90 rupees, and one pound buys 1.2 euros. How many rupees does a pound buy? You multiply: $1.2 \times 90 = 108$. Rupees per euro, times euros per pound, gives rupees per pound. Nobody would add those two rates, or use only one of them.
+
+        A derivative is an exchange rate between small changes. $\dfrac{du}{dx} = 2$ says: one unit of change in $x$ buys two units of change in $u$. $\dfrac{dy}{du} = 3u^2$ says: one unit of change in $u$ buys $3u^2$ units of change in $y$. So one unit of change in $x$ buys $3u^2 \times 2$ units of change in $y$.
+
+        $$\frac{dy}{dx} = \frac{dy}{du} \cdot \frac{du}{dx} = 3(2x + 1)^2 \cdot 2 = 6(2x + 1)^2.$$
+
+        At $x = 0$ that is 6. **Rates multiply along a chain.** That is the whole of the chain rule.
+
+        Or think of gears. If the first wheel turns the second twice as fast as itself, and the second turns the third three times as fast as itself, then the third turns six times as fast as the first. Each link in a chain of machines has its own magnification, and the magnification of the whole chain is the product.
+
+        One detail matters and is easy to get wrong. The rate of the outer step, $3u^2$, depends on **where $u$ is**. It must be worked out at the value the inner function actually produces, $u = 2x + 1$, and not at $x$. In the figure, the first arrow carries the rate of $u = x^2$ with respect to $x$, and the second the rate of $y = u^3$ with respect to $u$, computed at the current $u$.
+    - figure: chain-rates
+      props: { x: 1.2 }
+    - text: |
+        Here $y = (x^2)^3 = x^6$, so you can check the figure against the power rule: at $x = 1.2$ the derivative $6x^5$ is $6 \times 2.48832 = 14.93$, the product in the figure.
+  derivation:
+    - text: |
+        **The statement.** Let $g$ be differentiable at $a$, and let $f$ be differentiable at $g(a)$. Then the composition $f \circ g$, the function $x \mapsto f(g(x))$, is differentiable at $a$ and
+
+        $$(f \circ g)'(a) = f'\bigl(g(a)\bigr) \cdot g'(a).$$
+
+        In words: **the derivative of the outer function, taken at the inner function's value, times the derivative of the inner function.** In Leibniz's notation, with $u = g(x)$ and $y = f(u)$,
+
+        $$\frac{dy}{dx} = \frac{dy}{du} \cdot \frac{du}{dx}.$$
+
+        This looks like cancelling $du$ from a product of fractions. It is not, since these are not fractions, but the notation was designed so that the true rule would look like the obvious one. That is a large part of why the notation survived.
+
+        **A proof that almost works.** For $h \ne 0$, write $k = g(a + h) - g(a)$, the change in the inner function. Then
+
+        $$\frac{f(g(a + h)) - f(g(a))}{h} = \frac{f(g(a) + k) - f(g(a))}{k} \cdot \frac{k}{h}.$$
+
+        As $h \to 0$, $k \to 0$ too, since $g$ is continuous. The first factor looks like the difference quotient of $f$ and approaches $f'(g(a))$. The second is the difference quotient of $g$ and approaches $g'(a)$. Done?
+
+        Not quite. We divided by $k$, and nothing stops $k$ from being 0 for some non-zero $h$. A constant inner function has $k = 0$ always, and other functions return to the same value again and again. Dividing by zero does not become legal because it happens only occasionally. You met this kind of gap in the cluster on proof: an argument that is right in the typical case and silent in another.
+
+        **The honest proof.** The repair uses the fact from two lessons ago that says what a derivative really is: a straight-line stand-in with an error that vanishes faster than the step. Put $b = g(a)$. Differentiability of $f$ at $b$ means
+
+        $$f(b + k) - f(b) = \bigl[f'(b) + \varphi(k)\bigr]\,k,$$
+
+        where $\varphi(k) = \dfrac{f(b + k) - f(b)}{k} - f'(b)$ for $k \ne 0$. By the definition of the derivative, $\varphi(k) \to 0$ as $k \to 0$. Now **define** $\varphi(0) = 0$. Then the displayed equation is true for $k = 0$ as well, both sides being 0, and $\varphi$ is continuous at 0.
+
+        > **Proof.** Let $h \ne 0$ and $k = g(a + h) - g(a)$. By the equation above, which holds whether or not $k$ is 0,
+        >
+        > $$\frac{f(g(a + h)) - f(g(a))}{h} = \bigl[f'(b) + \varphi(k)\bigr] \cdot \frac{k}{h}.$$
+        >
+        > As $h \to 0$: $\dfrac{k}{h} \to g'(a)$ by the definition of the derivative of $g$. And $k \to 0$ because $g$ is continuous at $a$, so $\varphi(k) \to \varphi(0) = 0$ because $\varphi$ is continuous at 0. By the limit laws the right side approaches $\bigl[f'(b) + 0\bigr] \cdot g'(a)$. $\blacksquare$
+
+        Nothing was divided by $k$. The trick, replacing a quotient that might be undefined by a function that has been given a value at the awkward point, is the removal of a removable discontinuity, from the first lesson of this cluster.
+
+        **Using it.** Every use has three moves: name the inner function, differentiate the outer one **leaving the inside alone**, and multiply by the derivative of the inside.
+
+        - $(2x + 1)^3$: outer cube, inner $2x + 1$. $\;3(2x + 1)^2 \cdot 2$.
+        - $(x^2 + 1)^{100}$: outer hundredth power, inner $x^2 + 1$. $\;100(x^2 + 1)^{99} \cdot 2x$.
+        - $\sqrt{x^2 + 1}$: outer square root, with derivative $\dfrac{1}{2\sqrt{u}}$, inner $x^2 + 1$. $\;\dfrac{1}{2\sqrt{x^2 + 1}} \cdot 2x = \dfrac{x}{\sqrt{x^2 + 1}}$.
+        - $\dfrac{1}{(3x + 2)^2} = (3x + 2)^{-2}$: $\;-2(3x + 2)^{-3} \cdot 3 = -\dfrac{6}{(3x + 2)^3}$.
+
+        The first of these answers the puzzle. The factor of 2 is the derivative of the inside.
+
+        The general pattern for a power of a function is worth stating by itself, since it is used so often:
+
+        $$\frac{d}{dx}\,\bigl[g(x)\bigr]^n = n\,\bigl[g(x)\bigr]^{n-1} \cdot g'(x).$$
+
+        **Longer chains.** If $y$ depends on $v$, $v$ on $u$ and $u$ on $x$, apply the rule twice:
+
+        $$\frac{dy}{dx} = \frac{dy}{dv} \cdot \frac{dv}{du} \cdot \frac{du}{dx}.$$
+
+        One factor for each link, each taken at the value that actually flows through that link. For $y = \sqrt{(2x + 1)^3 + 1}$ at $x = 0$: $u = 2x + 1 = 1$, then $v = u^3 + 1 = 2$, then $y = \sqrt{v}$. The three local rates are $2$, then $3u^2 = 3$, then $\dfrac{1}{2\sqrt{v}} = \dfrac{1}{2\sqrt{2}}$. The derivative is their product, $\dfrac{6}{2\sqrt{2}} \approx 2.12$.
+
+        **A chain as a computation.** This suggests a way to organise the work that scales to chains of any length, and it is how machines do it.
+
+        1. **Forward pass.** Starting from the input, compute the value at every link in order, and keep them all.
+        2. **Local rates.** At each link, work out the derivative of that step at the value that entered it.
+        3. **Multiply.** The derivative of the whole chain is the product of the local rates.
+
+        As code, with a chain given as a list of pairs, each a function and its derivative:
+
+        ```python
+        def chain_derivative(steps, x):
+            value = x
+            rate = 1
+            for f, df in steps:
+                rate = rate * df(value)
+                value = f(value)
+            return (value, rate)
+        ```
+
+        The line `rate = rate * df(value)` is the chain rule, and it must come **before** `value = f(value)`, because the local rate of a step is taken at the value going into it. This version multiplies the rates as it goes forward, which is what the `Dual` class of the last lesson does. The product can equally be taken in the other order, starting from the last link and working back to the first, once the forward pass has stored the values. Multiplication of numbers does not care about order, so the answer is the same. That backward order is called **backpropagation**. For a single chain there is nothing to choose between the two. When a function has many inputs and one output, the backward order computes the rate with respect to **every** input in one sweep, and that is the situation in training a model.
+    - question:
+        id: order-passes
+        type: order
+        system: s2
+        prompt: |
+          Put the steps in order to find the derivative of $y = (x^2 + 1)^3$ at $x = 1$ by a forward pass followed by a backward pass.
+        steps:
+          - "Forward: compute the inner value $u = x^2 + 1 = 2$."
+          - "Forward: compute the output $y = u^3 = 8$."
+          - "Backward: the local rate of the last step at its input is $\\dfrac{dy}{du} = 3u^2 = 12$."
+          - "Backward: the local rate of the first step at its input is $\\dfrac{du}{dx} = 2x = 2$."
+          - "Multiply: $\\dfrac{dy}{dx} = 12 \\cdot 2 = 24$."
+        explanation: The forward pass must come first, in the order of the computation, because each local rate is evaluated at a value that the forward pass produces. The outer rate needs u = 2, which is known only after the inner step has run. The backward pass then visits the steps from the output towards the input and multiplies.
+        hints:
+          - The values must be computed before any rate that depends on them.
+          - The forward pass runs from the input to the output.
+          - The backward pass starts at the last step.
+    - text: |
+        **The derivative of an inverse.** In the cluster on functions, an inverse $g$ of $f$ undid what $f$ did: $f(g(y)) = y$ for every $y$. Differentiate both sides of that identity with respect to $y$. The right side gives 1. The left, by the chain rule, gives $f'(g(y)) \cdot g'(y)$. So
+
+        $$g'(y) = \frac{1}{f'\bigl(g(y)\bigr)},$$
+
+        provided $f'$ is not 0 there. **The rate of the inverse is the reciprocal of the rate of the original**, taken at the matching point. That is what exchange rates do: if a euro buys 90 rupees, a rupee buys one ninetieth of a euro. On a graph the inverse is the reflection in the line $y = x$, which turns a slope of $m$ into a slope of $\dfrac{1}{m}$.
+
+        Check it on a case you know. $f(x) = x^2$ for $x > 0$ has the inverse $g(y) = \sqrt{y}$, and $f'(x) = 2x$. So $g'(y) = \dfrac{1}{2\sqrt{y}}$, which is what the conjugate trick gave two lessons ago. (This argument assumes that $g$ is differentiable. That it is, wherever $f'$ is not zero, is a theorem of real analysis.)
+
+        **Rational powers.** The same idea finishes the power rule for fractions. Let $y = x^{p/q}$ with $p$ and $q$ whole numbers and $x > 0$. Then $y^q = x^p$. Differentiate both sides with respect to $x$, using the chain rule on the left, where $y$ is a function of $x$:
+
+        $$q\,y^{q-1} \cdot \frac{dy}{dx} = p\,x^{p-1}.$$
+
+        Solve for the derivative and substitute $y = x^{p/q}$:
+
+        $$\frac{dy}{dx} = \frac{p\,x^{p-1}}{q\,y^{q-1}} = \frac{p}{q} \cdot \frac{x^{p-1}}{x^{p - p/q}} = \frac{p}{q}\,x^{p/q - 1}.$$
+
+        The exponent comes down in front and drops by one. The power rule holds for every rational exponent. Differentiating an equation that defines $y$ without solving for it first is called **implicit differentiation**, and it is the chain rule and nothing else.
+
+        **The chain rule and dual numbers.** A `Dual` carries a value and a rate. To apply a function $f$ to one, give back the value $f(u)$ and the rate $f'(u) \cdot u'$: the local rate of $f$ times the rate that came in. For a power:
+
+        ```python
+        def power(u, n):
+            return Dual(u.value ** n, n * u.value ** (n - 1) * u.rate)
+        ```
+
+        The factor `u.rate` at the end is the derivative of the inside. Leave it off and you have made the mistake of the puzzle.
+
+        **How it goes wrong.**
+
+        | Mistake | Example | Correct |
+        | --- | --- | --- |
+        | Forgetting the inner derivative | $\bigl[(2x + 1)^3\bigr]' = 3(2x + 1)^2$ | $3(2x + 1)^2 \cdot 2$ |
+        | Outer rate at the wrong place | $\bigl[(x^2 + 1)^3\bigr]' = 3x^2 \cdot 2x$ | $3(x^2 + 1)^2 \cdot 2x$ |
+        | Differentiating the inside as well as multiplying by it | $3(2)^2 \cdot 2$ | the inside is left alone in the outer derivative |
+        | Using it on a product | $(x^2 \cdot x^3)' = 2x \cdot 3x^2$ | a product is not a composition: use the product rule |
+    - question:
+        id: derivation-naive-proof
+        type: choice
+        system: s2
+        prompt: |
+          The short proof of the chain rule multiplies and divides by $k = g(a + h) - g(a)$. For which inner function does that argument visibly break down?
+        options:
+          - "$g(x) = 2x + 1$"
+          - "$g(x) = 5$, a constant"
+          - "$g(x) = x^3 + x$"
+          - "It never breaks down."
+        answer: 1
+        explanation: |
+          For a constant inner function $k = 5 - 5 = 0$ for every $h$, so the short proof divides by zero at every step. The chain rule is still true there: $f(g(x)) = f(5)$ is constant, with derivative 0, and the rule gives $f'(5) \cdot 0 = 0$. The theorem holds and that particular proof does not establish it. For the two other functions $k \ne 0$ whenever $h \ne 0$ is small, and the short proof is fine. A proof must cover every case its theorem claims, which is why the honest proof avoids dividing by $k$.
+        hints:
+          - The short proof divides by k. When is k equal to 0?
+          - What is g(a + h) - g(a) when g never changes?
+          - Is the chain rule itself false in that case, or only the proof?
+  formal:
+    - text: |
+        **Chain rule.** If $g$ is differentiable at $a$ and $f$ is differentiable at $g(a)$, then $(f \circ g)'(a) = f'\bigl(g(a)\bigr) \cdot g'(a)$. With $u = g(x)$ and $y = f(u)$: $\ \dfrac{dy}{dx} = \dfrac{dy}{du} \cdot \dfrac{du}{dx}$.
+
+        **Power of a function.** $\dfrac{d}{dx}\,\bigl[g(x)\bigr]^n = n\,\bigl[g(x)\bigr]^{n-1} \cdot g'(x)$.
+
+        **Longer chains.** One factor for each link, each evaluated at the value entering that link: $\dfrac{dy}{dx} = \dfrac{dy}{dv} \cdot \dfrac{dv}{du} \cdot \dfrac{du}{dx}$.
+
+        **Inverse functions.** If $g$ is the inverse of $f$ and $f'(g(y)) \ne 0$, then $g'(y) = \dfrac{1}{f'\bigl(g(y)\bigr)}$.
+
+        **Power rule for rational exponents.** $\dfrac{d}{dx}\,x^r = r\,x^{r-1}$ for every rational $r$ and $x > 0$.
+
+        **Dual numbers.** Applying $f$ to the pair $(u, u')$ gives $\bigl(f(u),\ f'(u) \cdot u'\bigr)$.
+
+        | Function | Derivative |
+        | --- | --- |
+        | $(2x + 1)^3$ | $6(2x + 1)^2$ |
+        | $(x^2 + 1)^{100}$ | $200x\,(x^2 + 1)^{99}$ |
+        | $\sqrt{x^2 + 1}$ | $\dfrac{x}{\sqrt{x^2 + 1}}$ |
+        | $(3x + 2)^{-2}$ | $-6(3x + 2)^{-3}$ |
+  drill:
+    - text: Seconds each. Outer derivative with the inside left alone, times the derivative of the inside.
+    - question:
+        id: drill-rates
+        type: numeric
+        system: s1
+        prompt: |
+          $\dfrac{du}{dx} = 2$ and $\dfrac{dy}{du} = 5$. What is $\dfrac{dy}{dx}$?
+        answer: "10"
+        explanation: Rates multiply along a chain.
+        hints:
+          - Think of exchange rates.
+          - Multiply the two.
+    - question:
+        id: drill-three-links
+        type: numeric
+        system: s1
+        prompt: |
+          A chain has three links with local rates 2, 3 and 4. What is the rate of the whole chain?
+        answer: "24"
+        explanation: One factor for each link, all multiplied together.
+        hints:
+          - One factor per link.
+          - Multiply all three.
+    - question:
+        id: drill-linear-inside
+        type: numeric
+        system: s1
+        prompt: |
+          $y = (3x + 1)^2$. What is $\dfrac{dy}{dx}$ at $x = 1$?
+        answer: "24"
+        explanation: |
+          $2(3x + 1) \cdot 3$. At $x = 1$ the bracket is 4, giving $2 \cdot 4 \cdot 3$.
+        hints:
+          - The outer function is a square and the inner is 3x + 1.
+          - Do not forget the derivative of the inside, which is 3.
+    - question:
+        id: drill-quadratic-inside
+        type: numeric
+        system: s1
+        prompt: |
+          $y = (x^2 + 1)^2$. What is $\dfrac{dy}{dx}$ at $x = 2$?
+        answer: "40"
+        explanation: |
+          $2(x^2 + 1) \cdot 2x$. At $x = 2$: $2 \cdot 5 \cdot 4$.
+        hints:
+          - Outer square, inner x squared plus 1.
+          - The inner derivative is 2x.
+    - question:
+        id: drill-which-inner
+        type: choice
+        system: s1
+        prompt: |
+          In $y = \sqrt{5x - 2}$, which is the inner function?
+        options: ["the square root", "$5x - 2$", "$5x$", "$x$"]
+        answer: 1
+        explanation: The inner function is what is computed first, the thing under the root. The square root is then applied to it.
+        hints:
+          - Which is computed first when you put a number in?
+          - The outer function is applied last.
+    - question:
+        id: drill-where
+        type: choice
+        system: s1
+        prompt: |
+          In the chain rule $(f \circ g)'(a) = f'(\,?\,) \cdot g'(a)$, where is $f'$ evaluated?
+        options: ["at $a$", "at $g(a)$", "at $f(a)$", "at $g'(a)$"]
+        answer: 1
+        explanation: The outer function receives g(a) as its input, so its rate is taken there.
+        hints:
+          - What value actually enters the outer function?
+          - The outer function never sees a itself.
+    - question:
+        id: drill-root
+        type: numeric
+        system: s1
+        prompt: |
+          $y = \sqrt{4x + 1}$. What is $\dfrac{dy}{dx}$ at $x = 2$? Answer as a fraction.
+        answer: "2/3"
+        explanation: |
+          $\dfrac{1}{2\sqrt{4x + 1}} \cdot 4$. At $x = 2$ the root is 3, giving $\dfrac{4}{6}$.
+        hints:
+          - The derivative of the square root is 1 over twice the root.
+          - Multiply by the derivative of the inside, 4.
+    - question:
+        id: drill-inverse
+        type: choice
+        system: s1
+        prompt: |
+          $f(2) = 8$ and $f'(2) = 12$. If $g$ is the inverse of $f$, what is $g'(8)$?
+        options: ["$12$", "$\\dfrac{1}{12}$", "$\\dfrac{1}{8}$", "$-12$"]
+        answer: 1
+        explanation: The rate of the inverse is the reciprocal of the rate of the original at the matching point. The point 8 for g matches the point 2 for f.
+        hints:
+          - The inverse undoes f, so its rate is the reciprocal.
+          - Which point of f corresponds to the output 8?
+    - question:
+        id: drill-forgot
+        type: choice
+        system: s1
+        prompt: |
+          Someone writes $\dfrac{d}{dx}(5x + 3)^4 = 4(5x + 3)^3$. What is missing?
+        options:
+          - "Nothing. It is correct."
+          - "A factor of 5, the derivative of the inside."
+          - "A factor of 3."
+          - "The exponent should be 4, not 3."
+        answer: 1
+        explanation: The outer derivative has been taken correctly, and the derivative of the inner function 5x + 3 has been left out.
+        hints:
+          - What is the inner function?
+          - What is its derivative?
+    - question:
+        id: drill-rational-power
+        type: numeric
+        system: s1
+        prompt: |
+          $f(x) = x^{3/2}$. What is $f'(4)$?
+        answer: "3"
+        explanation: |
+          $\tfrac{3}{2}x^{1/2}$, and the square root of 4 is 2.
+        hints:
+          - The power rule works for fractions.
+          - Three halves, less one, is one half.
+    - question:
+        id: predict-local-rates
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          x = 1
+          u = x * x + 1
+          y = u ** 3
+          du_dx = 2 * x
+          dy_du = 3 * u ** 2
+          print(u, y, dy_du * du_dx)
+        output: "2 8 24"
+        explanation: The forward pass gives u = 2 and y = 8. The outer rate 3u² is taken at u = 2, giving 12, and the inner rate is 2. Their product is the derivative of the chain.
+        hints:
+          - Compute u first, then y.
+          - The outer rate uses the value of u, not of x.
+    - question:
+        id: predict-chain-loop
+        type: predict
+        system: s1
+        prompt: Each pair is a function and its derivative. What does this show?
+        code: |
+          steps = [(lambda x: 2 * x + 1, lambda x: 2), (lambda u: u ** 3, lambda u: 3 * u ** 2)]
+          value, rate = 0, 1
+          for f, df in steps:
+              rate = rate * df(value)
+              value = f(value)
+          print(value, rate)
+        output: "1 6"
+        explanation: Starting at x = 0, the first step has local rate 2 and produces 1. The second step has local rate 3 × 1² = 3 at its input 1, and produces 1. The rates multiply to 6, the derivative of (2x + 1)³ at 0 that the puzzle found.
+        hints:
+          - Follow value and rate through the loop one step at a time.
+          - The rate is updated before the value, using the value that enters the step.
+  work:
+    - text: Slower now. Name the inner function before you write anything else.
+    - question:
+        id: work-power-chain
+        type: numeric
+        system: s2
+        prompt: |
+          $y = (x^3 - 2)^4$. Find $\dfrac{dy}{dx}$ at $x = 1$.
+        answer: "-12"
+        explanation: |
+          Inner $u = x^3 - 2$, with $\dfrac{du}{dx} = 3x^2$. Outer $u^4$, with rate $4u^3$. So $\dfrac{dy}{dx} = 4(x^3 - 2)^3 \cdot 3x^2$. At $x = 1$: $u = -1$, so $4 \cdot (-1) \cdot 3 = -12$. The output $y$ is positive there, and decreasing.
+        hints:
+          - The inner function is x cubed minus 2. What is it at x = 1?
+          - The outer rate is 4 times the cube of the inner value.
+          - Multiply by the inner derivative 3x squared.
+    - question:
+        id: work-negative-power
+        type: numeric
+        system: s2
+        prompt: |
+          $y = \dfrac{1}{(x^2 + 1)^2}$. Find $\dfrac{dy}{dx}$ at $x = 1$. Answer as a decimal.
+        answer: "-0.5"
+        explanation: |
+          Write $y = (x^2 + 1)^{-2}$. Then $\dfrac{dy}{dx} = -2(x^2 + 1)^{-3} \cdot 2x$. At $x = 1$: $-2 \cdot \dfrac{1}{8} \cdot 2 = -\dfrac{1}{2}$. The quotient rule gives the same, with more work.
+        hints:
+          - Write the function as a negative power of x squared plus 1.
+          - The outer rate is minus 2 times the inner value to the power minus 3.
+          - The inner value is 2 and the inner derivative is 2.
+    - question:
+        id: work-product-and-chain
+        type: numeric
+        system: s2
+        prompt: |
+          $y = x\,(2x + 1)^3$. Find $\dfrac{dy}{dx}$ at $x = 1$.
+        answer: "81"
+        explanation: |
+          A product, one of whose factors is a composition. The product rule gives $1 \cdot (2x + 1)^3 + x \cdot \bigl[3(2x + 1)^2 \cdot 2\bigr]$. At $x = 1$: $27 + 1 \cdot 54 = 81$. The chain rule was needed inside the product rule, for the derivative of the second factor.
+        hints:
+          - Start with the product rule, treating the cube as one factor.
+          - The derivative of the cube needs the chain rule.
+          - At x = 1 the bracket is 3.
+    - question:
+        id: write-dual-power
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `power(u, n)` for the `Dual` class. Given a `Dual` `u` and a whole number `n`, it returns a new `Dual` for $u^n$: the value is `u.value ** n`, and the rate follows the **chain rule**, the local rate of the $n$th power at `u.value` times the rate that `u` already carries.
+
+          The program then differentiates $(2x + 1)^3$ at $x = 0$ and should print `1 6`.
+        starter: |
+          class Dual:
+              def __init__(self, value, rate):
+                  self.value = value
+                  self.rate = rate
+
+              def __add__(self, other):
+                  return Dual(self.value + other.value, self.rate + other.rate)
+
+              def __mul__(self, other):
+                  return Dual(self.value * other.value, self.rate * other.value + self.value * other.rate)
+
+          def power(u, n):
+              # Replace the next line with your own.
+              return Dual(u.value ** n, 0)
+
+          x = Dual(0, 1)
+          y = power(Dual(2, 0) * x + Dual(1, 0), 3)
+          print(y.value, y.rate)
+        solution: |
+          class Dual:
+              def __init__(self, value, rate):
+                  self.value = value
+                  self.rate = rate
+
+              def __add__(self, other):
+                  return Dual(self.value + other.value, self.rate + other.rate)
+
+              def __mul__(self, other):
+                  return Dual(self.value * other.value, self.rate * other.value + self.value * other.rate)
+
+          def power(u, n):
+              return Dual(u.value ** n, n * u.value ** (n - 1) * u.rate)
+
+          x = Dual(0, 1)
+          y = power(Dual(2, 0) * x + Dual(1, 0), 3)
+          print(y.value, y.rate)
+        tests: |
+          _y = power(Dual(2, 1), 3)
+          assert (_y.value, _y.rate) == (8, 12), "x cubed at 2 has value 8 and rate 3 * 4 = 12. You got " + repr((_y.value, _y.rate))
+          _y = power(Dual(5, 2), 2)
+          assert (_y.value, _y.rate) == (25, 20), "If u = 5 changes at rate 2, then u squared changes at rate 2 * 5 * 2 = 20. You got " + repr((_y.value, _y.rate))
+          _y = power(Dual(3, 0), 4)
+          assert (_y.value, _y.rate) == (81, 0), "A constant raised to a power is constant, so its rate is 0. You got " + repr((_y.value, _y.rate))
+          _y = power(power(Dual(2, 1), 2), 3)
+          assert (_y.value, _y.rate) == (64, 192), "(x squared) cubed is x to the sixth, with value 64 and rate 6 * 32 = 192 at 2. You got " + repr((_y.value, _y.rate))
+          _u = Dual(3, 5)
+          _y = power(_u, 1)
+          assert (_y.value, _y.rate) == (3, 5), "The first power of u is u itself, with the same value and rate. You got " + repr((_y.value, _y.rate))
+          assert (_u.value, _u.rate) == (3, 5), "power must return a new Dual and leave u unchanged"
+          assert output.split() == ["1", "6"], "The program should print 1 6"
+        wrong:
+          - "class Dual:\n    def __init__(self, value, rate):\n        self.value = value\n        self.rate = rate\n    def __add__(self, other):\n        return Dual(self.value + other.value, self.rate + other.rate)\n    def __mul__(self, other):\n        return Dual(self.value * other.value, self.rate * other.value + self.value * other.rate)\n\ndef power(u, n):\n    return Dual(u.value ** n, n * u.value ** (n - 1))\n\nprint(1, 6)\n"
+          - "class Dual:\n    def __init__(self, value, rate):\n        self.value = value\n        self.rate = rate\n    def __add__(self, other):\n        return Dual(self.value + other.value, self.rate + other.rate)\n    def __mul__(self, other):\n        return Dual(self.value * other.value, self.rate * other.value + self.value * other.rate)\n\ndef power(u, n):\n    return Dual(u.value ** n, n * u.rate ** (n - 1))\n\nprint(1, 6)\n"
+          - "class Dual:\n    def __init__(self, value, rate):\n        self.value = value\n        self.rate = rate\n    def __add__(self, other):\n        return Dual(self.value + other.value, self.rate + other.rate)\n    def __mul__(self, other):\n        return Dual(self.value * other.value, self.rate * other.value + self.value * other.rate)\n\ndef power(u, n):\n    return Dual(u.value ** n, n * u.value ** n * u.rate)\n\nprint(1, 6)\n"
+          - "class Dual:\n    def __init__(self, value, rate):\n        self.value = value\n        self.rate = rate\n    def __add__(self, other):\n        return Dual(self.value + other.value, self.rate + other.rate)\n    def __mul__(self, other):\n        return Dual(self.value * other.value, self.rate * other.value + self.value * other.rate)\n\ndef power(u, n):\n    return Dual(u.value ** n, u.rate ** n)\n\nprint(1, 6)\n"
+        explanation: |
+          The rate is `n * u.value ** (n - 1) * u.rate`: the local rate of the $n$th power, $n u^{n-1}$, taken at the value that enters it, times the rate already attached to `u`. That final factor is the derivative of the inside. In the program the inside is $2x + 1$, a `Dual` with value 1 and rate 2, and the cube contributes $3 \cdot 1^2 = 3$, so the rate is 6. Without `u.rate` the function would return 3, the wrong answer of the puzzle. Each function applied to a `Dual` needs only its own local rule, and the rates multiply themselves along the chain however long it is.
+        hints:
+          - The local rate of the nth power is n times the value to the power n - 1.
+          - That local rate must be multiplied by the rate u already carries.
+          - Return Dual(u.value ** n, n * u.value ** (n - 1) * u.rate).
+    - question:
+        id: write-gradient-check
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          People who write derivative code by hand check it against a numerical estimate. This is called a **gradient check**.
+
+          Write `chain_check(f, df, g, dg, x)`. Here `f` and `g` are functions and `df` and `dg` are **claimed** to be their derivatives. Compute the chain-rule value $f'(g(x)) \cdot g'(x)$ from the claims, estimate the true derivative of $f(g(x))$ by a central difference with $h = 10^{-5}$, and return `True` if the two are within $10^{-6}$ of each other, `False` otherwise.
+        starter: |
+          def chain_check(f, df, g, dg, x):
+              # Replace the next line with your own.
+              return True
+
+          cube = lambda u: u ** 3
+          inner = lambda x: 2 * x + 1
+          print(chain_check(cube, lambda u: 3 * u ** 2, inner, lambda x: 2, 0.5))
+          print(chain_check(cube, lambda u: 3 * u ** 2, inner, lambda x: 1, 0.5))
+        solution: |
+          def chain_check(f, df, g, dg, x):
+              h = 1e-5
+              estimate = (f(g(x + h)) - f(g(x - h))) / (2 * h)
+              return abs(estimate - df(g(x)) * dg(x)) < 1e-6
+
+          cube = lambda u: u ** 3
+          inner = lambda x: 2 * x + 1
+          print(chain_check(cube, lambda u: 3 * u ** 2, inner, lambda x: 2, 0.5))
+          print(chain_check(cube, lambda u: 3 * u ** 2, inner, lambda x: 1, 0.5))
+        tests: |
+          _cube = lambda u: u ** 3
+          _dcube = lambda u: 3 * u ** 2
+          _lin = lambda x: 2 * x + 1
+          _sq = lambda x: x * x
+          assert chain_check(_cube, _dcube, _lin, lambda x: 2, 0.5) is True, "(2x + 1) cubed with the correct derivatives must pass the check"
+          assert chain_check(_cube, _dcube, _lin, lambda x: 1, 0.5) is False, "With the inner derivative wrongly claimed to be 1, the check must fail"
+          assert chain_check(_cube, _dcube, _sq, lambda x: 2 * x, 2) is True, "(x squared) cubed at 2 has derivative 3 * 16 * 4 = 192. The outer derivative must be taken at g(x), not at x."
+          assert chain_check(_cube, _dcube, _lin, lambda x: 4, 0.5) is False, "A claimed derivative that is too large must fail as well. Compare the distance between the two numbers."
+          assert chain_check(_cube, lambda u: u ** 2, _lin, lambda x: 2, 0.5) is False, "With the outer derivative wrongly claimed to be u squared, the check must fail"
+          assert chain_check(lambda u: 5 * u, lambda u: 5, lambda x: 7 * x, lambda x: 7, 3) is True, "5 * (7x) has derivative 35 everywhere"
+          assert output.split() == ["True", "False"], "The program should print True and then False"
+        wrong:
+          - "def chain_check(f, df, g, dg, x):\n    return True\n\nprint(True)\nprint(False)\n"
+          - "def chain_check(f, df, g, dg, x):\n    h = 1e-5\n    estimate = (f(g(x + h)) - f(g(x - h))) / (2 * h)\n    return abs(estimate - df(x) * dg(x)) < 1e-6\n\nprint(True)\nprint(False)\n"
+          - "def chain_check(f, df, g, dg, x):\n    h = 1e-5\n    estimate = (f(g(x + h)) - f(g(x - h))) / (2 * h)\n    return estimate - df(g(x)) * dg(x) < 1e-6\n\nprint(True)\nprint(False)\n"
+          - "def chain_check(f, df, g, dg, x):\n    h = 1e-5\n    estimate = (f(g(x + h)) - f(g(x))) / h\n    return abs(estimate - df(g(x)) * dg(x)) < 1e-6\n\nprint(True)\nprint(False)\n"
+        explanation: |
+          Two numbers are computed by entirely different routes and compared. The estimate treats $f(g(x))$ as a black box and measures its slope with a symmetric chord. The claimed value assembles the derivative from the pieces by the chain rule, `df(g(x)) * dg(x)`, with the outer derivative taken at $g(x)$. If the pieces are right, the two agree to many digits. If either claimed derivative is wrong, they differ plainly. A central difference is needed, because a forward difference is itself wrong by about $10^{-5}$ times half the second derivative, far more than the tolerance. This check is slow and approximate, and nobody trains a model with it. Its job is to catch mistakes in fast, exact derivative code, and it is run on every serious implementation.
+        hints:
+          - Estimate the derivative of the composition with (f(g(x + h)) - f(g(x - h))) / (2 * h).
+          - The chain rule value is df(g(x)) * dg(x).
+          - Return whether the absolute difference of the two is below 1e-6.
+    - question:
+        id: fix-backward
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `backward(steps, x)` computes the derivative of a chain in the backward order. A forward pass stores every value: `values[0]` is the input, and `values[i + 1]` is the output of step `i`. Then the steps are visited from last to first, multiplying their local rates.
+
+          For $(2x + 1)^3$ at $x = 1$ it should print `(27, 54)`, and it prints `(27, 4374)`. One local rate is being taken at the wrong value. Fix it.
+        starter: |
+          def backward(steps, x):
+              values = [x]
+              for f, df in steps:
+                  values.append(f(values[-1]))
+              rate = 1
+              for i in range(len(steps) - 1, -1, -1):
+                  f, df = steps[i]
+                  rate = rate * df(values[i + 1])
+              return (values[-1], rate)
+
+          steps = [(lambda x: 2 * x + 1, lambda x: 2), (lambda u: u ** 3, lambda u: 3 * u ** 2)]
+          print(backward(steps, 1))
+        solution: |
+          def backward(steps, x):
+              values = [x]
+              for f, df in steps:
+                  values.append(f(values[-1]))
+              rate = 1
+              for i in range(len(steps) - 1, -1, -1):
+                  f, df = steps[i]
+                  rate = rate * df(values[i])
+              return (values[-1], rate)
+
+          steps = [(lambda x: 2 * x + 1, lambda x: 2), (lambda u: u ** 3, lambda u: 3 * u ** 2)]
+          print(backward(steps, 1))
+        tests: |
+          _s = [(lambda x: 2 * x + 1, lambda x: 2), (lambda u: u ** 3, lambda u: 3 * u ** 2)]
+          assert backward(_s, 1) == (27, 54), "(2x + 1) cubed at 1 has value 27 and derivative 3 * 9 * 2 = 54. You returned " + repr(backward(_s, 1))
+          assert backward(_s, 0) == (1, 6), "(2x + 1) cubed at 0 has value 1 and derivative 6. You returned " + repr(backward(_s, 0))
+          _t = [(lambda x: x * x, lambda x: 2 * x), (lambda u: u ** 3, lambda u: 3 * u ** 2)]
+          assert backward(_t, 2) == (64, 192), "(x squared) cubed at 2 has value 64 and derivative 192. You returned " + repr(backward(_t, 2))
+          _three = [(lambda x: x + 1, lambda x: 1), (lambda u: u * u, lambda u: 2 * u), (lambda v: 3 * v, lambda v: 3)]
+          assert backward(_three, 2) == (27, 18), "3 (x + 1) squared at 2 has value 27 and derivative 6 * 3 = 18. You returned " + repr(backward(_three, 2))
+          assert backward([], 5) == (5, 1), "An empty chain leaves the input alone, with rate 1"
+          assert output.strip() == "(27, 54)", "The program should print (27, 54)"
+        wrong:
+          - "def backward(steps, x):\n    values = [x]\n    for f, df in steps:\n        values.append(f(values[-1]))\n    rate = 1\n    for i in range(len(steps) - 1, -1, -1):\n        f, df = steps[i]\n        rate = rate * df(values[i + 1])\n    return (values[-1], rate)\n\nprint((27, 54))\n"
+          - "def backward(steps, x):\n    values = [x]\n    for f, df in steps:\n        values.append(f(values[-1]))\n    rate = 1\n    for i in range(len(steps) - 1, -1, -1):\n        f, df = steps[i]\n        rate = rate * df(x)\n    return (values[-1], rate)\n\nprint((27, 54))\n"
+          - "def backward(steps, x):\n    values = [x]\n    for f, df in steps:\n        values.append(f(values[-1]))\n    rate = 1\n    for i in range(len(steps) - 1, -1, -1):\n        f, df = steps[i]\n        rate = rate + df(values[i])\n    return (values[-1], rate)\n\nprint((27, 54))\n"
+        explanation: |
+          The local rate of a step is its derivative **at the value that went into it**. Step `i` received `values[i]` and produced `values[i + 1]`. The starter evaluated each derivative at the step's output instead, so the cube's rate was computed at 27 where it should have been at 3: $3 \cdot 27^2 = 2187$ in place of $3 \cdot 3^2 = 27$. This is the second row of the table of mistakes, in code. At $x = 0$ the bug happens to be invisible, because there the cube's input and output are both 1. A test at a single convenient point can pass by coincidence, which is why the tests try several. Notice also why the forward pass had to store every value: the backward pass needs them all, in reverse order. That stored list is the memory cost of backpropagation.
+        hints:
+          - Which value entered step i, values[i] or values[i + 1]?
+          - A local rate is evaluated at the input of its step.
+          - Change the index inside df(...).
+    - question:
+        id: work-inverse-derivative
+        type: numeric
+        system: s2
+        prompt: |
+          $f(x) = x^3 + x$ is increasing and has an inverse $g$. Since $f(1) = 2$, we have $g(2) = 1$. What is $g'(2)$? Answer as a decimal.
+        answer: "0.25"
+        explanation: |
+          $g'(y) = \dfrac{1}{f'(g(y))}$. Here $g(2) = 1$ and $f'(x) = 3x^2 + 1$, so $f'(1) = 4$ and $g'(2) = \dfrac{1}{4}$. Nobody can write a tidy formula for this inverse, and its derivative at the point was found all the same, from the derivative of $f$ alone.
+        hints:
+          - The rate of the inverse is the reciprocal of the rate of f at the matching point.
+          - The point 2 for g matches the point 1 for f.
+          - Find f'(1).
+    - question:
+        id: work-vanishing
+        type: choice
+        system: s2
+        prompt: |
+          A chain has 50 links, and at the present input every link has a local rate of 0.5. What is the derivative of the output with respect to the input, and what does that mean for training by small steps?
+        options:
+          - "$25$, since the rates add. Training works well."
+          - "$0.5^{50} \\approx 10^{-15}$. A change in the input has almost no effect on the output, so a method that follows the derivative gets almost no signal about how to adjust the early links."
+          - "$0.5$, since every link is the same."
+          - "$50^{0.5} \\approx 7$."
+        answer: 1
+        explanation: |
+          Rates multiply along a chain, so fifty rates of 0.5 give $0.5^{50}$, about $9 \times 10^{-16}$. If each rate were 2 the product would be $2^{50}$, about $10^{15}$. A long chain makes the overall derivative either minute or enormous unless the local rates are kept close to 1. In deep networks these are the problems of **vanishing and exploding gradients**, and much of the design of modern networks, how they are initialised, normalised and wired with shortcut connections, exists to keep the product of local rates near 1. All of that follows from the single fact that rates multiply.
+        hints:
+          - Do rates add or multiply along a chain?
+          - What happens to a number below 1 when it is raised to a high power?
+          - If the derivative is nearly 0, how much does the output respond to a nudge?
+  connections:
+    - text: |
+        The puzzle asked where the factor of 2 came from in the derivative of $(2x + 1)^3$. It is the rate of the inner function. A composition is a chain of machines, each multiplying small changes by its own local rate, and the rate of the whole chain is the product, with each local rate taken at the value that actually enters its link. The chain rule completes the set: with it and the rules of the last lesson you can differentiate any function built from powers by any sequence of adding, multiplying, dividing and composing.
+
+        You also saw the rule do things that are not obviously compositions. Differentiating the identity $f(g(y)) = y$ gave the derivative of an inverse as a reciprocal. Differentiating $y^q = x^p$ gave the power rule for every rational exponent. Both tricks return at once in the next lesson, [[m10.derivatives-of-exp-log-and-trig]], where the logarithm is differentiated as the inverse of the exponential, and where the functions $e^x$, $\ln x$, $\sin x$ and $\cos x$ finally get their derivatives. After that, anything you can write down you can differentiate.
+
+        The rule of this lesson is, without exaggeration, the reason deep learning works. A network is a composition of layers. Its error is one more function applied to its output. To train it one needs the rate of change of the error with respect to every number in every layer, and the chain rule supplies all of them: a forward pass to compute and store the values, then a backward pass multiplying local rates from the output towards the input. You wrote both passes today for a chain of single numbers.
+
+        Three things are needed to turn today's code into the real thing, and each has its place later in the course. The links of a real network take many numbers in and give many out, so each local rate becomes a table of rates and the products become products of tables, in [[m12.multivariable-chain-rule]]. The computation is a branching graph and not a single chain, and organising the backward pass over a graph efficiently is [[m13.reverse-mode-differentiation-and-its-cost]] and [[l5.backpropagation-on-an-arbitrary-graph]]. And the check you wrote, comparing a chain-rule derivative with a central difference, grows into a standard tool, [[e6.gradient-checking]]. The idea in all of them is the one in this lesson: rates multiply along a chain.

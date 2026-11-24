@@ -1,0 +1,678 @@
+concept: m10.fundamental-theorem-of-calculus
+minutes: 95
+claim: You can explain why the rate of change of an accumulated area is the height of the curve, state both parts of the fundamental theorem of calculus, find antiderivatives by reading the table of derivatives backwards, evaluate definite integrals as a difference of two values, and recognise when the theorem does not apply.
+recalls: [m10.integral-as-accumulation]
+uses: [m10.derivative-as-slope-and-rate, m10.differentiation-rules, m10.derivatives-of-exp-log-and-trig, m10.chain-rule, m10.limits-and-continuity, m10.maxima-and-minima, m2.summation-and-product-notation, m2.sequences-and-series, m1.polynomials, m1.logarithms, e0.functions, e0.loops, e0.lists-and-tuples, e1.comprehensions-and-iterators, e1.modules-and-imports]
+leads: [m10.integration-techniques, m11.differentiability-and-the-mean-value-theorem, m11.the-riemann-integral, m12.multiple-integrals-and-change-of-variables]
+starter: |
+  # Scratch space. Running totals, and the differences between neighbours.
+  values = [3, 1, 4, 1, 5]
+
+  totals = []
+  total = 0
+  for v in values:
+      total = total + v
+      totals.append(total)
+  print(totals)
+
+  steps = [totals[0]] + [totals[i + 1] - totals[i] for i in range(len(totals) - 1)]
+  print(steps)
+parts:
+  recall:
+    - text: |
+        [[m10.integral-as-accumulation]] defined the integral as a limit of sums of thin slices, and found two exact values the hard way, with formulas for $\sum i$ and $\sum i^2$. It ended on a coincidence: each answer turned out to be a function whose derivative was the thing being integrated. Three quick pulls first.
+    - question:
+        id: recall-signed
+        type: numeric
+        system: s1
+        concepts: [m10.integral-as-accumulation]
+        prompt: |
+          What is $\displaystyle\int_0^4 x\,dx$?
+        answer: "8"
+        explanation: A triangle with base 4 and height 4.
+        hints:
+          - The region is a triangle.
+          - Half the base times the height.
+    - question:
+        id: recall-additivity
+        type: numeric
+        system: s1
+        concepts: [m10.integral-as-accumulation]
+        prompt: |
+          $\displaystyle\int_0^5 f(x)\,dx = 12$ and $\displaystyle\int_0^2 f(x)\,dx = 5$. What is $\displaystyle\int_2^5 f(x)\,dx$?
+        answer: "7"
+        explanation: The integral from 0 to 5 is the integral from 0 to 2 plus the integral from 2 to 5.
+        hints:
+          - The intervals from 0 to 2 and from 2 to 5 join to make 0 to 5.
+          - Subtract.
+    - question:
+        id: recall-derivative
+        type: choice
+        system: s1
+        concepts: [m10.differentiation-rules]
+        prompt: |
+          What is the derivative of $\dfrac{x^3}{3}$?
+        options: ["$x^2$", "$3x^2$", "$\\dfrac{x^2}{3}$", "$\\dfrac{x^4}{12}$"]
+        answer: 0
+        explanation: The power rule brings down the 3, which cancels the 3 underneath.
+        hints:
+          - Bring down the exponent and lower it by one.
+          - The 3 on top cancels the 3 underneath.
+  puzzle:
+    - text: |
+        In the last lesson the area under $y = x^2$ from 0 to 3 came out as 9, after a page of algebra with $\sum i^2$. Suppose you now want
+
+        $$\int_0^3 x^5\,dx.$$
+
+        The same route needs a formula for $1^5 + 2^5 + \dots + n^5$. There is one, and it is ugly. For $\int_0^{\pi} \sin x\,dx$ you would need a formula for a sum of sines. For $\int_0^1 e^x\,dx$, something else again. Every new function seems to demand a new trick.
+
+        And yet both answers so far fit a pattern that involves no summing at all.
+
+        | Integrand | Integral from 0 to 3 | The same number, differently |
+        | --- | --- | --- |
+        | $10t$ | $45$ | $5t^2$ at $t = 3$, and $(5t^2)' = 10t$ |
+        | $x^2$ | $9$ | $\frac{x^3}{3}$ at $x = 3$, and $\left(\frac{x^3}{3}\right)' = x^2$ |
+
+        In each row the integral is the value of a function whose **derivative** is the integrand.
+
+        **Is that a coincidence? If it is not, why should adding up thin slices have anything to do with finding slopes? And can it be used to compute $\int_0^3 x^5\,dx$ without summing anything?**
+  intuition:
+    - text: |
+        Start with lists, where nothing is hidden. Run the starter. From the values `[3, 1, 4, 1, 5]` it builds the running totals `[3, 4, 8, 9, 14]`. Then it takes the differences between neighbouring totals, and gets `[3, 1, 4, 1, 5]`. The original list is back.
+
+        Of course it is. A running total grows, at each step, by the value just added. So the amount by which it grows from one entry to the next **is** that value. Summing and differencing undo each other.
+
+        There is a second fact in the same list. Suppose you want the sum of the last three values, $4 + 1 + 5$. You could add them. Or you could look at the running totals and subtract: $14 - 4 = 10$. The total up to the end, minus the total up to just before the stretch you want. **A sum over a stretch is a difference of two running totals**, however long the stretch.
+
+        Now carry both facts over to a curve. An integral is a sum of slices, so the running total is the **area gathered so far**. Fix a starting point and let the right-hand end move: call the area from the start up to $x$ by the name $A(x)$. That is a function of $x$. As $x$ moves right it sweeps out more area.
+
+        How fast does $A$ grow? Move $x$ on by a small step $h$. The new area is a thin strip. Its width is $h$ and its height is the height of the curve there, $f(x)$. So $A$ grows by about $f(x) \cdot h$, and its rate of growth, growth per unit step, is $f(x)$.
+
+        **The rate at which area is gathered is the height of the curve at the moving edge.** Where the curve is high, the area grows fast. Where it is at zero, the area stands still. Where it is below the axis, the area shrinks.
+
+        The figure shows a rate $f(t) = 3 - t$ above, and below it the area gathered from 0 up to $x$. Move $x$ and compare the slope of the lower graph with the height of the upper one.
+    - figure: accumulation
+      props: { x: 2 }
+    - text: |
+        While the rate is positive the total climbs, steeply at first and then more gently as the rate falls. At $x = 3$ the rate is zero and the total is at its peak, 4.5. Beyond 3 the rate is negative and the total comes down. The lower graph is at a stationary point exactly where the upper one crosses zero, as the last lesson but one would predict of a function whose derivative is the upper graph.
+  derivation:
+    - text: |
+        **The area function.** Let $f$ be continuous, fix $a$, and define
+
+        $$A(x) = \int_a^x f(t)\,dt.$$
+
+        The variable inside is called $t$ because $x$ is now in use as the upper limit.
+
+        **The fundamental theorem of calculus, first part.** $A$ is differentiable, and
+
+        $$A'(x) = f(x).$$
+
+        *Proof.* By additivity over intervals, $A(x + h) - A(x) = \int_x^{x+h} f(t)\,dt$: the area of the strip from $x$ to $x + h$. Take $h > 0$. Let $m_h$ and $M_h$ be the least and greatest values of $f$ on that strip. By the comparison rule,
+
+        $$m_h \cdot h \;\le\; A(x + h) - A(x) \;\le\; M_h \cdot h, \qquad\text{so}\qquad m_h \le \frac{A(x + h) - A(x)}{h} \le M_h.$$
+
+        The middle is the difference quotient of $A$. Now let $h \to 0$. The strip shrinks to the single point $x$, and since $f$ is continuous, its least and greatest values on the strip both tend to $f(x)$. The difference quotient is trapped between two quantities with the same limit, so it has that limit too. The case $h < 0$ is the same with the inequalities reversed. $\blacksquare$
+
+        Continuity was used at exactly one place, and it is essential there: it is what says that the strip's height is nearly $f(x)$ all the way across.
+
+        **Antiderivatives.** A function $F$ with $F'(x) = f(x)$ is called an **antiderivative** of $f$. The theorem says that every continuous function has one, namely its own area function. But there are others. $\frac{x^3}{3}$ is an antiderivative of $x^2$, and so are $\frac{x^3}{3} + 7$ and $\frac{x^3}{3} - 100$, because a constant differentiates to zero.
+
+        That is the only freedom there is. If $F$ and $G$ are both antiderivatives of $f$ on an interval, then $(F - G)' = f - f = 0$ everywhere, and a function whose rate of change is zero everywhere on an interval does not change: it is a constant. This is as obvious as it sounds, and it is also a theorem that needs proof, which it receives in [[m11.differentiability-and-the-mean-value-theorem]]. So **any two antiderivatives of the same function differ by a constant**.
+
+        **The fundamental theorem of calculus, second part.** If $F$ is any antiderivative of a continuous $f$ on $[a, b]$, then
+
+        $$\int_a^b f(x)\,dx = F(b) - F(a).$$
+
+        *Proof.* $A(x) = \int_a^x f$ is an antiderivative of $f$, by the first part. So is $F$. Therefore $A(x) = F(x) + C$ for some constant $C$. At $x = a$ the area gathered is zero, $A(a) = 0$, so $C = -F(a)$. Then $A(b) = F(b) - F(a)$, and $A(b)$ is $\int_a^b f$. $\blacksquare$
+
+        The difference $F(b) - F(a)$ is written $\bigl[F(x)\bigr]_a^b$.
+
+        This answers the puzzle. The pattern in the table was not a coincidence: it was this theorem. And now
+
+        $$\int_0^3 x^5\,dx = \left[\frac{x^6}{6}\right]_0^3 = \frac{729}{6} - 0 = 121.5,$$
+
+        because the derivative of $\frac{x^6}{6}$ is $x^5$. No slices, no sum of fifth powers, no limit. A limit of sums of thousands of slices has been replaced by one subtraction. It does not matter which antiderivative is used: with $\frac{x^6}{6} + C$ the constant appears in both $F(b)$ and $F(a)$ and cancels.
+
+        Compare with the lists. The running totals were the area function. The differences that gave the list back were the first part. The sum over a stretch as a difference of two totals was the second part.
+
+        **A table of antiderivatives.** Finding an antiderivative means answering the question "what has this as its derivative?" Every line of the table of derivatives, read from right to left, is an answer.
+
+        | $f(x)$ | An antiderivative $F(x)$ | Because |
+        | --- | --- | --- |
+        | $x^n$, $n \ne -1$ | $\dfrac{x^{n+1}}{n + 1}$ | the power rule brings down $n + 1$ |
+        | $\dfrac{1}{x}$, for $x > 0$ | $\ln x$ | $(\ln x)' = \frac{1}{x}$ |
+        | $e^x$ | $e^x$ | the exponential is its own derivative |
+        | $e^{kx}$ | $\dfrac{e^{kx}}{k}$ | the chain rule brings out a $k$ |
+        | $\cos x$ | $\sin x$ | $(\sin x)' = \cos x$ |
+        | $\sin x$ | $-\cos x$ | $(\cos x)' = -\sin x$ |
+
+        The one power the first row cannot handle is $x^{-1}$, where it would divide by zero, and that gap is filled by the logarithm. Because differentiation is linear, so is antidifferentiation: constants come out and sums are done term by term. For any polynomial that is the whole method. An antiderivative of $3x^2 + 2x$ is $x^3 + x^2$.
+
+        The general antiderivative of $f$ is written $\int f(x)\,dx$, with no limits, and called the **indefinite integral**: $\int x^2\,dx = \frac{x^3}{3} + C$. A definite integral is a number. An indefinite integral is a family of functions.
+
+        **Three integrals in three lines.**
+
+        $$\int_0^{\pi} \sin x\,dx = \bigl[-\cos x\bigr]_0^{\pi} = -\cos \pi - (-\cos 0) = 1 + 1 = 2.$$
+
+        $$\int_1^{e} \frac{1}{x}\,dx = \bigl[\ln x\bigr]_1^{e} = 1 - 0 = 1.$$
+
+        $$\int_0^1 e^x\,dx = \bigl[e^x\bigr]_0^1 = e - 1 \approx 1.718.$$
+
+        The area under one arch of the sine is exactly 2. The area under $\frac{1}{x}$ from 1 to $e$ is exactly 1, which could serve as a definition of $e$.
+    - question:
+        id: derivation-strip
+        type: choice
+        system: s2
+        prompt: |
+          In the proof that $A'(x) = f(x)$, the difference quotient $\dfrac{A(x + h) - A(x)}{h}$ was trapped between $m_h$ and $M_h$, the least and greatest values of $f$ between $x$ and $x + h$. Where was the continuity of $f$ used?
+        options:
+          - "To show that the strip has width $h$."
+          - "To conclude that $m_h$ and $M_h$ both tend to $f(x)$ as $h \\to 0$, so that the trapped quotient tends to $f(x)$ too."
+          - "To show that $A(x + h) - A(x)$ is the area of a strip."
+          - "It was not used."
+        answer: 1
+        explanation: |
+          That $A(x + h) - A(x)$ is the strip's area is additivity, and the bounds $m_h h$ and $M_h h$ are the comparison rule. Neither needs continuity. What needs it is the last step. Continuity at $x$ says that $f(t)$ is within any tolerance of $f(x)$ once $t$ is close enough to $x$, so on a narrow enough strip the least and greatest values are both within that tolerance of $f(x)$. If $f$ had a jump at $x$, the two would tend to different numbers and the area function would have a corner there: its slope from the left and from the right would differ.
+        hints:
+          - Which step takes a limit?
+          - What must be true of the least and greatest values on a very narrow strip?
+          - Think of a function with a jump at x.
+    - text: |
+        **The net change form.** Read the second part with $f = F'$:
+
+        $$\int_a^b F'(x)\,dx = F(b) - F(a).$$
+
+        **Integrating a rate of change gives the net change.** Integrate a velocity and you get the change in position. Integrate the rate at which a tank fills and you get the change in its contents. This is the statement that makes the integral useful in every science, and it is the list fact again: add up all the steps and you get the last total minus the first.
+
+        The ball once more: velocity $20 - 10t$, an antiderivative $20t - 5t^2$, which is its height. From $t = 0$ to $t = 3$ the change in height is $\bigl[20t - 5t^2\bigr]_0^3 = 15$, as the two triangles gave in the last lesson.
+
+        **Differentiating an integral.** The first part, read as a recipe, says that differentiating an integral with respect to its upper limit gives back the integrand:
+
+        $$\frac{d}{dx}\int_a^x f(t)\,dt = f(x).$$
+
+        The starting point $a$ does not appear in the answer. Changing it alters $A$ by a constant, which differentiates to zero.
+
+        **Where the theorem does not apply.** The second part requires $f$ to be continuous on the **whole** interval from $a$ to $b$. Try to ignore that with $f(x) = \frac{1}{x^2}$ on $[-1, 1]$. An antiderivative is $-\frac{1}{x}$, and
+
+        $$\left[-\frac{1}{x}\right]_{-1}^{1} = -1 - 1 = -2.$$
+
+        But $\frac{1}{x^2}$ is positive everywhere it is defined. A positive function cannot have a negative integral. The calculation is wrong because $f$ is not continuous on $[-1, 1]$: at 0 it is not even defined, and it grows without limit nearby. Always check the interval for such points before trusting a formula.
+
+        **A check for antiderivatives.** You now have two independent ways to compute an integral: the slow sum of slices, which needs no cleverness, and the fast formula, which depends on having found the right antiderivative. They must agree. So the slow one can test the fast one, exactly as the central difference tested hand-derived derivatives.
+
+        ```python
+        def midpoint_sum(f, a, b, n):
+            width = (b - a) / n
+            return sum([f(a + (i + 0.5) * width) * width for i in range(n)])
+
+        def check(f, F, a, b):
+            return abs(midpoint_sum(f, a, b, 1000) - (F(b) - F(a))) < 1e-4
+        ```
+
+        A wrong antiderivative, with a missing factor or a wrong sign, fails this at once.
+    - question:
+        id: order-evaluate
+        type: order
+        system: s2
+        prompt: Put the steps in order to evaluate $\displaystyle\int_1^2 (3x^2 + 2x)\,dx$.
+        steps:
+          - "Check that the integrand is continuous on $[1, 2]$. It is a polynomial, so it is."
+          - "Find an antiderivative term by term: $F(x) = x^3 + x^2$."
+          - "Confirm it by differentiating: $F'(x) = 3x^2 + 2x$."
+          - "Evaluate at the upper limit: $F(2) = 8 + 4 = 12$."
+          - "Evaluate at the lower limit: $F(1) = 1 + 1 = 2$."
+          - "Subtract: $12 - 2 = 10$."
+        explanation: The theorem needs a continuous integrand, so that is settled first. Then an antiderivative is found and confirmed by differentiating, which is the one check that costs almost nothing. It is evaluated at the upper limit, then the lower, and the lower value is subtracted from the upper.
+        hints:
+          - The antiderivative has to exist before it can be checked or evaluated.
+          - The upper limit comes first in F(b) − F(a).
+          - The subtraction is last.
+  formal:
+    - text: |
+        **Antiderivative.** $F$ is an antiderivative of $f$ on an interval if $F' = f$ there. Any two differ by a constant. The indefinite integral $\int f(x)\,dx$ denotes the general antiderivative, $F(x) + C$.
+
+        **Fundamental theorem, first part.** If $f$ is continuous on $[a, b]$ and $A(x) = \int_a^x f(t)\,dt$, then $A'(x) = f(x)$.
+
+        **Fundamental theorem, second part.** If $f$ is continuous on $[a, b]$ and $F' = f$, then
+
+        $$\int_a^b f(x)\,dx = F(b) - F(a) = \bigl[F(x)\bigr]_a^b.$$
+
+        **Net change.** $\int_a^b F'(x)\,dx = F(b) - F(a)$.
+
+        | $f(x)$ | $\int f(x)\,dx$ |
+        | --- | --- |
+        | $x^n$, $n \ne -1$ | $\dfrac{x^{n+1}}{n+1} + C$ |
+        | $\dfrac{1}{x}$, $x > 0$ | $\ln x + C$ |
+        | $e^{kx}$ | $\dfrac{e^{kx}}{k} + C$ |
+        | $\cos x$ | $\sin x + C$ |
+        | $\sin x$ | $-\cos x + C$ |
+        | $c\,f(x) + g(x)$ | $c\int f(x)\,dx + \int g(x)\,dx$ |
+
+        **Discrete form.** For a list with running totals $T_k = v_1 + \dots + v_k$ and $T_0 = 0$: $\ T_k - T_{k-1} = v_k$, and $v_{j+1} + \dots + v_k = T_k - T_j$.
+  drill:
+    - text: Seconds each. Ask what differentiates to the integrand, then subtract its two values.
+    - question:
+        id: drill-power
+        type: choice
+        system: s1
+        prompt: |
+          Which is an antiderivative of $x^4$?
+        options: ["$4x^3$", "$\\dfrac{x^5}{5}$", "$\\dfrac{x^5}{4}$", "$5x^5$"]
+        answer: 1
+        explanation: Raise the exponent by one and divide by the new exponent. Differentiating x⁵/5 brings down a 5 that cancels.
+        hints:
+          - Raise the exponent by one.
+          - Divide by the new exponent, and check by differentiating.
+    - question:
+        id: drill-cos
+        type: choice
+        system: s1
+        prompt: |
+          Which is an antiderivative of $\sin x$?
+        options: ["$\\cos x$", "$-\\cos x$", "$\\sin x$", "$-\\sin x$"]
+        answer: 1
+        explanation: The derivative of the cosine is minus the sine, so the derivative of minus the cosine is the sine.
+        hints:
+          - What is the derivative of the cosine?
+          - A minus sign is needed to cancel the one that differentiation brings.
+    - question:
+        id: drill-cubic
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\displaystyle\int_0^2 3x^2\,dx$?
+        answer: "8"
+        explanation: |
+          An antiderivative is $x^3$, and $2^3 - 0^3 = 8$.
+        hints:
+          - What differentiates to 3x squared?
+          - Evaluate it at 2 and at 0.
+    - question:
+        id: drill-linear
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\displaystyle\int_1^3 2x\,dx$?
+        answer: "8"
+        explanation: |
+          An antiderivative is $x^2$, and $9 - 1 = 8$. The last lesson found the same value as the area of a trapezium.
+        hints:
+          - An antiderivative is x squared.
+          - Subtract its value at 1 from its value at 3.
+    - question:
+        id: drill-quarter
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\displaystyle\int_0^1 x^3\,dx$?
+        answer: "1/4"
+        explanation: |
+          An antiderivative is $\frac{x^4}{4}$, which is $\frac{1}{4}$ at 1 and 0 at 0.
+        hints:
+          - Raise the exponent to 4 and divide by 4.
+          - Evaluate at 1.
+    - question:
+        id: drill-sum
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\displaystyle\int_0^4 (2x + 1)\,dx$?
+        answer: "20"
+        explanation: |
+          An antiderivative is $x^2 + x$, which is $16 + 4$ at 4 and 0 at 0.
+        hints:
+          - Find an antiderivative of each term.
+          - x squared plus x, evaluated at 4.
+    - question:
+        id: drill-sine-arch
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\displaystyle\int_0^{\pi} \sin x\,dx$?
+        answer: "2"
+        explanation: |
+          $[-\cos x]_0^{\pi} = -(-1) - (-1)$.
+        hints:
+          - An antiderivative is minus the cosine.
+          - The cosine is minus 1 at π and 1 at 0.
+    - question:
+        id: drill-exp
+        type: choice
+        system: s1
+        prompt: |
+          What is $\displaystyle\int_0^1 e^x\,dx$?
+        options: ["$e$", "$e - 1$", "$1$", "$e + 1$"]
+        answer: 1
+        explanation: The exponential is its own antiderivative, and it is e at 1 and 1 at 0.
+        hints:
+          - The exponential is its own antiderivative.
+          - Do not forget the value at the lower limit, which is not 0.
+    - question:
+        id: drill-difference
+        type: numeric
+        system: s1
+        prompt: |
+          $F' = f$, with $F(2) = 7$ and $F(5) = 11$. What is $\displaystyle\int_2^5 f(x)\,dx$?
+        answer: "4"
+        explanation: The integral of a rate is the net change, the later value minus the earlier.
+        hints:
+          - Use F(b) − F(a).
+          - The upper limit is 5.
+    - question:
+        id: drill-first-part
+        type: numeric
+        system: s1
+        prompt: |
+          $A(x) = \displaystyle\int_0^x t^2\,dt$. What is $A'(3)$?
+        answer: "9"
+        explanation: The rate at which area is gathered is the height of the curve at the moving edge, 3 squared. No integration is needed.
+        hints:
+          - The derivative of the area function is the integrand.
+          - Evaluate t squared at 3.
+    - question:
+        id: drill-constant
+        type: choice
+        system: s1
+        prompt: |
+          $F$ and $G$ are both antiderivatives of the same $f$ on an interval. What can be said?
+        options:
+          - "$F = G$"
+          - "$F - G$ is a constant"
+          - "$F = cG$ for some constant $c$"
+          - "Nothing"
+        answer: 1
+        explanation: Their difference has derivative zero everywhere on the interval, so it does not change.
+        hints:
+          - What is the derivative of F − G?
+          - A function whose derivative is zero on an interval is constant.
+    - question:
+        id: drill-reciprocal
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\displaystyle\int_1^{e} \frac{1}{x}\,dx$?
+        answer: "1"
+        explanation: |
+          $[\ln x]_1^e = \ln e - \ln 1 = 1 - 0$.
+        hints:
+          - The antiderivative of the reciprocal is the natural logarithm.
+          - The logarithm of e is 1 and of 1 is 0.
+    - question:
+        id: predict-totals
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          values = [3, 1, 4, 1, 5]
+          totals = []
+          total = 0
+          for v in values:
+              total = total + v
+              totals.append(total)
+          print(totals, totals[4] - totals[1])
+        output: "[3, 4, 8, 9, 14] 10"
+        explanation: The running totals are 3, 4, 8, 9 and 14. The last minus the second, 14 − 4, is the sum of the three values after the second, 4 + 1 + 5. A sum over a stretch is a difference of two running totals.
+        hints:
+          - Build the running totals one at a time.
+          - The entries at positions 4 and 1 are 14 and 4.
+    - question:
+        id: predict-net-change
+        type: predict
+        system: s1
+        prompt: A stone's speed is 10t, and F is an antiderivative of that. What does this show?
+        code: |
+          def F(t):
+              return 5 * t ** 2
+
+          print(F(3) - F(0), F(3) - F(1))
+        output: "45 40"
+        explanation: The first is the distance fallen in the first 3 seconds. The second is the distance fallen between t = 1 and t = 3, the integral of the speed over that stretch, 45 − 5.
+        hints:
+          - F(3) is 5 times 9.
+          - F(1) is 5.
+  work:
+    - text: Slower now. Find the antiderivative, check it by differentiating, and only then put in the limits.
+    - question:
+        id: work-fifth-power
+        type: numeric
+        system: s2
+        prompt: |
+          Evaluate $\displaystyle\int_0^2 (x^5 + 1)\,dx$. Give a fraction or a decimal.
+        answer: "38/3"
+        tolerance: "0.001"
+        explanation: |
+          An antiderivative is $\frac{x^6}{6} + x$. At 2 it is $\frac{64}{6} + 2 = \frac{32}{3} + \frac{6}{3} = \frac{38}{3}$, and at 0 it is 0. So the integral is $\frac{38}{3} \approx 12.667$. Check by differentiating: $\left(\frac{x^6}{6} + x\right)' = x^5 + 1$.
+        hints:
+          - Find an antiderivative of each term.
+          - 2 to the power 6 is 64.
+          - Add the two parts over a common denominator.
+    - question:
+        id: work-ball
+        type: numeric
+        system: s2
+        unit: metres
+        prompt: |
+          A ball has velocity $v(t) = 20 - 10t$ metres per second. Use an antiderivative to find its change in height between $t = 1$ and $t = 3$.
+        answer: "0"
+        explanation: |
+          An antiderivative is $20t - 5t^2$. At $t = 3$ it is $60 - 45 = 15$, and at $t = 1$ it is $20 - 5 = 15$. The change is $15 - 15 = 0$. The ball is at the same height at both times: it rises for one second, to its peak at $t = 2$, and falls for one second. The positive area from 1 to 2 and the negative area from 2 to 3 are equal triangles and cancel.
+        hints:
+          - Find a function whose derivative is 20 − 10t.
+          - Evaluate it at 3 and at 1.
+          - Subtract the second from the first.
+    - question:
+        id: work-peak
+        type: numeric
+        system: s2
+        prompt: |
+          $A(x) = \displaystyle\int_0^x (6 - 2t)\,dt$ for $x \ge 0$. What is the greatest value of $A$?
+        answer: "9"
+        explanation: |
+          By the first part of the theorem, $A'(x) = 6 - 2x$, which is zero at $x = 3$, positive before and negative after. So $A$ rises until 3 and falls afterwards: a maximum. Its value there is $\bigl[6t - t^2\bigr]_0^3 = 18 - 9 = 9$. A running total peaks at the moment its rate changes from positive to negative, which joins this lesson to the one on maxima.
+        hints:
+          - The derivative of A is the integrand, evaluated at x.
+          - Where does the rate change sign?
+          - Evaluate the integral up to that point with an antiderivative.
+    - question:
+        id: write-antiderivative
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A polynomial is a list of coefficients, constant term first. Write `antiderivative(coeffs)`, which returns the coefficient list of the antiderivative whose constant term is 0.
+
+          The term $c\,x^k$ becomes $\dfrac{c}{k + 1}x^{k+1}$. So $3x^2$, the list `[0, 0, 3]`, becomes $x^3$, the list `[0, 0.0, 0.0, 1.0]`. The empty list becomes `[0]`. Do not change the list you are given.
+        starter: |
+          def antiderivative(coeffs):
+              # Replace the next line with your own.
+              return coeffs
+
+          print(antiderivative([0, 0, 3]))
+        solution: |
+          def antiderivative(coeffs):
+              return [0] + [coeffs[k] / (k + 1) for k in range(len(coeffs))]
+
+          print(antiderivative([0, 0, 3]))
+        tests: |
+          def _d(c):
+              return [k * c[k] for k in range(1, len(c))]
+          assert antiderivative([5]) == [0, 5], "An antiderivative of the constant 5 is 5x. You returned " + repr(antiderivative([5]))
+          assert antiderivative([1, 2, 3]) == [0, 1, 1, 1], "An antiderivative of 1 + 2x + 3x^2 is x + x^2 + x^3. You returned " + repr(antiderivative([1, 2, 3]))
+          assert antiderivative([0, 10]) == [0, 0, 5], "An antiderivative of 10t is 5t^2. You returned " + repr(antiderivative([0, 10]))
+          assert antiderivative([20, -10]) == [0, 20, -5], "An antiderivative of 20 - 10t is 20t - 5t^2. You returned " + repr(antiderivative([20, -10]))
+          assert antiderivative([]) == [0], "The empty list becomes [0]. You returned " + repr(antiderivative([]))
+          _p = [7, -4, 9, 2, 5]
+          assert _d(antiderivative(_p)) == _p, "Differentiating your antiderivative should give back the polynomial you started from"
+          assert _p == [7, -4, 9, 2, 5], "Do not change the list that was passed in"
+          assert output.strip() == "[0, 0.0, 0.0, 1.0]", "The program should print [0, 0.0, 0.0, 1.0]"
+        wrong:
+          - "def antiderivative(coeffs):\n    return [coeffs[k] / (k + 1) for k in range(len(coeffs))]\n\nprint([0, 0.0, 0.0, 1.0])\n"
+          - "def antiderivative(coeffs):\n    return [0] + [coeffs[k] * (k + 1) for k in range(len(coeffs))]\n\nprint([0, 0.0, 0.0, 1.0])\n"
+          - "def antiderivative(coeffs):\n    return [0] + [coeffs[k] / (k + 2) for k in range(len(coeffs))]\n\nprint([0, 0.0, 0.0, 1.0])\n"
+          - "def antiderivative(coeffs):\n    return [0] + [coeffs[k] for k in range(len(coeffs))]\n\nprint([0, 0.0, 0.0, 1.0])\n"
+          - "def antiderivative(coeffs):\n    return [0] + [coeffs[k] / k for k in range(1, len(coeffs))]\n\nprint([0, 0.0, 0.0, 1.0])\n"
+        explanation: |
+          Each coefficient moves one place to the right, since the power rises by one, and is divided by its new exponent. The leading 0 is the constant term, the "+ C" with $C$ chosen as 0. This is the mirror image of the one-line derivative from earlier in the cluster, which moved each coefficient one place to the left and multiplied by its old exponent. The round-trip test states the fundamental theorem for polynomials: differentiate the antiderivative and you are back where you began. The other order does not quite return: differentiating and then antidifferentiating loses the constant term, which is the reason for the "+ C".
+        hints:
+          - The coefficient at position k moves to position k + 1.
+          - Divide it by k + 1.
+          - Put a 0 at the front for the constant term.
+    - question:
+        id: fix-differences
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `running_totals` is correct. `differences(totals)` should undo it, returning the list that the totals were built from. The program should print `[3, 1, 4, 1, 5]`. It prints `[1, 4, 1, 5]`. Fix `differences`.
+        starter: |
+          def running_totals(values):
+              totals = []
+              total = 0
+              for v in values:
+                  total = total + v
+                  totals.append(total)
+              return totals
+
+          def differences(totals):
+              return [totals[i + 1] - totals[i] for i in range(len(totals) - 1)]
+
+          print(differences(running_totals([3, 1, 4, 1, 5])))
+        solution: |
+          def running_totals(values):
+              totals = []
+              total = 0
+              for v in values:
+                  total = total + v
+                  totals.append(total)
+              return totals
+
+          def differences(totals):
+              return [totals[i] - ([0] + totals)[i] for i in range(len(totals))]
+
+          print(differences(running_totals([3, 1, 4, 1, 5])))
+        tests: |
+          assert differences([3, 4, 8, 9, 14]) == [3, 1, 4, 1, 5], "The totals 3, 4, 8, 9, 14 come from the values 3, 1, 4, 1, 5. You returned " + repr(differences([3, 4, 8, 9, 14]))
+          assert differences([7]) == [7], "A single total came from a single value, itself. You returned " + repr(differences([7]))
+          assert differences([]) == [], "No totals came from no values"
+          assert differences([2, 2, 2]) == [2, 0, 0], "The totals 2, 2, 2 come from 2, 0, 0. You returned " + repr(differences([2, 2, 2]))
+          for _v in [[5], [1, 2, 3, 4], [10, -3, 0, 8, -8, 2]]:
+              assert differences(running_totals(_v)) == _v, "Taking differences of the running totals of " + repr(_v) + " should give that list back, and you returned " + repr(differences(running_totals(_v)))
+              assert running_totals(differences(_v)) == _v, "Taking running totals of the differences of " + repr(_v) + " should give that list back as well"
+          assert output.strip() == "[3, 1, 4, 1, 5]", "The program should print [3, 1, 4, 1, 5]"
+        wrong:
+          - "def running_totals(values):\n    totals = []\n    total = 0\n    for v in values:\n        total = total + v\n        totals.append(total)\n    return totals\n\ndef differences(totals):\n    return [totals[i + 1] - totals[i] for i in range(len(totals) - 1)]\n\nprint([3, 1, 4, 1, 5])\n"
+          - "def running_totals(values):\n    totals = []\n    total = 0\n    for v in values:\n        total = total + v\n        totals.append(total)\n    return totals\n\ndef differences(totals):\n    return [0] + [totals[i + 1] - totals[i] for i in range(len(totals) - 1)]\n\nprint([3, 1, 4, 1, 5])\n"
+          - "def running_totals(values):\n    totals = []\n    total = 0\n    for v in values:\n        total = total + v\n        totals.append(total)\n    return totals\n\ndef differences(totals):\n    return [totals[i] - totals[i - 1] for i in range(len(totals))]\n\nprint([3, 1, 4, 1, 5])\n"
+          - "def running_totals(values):\n    totals = []\n    total = 0\n    for v in values:\n        total = total + v\n        totals.append(total)\n    return totals\n\ndef differences(totals):\n    return [totals[0]] + [totals[i] - totals[i + 1] for i in range(len(totals) - 1)]\n\nprint([3, 1, 4, 1, 5])\n"
+        explanation: |
+          The running total before anything has been added is 0, and the first value is the first total minus that 0. The starter only compared neighbours inside the list, so it produced one entry too few and lost the first value. The fix is to treat the totals as if a 0 stood in front of them: the solution subtracts from each total the entry before it in `[0] + totals`. Writing `[totals[0]] + ...` in front of the starter's list is equally good, as long as the empty list is handled. That missing 0 is the discrete form of the condition $A(a) = 0$ in the proof of the theorem, the fact that fixed the constant. Running totals and differences are the list versions of integrating and differentiating, and the tests check that each undoes the other.
+        hints:
+          - How many values went into five running totals, and how many differences does the starter return?
+          - What was the running total before the first value was added?
+          - The first value is the first total minus 0.
+    - question:
+        id: write-integrate-poly
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A polynomial is a list of coefficients, constant term first. Write `integrate_poly(coeffs, a, b)`, which returns the exact value of its integral from `a` to `b`, using the fundamental theorem: the antiderivative at `b` minus the antiderivative at `a`.
+
+          The term $c\,x^k$ contributes $\dfrac{c\,(b^{k+1} - a^{k+1})}{k + 1}$.
+        starter: |
+          def integrate_poly(coeffs, a, b):
+              # Replace the next line with your own.
+              return 0
+
+          print(integrate_poly([0, 0, 1], 0, 3))
+        solution: |
+          def integrate_poly(coeffs, a, b):
+              total = 0
+              for k in range(len(coeffs)):
+                  total = total + coeffs[k] * (b ** (k + 1) - a ** (k + 1)) / (k + 1)
+              return total
+
+          print(integrate_poly([0, 0, 1], 0, 3))
+        tests: |
+          def _close(got, want, name):
+              assert abs(got - want) < 1e-9, "The integral of " + name + " is " + str(want) + " and you returned " + repr(got)
+          _close(integrate_poly([0, 0, 1], 0, 3), 9, "x^2 from 0 to 3")
+          _close(integrate_poly([0, 10], 0, 3), 45, "10t from 0 to 3")
+          _close(integrate_poly([20, -10], 0, 3), 15, "20 - 10t from 0 to 3")
+          _close(integrate_poly([20, -10], 1, 3), 0, "20 - 10t from 1 to 3")
+          _close(integrate_poly([5], 1, 4), 15, "the constant 5 from 1 to 4")
+          _close(integrate_poly([1, 2, 3], 1, 2), 11, "1 + 2x + 3x^2 from 1 to 2")
+          _close(integrate_poly([1, 2, 3], 2, 2), 0, "anything from 2 to 2")
+          _close(integrate_poly([1, 2, 3], 2, 1), -11, "1 + 2x + 3x^2 from 2 to 1")
+          _close(integrate_poly([], 0, 5), 0, "the zero polynomial")
+          assert output.strip() == "9.0", "The program should print 9.0"
+        wrong:
+          - "def integrate_poly(coeffs, a, b):\n    total = 0\n    for k in range(len(coeffs)):\n        total = total + coeffs[k] * b ** (k + 1) / (k + 1)\n    return total\n\nprint(9.0)\n"
+          - "def integrate_poly(coeffs, a, b):\n    total = 0\n    for k in range(len(coeffs)):\n        total = total + coeffs[k] * (b ** (k + 1) + a ** (k + 1)) / (k + 1)\n    return total\n\nprint(9.0)\n"
+          - "def integrate_poly(coeffs, a, b):\n    total = 0\n    for k in range(len(coeffs)):\n        total = total + coeffs[k] * (b ** k - a ** k) / (k + 1)\n    return total\n\nprint(9.0)\n"
+          - "def integrate_poly(coeffs, a, b):\n    total = 0\n    for k in range(len(coeffs)):\n        total = total + coeffs[k] * (b ** (k + 1) - a ** (k + 1))\n    return total\n\nprint(9.0)\n"
+          - "def integrate_poly(coeffs, a, b):\n    total = 0\n    for k in range(len(coeffs)):\n        total = total + coeffs[k] * (b - a) ** (k + 1) / (k + 1)\n    return total\n\nprint(9.0)\n"
+        explanation: |
+          The antiderivative of $c\,x^k$ is $\frac{c}{k+1}x^{k+1}$, and the theorem asks for its value at $b$ minus its value at $a$. Doing that term by term and adding is legitimate because the integral is linear. The answer is exact, up to rounding, with one pass over the coefficients, where the midpoint rule needed a thousand evaluations to get five figures. The tests with a lower limit other than 0 matter most: forgetting to subtract $F(a)$ is invisible when $a = 0$ and the antiderivative vanishes there. Note also that $(b - a)^{k+1}$ is not $b^{k+1} - a^{k+1}$. The test from 1 to 2 separates them.
+        hints:
+          - Loop over the positions k of the list.
+          - For each, compute b ** (k + 1) - a ** (k + 1), multiply by the coefficient and divide by k + 1.
+          - Add the terms into a running total.
+    - question:
+        id: work-discontinuity
+        type: choice
+        system: s2
+        prompt: |
+          A student writes $\displaystyle\int_{-1}^{1} \frac{1}{x^2}\,dx = \left[-\frac{1}{x}\right]_{-1}^{1} = -1 - 1 = -2$. What is wrong?
+        options:
+          - "The antiderivative is wrong. It should be $\\frac{1}{x}$."
+          - "The arithmetic is wrong. The answer is 0."
+          - "Nothing is wrong."
+          - "The integrand is not continuous on $[-1, 1]$: it is undefined at 0 and unbounded near it, so the theorem does not apply. A positive function cannot have a negative integral."
+        answer: 3
+        explanation: |
+          The antiderivative is right, since $\left(-x^{-1}\right)' = x^{-2}$, and so is the arithmetic. The error is in applying a theorem whose condition is not met. The fundamental theorem requires the integrand to be continuous on the whole closed interval, and $\frac{1}{x^2}$ blows up in the middle of this one. The sign of the answer gives the mistake away: every slice has positive height, so no sum of slices could be negative. In fact the area near 0 is infinite. Before using $F(b) - F(a)$, look for points between $a$ and $b$ where the integrand is undefined.
+        hints:
+          - Check the antiderivative by differentiating it.
+          - What is the sign of the integrand everywhere it is defined?
+          - What happens to the integrand at 0?
+    - question:
+        id: work-softplus
+        type: numeric
+        system: s2
+        prompt: |
+          The softplus function $s(x) = \ln(1 + e^x)$ has derivative $s'(x) = \sigma(x) = \dfrac{1}{1 + e^{-x}}$, the sigmoid. Use this to find $\displaystyle\int_{-1}^{1} \sigma(x)\,dx$ exactly.
+        answer: "1"
+        explanation: |
+          Softplus is an antiderivative of the sigmoid, so the integral is $s(1) - s(-1) = \ln(1 + e) - \ln(1 + e^{-1})$. The difference of logarithms is the logarithm of the quotient, and $\dfrac{1 + e}{1 + e^{-1}} = \dfrac{e(1 + e)}{e + 1} = e$. So the integral is $\ln e = 1$. That agrees with a picture: the sigmoid is symmetric about the point $(0, \frac{1}{2})$, so its average height on $[-1, 1]$ is $\frac{1}{2}$, over a width of 2. You did not need to know how to integrate the sigmoid. You needed to recognise it as a derivative you had already met.
+        hints:
+          - An antiderivative of the sigmoid is softplus.
+          - Evaluate softplus at 1 and at −1 and subtract.
+          - Combine the two logarithms into the logarithm of a quotient, and multiply top and bottom by e.
+    - question:
+        id: work-average-sine
+        type: choice
+        system: s2
+        prompt: |
+          What is the average value of $\sin x$ over the interval $[0, \pi]$?
+        options:
+          - "$\\frac{1}{2}$"
+          - "$\\frac{2}{\\pi} \\approx 0.637$"
+          - "$1$"
+          - "$\\frac{\\pi}{4} \\approx 0.785$"
+        answer: 1
+        explanation: |
+          The average value is the integral divided by the length of the interval. The integral is $[-\cos x]_0^{\pi} = 2$ and the length is $\pi$. So the average is $\frac{2}{\pi}$. It is more than $\frac{1}{2}$, the average of the least and greatest values, because the arch is rounded: the sine spends more of the interval near its top than near its ends. An average over a continuous range is an integral, and the fundamental theorem is what makes such averages computable in a line.
+        hints:
+          - The average value is the integral divided by the length of the interval.
+          - The integral of the sine from 0 to π is 2.
+          - Divide by π.
+  connections:
+    - text: |
+        The puzzle asked whether it was a coincidence that the area under $10t$ came out as $5t^2$ and the area under $x^2$ as $\frac{x^3}{3}$. It was not. Let the right-hand edge of an area move, and the area grows by a thin strip whose height is the curve's height there. So the rate of change of the accumulated area is the integrand: $A' = f$. And since any two functions with the same derivative differ by a constant, any antiderivative $F$ will serve to compute the area: $\int_a^b f = F(b) - F(a)$.
+
+        Those two statements are the fundamental theorem of calculus. It joins the two halves of this cluster. One half began with the slope of a tangent and the other with the area under a curve, two problems that look unrelated, and the theorem says that each operation undoes the other. In a list this is plain: differences undo running totals, and a sum over a stretch is a difference of two totals. The theorem says the same of slopes and areas.
+
+        Its practical effect is to turn integration from a limit of sums into a search: to integrate $f$, find something whose derivative is $f$. For powers, exponentials, sines and cosines the search is over as soon as it starts, because the table of derivatives can be read backwards. But try $\int 2x\cos(x^2)\,dx$, or $\int x\,e^x\,dx$. Neither integrand is in the table. Each, though, is the kind of thing a differentiation **rule** produces: the first looks like the output of the chain rule, the second like half the output of the product rule. Every rule for differentiating can be run in reverse to give a method for integrating. Those methods are the next lesson, [[m10.integration-techniques]], the last of this cluster.
+
+        The proofs leaned on two facts taken on trust: that a continuous function has a least and greatest value on a closed interval, and that a function with zero derivative is constant. Both are established in [[m11.differentiability-and-the-mean-value-theorem]], and the integral itself is rebuilt with full care in [[m11.the-riemann-integral]]. With several variables, areas become volumes, in [[m12.multiple-integrals-and-change-of-variables]].
