@@ -1618,7 +1618,7 @@ const AREAS: Record<string, { name: string; f: (x: number) => number; a: number;
   sin: { name: "y = sin x", f: Math.sin, a: 0, b: Math.PI, bName: "π", exact: 2, view: { x0: 0, x1: 3.3, y0: 0, y1: 1.3 } },
   recip: { name: "y = 1 ÷ x", f: (x) => 1 / x, a: 1, b: Math.E, bName: "e", exact: 1, view: { x0: 0.8, x1: 2.9, y0: 0, y1: 1.2 } },
 };
-const RULES = ["left ends", "right ends", "midpoints"];
+const RULES = ["left ends", "midpoints", "right ends"];
 
 /** The area under a curve as a sum of rectangles, which improves as the rectangles are made narrower. */
 function Riemann(props: Props) {

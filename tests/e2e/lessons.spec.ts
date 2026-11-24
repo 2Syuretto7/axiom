@@ -155,7 +155,7 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   await expect(approach).toContainText("At x = 0.99 it is 1.99 and at x = 1.01 it is 2.01.");
   const chord = page.getByRole("figure").filter({ hasText: "From a chord to a tangent" });
   await expect(chord).toContainText("From x = 1 to x = 1.5 the curve rises 1.25 over a run of 0.5, so the chord has slope 2.5. The tangent at x = 1 has slope 2.");
-  for (let i = 0; i < 3; i++) await chord.getByRole("button", { name: "Increase closeness" }).click();
+  for (let i = 0; i < 2; i++) await chord.getByRole("button", { name: "Increase closeness" }).click();
   await expect(chord).toContainText("the curve rises 0.0201 over a run of 0.01, so the chord has slope 2.01.");
   const chain = page.getByRole("figure").filter({ hasText: "Rates multiply along a chain" });
   await expect(chain).toContainText("So y changes 2 × 3 = 6 times as fast as x.");
@@ -180,7 +180,6 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   await expect(descent).toContainText("The method diverges.");
   const rectangles = page.getByRole("figure").filter({ hasText: "Area as a sum of rectangles" });
   await expect(rectangles).toContainText("4 rectangles under y = x² from 0 to 3, with heights taken at the left ends, total 5.906");
-  await rectangles.getByRole("button", { name: "Change rule" }).click();
   await rectangles.getByRole("button", { name: "Change rule" }).click();
   await expect(rectangles).toContainText("with heights taken at the midpoints, total 8.8594. The exact area is 9. The error is 0.1406.");
   const total = page.getByRole("figure").filter({ hasText: "A total and its rate" });
