@@ -1,0 +1,767 @@
+concept: e5.strides-and-memory-layout
+minutes: 90
+claim: You can describe any view of an array as a start place and one stride for each axis, compute where an entry lies in the block from them, say what slicing, reversing, transposing and broadcasting each do to the strides, tell when an array is stored in its own reading order, explain why reading memory in order is much faster than jumping about in it, and arrange data and loops accordingly.
+recalls: [e5.reshaping-views-and-copies]
+uses: [e5.indexing-and-slicing, e5.arrays-dtype-and-shape, e5.broadcasting, e5.vectorisation, e5.axis-operations-and-reductions, e3.arrays-and-linked-lists, e1.complexity-and-big-o, m5.transpose, m0.estimation-and-orders-of-magnitude, e0.lists-and-tuples, e0.loops, e0.functions]
+leads: [e5.linear-algebra-routines, e5.einsum, e5.numerical-error-analysis-in-practice]
+starter: |
+  # Scratch space. Nine million numbers, added up row by row and then column by column.
+  import time
+  import numpy as np
+
+  n = 3000
+  M = np.ones((n, n), dtype=np.float32)
+
+  start = time.perf_counter()
+  for i in range(n):
+      M[i].sum()
+  by_rows = time.perf_counter() - start
+
+  start = time.perf_counter()
+  for j in range(n):
+      M[:, j].sum()
+  by_columns = time.perf_counter() - start
+
+  print("row by row      ", round(by_rows * 1000, 1), "ms")
+  print("column by column", round(by_columns * 1000, 1), "ms")
+parts:
+  recall:
+    - text: |
+        [[e5.reshaping-views-and-copies]] decided its puzzle by asking whether a rule existed "for stepping evenly through the block", and promised to say exactly what such a rule is. Three quick pulls first.
+    - question:
+        id: recall-copy
+        type: choice
+        system: s1
+        concepts: [e5.reshaping-views-and-copies]
+        prompt: |
+          `b` is a freshly made table of shape `(3, 4)`. Which of these is a copy, and not a view of the block of `b`?
+        options: ["`b.T`", "`b.reshape(2, 6)`", "`b[:, ::2]`", "`b.T.reshape(12)`"]
+        answer: 3
+        explanation: The reading order of the transpose cannot be reached by even steps along a plain row, so the entries are copied.
+        hints:
+          - A transpose, a slice and a reshape of a fresh array are all views.
+          - Which one asks for the transposed order as a single row?
+    - question:
+        id: recall-place
+        type: numeric
+        system: s1
+        concepts: [e5.arrays-dtype-and-shape]
+        prompt: |
+          A table of shape `(3, 4)` is stored row by row. At which place of the block, counting from 0, is the entry at index `[2, 3]`?
+        answer: "11"
+        explanation: Two whole rows of 4 come first, then 3 more entries. 2 × 4 + 3.
+        hints:
+          - How many entries come before row 2?
+          - Then count along the row.
+    - question:
+        id: recall-address
+        type: choice
+        system: s1
+        concepts: [e3.arrays-and-linked-lists]
+        prompt: |
+          An array stores items of 8 bytes each, starting at byte 0 of its block. At which byte does item 5 begin?
+        options: ["5", "13", "40", "48"]
+        answer: 2
+        explanation: Five items of 8 bytes come before it.
+        hints:
+          - How many items come before item 5?
+          - Each takes 8 bytes.
+  puzzle:
+    - text: |
+        The starter makes a square table of nine million numbers, 3000 rows by 3000 columns, and adds it up twice.
+
+        The first loop takes each **row** in turn, `M[i]`, and asks NumPy for its total. The second takes each **column** in turn, `M[:, j]`, and does the same.
+
+        Compare the two jobs. Each makes 3000 calls. Each call adds 3000 numbers. The rows and the columns have the same length, since the table is square. `M[i]` and `M[:, j]` are both views, as you know, so nothing is copied in either loop. The same nine million additions are done, on the same block of memory, by the same compiled code.
+
+        Run it, more than once. The timings move about, and one fact stays: **column by column takes several times as long as row by row.**
+
+        Nothing in what you have learned so far explains this. The count of operations is identical, and counting operations is how you have reasoned about running time since you first met orders of growth.
+
+        **What is different about a column? What, precisely, is a view, that a row and a column of the same table can be so unlike? And what does the difference say about how data ought to be laid out?**
+  intuition:
+    - text: |
+        Begin with what the block looks like. The table is stored row by row: the 3000 numbers of row 0, then the 3000 of row 1, and so on, nine million in a line. Each is a `float32` of 4 bytes.
+
+        Where is row $i$? It is 3000 numbers lying side by side, starting at number $3000\,i$. To read it you start there and move **one number** at a time.
+
+        Where is column $j$? Its first entry is number $j$. Its next is one whole row later, number $3000 + j$. The next is at $6000 + j$. To read a column you start at $j$ and move **3000 numbers** at a time, twelve thousand bytes for each step.
+
+        So a row and a column are the same kind of thing with one number changed. Each is: **start here, and to get to the next entry, move by this much.** That "this much" is called the **stride**. The stride of a row is one number. The stride of a column is a whole row of numbers.
+
+        That is the rule for stepping evenly through a block. A view of any kind is a start place and a stride for each of its axes. The figure shows several views of one block of twelve numbers, each with its start and its strides. Step through them, and for each, step through its items and watch where they fall in the block.
+    - figure: strides
+      props: { view: 0, item: 6 }
+    - text: |
+        Now the speed. It comes from how the memory of a computer is built, and one picture is enough.
+
+        Think of a carpenter. On the bench within reach are a few tools. In the van outside are all the others. Picking up a tool from the bench takes a second. Fetching one from the van takes a few minutes. A sensible carpenter who walks to the van does not come back with one screw. They bring the whole box that the screw was in, since the next thing needed is probably in the same box.
+
+        A processor has a bench, a small and very fast memory called the **cache**, and a van, the main memory, which is around a hundred times slower to reach. When the processor needs a number that is not in the cache, it fetches from main memory not that one number but the whole run of 64 bytes around it, and keeps the run in the cache. It also notices when a program is reading straight along through memory, and starts fetching ahead.
+
+        Read a row: the first number costs a trip, and it brings its fifteen neighbours with it. The next fifteen reads are from the bench. And the reading runs straight ahead, so the fetching ahead keeps pace. Almost every read is fast.
+
+        Read a column: each entry is twelve thousand bytes past the last. Every one is in a different run of 64 bytes. **Every read is a trip to the van**, and each trip brings back fifteen numbers that will not be wanted until much later, by which time they have been pushed off the bench.
+
+        The additions are the same. The waiting is not.
+  derivation:
+    - text: |
+        **The rule, exactly.** An array is described by four things beside its dtype:
+
+        - the **block** of memory it reads,
+        - a **start**, the byte of the block where its first entry lies,
+        - its **shape**,
+        - its **strides**, one for each axis: the number of bytes to move in the block to go one step along that axis.
+
+        The entry at index $[i, j]$ lies at byte
+
+        $$\text{start} + i \times s_0 + j \times s_1,$$
+
+        and in general at the start plus the sum of each index times the stride of its axis. `a.strides` shows the strides, as a tuple in bytes.
+
+        **A freshly made array.** For a table of shape $(m, n)$ stored row by row, with entries of $b$ bytes, one step along a row moves one entry, so $s_1 = b$. One step down a column moves a whole row of $n$ entries, so $s_0 = n\,b$. The formula gives byte $(i\,n + j)\,b$, which is the place $i \times n + j$ of the first lesson of this cluster, counted in bytes. For a `float32` table of shape `(3000, 3000)` the strides are `(12000, 4)`.
+
+        With more axes the pattern continues: the stride of the last axis is the size of an entry, and each earlier stride is the next one multiplied by the length of that next axis. For an `int64` array of shape `(2, 3, 4)` the strides are `(96, 32, 8)`.
+
+        **Every view is a change to these four things.** Take `a = np.arange(12, dtype=np.int64).reshape(3, 4)`, with start 0 and strides `(32, 8)`. The block is never touched.
+
+        | view | start | shape | strides | what changed |
+        |---|---|---|---|---|
+        | `a` | 0 | `(3, 4)` | `(32, 8)` | |
+        | `a[1]` | 32 | `(4,)` | `(8,)` | a whole number fixes the start and drops the axis |
+        | `a[:, 1]` | 8 | `(3,)` | `(32,)` | the same, for the other axis |
+        | `a[:, ::2]` | 0 | `(3, 2)` | `(32, 16)` | a step of 2 doubles the stride |
+        | `a[::-1]` | 64 | `(3, 4)` | `(-32, 8)` | reversing starts at the far end with a negative stride |
+        | `a.T` | 0 | `(4, 3)` | `(8, 32)` | the transpose exchanges the strides |
+
+        Look at the last line. The transpose of a table, however large, is made by **exchanging two numbers**. Entry $[i, j]$ of `a.T` is at byte $8i + 32j$, which is where entry $[j, i]$ of `a` is. That is the whole of it, and it is why a transpose costs nothing.
+
+        Look at the second and third lines together. A row has stride 8, one entry. A column has stride 32, one row. For the table of the puzzle those were 4 and 12 000. A row and a column are the same kind of object with different strides, as the intuition said.
+
+        **Stretching, explained.** The broadcasting lesson claimed that a row stretched down a table is not copied. Here is how: `np.broadcast_to(row, (4, 3))` is a view of the three numbers of `row` with shape `(4, 3)` and strides `(0, 8)`. A stride of **zero** along axis 0 means that a step down moves nowhere. Every row of the view reads the same three numbers. Four rows are presented and three numbers exist.
+
+        **Reshape, explained.** The last lesson's puzzle can now be stated in a line. `reshape` gives a view exactly when some start and strides, over the block it is given, produce the entries in the order wanted. For `b.T.reshape(12)` a single stride would have to move through the block by 32, 32, and then $-56$ bytes. There is no such stride, so the entries are copied.
+    - question:
+        id: derivation-transpose
+        type: choice
+        system: s2
+        prompt: |
+          `a` is an `int64` table of shape `(3, 4)` with strides `(32, 8)`. Why does `a.T`, of shape `(4, 3)`, need no copying, however large `a` is?
+        options:
+          - "Because NumPy copies in the background and hides it."
+          - "The entry of `a.T` at $[i, j]$ must be the entry of `a` at $[j, i]$, which lies at byte $32j + 8i$. That is exactly what the strides `(8, 32)` give for index $[i, j]$. So exchanging the two strides, and the two lengths, describes the transpose over the same block."
+          - "Because a transpose only renames the array."
+          - "Because the transpose of a table has the same reading order as the table."
+        answer: 1
+        explanation: |
+          The place of an entry is the start plus each index times its stride. Exchange which index goes with which stride and you have exchanged rows with columns. Nothing depends on the number of entries: the work is the same for a table of twelve numbers as for one of twelve thousand million. The reading order of the transpose is **not** the order of the block, which is why it could not be reshaped without a copy, and why, as the puzzle of this lesson suggests, working through it row by row will be slow.
+        hints:
+          - Where in the block is the entry of a at [j, i]?
+          - What strides would send index [i, j] to that same byte?
+          - Does the answer depend on the size of the table?
+    - text: |
+        **Stored in reading order.** An array is called **contiguous**, in the row-by-row sense, when its entries in reading order lie one after another in the block with no gaps and no jumps: the last stride is the size of an entry, and each earlier stride is the next times the length of that axis. A freshly made array is contiguous. `a.flags.c_contiguous` reports it.
+
+        Views often are not. `a.T` is not: reading it row by row goes down the columns of the block. `a[:, ::2]` is not: it skips every second entry. `a[1:3]`, two whole rows, still is.
+
+        `np.ascontiguousarray(x)` returns `x` itself if it is contiguous, and otherwise a copy of its entries laid out in their own reading order.
+
+        **Why order in memory is speed.** The cache holds recently used memory in runs of 64 bytes, and reaching main memory takes on the order of a hundred times as long as reaching the cache. From those two facts:
+
+        - Reading entries that lie one after another costs one slow fetch for each run of 64 bytes: one in sixteen reads for `float32`, one in eight for `float64`. And since the processor fetches ahead of a steady march, even those are mostly ready in time.
+        - Reading entries far apart costs a slow fetch for **every** entry.
+
+        A table of nine million `float32` values takes 36 megabytes, far more than a cache holds, so the difference is paid in full. For a small table that fits in the cache whole, the order of reading hardly matters, which is why you could not have noticed this effect on the small examples of earlier lessons.
+
+        This is a second way, beside the bookkeeping of the vectorisation lesson, in which counting operations does not give the running time. The operations are the same. What differs is the cost of bringing each number to the processor. Reading memory in order is called having good **locality**.
+
+        **What follows for your code.** Three habits.
+
+        1. **Lay data out so that what is used together lies together.** A table with one example in each row keeps each example in one piece of memory. Taking a batch of examples, `X[k:k + 64]`, reads one solid stretch of the block. That is the reason, beside broadcasting, for the convention of examples in rows.
+
+        2. **When a loop must go through a table piece by piece, go along the last axis in the inner step.** Row by row for a table stored row by row.
+
+        3. **If a view that jumps about will be used heavily, pay once for a copy in its own order**: `np.ascontiguousarray(M.T)`. The copy itself is slow, for the same reason the columns were, and after it every pass is fast.
+
+        NumPy looks after this where it can. `M.sum(axis=0)`, the totals of all the columns in **one** call, is fast: inside, NumPy walks the block in memory order and keeps a running total for each column. The slow version in the puzzle was slow because the Python loop forced the order of travel, one column at a time. That is another reason to hand NumPy the whole job.
+
+        **A small view keeps a large block alive.** A view owns no numbers, and it does keep its block from being thrown away. If a program reads a table of a thousand megabytes, takes `first = table[0]`, and lets go of `table`, the thousand megabytes stay in memory for as long as `first` exists, though `first` shows only a few thousand numbers. When a small piece is to outlive a large array, take it with `.copy()`.
+
+        **Overlapping windows.** Strides can do one more thing that slicing cannot. Suppose an array `x` of length 6 with stride 8 is read with shape `(4, 3)` and strides `(8, 8)`: a step along either axis moves one entry. Row 0 is entries 0, 1, 2. Row 1 is entries 1, 2, 3. Each row is a **window** of three neighbours, and the windows overlap. Four windows of three are presented, twelve entries in all, and only six numbers exist.
+
+        ```python
+        from numpy.lib.stride_tricks import sliding_window_view
+
+        windows = sliding_window_view(x, 3)
+        ```
+
+        Each row of `windows` is one window, and `windows.mean(axis=1)` is the moving average of `x`. A layer that slides a small pattern along a signal or across a picture, the central operation of networks that see and hear, is this: a view of overlapping windows, then one product over the last axis. For an array of length $n$ and windows of length $k$ there are $n - k + 1$ windows.
+    - question:
+        id: order-locate
+        type: order
+        system: s2
+        prompt: Put in order how NumPy reads the entry at index `[i, j]` of a view.
+        steps:
+          - 'Take the start of the view, the byte of the block where its first entry lies.'
+          - 'Add `i` times the stride of axis 0.'
+          - 'Add `j` times the stride of axis 1.'
+          - 'Read from that byte of the block as many bytes as the dtype says one entry takes.'
+          - 'Interpret those bytes as the dtype says: a whole number, or a decimal.'
+        explanation: The first three steps are arithmetic on a handful of numbers and involve no memory at all. Only the fourth touches the block, and whether that read is fast or slow depends on whether the byte is already in the cache, which depends on what was read just before. The dtype is needed twice, for how many bytes to read and for what they mean.
+        hints:
+          - The address must be worked out before anything is read.
+          - The start comes before the strides are added.
+          - Bytes must be read before they can be interpreted.
+  formal:
+    - text: |
+        **Strided view.** An array is a block of memory together with a start $o$, a shape $(n_0, \dots, n_{d-1})$ and strides $(s_0, \dots, s_{d-1})$ in bytes. Its entry at index $[i_0, \dots, i_{d-1}]$ is read from byte $o + \sum_k i_k s_k$ of the block.
+
+        **Row-by-row layout.** A freshly made array with entries of $b$ bytes has $s_{d-1} = b$ and $s_k = s_{k+1}\,n_{k+1}$.
+
+        **Views.** A slice with step $t$ on axis $k$ multiplies $s_k$ by $t$ and moves the start. A whole-number index moves the start and removes the axis. A transpose reverses the order of the shape and of the strides. Broadcasting an axis of length 1 gives it stride 0.
+
+        **Contiguous.** An array is contiguous in the row-by-row sense if its strides are those of the row-by-row layout for its shape. `np.ascontiguousarray(x)` returns such an array with the entries of `x`, copying only if needed.
+
+        **Locality.** Memory is fetched into the cache in runs of 64 bytes. Reading a block in order costs about one slow fetch for each run. Reading with a stride of 64 bytes or more, in a block larger than the cache, costs one for each entry.
+
+        **Windows.** For `x` of length $n$, `sliding_window_view(x, k)` is a view of shape $(n - k + 1, k)$ whose row $r$ is `x[r:r + k]`.
+  drill:
+    - text: |
+        Seconds each. Throughout, `a = np.arange(12, dtype=np.int64).reshape(3, 4)`, with entries of 8 bytes and strides `(32, 8)`.
+    - question:
+        id: drill-fresh
+        type: choice
+        system: s1
+        prompt: |
+          A freshly made `float32` table has shape `(3, 4)`. What are its strides?
+        options: ["`(16, 4)`", "`(32, 8)`", "`(4, 16)`", "`(12, 4)`"]
+        answer: 0
+        explanation: One entry is 4 bytes, and a row of 4 entries is 16 bytes.
+        hints:
+          - The last stride is the size of one entry.
+          - The first stride is a whole row.
+    - question:
+        id: drill-three-axes
+        type: choice
+        system: s1
+        prompt: |
+          A freshly made `int64` array has shape `(2, 3, 4)`. What are its strides?
+        options: ["`(96, 32, 8)`", "`(8, 32, 96)`", "`(24, 12, 4)`", "`(16, 24, 32)`"]
+        answer: 0
+        explanation: The last stride is one entry, 8. The middle is 4 entries, 32. The first is 3 times that, 96.
+        hints:
+          - Work from the last axis backwards.
+          - Each earlier stride is the next one times the length of the next axis.
+    - question:
+        id: drill-transpose
+        type: choice
+        system: s1
+        prompt: |
+          What are the strides of `a.T`?
+        options: ["`(32, 8)`", "`(8, 32)`", "`(24, 8)`", "`(8, 24)`"]
+        answer: 1
+        explanation: The transpose exchanges the strides and leaves the block alone.
+        hints:
+          - No numbers are moved.
+          - The two strides change places.
+    - question:
+        id: drill-step
+        type: choice
+        system: s1
+        prompt: |
+          What are the strides of `a[:, ::2]`?
+        options: ["`(32, 8)`", "`(32, 16)`", "`(64, 8)`", "`(16, 8)`"]
+        answer: 1
+        explanation: Taking every second column doubles the stride along axis 1.
+        hints:
+          - Which axis has the step of 2?
+          - A step multiplies the stride of its axis.
+    - question:
+        id: drill-reverse
+        type: choice
+        system: s1
+        prompt: |
+          What are the strides of `a[::-1]`?
+        options: ["`(-32, 8)`", "`(32, -8)`", "`(32, 8)`", "`(-8, -32)`"]
+        answer: 0
+        explanation: The rows are read backwards, so a step along axis 0 moves back one row.
+        hints:
+          - Which axis is reversed?
+          - Going backwards is a negative stride.
+    - question:
+        id: drill-row
+        type: choice
+        system: s1
+        prompt: |
+          What are the strides of `a[1]`?
+        options: ["`(32,)`", "`(8,)`", "`(32, 8)`", "`(4,)`"]
+        answer: 1
+        explanation: A row is read one entry at a time.
+        hints:
+          - The whole number removed axis 0.
+          - How far apart are neighbouring entries of a row?
+    - question:
+        id: drill-column
+        type: choice
+        system: s1
+        prompt: |
+          What are the strides of `a[:, 1]`?
+        options: ["`(32,)`", "`(8,)`", "`(32, 8)`", "`(4,)`"]
+        answer: 0
+        explanation: Each entry of a column is one whole row past the last.
+        hints:
+          - The whole number removed axis 1.
+          - How far apart in the block are neighbouring entries of a column?
+    - question:
+        id: drill-byte
+        type: numeric
+        system: s1
+        prompt: |
+          With start 0 and strides `(32, 8)`, at which byte of the block is the entry at index `[2, 1]`?
+        answer: "72"
+        explanation: 2 × 32 + 1 × 8.
+        hints:
+          - Multiply each index by the stride of its axis.
+          - Add the two products to the start.
+    - question:
+        id: drill-contiguous
+        type: choice
+        system: s1
+        prompt: |
+          Which of these is stored in its own row-by-row reading order?
+        options: ["`a.T`", "`a[:, ::2]`", "`a[1:3]`", "`a[::-1]`"]
+        answer: 2
+        explanation: Two whole neighbouring rows are a solid stretch of the block, read straight through.
+        hints:
+          - Which one reads the block straight through with no gaps or jumps?
+          - Whole rows lie side by side.
+    - question:
+        id: drill-zero
+        type: choice
+        system: s1
+        prompt: |
+          A view has shape `(4, 3)` and strides `(0, 8)`. What does it show?
+        options: ["Twelve different numbers", "The same three numbers in every one of its four rows", "Four numbers repeated three times across", "Nothing, since a stride of 0 is an error"]
+        answer: 1
+        explanation: A step along axis 0 moves nowhere, so every row reads the same three entries.
+        hints:
+          - What does a step down the rows do to the place in the block?
+          - How many different places can the view reach?
+    - question:
+        id: drill-faster
+        type: choice
+        system: s1
+        prompt: |
+          `M` is a freshly made table too large for the cache. Which is faster to add up, one entry after another?
+        options: ["A row, since its entries lie side by side", "A column, since it is shorter", "They take the same time, since they have the same number of entries", "It depends on the values"]
+        answer: 0
+        explanation: Neighbouring entries of a row come into the cache together. Each entry of a column needs its own fetch.
+        hints:
+          - Which has the smaller stride?
+          - What does one fetch from main memory bring with it?
+    - question:
+        id: drill-windows-shape
+        type: choice
+        system: s1
+        prompt: |
+          `x` has 6 entries. What is the shape of `sliding_window_view(x, 3)`?
+        options: ["`(2, 3)`", "`(4, 3)`", "`(6, 3)`", "`(3, 4)`"]
+        answer: 1
+        explanation: A window of 3 can start at places 0, 1, 2 and 3.
+        hints:
+          - At which places can a window of 3 start?
+          - The last window must end at the last entry.
+    - question:
+        id: drill-windows-count
+        type: numeric
+        system: s1
+        prompt: |
+          How many windows of length 10 are there in an array of length 100?
+        answer: "91"
+        explanation: A window can start at any place from 0 to 90, which is 100 − 10 + 1 places.
+        hints:
+          - What is the last place at which a window can start?
+          - Count the starting places, including place 0.
+    - question:
+        id: predict-strides
+        type: predict
+        system: s1
+        prompt: One block, five descriptions. What does this show?
+        code: |
+          import numpy as np
+
+          a = np.arange(12, dtype=np.int64).reshape(3, 4)
+          print(a.strides, a.T.strides)
+          print(a[:, ::2].strides, a[::-1].strides)
+          print(a.flags.c_contiguous, a.T.flags.c_contiguous)
+        output: |
+          (32, 8) (8, 32)
+          (32, 16) (-32, 8)
+          True False
+        explanation: A row of four 8-byte entries is 32 bytes. The transpose exchanges the strides. A step of 2 doubles a stride and a reversal makes it negative. The fresh table is stored in its reading order and its transpose is not.
+        hints:
+          - The last stride of a fresh array is the size of one entry.
+          - The transpose exchanges the two strides.
+          - Is the transpose read straight through the block?
+    - question:
+        id: predict-windows
+        type: predict
+        system: s1
+        prompt: Overlapping windows. What does this show?
+        code: |
+          import numpy as np
+          from numpy.lib.stride_tricks import sliding_window_view
+
+          x = np.array([1.0, 2.0, 6.0, 4.0, 5.0])
+          w = sliding_window_view(x, 3)
+          print(w)
+          print(w.shape, np.shares_memory(w, x))
+          print(w.mean(axis=1))
+        output: |
+          [[1. 2. 6.]
+           [2. 6. 4.]
+           [6. 4. 5.]]
+          (3, 3) True
+          [3. 4. 5.]
+        explanation: Each row is three neighbouring entries, starting one place later than the row above. Five entries hold three such windows. The nine entries shown are views of five numbers, and the mean of each row is the moving average.
+        hints:
+          - Each window starts one place after the last.
+          - Five entries, windows of three.
+          - The mean along axis 1 gives one number for each window.
+  work:
+    - text: Slower now. For each view, say its start and its strides before saying anything about its speed.
+    - question:
+        id: write-strides
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `strides_of(shape, itemsize)` to return, as a tuple, the strides in bytes of a freshly made array with the given shape, a tuple, whose entries take `itemsize` bytes each and are stored row by row.
+
+          Do not build an array. An empty shape `()` has no strides and gives `()`.
+        starter: |
+          def strides_of(shape, itemsize):
+              # Replace the next line with your own.
+              return shape
+
+          print(strides_of((2, 3, 4), 8))
+        solution: |
+          def strides_of(shape, itemsize):
+              strides = []
+              step = itemsize
+              for length in shape[::-1]:
+                  strides.append(step)
+                  step = step * length
+              return tuple(strides[::-1])
+
+          print(strides_of((2, 3, 4), 8))
+        tests: |
+          import numpy as _np
+          assert strides_of((2, 3, 4), 8) == (96, 32, 8), "Shape (2, 3, 4) with 8-byte entries has strides (96, 32, 8)"
+          assert strides_of((3, 4), 8) == (32, 8), "Shape (3, 4) with 8-byte entries has strides (32, 8)"
+          assert strides_of((3000, 3000), 4) == (12000, 4), "The table of the puzzle has strides (12000, 4)"
+          assert strides_of((5,), 4) == (4,), "A plain array has one stride, the size of an entry"
+          assert strides_of((), 8) == (), "An empty shape has no strides"
+          assert strides_of((4, 3), 8) == (24, 8), "Shape (4, 3) with 8-byte entries has strides (24, 8)"
+          assert strides_of((2, 2, 2, 2), 1) == (8, 4, 2, 1), "Four axes of length 2 with 1-byte entries have strides (8, 4, 2, 1)"
+          for _shape in [(7, 5), (2, 6, 3), (1, 9), (4, 1, 2)]:
+              assert strides_of(_shape, 8) == _np.zeros(_shape, dtype=_np.float64).strides, "The result must agree with the strides NumPy reports for a fresh array of that shape"
+          assert isinstance(strides_of((3, 4), 8), tuple), "Return a tuple"
+          assert output.strip() == "(96, 32, 8)", "The program should print (96, 32, 8)"
+        wrong:
+          - |
+            def strides_of(shape, itemsize):
+                strides = []
+                step = itemsize
+                for length in shape:
+                    strides.append(step)
+                    step = step * length
+                return tuple(strides)
+
+            print("(96, 32, 8)")
+          - |
+            def strides_of(shape, itemsize):
+                return tuple([length * itemsize for length in shape])
+
+            print("(96, 32, 8)")
+          - |
+            def strides_of(shape, itemsize):
+                strides = []
+                step = itemsize
+                for length in shape[::-1]:
+                    step = step * length
+                    strides.append(step)
+                return tuple(strides[::-1])
+
+            print("(96, 32, 8)")
+          - |
+            def strides_of(shape, itemsize):
+                strides = []
+                step = 1
+                for length in shape[::-1]:
+                    strides.append(step)
+                    step = step * length
+                return tuple(strides[::-1])
+
+            print("(96, 32, 8)")
+          - |
+            def strides_of(shape, itemsize):
+                strides = []
+                step = itemsize
+                for length in shape[::-1]:
+                    strides.append(step)
+                    step = step * length
+                return strides
+
+            print("(96, 32, 8)")
+        explanation: |
+          Work from the last axis back. One step along the last axis moves one entry, so its stride is the size of an entry. One step along the axis before it moves past a whole run of the last axis, so its stride is the last stride times the last length. And so on outwards: each stride is the number of bytes in one whole item of everything inside it. The loop keeps that running product, records it **before** multiplying by the current length, and the list is reversed at the end because it was built from the back. For the table of the puzzle this gives 12 000 bytes for a step down a column against 4 for a step along a row, and that single pair of numbers is the explanation of the timings. This is the address arithmetic of an array, from your lessons on data structures, carried to any number of axes.
+        hints:
+          - What is the stride of the last axis?
+          - Each earlier stride is the next stride times the length of the next axis.
+          - Go through the shape backwards, keeping a running product, and reverse the list at the end.
+    - question:
+        id: write-moving
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `moving_average(x, k)` for a plain array `x` of length at least `k`. Return the array whose entry $r$ is the mean of the `k` neighbouring entries `x[r]`, ..., `x[r + k - 1]`.
+
+          Use `sliding_window_view`, which is imported for you, and no loop or comprehension.
+        starter: |
+          import numpy as np
+          from numpy.lib.stride_tricks import sliding_window_view
+
+          def moving_average(x, k):
+              # Replace the next line with your own.
+              return x
+
+          print(moving_average(np.array([1.0, 2.0, 6.0, 4.0, 5.0]), 3))
+        solution: |
+          import numpy as np
+          from numpy.lib.stride_tricks import sliding_window_view
+
+          def moving_average(x, k):
+              return sliding_window_view(x, k).mean(axis=1)
+
+          print(moving_average(np.array([1.0, 2.0, 6.0, 4.0, 5.0]), 3))
+        tests: |
+          import numpy as _np
+          _x = _np.array([1.0, 2.0, 6.0, 4.0, 5.0])
+          _m = moving_average(_x, 3)
+          assert _m.shape == (3,), "Five entries hold three windows of length 3"
+          assert _np.allclose(_m, [3.0, 4.0, 5.0]), "The means of 1, 2, 6 and of 2, 6, 4 and of 6, 4, 5 are 3, 4 and 5"
+          assert _np.allclose(moving_average(_x, 1), _x), "Windows of length 1 give the array itself"
+          assert _np.allclose(moving_average(_x, 5), [3.6]), "One window of the whole array gives its mean, 3.6"
+          assert _np.allclose(moving_average(_x, 2), [1.5, 4.0, 5.0, 4.5]), "Windows of length 2 give the means of neighbouring pairs"
+          assert _np.allclose(moving_average(_np.arange(10.0), 4), [1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5]), "For 0 to 9 the moving averages of 4 are 1.5 to 7.5"
+          assert _x.tolist() == [1.0, 2.0, 6.0, 4.0, 5.0], "The array passed in must not be changed"
+          assert "for " not in source and "while " not in source, "Use no loop and no comprehension"
+          assert output.strip() == "[3. 4. 5.]", "The program should print [3. 4. 5.]"
+        wrong:
+          - |
+            import numpy as np
+            from numpy.lib.stride_tricks import sliding_window_view
+
+            def moving_average(x, k):
+                return sliding_window_view(x, k).mean(axis=0)
+
+            print("[3. 4. 5.]")
+          - |
+            import numpy as np
+            from numpy.lib.stride_tricks import sliding_window_view
+
+            def moving_average(x, k):
+                return sliding_window_view(x, k).sum(axis=1)
+
+            print("[3. 4. 5.]")
+          - |
+            import numpy as np
+            from numpy.lib.stride_tricks import sliding_window_view
+
+            def moving_average(x, k):
+                return sliding_window_view(x, k).mean()
+
+            print("[3. 4. 5.]")
+          - |
+            import numpy as np
+            from numpy.lib.stride_tricks import sliding_window_view
+
+            def moving_average(x, k):
+                return sliding_window_view(x, k + 1).mean(axis=1)
+
+            print("[3. 4. 5.]")
+          - |
+            import numpy as np
+            from numpy.lib.stride_tricks import sliding_window_view
+
+            def moving_average(x, k):
+                return x[:len(x) // k * k].reshape(-1, k).mean(axis=1)
+
+            print("[3. 4. 5.]")
+        explanation: |
+          `sliding_window_view(x, k)` is a table with one window in each row: shape $(n - k + 1, k)$, with strides that move one entry along either axis, so no number is copied. The mean of each window is a reduction along the axis that runs **within** a window, axis 1, which disappears and leaves one number for each window. Along axis 0 the means would be taken across windows, giving $k$ numbers that mean nothing useful. A reshape into rows of $k$ gives windows that do not overlap, which is a different thing: it summarises the array in blocks, where a moving average follows it step by step. Smoothing a noisy training curve so that its trend can be seen is done with exactly this function.
+        hints:
+          - sliding_window_view(x, k) has one window in each row.
+          - Which axis runs along a window?
+          - Take the mean along that axis.
+    - question:
+        id: fix-keep
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          A program loads a very large table, keeps only its first row as a sample, and lets the table go. `sample(table)` should return the first row as an array that **owns its own block**, so that the large table can be thrown away. As written, the result is a view, and the whole table stays in memory for as long as the sample is kept. The program prints `False` and should print `True`. Fix it.
+        starter: |
+          import numpy as np
+
+          def sample(table):
+              return table[0]
+
+          table = np.arange(12.0).reshape(3, 4)
+          print(sample(table).base is None)
+        solution: |
+          import numpy as np
+
+          def sample(table):
+              return table[0].copy()
+
+          table = np.arange(12.0).reshape(3, 4)
+          print(sample(table).base is None)
+        tests: |
+          import numpy as _np
+          _t = _np.arange(12.0).reshape(3, 4)
+          _s = sample(_t)
+          assert _s.tolist() == [0.0, 1.0, 2.0, 3.0], "The sample holds the first row"
+          assert _s.shape == (4,), "The sample is a plain array with one entry for each column"
+          assert not _np.shares_memory(_s, _t), "The sample must not share the block of the table"
+          assert _s.base is None, "The sample must own its block"
+          _s[0] = 99.0
+          assert _t[0, 0] == 0.0, "Writing to the sample must not change the table"
+          _u = _np.array([[5.0, 6.0], [7.0, 8.0]])
+          assert sample(_u).tolist() == [5.0, 6.0], "For a square table the sample is the first row, not the first column"
+          assert sample(_np.ones((1000, 3))).nbytes == 24, "The sample of a table with three columns holds 24 bytes"
+          assert output.strip() == "True", "The program should print True"
+        wrong:
+          - |
+            import numpy as np
+
+            def sample(table):
+                return table[0]
+
+            print(True)
+          - |
+            import numpy as np
+
+            def sample(table):
+                return table[0][:]
+
+            print(True)
+          - |
+            import numpy as np
+
+            def sample(table):
+                return table[0:1].copy()
+
+            table = np.arange(12.0).reshape(3, 4)
+            print(sample(table).base is None)
+          - |
+            import numpy as np
+
+            def sample(table):
+                return table[:, 0].copy()
+
+            table = np.arange(12.0).reshape(3, 4)
+            print(sample(table).base is None)
+          - |
+            import numpy as np
+
+            def sample(table):
+                return table.copy()[0]
+
+            print(True)
+        explanation: |
+          `table[0]` is a view: a start and a stride over the block of the table. It shows four numbers and holds on to all of them, since Python keeps a block for as long as anything refers to it, and a view refers to it. `.copy()` gives the row a block of its own, 32 bytes here, and breaks the link. Slicing the view again makes another view of the same block. Copying the **whole** table and then taking a row of the copy is worse than the bug: the row is a view of a second full-sized block. The attribute `base` tells the two cases apart, being `None` exactly when an array owns its block. This is the commonest cause of a program that uses far more memory than its data seems to account for, since `nbytes` on a view reports only the entries it shows.
+        hints:
+          - Is table[0] a view or a copy?
+          - What keeps a block of memory from being thrown away?
+          - Which method gives an array a block of its own?
+    - question:
+        id: work-columns
+        type: choice
+        system: s2
+        prompt: |
+          In the puzzle, adding the table column by column took several times as long as row by row, though both did nine million additions on views. What accounts for the difference?
+        options:
+          - "A column has more entries than a row."
+          - "`M[:, j]` is copied before it is added up."
+          - "The entries of a row lie side by side, so each fetch from main memory brings the next fifteen with it and the rest are read from the cache. The entries of a column are 12 000 bytes apart, each in a different run of 64 bytes, so every one needs its own fetch from main memory."
+          - "Python's bookkeeping is larger for columns."
+        answer: 2
+        explanation: |
+          The Python work is the same in both loops, 3000 calls each, and no copy is made in either. The difference is inside NumPy's compiled loop, in how long the processor waits for each number to arrive. With a stride of 4 bytes, sixteen entries share each run of 64 bytes and the steady march lets the processor fetch ahead. With a stride of 12 000 bytes nothing is shared, and the table, at 36 megabytes, is far too large to sit in the cache. So the cost is not in the arithmetic at all. A count of operations assumes every operation costs the same, and reading memory does not: it depends on what was read just before.
+        hints:
+          - What are the strides of a row and of a column of this table?
+          - How many bytes does one fetch from main memory bring?
+          - How many entries of a row fit in that, and how many of a column?
+    - question:
+        id: work-stride
+        type: numeric
+        system: s2
+        prompt: |
+          `a` is a freshly made `float64` table of shape `(100, 50)`. What is the stride, in bytes, along axis 0 of the view `a[::2, ::5]`?
+        answer: "800"
+        explanation: |
+          In `a` one step down a column passes a whole row of 50 entries of 8 bytes, so the stride of axis 0 is 400. The slice takes every second row, which doubles it. The stride of axis 1 goes from 8 to 40 in the same way, and the view has shape `(50, 10)`. No entry has moved. The view is not stored in its reading order, since its neighbouring entries are 40 bytes apart and its neighbouring rows 800, so a heavy computation on it would be faster after `np.ascontiguousarray`.
+        hints:
+          - What is the stride along axis 0 of a itself?
+          - What does a step of 2 on that axis do to the stride?
+          - A row of a holds 50 entries of 8 bytes.
+    - question:
+        id: work-zero
+        type: choice
+        system: s2
+        prompt: |
+          `row` holds three `float64` numbers. `v = np.broadcast_to(row, (1000000, 3))` has shape `(1000000, 3)` and strides `(0, 8)`. How much memory do its entries occupy, and what would happen if a program could write to `v[5, 0]`?
+        options:
+          - "24 megabytes, and only row 5 would change."
+          - "24 bytes. A stride of 0 along axis 0 means every row reads the same three numbers, so a write to `v[5, 0]` would change the first entry of **every** row at once. For that reason NumPy marks such a view as read-only."
+          - "24 bytes, and only row 5 would change."
+          - "Nothing, since the view is empty."
+        answer: 1
+        explanation: |
+          The place of `v[i, j]` is $0 \times i + 8 \times j$, which does not depend on $i$. A million rows are shown and three numbers exist. That is how broadcasting stretches without copying, as was claimed three lessons ago. It also means the rows are not independent: they are one row seen a million times. Writing through such a view would be so surprising that NumPy forbids it, and when a program truly needs a million separate rows it must ask for a copy, which takes the full 24 megabytes.
+        hints:
+          - Where in the block is v[i, j], by the stride formula?
+          - Does that place depend on i?
+          - How many different numbers can the view reach?
+    - question:
+        id: work-layout
+        type: choice
+        system: s2
+        prompt: |
+          A set of training data has a million examples, each of 100 features, and a model is trained by reading 64 examples at a time. The data could be stored as a table of shape `(1000000, 100)`, examples in rows, or as `(100, 1000000)`, features in rows. Which layout suits the training loop, and why?
+        options:
+          - "Features in rows, since there are fewer rows."
+          - "Examples in rows. A batch `X[k:k + 64]` is then one solid stretch of 6400 numbers, read in order. With features in rows, a batch `X[:, k:k + 64]` is a hundred short pieces 8 megabytes apart, and assembling it means a hundred far jumps through memory."
+          - "It makes no difference, since both hold the same numbers."
+          - "Features in rows, since a transpose is free."
+        answer: 1
+        explanation: |
+          Lay data out so that what is used together lies together. The training loop uses one example's features together, and neighbouring examples together, so each example should be a solid run and each batch a solid run of those. A transpose is free to **make**, and that is exactly the trap: the transposed table is a view whose reading order jumps through the block, and every pass over it pays for the jumps. If the analysis at hand worked a feature at a time, over all examples, the other layout would be the right one. There is no best layout in general. There is the layout that matches the order in which the numbers will be read.
+        hints:
+          - Which numbers does one step of training read together?
+          - In which layout do those numbers lie side by side?
+          - Does a free transpose change where the numbers are in memory?
+  connections:
+    - text: |
+        A square table was added up by rows and by columns, with the same nine million additions, and the columns took several times as long. A row is read one entry at a time. A column is read a whole row at a time, 12 000 bytes for each step. A processor fetches memory in runs of 64 bytes and fetches ahead of a steady march, so the row arrives nearly for nothing, and every entry of the column has to be sent for.
+
+        That step is the **stride**, and with it the phrase left open by [[e5.reshaping-views-and-copies]] is closed. A view is a block, a start, a shape and one stride for each axis, and the entry at an index lies at the start plus each index times its stride. A slice with a step multiplies a stride. A reversal makes it negative. A transpose exchanges two strides, which is why it is free. A broadcast axis has stride zero, which is how one row is shown a million times. And a reshape is a view exactly when some start and strides give the order wanted.
+
+        From this come habits for real work. Keep together in memory what is used together: examples in rows, batches as slices of rows. Let NumPy do a whole job in one call, since it walks the block in memory order when it can. Copy a small piece that must outlive a large array. And when a view that jumps about is to be used heavily, pay once for a copy in its own order.
+
+        Strides also gave overlapping windows, a table of every run of $k$ neighbours with nothing copied, which is the mechanism under moving averages and under the layers of a network that slide a pattern across a signal. The effect of the order of operations on the **accuracy** of a result, as distinct from its speed, is taken up in [[e5.numerical-error-analysis-in-practice]].
+
+        You now know the array from the outside and from the inside: its shape and dtype, how to select from it, how shapes combine, how to reduce along an axis, how views share a block, and how the block is walked. Everything so far has treated an array as a container of numbers. It is time to treat a table as what the last cluster said it is, a **matrix**: a linear map, with a product, an inverse, a rank and a determinant. You wrote `matmul`, `solve`, `rank` and `det` by hand, on lists of rows, and proved what each one does. NumPy has all of them, written by specialists and resting on fifty years of careful work, hundreds of times faster than yours and far more careful about rounding. Which to call, what each really computes, and why you should almost never ask for an inverse, is the next lesson, [[e5.linear-algebra-routines]].

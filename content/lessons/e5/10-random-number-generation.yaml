@@ -1,0 +1,851 @@
+concept: e5.random-number-generation
+minutes: 90
+claim: You can explain how a fixed rule produces numbers that pass for chance, say what a seed is and what a generator's state is, draw uniform numbers, whole numbers, normal numbers and permutations of any shape from a NumPy generator, predict how far the mean of many draws is likely to lie from its true value, and organise a program so that its randomness can be repeated exactly.
+recalls: [e5.einsum]
+uses: [e1.modules-and-imports, e5.indexing-and-slicing, e5.axis-operations-and-reductions, e5.vectorisation, e5.arrays-dtype-and-shape, e5.broadcasting, m10.integral-as-accumulation, m0.powers-and-roots, m0.estimation-and-orders-of-magnitude, e0.functions, e0.loops, e0.expressions]
+leads: [e5.log-sum-exp-and-stable-formulations, e5.numerical-error-analysis-in-practice]
+starter: |
+  # Scratch space. Run this several times and compare the two lines from one run to the next.
+  import numpy as np
+
+  fresh = np.random.default_rng()
+  print("no seed  ", fresh.random(3))
+
+  fixed = np.random.default_rng(2024)
+  print("seed 2024", fixed.random(3))
+parts:
+  recall:
+    - text: |
+        [[e5.einsum]] closed by pointing out that every array so far had been tidy, and that real work needs numbers with no pattern in them. Three quick pulls first.
+    - question:
+        id: recall-einsum
+        type: choice
+        system: s1
+        concepts: [e5.einsum]
+        prompt: |
+          What is `np.einsum("ij->i", A)`?
+        options: ["The sum of each row of `A`", "The sum of each column of `A`", "The transpose of `A`", "The diagonal of `A`"]
+        answer: 0
+        explanation: The letter `j`, which runs along a row, is dropped and so summed. One number is left for each row.
+        hints:
+          - Which letter is missing after the arrow?
+          - Along what does that letter run?
+    - question:
+        id: recall-seed
+        type: choice
+        system: s1
+        concepts: [e1.modules-and-imports]
+        prompt: |
+          A program begins with `import random` and `random.seed(3)`, and then prints `random.random()`. What happens when it is run a second time?
+        options: ["It prints a different number", "It prints the same number as the first time", "It stops with an error", "It prints 3"]
+        answer: 1
+        explanation: Seeding fixes where the sequence of numbers starts, so the same seed gives the same numbers.
+        hints:
+          - What is the seed for?
+          - Does anything differ between the two runs?
+    - question:
+        id: recall-positions
+        type: choice
+        system: s1
+        concepts: [e5.indexing-and-slicing]
+        prompt: |
+          `x = np.array([10, 20, 30])`. What is `x[np.array([2, 0, 1])]`?
+        options: ["`[30 10 20]`", "`[20 30 10]`", "`[10 20 30]`", "It is an error"]
+        answer: 0
+        explanation: An array of positions picks the entries at those positions, in the order given.
+        hints:
+          - The first position asked for is 2.
+          - The result has one entry for each position listed.
+  puzzle:
+    - text: |
+        The starter makes two **generators** of random numbers and asks each for three numbers between 0 and 1.
+
+        The first is made with nothing in the brackets. The second is made with the number 2024 in the brackets.
+
+        Run it. Then run it again, and again, and watch the two lines.
+
+        The first line changes on every run. That is what you expect of random numbers.
+
+        **The second line never changes.** Run it a hundred times, on this machine or any other, today or in ten years, and it prints the same three numbers. They do not look special. They have no pattern you could name. If someone showed you both lines and asked which one was "really random", you could not tell.
+
+        This ought to be puzzling from both directions. A computer is a machine built to do exactly what it is told, the same way each time: where is the first line getting its surprises? And if the second line is the same on every run, in what sense are those numbers random at all?
+
+        **How does a machine that follows rules produce numbers that pass for chance? What is the number in the brackets? And if the answer is that the numbers are not chance, why is that exactly what a scientist wants?**
+  intuition:
+    - text: |
+        Start by building a generator yourself. It takes one line.
+
+        Pick a whole number from 0 to 15 and call it the **state**. To get the next number, multiply the state by 5, add 3, and keep the remainder on dividing by 16:
+
+        $$\text{state} \leftarrow (5 \times \text{state} + 3) \bmod 16.$$
+
+        Begin with 7. Five 7s and 3 make 38, and the remainder on dividing by 16 is 6. From 6: 33, remainder 1. From 1: 8. Carry on, and the states run
+
+        $$7 \to 6,\ 1,\ 8,\ 11,\ 10,\ 5,\ 12,\ 15,\ 14,\ 9,\ 0,\ 3,\ 2,\ 13,\ 4,\ 7,\ \dots$$
+
+        Look at that list as if you did not know the rule. It jumps about. Small numbers and large ones are mixed. Every value from 0 to 15 appears exactly once before the 7 returns and the whole thing repeats. If you divided each by 16 you would have sixteen numbers spread between 0 and 1 in no evident order.
+
+        And yet nothing here is chance. Multiplying stretches the numbers out, and taking the remainder folds them back, like a baker stretching and folding dough: two raisins that start side by side are soon far apart, and where any one raisin ends up is hard to foresee, though every fold was perfectly definite.
+
+        That is the whole idea. A **pseudo-random generator** is a state and a fixed rule for stirring it. Each time you ask for a number, the rule is applied, the state moves on, and a number is made from the new state.
+
+        The rule above is a toy: it repeats after 16 steps. The generator inside NumPy has a state of 128 binary digits and a much better stirring rule. It repeats after $2^{128}$ steps, a number with 39 digits. At a thousand million draws a second, the age of the universe would not get you a noticeable way round.
+
+        Now the **seed**. It is simply the state the generator starts in. Start the toy at 7 and you get 6, 1, 8, 11. Start it at 12 and you get 15, 14, 9, 0. Think of an enormous book filled with jumbled digits. The book never changes. The seed is the page at which you open it. Open at the same page and you read the same digits.
+
+        That settles the second line of the puzzle: same seed, same starting state, same rule, same numbers. And the first line? With nothing in the brackets, NumPy asks the operating system for a seed, and the operating system makes one from things that truly are unpredictable to a program: the exact timing of keystrokes, of network traffic, of the disc. A different page each run.
+
+        The figure draws numbers from a generator of this kind. Change the seed and watch the first three numbers change, and the overall picture stay the same. Then raise the number of draws.
+    - figure: random-samples
+      props: { seed: 0, power: 2 }
+    - text: |
+        Two things to see there. With a hundred draws the bars are ragged: some stretches of the line between 0 and 1 got more than their share and others fewer. With ten thousand they are nearly level. Each equal stretch gets, in the long run, an equal share. That is what **uniform** means, and it is the one promise a generator makes: not that any single number is unpredictable, since with the seed in hand it is perfectly predictable, but that the numbers as a crowd are spread the way chance would spread them.
+
+        And the mean of the draws moves towards 0.5 as the count grows, quickly at first and then more and more slowly. Remember that. It has a law.
+
+        Uniform numbers are the raw material. Everything else is made from them. Switch the figure to the other kind you will use most.
+    - figure: random-samples
+      props: { seed: 0, power: 4, normal: true }
+    - text: |
+        These are **normal** draws, and their picture is the bell curve. They pile up near 0 and thin out on both sides. About 68 in every 100 lie within 1 of the middle, about 95 within 2, and beyond 3 there is almost nothing. Heights of people, errors of measurement, and the sum of many small independent pushes of any kind all take this shape, for a reason that the clusters on probability will prove. For now, take it as the standard shape of "a typical value, give or take". When a network's weights are given their starting values, this is nearly always where they are drawn from.
+
+        So why would anyone want numbers that only pretend to be chance? Because an experiment that cannot be repeated is not an experiment. Suppose you train a model and its accuracy is 91 per cent. You change one line and train again: 92. Was the change an improvement, or did the second run just happen to start from luckier weights? If the randomness cannot be replayed, you cannot know. With a seed you can run both versions on **the very same** random numbers, and whatever differs is due to your change. And when something goes wrong on the four-thousandth step of training, you can make it go wrong again, on demand, while you look.
+
+        Randomness that can be replayed is the kind science needs. The seed is a laboratory notebook entry: it records exactly which chance you had.
+  derivation:
+    - text: |
+        **Making a generator.** One line:
+
+        ```python
+        rng = np.random.default_rng(2024)
+        ```
+
+        `rng` is an object that holds a state. Each method below draws from it and moves the state on. The `size` may be a whole number or a shape.
+
+        | call | what it returns |
+        |---|---|
+        | `rng.random(size)` | uniform floats, from 0 up to but **not including** 1 |
+        | `rng.uniform(a, b, size)` | uniform floats from `a` up to `b` |
+        | `rng.integers(a, b, size)` | whole numbers from `a` up to but **not including** `b` |
+        | `rng.normal(mean, sd, size)` | normal floats with that mean and standard deviation |
+        | `rng.permutation(n)` | the numbers 0 to `n - 1` in a jumbled order |
+        | `rng.shuffle(a)` | nothing. It jumbles the array `a` in place |
+        | `rng.choice(a, size)` | entries picked from the array `a` |
+
+        `rng.random((3, 4))` is a table of twelve draws, made in one compiled loop. You never draw in a Python loop.
+
+        **Everything from uniform.** Let $u$ be a uniform draw between 0 and 1.
+
+        - Stretch and shift, and $a + (b - a)\,u$ is uniform between $a$ and $b$. So `2 * rng.random(n) - 1` is uniform between $-1$ and 1.
+        - Multiply by $n$ and drop the fraction, and you have a whole number from 0 to $n - 1$, each equally often. That is `integers`.
+        - A normal draw $z$ with mean 0 and standard deviation 1 is made from uniform draws by a transformation that will be within your reach after the clusters on probability. From it, $\mu + \sigma z$ has mean $\mu$ and standard deviation $\sigma$: stretch and shift again. So `rng.normal(5.0, 2.0, n)` is `5.0 + 2.0 * rng.normal(size=n)`.
+
+        **The mean and spread of a uniform draw.** You can work these out with an integral, which is an average over a continuous range. The mean of $u$ over the stretch from 0 to 1 is
+
+        $$\int_0^1 u\, du = \tfrac12.$$
+
+        The mean of $u^2$ is $\int_0^1 u^2\, du = \tfrac13$. The variance, as you computed it for arrays, is the mean of the squares less the square of the mean: $\tfrac13 - \tfrac14 = \tfrac1{12}$. So the standard deviation of a uniform draw is $1/\sqrt{12} \approx 0.29$.
+
+        **How good is the mean of $n$ draws?** Draw $n$ uniform numbers and take their mean. It will not be exactly 0.5. How far off is it likely to be? Measure:
+
+        | draws | typical distance of the mean from 0.5 |
+        |---|---|
+        | 100 | 0.03 |
+        | 10 000 | 0.003 |
+        | 1 000 000 | 0.0003 |
+
+        A hundred times more draws, and the mean is only **ten** times closer. The law is
+
+        $$\text{typical error of the mean of } n \text{ draws} \approx \frac{\text{standard deviation of one draw}}{\sqrt{n}},$$
+
+        which for uniform draws is $0.29/\sqrt{n}$, and the table agrees with it. Why a square root is, again, a theorem of probability that you will prove later. Its consequence is worth knowing now, since it governs every measurement made by sampling, the accuracy of a model on a test set included: **to halve the uncertainty you need four times the data, and for one more decimal place, a hundred times.**
+
+        **The state moves.** This is the fact that most affects how you write programs.
+
+        ```python
+        rng = np.random.default_rng(0)
+        x = rng.random(3)
+        y = rng.random(3)
+        ```
+
+        `x` and `y` are different. The first call advanced the state, and the second went on from there. Together they are the first six numbers from seed 0. So the numbers a call returns depend on the seed **and on every draw made before it.** Insert one extra draw near the top of a program and every random number after it changes.
+
+        Now the opposite mistake.
+
+        ```python
+        def noisy(x):
+            rng = np.random.default_rng(0)
+            return x + rng.normal(size=x.shape)
+        ```
+
+        Every call makes a new generator, opened at the same page. Every call adds **the same** noise. Nothing warns you: the noise looks random each time you look at it.
+    - question:
+        id: derivation-pass
+        type: choice
+        system: s2
+        prompt: |
+          A function that needs random numbers creates `np.random.default_rng(0)` inside itself. It is called a thousand times in a training loop. What goes wrong, and what is the sound design?
+        options:
+          - "Nothing goes wrong, since a seed makes the results repeatable."
+          - "Each call starts a fresh generator in the same state, so all thousand calls draw identical numbers, which are random in appearance and wholly dependent on one another in fact. The function should take a generator as an argument. The program makes one generator, at the top, from one recorded seed, and passes it to everything that needs randomness, so that each draw moves the single shared state on."
+          - "It is too slow, and the seed should be removed so that the function runs faster."
+          - "The seed 0 is not allowed."
+        answer: 1
+        explanation: |
+          A seed fixes the starting state, and a new generator with the same seed starts in the same state. The function therefore replays the first few numbers of one sequence for ever. Removing the seed inside the function would make the calls differ, and would also throw away the ability to repeat a run. Passing the generator in gives both: the calls differ, since the state moves on between them, and the whole run can be replayed, since everything descends from one seed. It also makes the function honest about what it depends on, which is the same reason you prefer an argument to a hidden global variable anywhere else.
+        hints:
+          - In what state does a newly made generator with seed 0 begin?
+          - What does that mean for the numbers drawn by the second call?
+          - How can a function use a generator without making one?
+    - text: |
+        **The discipline.** Four rules cover nearly everything.
+
+        1. **One seed, written down.** Choose it at the top of the program and record it with the results.
+        2. **One generator, made once**, and passed as an argument to every function that draws.
+        3. **Never make a generator inside a loop or inside a function that is called repeatedly.**
+        4. **Draw in the same order.** The same seed gives the same run only if the same draws are made in the same sequence.
+
+        You will see older code that calls `np.random.seed(0)` and then functions such as `np.random.rand`. That is a single hidden generator shared by the whole program, a global variable in everything but name. Any function, in any library, can advance it without your knowing, and then your "repeatable" run is not. `default_rng` gives you a generator that is yours.
+
+        **A seed is not a result.** Fixing the seed makes a run repeatable. It does not make its outcome typical. If one model beats another with seed 0, run seeds 1 to 9 as well. A difference that holds for one seed and vanishes for the others was luck.
+
+        **Shuffling a set of examples.** Training shows the examples in a new random order on each pass. The examples are the rows of `X`, and their labels are the entries of `y`, and they must stay paired. Draw **one** jumbled order and use it for both, with the position arrays of the indexing lesson:
+
+        ```python
+        order = rng.permutation(len(X))
+        X_shuffled = X[order]
+        y_shuffled = y[order]
+        ```
+
+        Row `k` of the result is row `order[k]` of the original, in both arrays. Shuffle the two separately and every example is given some other example's label.
+
+        **Starting a network.** A layer that takes `n_in` numbers to `n_out` numbers is a table of weights of shape `(n_out, n_in)`, and it is started with small normal draws:
+
+        ```python
+        W = rng.normal(0.0, 0.01, size=(n_out, n_in))
+        ```
+
+        Why random, and not all zeros? If every weight starts the same, every unit of the layer computes the same thing, receives the same correction, and stays the same as its neighbours for ever. Random starting values break the tie.
+
+        **Measuring by sampling.** Random numbers also compute things. Scatter points uniformly over the unit square. The fraction that land inside the quarter circle of radius 1 approaches the area of the quarter circle, $\pi/4$, since each equal patch of the square gets an equal share of points. Four times the fraction is an estimate of $\pi$. With a million points the estimate is typically off by about 0.002, in line with the square-root law. An integral, which you met as an area, can always be estimated this way, and in many dimensions, where slicing into strips is hopeless, it is the only way that works. The method is named after the casino at Monte Carlo.
+    - question:
+        id: order-experiment
+        type: order
+        system: s2
+        prompt: Put in order the steps of a training run whose randomness can be replayed exactly.
+        steps:
+          - 'Choose a seed and write it down with the settings of the run.'
+          - 'Make one generator from that seed, at the top of the program.'
+          - 'Draw the starting weights of the model from the generator.'
+          - 'At the start of each pass, draw one permutation from the generator and reorder the examples and the labels by it.'
+          - 'Take the batches in that order and train on them.'
+          - 'To replay the run, start the program again with the same seed and change nothing in the order of the draws.'
+        explanation: The seed comes first, since the generator is made from it, and the generator before anything is drawn. The weights are drawn once, before training. Each pass then draws its own order from the same generator, so the passes differ from one another, and the whole sequence of draws is fixed by the one seed. Replaying depends on the draws being made in the same sequence, so any change that inserts or removes a draw changes everything after it.
+        hints:
+          - A generator cannot be made before its seed is chosen.
+          - The weights exist before the first pass over the data.
+          - Replaying comes last.
+  formal:
+    - text: |
+        **Generator.** A pseudo-random generator is a state $s$ from a finite set, an update rule $s \leftarrow f(s)$ and an output rule $g(s)$. Its outputs are a fixed sequence determined by the starting state, the **seed**. `np.random.default_rng(seed)` returns a generator, and each draw advances its state.
+
+        **Uniform.** `rng.random(size)` returns floats $u$ with $0 \le u < 1$, of which the fraction falling in any stretch approaches the length of the stretch. Mean $\tfrac12$, standard deviation $1/\sqrt{12}$. The value $a + (b - a)u$ is uniform on the stretch from $a$ to $b$.
+
+        **Whole numbers.** `rng.integers(a, b, size)` returns whole numbers $k$ with $a \le k < b$, each equally often in the long run.
+
+        **Normal.** `rng.normal(mu, sigma, size)` returns $\mu + \sigma z$, where $z$ is standard normal: about 68 per cent of draws within $\sigma$ of $\mu$, and about 95 per cent within $2\sigma$.
+
+        **Permutation.** `rng.permutation(n)` returns the whole numbers 0 to $n - 1$ in an order chosen so that every order is equally likely.
+
+        **Error of a mean.** The mean of $n$ independent draws, each with standard deviation $\sigma$, typically differs from the true mean by about $\sigma / \sqrt{n}$.
+  drill:
+    - text: |
+        Seconds each. Throughout, `rng` is a generator made by `np.random.default_rng`.
+    - question:
+        id: drill-make
+        type: choice
+        system: s1
+        prompt: |
+          Which line makes a generator that starts from seed 7?
+        options: ["`rng = np.random.default_rng(7)`", "`rng = np.random(7)`", "`rng = np.seed(7)`", "`rng = np.array(7)`"]
+        answer: 0
+        explanation: "`default_rng` returns a generator, and its argument is the seed."
+        hints:
+          - The function lives in the random part of NumPy.
+          - Its name says it gives the default generator.
+    - question:
+        id: drill-range
+        type: choice
+        system: s1
+        prompt: |
+          In what range do the values of `rng.random(5)` lie?
+        options: ["From 0 up to but not including 1", "From 1 to 5", "From −1 to 1", "Any float at all"]
+        answer: 0
+        explanation: Uniform draws start at 0 and stop just short of 1.
+        hints:
+          - These are the raw uniform draws.
+          - The argument 5 is how many, not how large.
+    - question:
+        id: drill-shape
+        type: choice
+        system: s1
+        prompt: |
+          What is the shape of `rng.random((2, 3))`?
+        options: ["`(2, 3)`", "`(6,)`", "`(3, 2)`", "`(2,)`"]
+        answer: 0
+        explanation: The size may be a shape, and the result has that shape.
+        hints:
+          - The argument is a tuple.
+          - It is used as the shape of the result.
+    - question:
+        id: drill-integers
+        type: choice
+        system: s1
+        prompt: |
+          Which value can never appear in `rng.integers(0, 10, size=4)`?
+        options: ["0", "5", "9", "10"]
+        answer: 3
+        explanation: The upper end is not included, as with `range` and with slices.
+        hints:
+          - Is the upper end included?
+          - It follows the same convention as range.
+    - question:
+        id: drill-same-seed
+        type: choice
+        system: s1
+        prompt: |
+          `a` and `b` are two generators made with the same seed. Each is asked once for `random(3)`. How do the results compare?
+        options: ["They are identical", "They are different", "The second is the reverse of the first", "It cannot be known"]
+        answer: 0
+        explanation: Same starting state and same rule give the same numbers.
+        hints:
+          - In what state does each generator begin?
+          - Is anything different between the two?
+    - question:
+        id: drill-twice
+        type: choice
+        system: s1
+        prompt: |
+          One generator is asked twice for `random(3)`. How do the two results compare?
+        options: ["They are identical", "They are different, since the first call moved the state on", "The second is all zeros", "The second call is an error"]
+        answer: 1
+        explanation: Each draw advances the state, and the second call carries on from where the first stopped.
+        hints:
+          - What does a draw do to the state?
+          - Where does the second call start from?
+    - question:
+        id: drill-mean
+        type: numeric
+        system: s1
+        prompt: |
+          To one decimal place, what is the mean of a million values of `rng.random`?
+        answer: "0.5"
+        explanation: The draws are spread evenly from 0 to 1, and the middle of that stretch is one half.
+        hints:
+          - The draws are spread evenly over a stretch.
+          - What is the middle of that stretch?
+    - question:
+        id: drill-stretch
+        type: numeric
+        system: s1
+        prompt: |
+          A uniform draw between 0 and 1 comes out as 0.5. It is turned into a draw between 2 and 5 by $a + (b - a)\,u$. What is the result?
+        answer: "3.5"
+        explanation: 2 + 3 × 0.5. Half way along the stretch from 0 to 1 becomes half way along the stretch from 2 to 5.
+        hints:
+          - Here a is 2 and b is 5.
+          - Multiply the draw by the width of the new stretch, then add its start.
+    - question:
+        id: drill-normal
+        type: choice
+        system: s1
+        prompt: |
+          About what share of the values of `rng.normal(size=100000)` lie between −1 and 1?
+        options: ["About 50 per cent", "About 68 per cent", "About 95 per cent", "All of them"]
+        answer: 1
+        explanation: For normal draws about 68 in every 100 lie within one standard deviation of the mean.
+        hints:
+          - With no other arguments the mean is 0 and the standard deviation is 1.
+          - What share lies within one standard deviation?
+    - question:
+        id: drill-normal-mean
+        type: numeric
+        system: s1
+        prompt: |
+          To the nearest whole number, what is `rng.normal(10.0, 2.0, size=100000).mean()`?
+        answer: "10"
+        explanation: The first argument is the mean, and with so many draws their mean lies very close to it.
+        hints:
+          - What is the first argument of normal?
+          - The mean of many draws lies close to the true mean.
+    - question:
+        id: drill-permutation
+        type: choice
+        system: s1
+        prompt: |
+          What does `rng.permutation(5)` return?
+        options: ["Five floats between 0 and 1", "The numbers 0 to 4, each once, in a jumbled order", "Five whole numbers from 0 to 4, with repeats allowed", "The number 5"]
+        answer: 1
+        explanation: A permutation is a reordering, so every number appears exactly once.
+        hints:
+          - A permutation reorders.
+          - Can a reordering repeat or lose a number?
+    - question:
+        id: drill-toy
+        type: numeric
+        system: s1
+        prompt: |
+          The toy generator has the rule state ← (5 × state + 3) mod 16. Its state is 3. What is the next state?
+        answer: "2"
+        explanation: 5 × 3 + 3 is 18, and the remainder on dividing by 16 is 2.
+        hints:
+          - Multiply by 5 and add 3.
+          - Keep the remainder on dividing by 16.
+    - question:
+        id: drill-shuffle
+        type: choice
+        system: s1
+        prompt: |
+          What does `rng.shuffle(a)` do?
+        options: ["It returns a jumbled copy and leaves `a` alone", "It jumbles `a` in place and returns nothing", "It sorts `a`", "It returns one entry of `a`"]
+        answer: 1
+        explanation: "`shuffle` changes the array it is given. `permutation` is the one that returns a new array."
+        hints:
+          - One of the two, shuffle and permutation, works in place.
+          - Which name sounds like an action done to something?
+    - question:
+        id: drill-symmetric
+        type: choice
+        system: s1
+        prompt: |
+          Which expression gives `n` uniform draws between −1 and 1?
+        options: ["`rng.random(n) - 1`", "`2 * rng.random(n) - 1`", "`rng.random(n) / 2`", "`rng.integers(-1, 1, size=n)`"]
+        answer: 1
+        explanation: Doubling stretches the range to 0 up to 2, and subtracting 1 shifts it to start at −1.
+        hints:
+          - The new stretch has width 2.
+          - Stretch first, then shift.
+    - question:
+        id: predict-state
+        type: predict
+        system: s1
+        prompt: Two generators and three draws. What does this show?
+        code: |
+          import numpy as np
+
+          a = np.random.default_rng(0)
+          b = np.random.default_rng(0)
+          x = a.random(3)
+          y = b.random(3)
+          z = a.random(3)
+          print(np.allclose(x, y), np.allclose(x, z))
+          print(x.shape, x.min() >= 0, x.max() < 1)
+        output: |
+          True False
+          (3,) True True
+        explanation: The two generators start in the same state, so their first draws agree. The second draw from `a` carries on from where its first stopped, so it differs. Every uniform draw is at least 0 and below 1.
+        hints:
+          - The generators a and b have the same seed.
+          - What did the first draw from a do to its state?
+          - Between which two numbers do uniform draws lie?
+    - question:
+        id: predict-permutation
+        type: predict
+        system: s1
+        prompt: A jumbled order and some whole numbers. What does this show?
+        code: |
+          import numpy as np
+
+          rng = np.random.default_rng(1)
+          p = rng.permutation(6)
+          print(sorted(p.tolist()), p.sum())
+          k = rng.integers(0, 3, size=1000)
+          print(k.min(), k.max())
+        output: |
+          [0, 1, 2, 3, 4, 5] 15
+          0 2
+        explanation: Whatever the order, a permutation of 6 holds each of 0 to 5 once, so sorted it is always the same list, and its sum is 15. A thousand whole numbers from 0 up to but not including 3 are certain, in practice, to include a 0 and a 2, and can never include a 3.
+        hints:
+          - Which numbers does a permutation of 6 hold, whatever their order?
+          - Is the upper end of integers included?
+          - With a thousand draws, the smallest and largest possible values will both have turned up.
+  work:
+    - text: Slower now. For each program, ask where the generator is made, and how many draws have been taken from it before the line you are looking at.
+    - question:
+        id: write-shuffled
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          `X` is a table with one example in each row and `y` is a plain array with the label of each example. Write `shuffled(X, y, rng)` to return the pair `(X2, y2)`: the same examples in a random order drawn from the generator `rng`, with every example still beside its own label.
+
+          Do not change `X` or `y`, and do not make a generator of your own.
+        starter: |
+          import numpy as np
+
+          def shuffled(X, y, rng):
+              # Replace the next line with your own.
+              return X, y
+
+          X = np.arange(100).reshape(50, 2)
+          y = np.arange(50) * 2
+          X2, y2 = shuffled(X, y, np.random.default_rng(0))
+          print((X2[:, 0] == y2).all(), (y2 != y).any())
+        solution: |
+          import numpy as np
+
+          def shuffled(X, y, rng):
+              order = rng.permutation(len(X))
+              return X[order], y[order]
+
+          X = np.arange(100).reshape(50, 2)
+          y = np.arange(50) * 2
+          X2, y2 = shuffled(X, y, np.random.default_rng(0))
+          print((X2[:, 0] == y2).all(), (y2 != y).any())
+        tests: |
+          import numpy as _np
+          _X = _np.arange(100).reshape(50, 2)
+          _y = _np.arange(50) * 2
+          _X2, _y2 = shuffled(_X, _y, _np.random.default_rng(0))
+          assert _X2.shape == (50, 2) and _y2.shape == (50,), "The shapes must be unchanged"
+          assert (_X2[:, 0] == _y2).all(), "Every example must still be beside its own label"
+          assert (_X2[:, 1] == _X2[:, 0] + 1).all(), "The rows themselves must be kept whole"
+          assert sorted(_y2.tolist()) == _y.tolist(), "Every example must appear exactly once"
+          assert (_y2 != _y).any(), "The order must actually change"
+          assert _X.tolist() == _np.arange(100).reshape(50, 2).tolist() and _y.tolist() == (_np.arange(50) * 2).tolist(), "The arrays passed in must not be changed"
+          _a = shuffled(_X, _y, _np.random.default_rng(5))[1]
+          _b = shuffled(_X, _y, _np.random.default_rng(5))[1]
+          _c = shuffled(_X, _y, _np.random.default_rng(6))[1]
+          assert _a.tolist() == _b.tolist(), "The same seed must give the same order"
+          assert _a.tolist() != _c.tolist(), "A different seed must give a different order, so the generator passed in must be the one used"
+          _r = _np.random.default_rng(9)
+          _d = shuffled(_X, _y, _r)[1]
+          _e = shuffled(_X, _y, _r)[1]
+          assert _d.tolist() != _e.tolist(), "Two calls with the same generator must give different orders"
+          assert output.strip() == "True True", "The program should print True True"
+        wrong:
+          - |
+            import numpy as np
+
+            def shuffled(X, y, rng):
+                return X[rng.permutation(len(X))], y[rng.permutation(len(X))]
+
+            print("True True")
+          - |
+            import numpy as np
+
+            def shuffled(X, y, rng):
+                rng = np.random.default_rng(0)
+                order = rng.permutation(len(X))
+                return X[order], y[order]
+
+            X = np.arange(100).reshape(50, 2)
+            y = np.arange(50) * 2
+            X2, y2 = shuffled(X, y, np.random.default_rng(0))
+            print((X2[:, 0] == y2).all(), (y2 != y).any())
+          - |
+            import numpy as np
+
+            def shuffled(X, y, rng):
+                order = rng.integers(0, len(X), size=len(X))
+                return X[order], y[order]
+
+            print("True True")
+          - |
+            import numpy as np
+
+            def shuffled(X, y, rng):
+                order = rng.permutation(len(X))
+                return X[order], y
+
+            print("True True")
+          - |
+            import numpy as np
+
+            def shuffled(X, y, rng):
+                order = rng.permutation(X.shape[1])
+                return X[:, order], y
+
+            print("True True")
+        explanation: |
+          Draw **one** jumbled order and use it twice. `rng.permutation(len(X))` is an array of positions holding each row number once. `X[order]` picks the rows in that order, and `y[order]` picks the labels in the same order, so row $k$ of both results comes from position `order[k]` of the originals. Indexing with a position array makes copies, so the originals are untouched. Drawing a second permutation for the labels pairs each example with a label taken at random, and a model trained on that learns nothing, with no error to tell you why. Drawing whole numbers with `integers` is sampling with repeats: some examples appear twice and others vanish. And a generator made inside the function, with its own seed, ignores the one the caller passed, so every call returns the same order.
+        hints:
+          - How many random orders are needed to keep two arrays paired?
+          - Which method returns the row numbers in a jumbled order?
+          - A position array picks rows of X and entries of y alike.
+    - question:
+        id: write-pi
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `estimate_pi(n, rng)`. Scatter `n` points uniformly over the unit square, with both coordinates between 0 and 1, using the generator `rng`. The fraction that lie inside the quarter circle, where $x^2 + y^2 < 1$, estimates $\pi/4$. Return the estimate of $\pi$.
+
+          Use no loop and no comprehension.
+        starter: |
+          import numpy as np
+
+          def estimate_pi(n, rng):
+              # Replace the next line with your own.
+              return 0.0
+
+          print(abs(estimate_pi(1000000, np.random.default_rng(0)) - 3.14159) < 0.01)
+        solution: |
+          import numpy as np
+
+          def estimate_pi(n, rng):
+              points = rng.random((n, 2))
+              inside = (points ** 2).sum(axis=1) < 1
+              return 4 * inside.mean()
+
+          print(abs(estimate_pi(1000000, np.random.default_rng(0)) - 3.14159) < 0.01)
+        tests: |
+          import numpy as _np
+          for _seed in [0, 1, 2, 3]:
+              _e = float(estimate_pi(200000, _np.random.default_rng(_seed)))
+              assert abs(_e - 3.14159) < 0.03, "With 200 000 points the estimate should be within 0.03 of pi"
+          _p = float(estimate_pi(1000, _np.random.default_rng(4)))
+          _q = float(estimate_pi(1000, _np.random.default_rng(4)))
+          _r = float(estimate_pi(1000, _np.random.default_rng(5)))
+          assert _p == _q, "The same seed must give the same estimate"
+          assert _p != _r, "A different seed should give a different estimate, so the generator passed in must be the one used"
+          assert abs(_p * 250 - round(_p * 250)) < 1e-6, "With 1000 points the estimate must be 4 times a count of points divided by 1000"
+          assert 2.9 < _p < 3.4, "With 1000 points the estimate should lie between 2.9 and 3.4"
+          assert "for " not in source and "while " not in source, "Use no loop and no comprehension"
+          assert output.strip() == "True", "The program should print True"
+        wrong:
+          - |
+            import numpy as np
+
+            def estimate_pi(n, rng):
+                points = rng.random((n, 2))
+                inside = (points ** 2).sum(axis=1) < 1
+                return inside.mean()
+
+            print(True)
+          - |
+            import numpy as np
+
+            def estimate_pi(n, rng):
+                x = rng.random(n)
+                inside = x ** 2 + x ** 2 < 1
+                return 4 * inside.mean()
+
+            print(True)
+          - |
+            import numpy as np
+
+            def estimate_pi(n, rng):
+                points = rng.random((n, 2))
+                inside = points.sum(axis=1) < 1
+                return 4 * inside.mean()
+
+            print(True)
+          - |
+            import numpy as np
+
+            def estimate_pi(n, rng):
+                points = np.random.default_rng(0).random((n, 2))
+                inside = (points ** 2).sum(axis=1) < 1
+                return 4 * inside.mean()
+
+            print(True)
+          - |
+            import numpy as np
+
+            def estimate_pi(n, rng):
+                points = rng.uniform(-2.0, 2.0, size=(n, 2))
+                inside = (points ** 2).sum(axis=1) < 1
+                return 4 * inside.mean()
+
+            print(True)
+        explanation: |
+          `rng.random((n, 2))` is a table of `n` points, one in each row, with its two coordinates. Squaring and adding along axis 1 gives $x^2 + y^2$ for every point, and comparing with 1 gives a mask that is `True` inside the quarter circle. The mean of a mask is the fraction of `True`s, as you used for accuracy. That fraction estimates the area of the quarter circle as a share of the square, $\pi/4$, so four times it estimates $\pi$. Using the same draw for both coordinates puts every point on the diagonal of the square, which measures a length and not an area. The condition $x + y < 1$ marks out a triangle of area one half. This is integration by sampling. Each point is a yes or a no with a standard deviation of about 0.4, so by the square-root law the estimate from a million points is typically off by $4 \times 0.4 / 1000$, around 0.002: slow to converge, and indifferent to how many dimensions the region has, which is its whole value.
+        hints:
+          - Draw a table with one point in each row and two coordinates.
+          - Which reduction gives x squared plus y squared for every point?
+          - The mean of a mask is the fraction of points inside.
+    - question:
+        id: fix-batches
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `batches(n, size, steps, seed)` should return a list of `steps` arrays, each holding `size` example numbers drawn from 0 up to `n`, a different random batch for each step of training, and the same list whenever it is called with the same seed. As written, every batch is the same as the first. The program prints `True` and should print `False`. Fix it, keeping the call `rng.integers(0, n, size=size)` as it is.
+        starter: |
+          import numpy as np
+
+          def batches(n, size, steps, seed):
+              out = []
+              for step in range(steps):
+                  rng = np.random.default_rng(seed)
+                  out.append(rng.integers(0, n, size=size))
+              return out
+
+          got = batches(1000, 8, 3, 0)
+          print(got[0].tolist() == got[1].tolist())
+        solution: |
+          import numpy as np
+
+          def batches(n, size, steps, seed):
+              out = []
+              rng = np.random.default_rng(seed)
+              for step in range(steps):
+                  out.append(rng.integers(0, n, size=size))
+              return out
+
+          got = batches(1000, 8, 3, 0)
+          print(got[0].tolist() == got[1].tolist())
+        tests: |
+          import numpy as _np
+          _got = batches(1000, 8, 3, 0)
+          assert len(_got) == 3, "Three steps give three batches"
+          assert all(_g.shape == (8,) for _g in _got), "Each batch holds 8 example numbers"
+          assert _got[0].tolist() != _got[1].tolist() and _got[1].tolist() != _got[2].tolist(), "The batches must differ from one another"
+          assert all(0 <= int(_v) < 1000 for _g in _got for _v in _g), "Every example number must be from 0 up to 999"
+          _again = batches(1000, 8, 3, 0)
+          assert [_g.tolist() for _g in _again] == [_g.tolist() for _g in _got], "The same seed must give the same batches"
+          assert [_g.tolist() for _g in batches(1000, 8, 3, 1)] != [_g.tolist() for _g in _got], "A different seed must give different batches"
+          _ref = _np.random.default_rng(7)
+          _want = [_ref.integers(0, 50, size=4).tolist() for _ in range(5)]
+          assert [_g.tolist() for _g in batches(50, 4, 5, 7)] == _want, "The batches must be successive draws from one generator made from the seed"
+          assert output.strip() == "False", "The program should print False"
+        wrong:
+          - |
+            import numpy as np
+
+            def batches(n, size, steps, seed):
+                out = []
+                for step in range(steps):
+                    rng = np.random.default_rng(seed)
+                    out.append(rng.integers(0, n, size=size))
+                return out
+
+            print(False)
+          - |
+            import numpy as np
+
+            def batches(n, size, steps, seed):
+                out = []
+                for step in range(steps):
+                    rng = np.random.default_rng(seed + step)
+                    out.append(rng.integers(0, n, size=size))
+                return out
+
+            got = batches(1000, 8, 3, 0)
+            print(got[0].tolist() == got[1].tolist())
+          - |
+            import numpy as np
+
+            def batches(n, size, steps, seed):
+                out = []
+                for step in range(steps):
+                    rng = np.random.default_rng()
+                    out.append(rng.integers(0, n, size=size))
+                return out
+
+            got = batches(1000, 8, 3, 0)
+            print(got[0].tolist() == got[1].tolist())
+          - |
+            import numpy as np
+
+            def batches(n, size, steps, seed):
+                out = []
+                rng = np.random.default_rng()
+                for step in range(steps):
+                    out.append(rng.integers(0, n, size=size))
+                return out
+
+            got = batches(1000, 8, 3, 0)
+            print(got[0].tolist() == got[1].tolist())
+          - |
+            import numpy as np
+
+            def batches(n, size, steps, seed):
+                out = []
+                rng = np.random.default_rng(seed)
+                batch = rng.integers(0, n, size=size)
+                for step in range(steps):
+                    out.append(batch)
+                return out
+
+            print(False)
+        explanation: |
+          The generator was made inside the loop. On every step a new one was opened at the same page, and it read out the same eight numbers. Moving the line above the loop makes one generator, whose state each draw moves on, so the batches differ, and since everything follows from the one seed, the whole list is the same on every call. Dropping the seed makes the batches differ and throws away the repeatability that was asked for. Adding the step number to the seed looks clever and does produce different batches, but it is a habit to avoid: generators started from neighbouring seeds are not promised to be independent of one another, the scheme collides with any other part of the program that uses seed 1 or seed 2, and it remains a generator made inside a loop. A model trained with the original bug sees eight examples out of a thousand, over and over, and learns those eight by heart.
+        hints:
+          - In what state is the generator at the moment of each draw?
+          - How many times is default_rng called, and how many times should it be?
+          - Where must the line that makes the generator stand?
+    - question:
+        id: work-random
+        type: choice
+        system: s2
+        prompt: |
+          In the puzzle, the line with seed 2024 printed the same three numbers on every run. In what sense, then, are they random?
+        options:
+          - "In no sense. They are a fixed list, and using them is a mistake."
+          - "No single number is unpredictable: given the seed and the rule, each is certain. What the generator promises is that the numbers as a collection are spread as chance would spread them, with each equal stretch of the range getting an equal share and no usable pattern from one to the next. That is all that shuffling, starting weights and sampling require, and the fixed seed adds the ability to replay the run."
+          - "They are random because the computer picks the seed itself."
+          - "They become random once enough of them are drawn."
+        answer: 1
+        explanation: |
+          There are two quite different things one could want from random numbers. One is that nobody can foresee them, which matters for passwords and for gambling, and which a seeded generator plainly does not give. The other is that they behave statistically like draws of chance, which is what computation needs: an order with no relation to the data, starting values with no symmetry, sample points spread evenly. For the second purpose, a sequence fixed by a seed is not a compromise. It is better than true chance, since an experiment made with it can be repeated exactly. With the seed left out, NumPy took one from the operating system, which is why the first line of the puzzle changed.
+        hints:
+          - Could you predict the numbers if you knew the seed and the rule?
+          - What property do shuffling and sampling actually need?
+          - What does a fixed seed let you do that true chance does not?
+    - question:
+        id: work-toy
+        type: numeric
+        system: s2
+        prompt: |
+          The toy generator has the rule state ← (5 × state + 3) mod 16. It is seeded with the state 12. What is the third state it produces?
+        answer: "9"
+        explanation: |
+          From 12: 5 × 12 + 3 is 63, and 63 less 48 is 15. From 15: 78, and 78 less 64 is 14. From 14: 73, and 73 less 64 is 9. The same sequence 15, 14, 9 appears in the run that began at 7, further along. A seed does not choose a different sequence. It chooses a different place to begin in the one sequence the rule defines, as a page chooses a place in a book.
+        hints:
+          - Apply the rule once to 12 to get the first state produced.
+          - Apply it again to that result, and once more.
+          - The remainder on dividing by 16 is what is left after taking away as many 16s as will go.
+    - question:
+        id: work-seeds
+        type: choice
+        system: s2
+        prompt: |
+          With seed 0, model A reaches 91.2 per cent accuracy and model B reaches 91.9 per cent. A colleague concludes that B is the better model. What is the sound next step?
+        options:
+          - "Accept the conclusion, since the seed was fixed and the comparison was fair."
+          - "Train both models with several other seeds as well. Fixing the seed made each run repeatable, and it did not make it typical. If the accuracy of either model moves by a whole point from seed to seed, a difference of 0.7 between two single runs says nothing, and only the spread over seeds can show whether B is reliably ahead."
+          - "Remove the seed, so that the result is more random."
+          - "Try seeds until one is found for which the gap is as large as possible, and report that."
+        answer: 1
+        explanation: |
+          A seed selects one particular run from the many that chance could have given: one set of starting weights, one order of examples. The result of that run is a single draw, and a single draw tells you little about a typical one. Repeating over seeds measures the run-to-run spread, and the square-root law says how the average over runs sharpens: four seeds halve the uncertainty of one. Removing the seed keeps the ignorance and loses the repeatability. Hunting for the seed with the largest gap is choosing the evidence to fit the conclusion, and it is common enough in practice that careful readers ask how many seeds a reported result was run with.
+        hints:
+          - What does fixing a seed guarantee, and what does it not?
+          - How could you find out how much the accuracy varies from run to run?
+          - Compare the gap between the models with that variation.
+    - question:
+        id: work-root
+        type: numeric
+        system: s2
+        prompt: |
+          The mean of 100 uniform draws is typically about 0.03 away from 0.5. About how many draws are needed for the mean to be typically about 0.003 away?
+        answer: "10000"
+        explanation: |
+          The typical error falls as $1/\sqrt{n}$. To make it ten times smaller, $\sqrt{n}$ must be ten times larger, so $n$ must be a hundred times larger. A hundred times 100 draws. Each further decimal place costs another factor of a hundred, which is why measuring anything by sampling to high precision is expensive, and why a test set of a few hundred examples cannot distinguish two models whose accuracies differ by half a per cent.
+        hints:
+          - How does the typical error depend on the number of draws?
+          - By what factor must the square root of n grow?
+          - Then by what factor must n grow?
+  connections:
+    - text: |
+        Two generators printed three numbers each, and one of them printed the same three on every run. A generator is a state and a fixed rule for stirring it. Each draw applies the rule, moves the state on, and makes a number from it. The numbers are certain, given the starting state, and as a crowd they are spread the way chance would spread them. The **seed** is the starting state. With no seed, NumPy takes one from the unpredictable timing of events in the machine.
+
+        From uniform draws between 0 and 1 everything else is made by stretching, shifting and transforming: any range, whole numbers, permutations, and the bell-shaped normal draws that the weights of a network start from. The mean of $n$ draws differs from the true mean by about the spread of one draw divided by $\sqrt{n}$, so a hundred times the data buys one more decimal place.
+
+        Because the state moves, how a program handles its generator matters. One seed, written down. One generator, made once and passed to whatever draws. Never one made inside a loop. Shuffle examples and labels by a single permutation, with the position arrays of the indexing lesson. And treat the outcome of one seed as one draw: repeat over several before believing a difference.
+
+        The integral you met as an accumulated area came back twice, once to find the mean and spread of a uniform draw and once turned inside out, as an area estimated by scattering points. Sampling of that kind is how the many-dimensional integrals of probability are computed in practice, and the question of how much to trust such an estimate is taken further in [[e5.numerical-error-analysis-in-practice]].
+
+        Random numbers give you one more thing: a way to test your own code on inputs you did not choose. Try it on a function you wrote four lessons ago. Draw a hundred rows of scores with `rng.normal(0.0, 1000.0, size=(100, 5))`, large ones, such as a badly started network can easily produce, and hand the table to your `softmax`. Most of the rows come back as `nan`. Yet the answer for every row is perfectly well defined: nearly all the probability belongs to the largest score. The formula is right, every step of the code follows the formula, and the result is rubbish. How a correct formula can be an incorrect program, and how to rewrite it so that it cannot fail, is the next lesson, [[e5.log-sum-exp-and-stable-formulations]].

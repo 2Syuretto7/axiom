@@ -1,0 +1,818 @@
+concept: e5.indexing-and-slicing
+minutes: 90
+claim: You can reach any entry, row, column or regular block of an array in one expression, predict the shape of what you get from the rule that a whole number removes an axis and a slice keeps it, explain why a slice is a view of the same memory and what follows from that, select and assign with a mask of True and False, gather rows with an array of positions, and say which selections share memory and which copy.
+recalls: [e5.arrays-dtype-and-shape]
+uses: [e3.arrays-and-linked-lists, m5.matrices-as-linear-maps, m5.determinant, e1.comprehensions-and-iterators, e1.exceptions, e0.strings, e0.lists-and-tuples, e0.booleans-and-conditionals, e0.loops, e0.functions]
+leads: [e5.broadcasting, e5.vectorisation, e5.reshaping-views-and-copies, e5.strides-and-memory-layout]
+starter: |
+  # Scratch space. The same slice, taken from a list and from an array.
+  import numpy as np
+
+  numbers = [5, 6, 7, 8]
+  part = numbers[1:3]
+  part[0] = 0
+  print(numbers)
+
+  array = np.array([5, 6, 7, 8])
+  part = array[1:3]
+  part[0] = 0
+  print(array)
+parts:
+  recall:
+    - text: |
+        [[e5.arrays-dtype-and-shape]] took an array apart into three things: a block of raw values, a dtype and a shape. It ended by promising that an array could hand over a row, a column or a block of both in one expression, without copying a number. Three quick pulls first.
+    - question:
+        id: recall-shape
+        type: choice
+        system: s1
+        concepts: [e5.arrays-dtype-and-shape]
+        prompt: |
+          An array has shape `(4, 6)`. What does that say?
+        options: ["4 columns and 6 rows", "4 rows and 6 columns", "24 axes", "6 entries of 4 bytes"]
+        answer: 1
+        explanation: The first number is the length of axis 0, which counts rows, and the second is the length of axis 1, which counts columns.
+        hints:
+          - Axis 0 comes first.
+          - Axis 0 counts the rows of a table.
+    - question:
+        id: recall-place
+        type: numeric
+        system: s1
+        concepts: [e5.arrays-dtype-and-shape]
+        prompt: |
+          A table of 4 rows and 6 columns is stored row by row in one block. At which place in the block, counting from 0, is the entry in row 2, column 3?
+        answer: "15"
+        explanation: Two whole rows of 6 come first, then 3 more entries. 2 × 6 + 3.
+        hints:
+          - How many whole rows come before row 2?
+          - Each of them holds six entries, and then count along the row.
+    - question:
+        id: recall-list-slice
+        type: choice
+        system: s1
+        concepts: [e0.strings]
+        prompt: |
+          For the list `s = [5, 6, 7, 8]`, what is `s[1:3]`?
+        options: ["`[5, 6, 7]`", "`[6, 7]`", "`[6, 7, 8]`", "`[7, 8]`"]
+        answer: 1
+        explanation: A slice starts at the first position named and stops before the second.
+        hints:
+          - Positions are counted from 0.
+          - The stop position is left out.
+  puzzle:
+    - text: |
+        Run the starter. It does the same four things twice.
+
+        First to a list: take the slice `[1:3]`, call it `part`, set the first entry of `part` to 0, and print the **original**. The list prints `[5, 6, 7, 8]`. Nothing happened to it. The slice of a list is a new list, and changing the new list leaves the old one alone. You have relied on this for a long time.
+
+        Then to an array, with the same notation. The original prints `[5 0 7 8]`.
+
+        The 6 has become 0. Nobody assigned anything to `array`. The assignment was to `part`.
+
+        This is not a bug, and it is not an accident. The people who designed arrays chose it on purpose, knowing that it would surprise everyone who came from lists.
+
+        **What is `part`, if changing it changes the array? Why would anyone design slicing that way? And is every way of selecting from an array like this, or only some?**
+  intuition:
+    - text: |
+        Recall what an array is: a block of raw values, with a small description beside it saying how to read the block. The description holds the dtype and the shape.
+
+        Now ask what it would take to describe the slice `array[1:3]`. It is the entries at places 1 and 2 of the same block. To read them you need to know where to start, place 1, and how many to take, 2. That is all. **The slice can be described completely without touching a single number.** So NumPy does exactly that. It writes a new small description, "start at place 1, length 2", pointing at the **same block**.
+
+        `part` is that description. It is an array in every respect: it has a shape, a dtype, it can be added and printed. But it owns no numbers of its own. It is a window onto the block of `array`, and what you write through the window lands in the block. Such an array is called a **view**.
+
+        Why design it so? Think of the sizes involved. The table of word vectors in the last lesson took 154 megabytes. A set of training data can be many times that. Code is forever taking pieces of such arrays: the first thousand rows, one column, every second entry. If each piece were a copy, every such step would cost time and memory in proportion to the piece. As views, they cost a few dozen bytes each, however large the piece. Slicing a list of a million items copies a million references. Slicing an array of a million numbers copies nothing.
+
+        The figure shows a slice of a table. The table has 4 rows and 6 columns, and each entry is ten times its row number plus its column number, so that you can read off where it came from. Choose which rows to take and which columns, and the marked entries are the result.
+    - figure: array-slice
+      props: { start: 1, stop: 3, step: 2 }
+    - text: |
+        Look at what kind of pattern a slice can mark. The rows taken are always evenly spaced, and so are the columns. That regularity is what lets the result be described by a start and a step, and so be a view.
+
+        There are selections that are not regular: "the entries that are negative", or "rows 7, 2 and 7 again". Those cannot be described by a start and a step. NumPy lets you make them, by two other kinds of index, and for those it has no choice but to copy the chosen numbers into a new block.
+
+        So the answer to the last question of the puzzle is: only some. **A slice gives a view. A selection by a mask or by a list of positions gives a copy.** Knowing which you hold is knowing whether your next assignment changes one array or two.
+  derivation:
+    - text: |
+        The examples use the table of the figure, built so that each entry shows its own row and column:
+
+        ```python
+        import numpy as np
+
+        a = np.array([[10 * r + c for c in range(6)] for r in range(4)])
+        ```
+
+        Its rows are 0 to 5, 10 to 15, 20 to 25 and 30 to 35.
+
+        **One entry.** A table takes one index for each axis, separated by a comma inside one pair of brackets: `a[1, 2]` is the entry in row 1, column 2, which is 12. Negative indices count from the end, as for lists, so `a[-1, -1]` is 35. An index past the end raises an `IndexError`.
+
+        You could also write `a[1][2]`, as for a list of rows, and get 12. But that does two things: it first makes `a[1]`, a row, and then takes entry 2 of it. `a[1, 2]` goes straight to place $1 \times 6 + 2$ of the block. Use the comma.
+
+        **Fewer indices than axes.** `a[1]` is the whole of row 1, the array `[10 11 12 13 14 15]`, of shape `(6,)`. An index that is left out means "all of that axis".
+
+        **Slices on each axis.** Each index may be a slice, `start:stop:step`, with the meaning it has for lists and strings. A bare colon is the whole axis.
+
+        | expression | what it takes | shape |
+        |---|---|---|
+        | `a[1:3]` | rows 1 and 2 | `(2, 6)` |
+        | `a[:, 2]` | column 2 | `(4,)` |
+        | `a[1:3, ::2]` | rows 1 and 2, every second column | `(2, 3)` |
+        | `a[:, -1]` | the last column | `(4,)` |
+        | `a[::-1]` | the rows in reverse order | `(4, 6)` |
+        | `a[0, 1:4]` | entries 1 to 3 of row 0 | `(3,)` |
+
+        The second line is the one the last cluster wanted and could not have. With a list of rows, a column took a comprehension, `[row[2] for row in A]`, and getting that wrong was the bug you fixed in Cramer's rule. With an array, column 2 is `a[:, 2]`: all rows, column 2.
+
+        **The shape of the result.** One rule gives the shape of any such expression.
+
+        - **A whole number as an index removes that axis.** You asked for one position along it, so there is nothing left to count.
+        - **A slice as an index keeps that axis**, with the length of the slice, even if that length is 1 or 0.
+
+        So `a[:, 2]` has shape `(4,)`: axis 0 kept, axis 1 removed. And `a[:, 2:3]`, which contains exactly the same four numbers, has shape `(4, 1)`: axis 1 kept, with length 1. The first is a plain list of four numbers. The second is a table with one column. The last lesson warned that these are different arrays, and this is where the difference is made. When you want a column that is still a column, slice.
+
+        **A slice is a view.** As the puzzle showed, the result of slicing shares the block of the array it came from. Writing through it changes the original:
+
+        ```python
+        col = a[:, 0]
+        col[0] = 99
+        print(a[0, 0])
+        ```
+
+        This prints 99. It works in both directions, since there is only one block: change `a` and `col` shows the change.
+
+        When you need an independent array, ask for one: `a[:, 0].copy()` copies the chosen numbers into a new block. `np.shares_memory(x, y)` reports whether two arrays overlap in memory, which settles any doubt.
+
+        **Assigning to a slice.** A slice on the left of `=` writes into the array, in place.
+
+        ```python
+        a[:, 1] = 7
+        a[1:3, 2:4] = 0
+        ```
+
+        The first sets every entry of column 1 to 7. The second sets a 2 by 2 block to 0. No new array is made. A single number on the right is written into every chosen place, and an array of the right shape is written entry for entry. This is how an array made by `np.zeros` gets filled.
+
+        One assignment does not do what its author hopes. `col = col * 2` does not double the column of `a`. The right side builds a **new** array, and the name `col` is then moved to it and away from the view. To write the doubled values into the block, assign to a slice of the view: `col[:] = col * 2`.
+    - question:
+        id: derivation-regular
+        type: choice
+        system: s2
+        prompt: |
+          `a[::2]` is a view of `a`, but the selection of "the negative entries of `a`" is a copy. Why can the first be a view and the second not?
+        options:
+          - "Views are allowed only for whole rows."
+          - "The entries of `a[::2]` sit at evenly spaced places of the block, so they are described by a start, a step and a length, and nothing needs to be stored. The negative entries can be anywhere. No start and step describes them, so their values must be gathered into a block of their own."
+          - "The negative entries have a different dtype."
+          - "It is a historical accident with no reason."
+        answer: 1
+        explanation: |
+          An array is a block together with a rule for reading it, and the rule is of a fixed, simple kind: begin here, and step by this much along each axis. Every slice fits that rule, because a slice is itself a start, a stop and a step. So a slice needs only a new rule over the old block. An arbitrary selection, the entries passing a test, or positions 7, 2, 7, has no such rule. The only way to present it as an array is to copy the chosen values, side by side, into a fresh block. The same reasoning tells you the cost: a slice costs the same whether it selects ten entries or ten million, and a mask or a list of positions costs time and memory in proportion to what it selects.
+        hints:
+          - What information describes where the entries of a[::2] are in the block?
+          - Could the same kind of description say where the negative entries are?
+          - If no rule over the old block will do, where must the values live?
+    - text: |
+        **Masks.** A comparison between an array and a number is done entry by entry, like arithmetic, and gives an array of True and False of the same shape, with dtype `bool`.
+
+        ```python
+        x = np.array([3.0, -1.0, 2.0, -5.0])
+        mask = x < 0
+        print(mask)
+        ```
+
+        This prints `[False  True False  True]`. Such an array is called a **mask**, and it can be used as an index. `x[mask]` is the array of the entries where the mask is True, here `[-1. -5.]`. Usually the comparison is written straight into the brackets: `x[x < 0]`.
+
+        The selection is a copy, as it must be. But a mask on the **left** of an assignment writes into the original array at the True places:
+
+        ```python
+        x[x < 0] = 0
+        print(x)
+        ```
+
+        This prints `[3. 0. 2. 0.]`. Every negative entry has been replaced by zero, in place. That one line is the rectifier of a neural network, the function that passes positive values and stops negative ones.
+
+        Since True counts as 1 and False as 0, `mask.sum()` counts the entries that pass the test. Masks are combined with `&` for "and", `|` for "or" and `~` for "not", and each comparison must be in its own parentheses: `x[(x > 0) & (x < 3)]`. The words `and` and `or` do not work on arrays, because they ask for a single True or False and an array has many.
+
+        For a table, a mask selection gives a plain list of the chosen entries, with one axis, since the chosen entries need not form a rectangle.
+
+        **Indexing with an array of positions.** An index may also be a list or array of whole numbers. The result takes those positions, in that order, with repeats allowed.
+
+        ```python
+        E = np.array([[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]])
+        ids = np.array([2, 0, 2])
+        print(E[ids])
+        ```
+
+        This prints three rows: row 2, row 0, and row 2 again. The result has shape `(3, 2)`, one row for each position asked for. It is a copy.
+
+        This is the first operation of every language model. The text is turned into a list of whole numbers, one for each piece of a word. The model holds a table with one row of weights for each possible piece. `E[ids]` gathers the rows for the pieces of this text, in order, and that table of vectors is what the rest of the model works on.
+
+        When two arrays of positions are given, one for each axis, they are **paired up**: `a[[0, 2], [1, 3]]` is the two entries `a[0, 1]` and `a[2, 3]`. It is not the block of rows 0 and 2 with columns 1 and 3. The pairing is what you want when each row has its own column to pick, as when each example has its own correct answer:
+
+        ```python
+        P = np.array([[0.7, 0.2, 0.1], [0.1, 0.8, 0.1]])
+        y = np.array([0, 1])
+        print(P[np.arange(2), y])
+        ```
+
+        Row 0 is paired with column 0, and row 1 with column 1, giving `[0.7 0.8]`: the probability each row gave to its own correct class.
+
+        **Which selections share memory.** The whole lesson in one table.
+
+        | index | example | result |
+        |---|---|---|
+        | whole numbers and slices | `a[1:3, ::2]`, `a[:, 0]`, `a[2]` | a view of the same block |
+        | a mask | `a[a > 20]` | a copy |
+        | an array or list of positions | `a[[0, 2]]` | a copy |
+
+        And for all three, an index expression on the **left** of `=` writes into the original array.
+    - question:
+        id: order-mask-assign
+        type: order
+        system: s2
+        prompt: Put in order what happens when Python runs `x[x < 0] = 0` for an array `x`.
+        steps:
+          - 'The comparison `x < 0` runs over the block of `x`, entry by entry.'
+          - 'Its results are written into a new array of True and False with the shape of `x`.'
+          - 'The assignment hands that mask and the value 0 to `x`.'
+          - 'At each place where the mask is True, 0 is written into the block of `x` itself.'
+          - 'The mask is thrown away. `x` is the same array as before, with some entries changed.'
+        explanation: The only new array is the mask, one byte for each entry. No copy of `x` is made. The values are changed inside the block that `x` already had, so every view of that block sees the change as well.
+        hints:
+          - The index is worked out before the assignment can use it.
+          - The mask must exist before anything can be written at its True places.
+          - The array x is never replaced by a new one.
+  formal:
+    - text: |
+        **Indexing.** For an array `a` with $n$ axes, `a[i_0, ..., i_k]` takes one index for each of the first $k + 1$ axes, and all of any axis left out. Each index is a whole number or a slice `start:stop:step`.
+
+        **Shape rule.** A whole-number index removes its axis. A slice keeps its axis, with the length of the slice.
+
+        **Views.** An index made only of whole numbers and slices gives a view: an array with its own shape that shares the block of `a`. Writing through either changes both. `a.copy()` gives an array with a block of its own.
+
+        **Masks.** If `m` is an array of `bool` with the shape of `a`, then `a[m]` is a new array with one axis, holding the entries of `a` where `m` is True, and `a[m] = v` writes `v` into `a` at those places.
+
+        **Arrays of positions.** If `p` is an array of whole numbers, `a[p]` is a new array with the entries, or rows, of `a` at those positions, in that order. With one such array for each axis, `a[p, q]` holds the entries `a[p[k], q[k]]`.
+
+        **Assignment.** Any index expression on the left of `=` writes into the block of `a`.
+  drill:
+    - text: |
+        Seconds each. Throughout, `a` is the table of the figure, with 4 rows and 6 columns and entry $10r + c$ in row $r$, column $c$, and `b = np.arange(10)`.
+    - question:
+        id: drill-entry
+        type: numeric
+        system: s1
+        prompt: |
+          What is `a[2, 4]`?
+        answer: "24"
+        explanation: Row 2, column 4, so ten times 2 plus 4.
+        hints:
+          - The first index is the row.
+          - Each entry is ten times its row plus its column.
+    - question:
+        id: drill-negative
+        type: numeric
+        system: s1
+        prompt: |
+          What is `a[-1, 0]`?
+        answer: "30"
+        explanation: The last row is row 3, and its first entry is ten times 3 plus 0.
+        hints:
+          - A negative index counts from the end.
+          - Which row is the last?
+    - question:
+        id: drill-row-shape
+        type: choice
+        system: s1
+        prompt: |
+          What is the shape of `a[1]`?
+        options: ["`(4,)`", "`(6,)`", "`(1, 6)`", "`(4, 6)`"]
+        answer: 1
+        explanation: A whole number removes axis 0, and all six columns of that row remain.
+        hints:
+          - A whole-number index removes its axis.
+          - How long is one row?
+    - question:
+        id: drill-column-shape
+        type: choice
+        system: s1
+        prompt: |
+          What is the shape of `a[:, 2]`?
+        options: ["`(4,)`", "`(6,)`", "`(4, 1)`", "`(1, 4)`"]
+        answer: 0
+        explanation: The colon keeps axis 0 with its 4 rows, and the whole number removes axis 1.
+        hints:
+          - The colon keeps all of axis 0.
+          - The whole number removes axis 1.
+    - question:
+        id: drill-keep-axis
+        type: choice
+        system: s1
+        prompt: |
+          What is the shape of `a[:, 2:3]`?
+        options: ["`(4,)`", "`(6,)`", "`(4, 1)`", "`(1, 4)`"]
+        answer: 2
+        explanation: A slice keeps its axis even when it selects one column, so the result is a table with one column.
+        hints:
+          - A slice keeps its axis.
+          - How many columns does 2:3 select?
+    - question:
+        id: drill-block-shape
+        type: choice
+        system: s1
+        prompt: |
+          What is the shape of `a[1:3, ::2]`?
+        options: ["`(2, 3)`", "`(3, 2)`", "`(2, 6)`", "`(6,)`"]
+        answer: 0
+        explanation: Rows 1 and 2, and columns 0, 2 and 4.
+        hints:
+          - How many rows are from 1 up to but not including 3?
+          - Every second column of six.
+    - question:
+        id: drill-step
+        type: choice
+        system: s1
+        prompt: |
+          What is `b[::3]`?
+        options: ["`[0 3 6 9]`", "`[0 1 2]`", "`[3 6 9]`", "`[0 3 6]`"]
+        answer: 0
+        explanation: Every third entry, starting from the first.
+        hints:
+          - The start is left out, so it begins at position 0.
+          - Step along by three.
+    - question:
+        id: drill-tail
+        type: choice
+        system: s1
+        prompt: |
+          What is `b[-3:]`?
+        options: ["`[7 8 9]`", "`[0 1 2]`", "`[9 8 7]`", "`[3]`"]
+        answer: 0
+        explanation: From the third from the end to the end.
+        hints:
+          - A negative start counts from the end.
+          - The stop is left out, so it runs to the end.
+    - question:
+        id: drill-view
+        type: choice
+        system: s1
+        prompt: |
+          `c = b[2:5]` and then `c[0] = 99`. What is `b[2]`?
+        options: ["2", "99", "0", "An error is raised"]
+        answer: 1
+        explanation: A slice is a view of the same block, so writing through it changes b.
+        hints:
+          - Does a slice of an array own its numbers?
+          - What happened in the puzzle?
+    - question:
+        id: drill-copy
+        type: choice
+        system: s1
+        prompt: |
+          `c = b[b > 6]` and then `c[0] = 99`. What is `b[7]`?
+        options: ["7", "99", "0", "An error is raised"]
+        answer: 0
+        explanation: A selection by a mask is a copy, so b is untouched.
+        hints:
+          - Is a mask selection a regular pattern?
+          - A copy has its own block.
+    - question:
+        id: drill-mask-count
+        type: numeric
+        system: s1
+        prompt: |
+          What is `(b > 6).sum()`?
+        answer: "3"
+        explanation: The mask is True for 7, 8 and 9, and True counts as 1.
+        hints:
+          - Which entries of b are greater than 6?
+          - Each True adds 1 to the sum.
+    - question:
+        id: drill-gather
+        type: choice
+        system: s1
+        prompt: |
+          What is `b[[4, 4, 1]]`?
+        options: ["`[4 4 1]`", "`[1 4]`", "`[4 1]`", "An error, because 4 is repeated"]
+        answer: 0
+        explanation: The entries at positions 4, 4 and 1, in the order asked for. Since b holds its own positions, those are 4, 4 and 1.
+        hints:
+          - Positions may be repeated.
+          - The result follows the order of the positions.
+    - question:
+        id: drill-pairs
+        type: choice
+        system: s1
+        prompt: |
+          What is `a[[0, 2], [1, 3]]`?
+        options: ["`[1 23]`", "The 2 by 2 block of rows 0, 2 and columns 1, 3", "`[1 3]`", "`[0 2 1 3]`"]
+        answer: 0
+        explanation: The two lists are paired, giving the entries at row 0, column 1 and at row 2, column 3.
+        hints:
+          - The positions are paired up, one from each list.
+          - The first pair is row 0, column 1.
+    - question:
+        id: predict-views
+        type: predict
+        system: s1
+        prompt: A column taken as a view, and a column taken as a copy. What does this show?
+        code: |
+          import numpy as np
+
+          a = np.array([[1, 2], [3, 4], [5, 6]])
+          first = a[:, 0]
+          second = a[:, 1].copy()
+          first[0] = 10
+          second[0] = 20
+          print(a)
+          print(first.shape, a[:, 0:1].shape)
+          print(np.shares_memory(a, first), np.shares_memory(a, second))
+        output: |
+          [[10  2]
+           [ 3  4]
+           [ 5  6]]
+          (3,) (3, 1)
+          True False
+        explanation: Writing through the view changed the table. Writing to the copy did not. A whole-number index removes the axis, and a slice keeps it with length 1.
+        hints:
+          - Which of the two columns shares the block of a?
+          - A whole number removes an axis and a slice keeps it.
+          - When a table holds a two-digit number, every entry is printed with the same width.
+    - question:
+        id: predict-mask
+        type: predict
+        system: s1
+        prompt: A mask used to read and then to write. What does this show?
+        code: |
+          import numpy as np
+
+          x = np.array([3.0, -1.0, 2.0, -5.0])
+          print(x < 0)
+          print(x[x < 0])
+          print((x < 0).sum())
+          x[x < 0] = 0
+          print(x)
+        output: |
+          [False  True False  True]
+          [-1. -5.]
+          2
+          [3. 0. 2. 0.]
+        explanation: The comparison gives one True or False for each entry. Used as an index it selects the entries at the True places. Summed, it counts them. On the left of an assignment it writes into the array at those places.
+        hints:
+          - The comparison is made entry by entry.
+          - True counts as 1 in a sum.
+          - The assignment changes x in place.
+  work:
+    - text: Slower now. For each expression, say its shape, and say whether it shares the block of the array it came from.
+    - question:
+        id: write-batches
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A model is trained on a few rows of the data at a time. Write `batches(X, size)` to return a list of the consecutive blocks of `size` rows of the table `X`: rows 0 to `size - 1`, then the next `size` rows, and so on. If the rows do not divide evenly, the last block is shorter. Every row must appear in exactly one block.
+
+          The blocks must be **views** of `X`. No number is to be copied. `len(X)` is the number of rows.
+        starter: |
+          import numpy as np
+
+          def batches(X, size):
+              # Replace the next line with your own.
+              return [X]
+
+          X = np.array([[i, 10 * i] for i in range(10)])
+          print([block.shape for block in batches(X, 4)])
+        solution: |
+          import numpy as np
+
+          def batches(X, size):
+              return [X[start:start + size] for start in range(0, len(X), size)]
+
+          X = np.array([[i, 10 * i] for i in range(10)])
+          print([block.shape for block in batches(X, 4)])
+        tests: |
+          import numpy as _np
+          _X = _np.array([[i, 10 * i] for i in range(10)])
+          _b = batches(_X, 4)
+          assert [block.shape for block in _b] == [(4, 2), (4, 2), (2, 2)], "Ten rows in blocks of 4 give blocks of 4, 4 and 2 rows"
+          assert _b[1].tolist() == [[4, 40], [5, 50], [6, 60], [7, 70]], "The second block of 4 holds rows 4 to 7"
+          assert _b[2].tolist() == [[8, 80], [9, 90]], "The last block holds the rows left over"
+          assert all([_np.shares_memory(block, _X) for block in _b]), "The blocks must be views of X, not copies"
+          assert [block.shape for block in batches(_X, 5)] == [(5, 2), (5, 2)], "Ten rows in blocks of 5 give two blocks and no empty one"
+          assert [block.shape for block in batches(_X, 10)] == [(10, 2)], "A block size equal to the number of rows gives one block"
+          assert [block.shape for block in batches(_X, 25)] == [(10, 2)], "A block size larger than the table gives one block with every row"
+          assert [block.shape for block in batches(_X, 1)] == [(1, 2)] * 10, "Blocks of 1 row are tables with one row, not plain lists"
+          assert sum([len(block) for block in batches(_X, 3)]) == 10, "Every row must appear exactly once"
+          assert output.strip() == "[(4, 2), (4, 2), (2, 2)]", "The program should print [(4, 2), (4, 2), (2, 2)]"
+        wrong:
+          - |
+            import numpy as np
+
+            def batches(X, size):
+                return [X[start:start + size] for start in range(0, len(X) - size + 1, size)]
+
+            print("[(4, 2), (4, 2), (2, 2)]")
+          - |
+            import numpy as np
+
+            def batches(X, size):
+                return [X[start:start + size].copy() for start in range(0, len(X), size)]
+
+            X = np.array([[i, 10 * i] for i in range(10)])
+            print([block.shape for block in batches(X, 4)])
+          - |
+            import numpy as np
+
+            def batches(X, size):
+                return [X[start:start + size] for start in range(len(X))]
+
+            print("[(4, 2), (4, 2), (2, 2)]")
+          - |
+            import numpy as np
+
+            def batches(X, size):
+                return [X[start:start + size - 1] for start in range(0, len(X), size)]
+
+            print("[(4, 2), (4, 2), (2, 2)]")
+          - |
+            import numpy as np
+
+            def batches(X, size):
+                return [X[start] for start in range(0, len(X), size)]
+
+            print("[(4, 2), (4, 2), (2, 2)]")
+          - |
+            import numpy as np
+
+            def batches(X, size):
+                return [X[:, start:start + size] for start in range(0, len(X), size)]
+
+            print("[(4, 2), (4, 2), (2, 2)]")
+        explanation: |
+          `range(0, len(X), size)` gives the row at which each block starts, and `X[start:start + size]` is the block. A slice that runs past the end is cut short without complaint, exactly as for a list, and that gives the shorter last block with no special case. Each block is a slice, so each is a view: a few dozen bytes describing where in `X` to look. A thousand passes over a large set of training data, each cutting it into thousands of blocks, copies nothing. Only a slice will do here. `X[start]`, with a whole number, would give one row and drop an axis, and a block of one row must still be a table of shape `(1, 2)`, since the code that receives it expects two axes.
+        hints:
+          - The starts of the blocks are 0, size, 2 × size and so on, which is a range with a step.
+          - The block starting at start is X[start:start + size].
+          - A slice may run past the end. It is cut short, with no error.
+    - question:
+        id: write-relu
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `relu(x)` to return a **new** array equal to `x` with every negative entry replaced by 0. The array `x` that was passed in must be left exactly as it was. `x` may have any shape.
+        starter: |
+          import numpy as np
+
+          def relu(x):
+              # Replace the next line with your own.
+              return x
+
+          x = np.array([3.0, -1.0, 2.0, -5.0])
+          print(relu(x), x)
+        solution: |
+          import numpy as np
+
+          def relu(x):
+              out = x.copy()
+              out[out < 0] = 0
+              return out
+
+          x = np.array([3.0, -1.0, 2.0, -5.0])
+          print(relu(x), x)
+        tests: |
+          import numpy as _np
+          _x = _np.array([3.0, -1.0, 2.0, -5.0])
+          _r = relu(_x)
+          assert isinstance(_r, _np.ndarray), "relu must return a NumPy array"
+          assert _r.tolist() == [3.0, 0.0, 2.0, 0.0], "The negative entries of [3, -1, 2, -5] become 0"
+          assert _x.tolist() == [3.0, -1.0, 2.0, -5.0], "The array passed in must not be changed"
+          assert not _np.shares_memory(_r, _x), "The result must have a block of its own"
+          _t = _np.array([[-1.0, 2.0], [0.5, -0.5]])
+          assert relu(_t).tolist() == [[0.0, 2.0], [0.5, 0.0]], "A table keeps its shape, with its negative entries set to 0"
+          assert _t.tolist() == [[-1.0, 2.0], [0.5, -0.5]], "A table passed in must not be changed"
+          assert relu(_np.array([1.0, 2.0])).tolist() == [1.0, 2.0], "An array with no negative entries comes back equal"
+          assert relu(_np.array([-4.0])).tolist() == [0.0], "A single negative entry becomes 0"
+          assert relu(_np.array([-2, 5, -7])).tolist() == [0, 5, 0], "Whole numbers work too"
+          assert output.strip() == "[3. 0. 2. 0.] [ 3. -1.  2. -5.]", "The program should print [3. 0. 2. 0.] [ 3. -1.  2. -5.]"
+        wrong:
+          - |
+            import numpy as np
+
+            def relu(x):
+                x[x < 0] = 0
+                return x
+
+            print("[3. 0. 2. 0.] [ 3. -1.  2. -5.]")
+          - |
+            import numpy as np
+
+            def relu(x):
+                out = x
+                out[out < 0] = 0
+                return out
+
+            print("[3. 0. 2. 0.] [ 3. -1.  2. -5.]")
+          - |
+            import numpy as np
+
+            def relu(x):
+                out = x[:]
+                out[out < 0] = 0
+                return out
+
+            print("[3. 0. 2. 0.] [ 3. -1.  2. -5.]")
+          - |
+            import numpy as np
+
+            def relu(x):
+                return x[x > 0]
+
+            print("[3. 0. 2. 0.] [ 3. -1.  2. -5.]")
+          - |
+            import numpy as np
+
+            def relu(x):
+                out = x.copy()
+                out[out > 0] = 0
+                return out
+
+            print("[3. 0. 2. 0.] [ 3. -1.  2. -5.]")
+          - |
+            import numpy as np
+
+            def relu(x):
+                out = x.copy()
+                out[out < 0] = -out[out < 0]
+                return out
+
+            print("[3. 0. 2. 0.] [ 3. -1.  2. -5.]")
+        explanation: |
+          Copy first, then write into the copy through a mask. The order matters, and so does the word `copy`. Writing `out = x` gives the same array a second name, and `out = x[:]`, which for a list would make a copy, makes a **view** for an array. In both cases the assignment through the mask lands in the caller's block, and a function that was asked for a result has silently changed its input. For a list the slice was a safe idiom. For an array it is the trap of the puzzle. Selecting `x[x > 0]` avoids the trap and gives the wrong thing: a shorter array with the negative entries missing, where the rectifier must keep every position and put a zero there. The function works for any shape because a mask has the shape of the array it came from.
+        hints:
+          - Make an independent array with x.copy().
+          - A mask on the left of an assignment writes at the True places.
+          - Is x[:] a copy, for an array?
+    - question:
+        id: fix-pick
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          Each row of the table `P` holds the probabilities a model gave to the classes for one example, and `y[k]` is the correct class of example `k`. `pick(P, y)` should return, for each example, the probability its row gave to **its own** correct class: one number for each row. For the two rows below and `y = [0, 1]` it should print `[0.7 0.8]`. It prints a 2 by 2 table. Fix it.
+        starter: |
+          import numpy as np
+
+          def pick(P, y):
+              return P[:, y]
+
+          P = np.array([[0.7, 0.2, 0.1], [0.1, 0.8, 0.1]])
+          print(pick(P, np.array([0, 1])))
+        solution: |
+          import numpy as np
+
+          def pick(P, y):
+              return P[np.arange(len(y)), y]
+
+          P = np.array([[0.7, 0.2, 0.1], [0.1, 0.8, 0.1]])
+          print(pick(P, np.array([0, 1])))
+        tests: |
+          import numpy as _np
+          _P = _np.array([[0.7, 0.2, 0.1], [0.1, 0.8, 0.1]])
+          assert pick(_P, _np.array([0, 1])).tolist() == [0.7, 0.8], "Row 0 gave 0.7 to class 0 and row 1 gave 0.8 to class 1"
+          assert pick(_P, _np.array([2, 0])).tolist() == [0.1, 0.1], "Row 0 gave 0.1 to class 2 and row 1 gave 0.1 to class 0"
+          assert pick(_P, _np.array([1, 1])).tolist() == [0.2, 0.8], "Row 0 gave 0.2 to class 1 and row 1 gave 0.8 to class 1"
+          _Q = _np.array([[0.1, 0.9], [0.6, 0.4], [0.5, 0.5], [0.2, 0.8]])
+          assert pick(_Q, _np.array([1, 0, 1, 0])).tolist() == [0.9, 0.6, 0.5, 0.2], "Four examples and two classes give four numbers"
+          assert pick(_Q, _np.array([0, 0, 0, 0])).tolist() == [0.1, 0.6, 0.5, 0.2], "With every correct class 0 the result is the first column"
+          assert pick(_Q, _np.array([1, 0, 1, 0])).shape == (4,), "The result has one number for each example"
+          assert output.strip() == "[0.7 0.8]", "The program should print [0.7 0.8]"
+        wrong:
+          - |
+            import numpy as np
+
+            def pick(P, y):
+                return P[:, y]
+
+            print("[0.7 0.8]")
+          - |
+            import numpy as np
+
+            def pick(P, y):
+                return P[y, np.arange(len(y))]
+
+            print("[0.7 0.8]")
+          - |
+            import numpy as np
+
+            def pick(P, y):
+                return P[:, y][0]
+
+            print("[0.7 0.8]")
+          - |
+            import numpy as np
+
+            def pick(P, y):
+                return P.max(axis=1)
+
+            P = np.array([[0.7, 0.2, 0.1], [0.1, 0.8, 0.1]])
+            print(pick(P, np.array([0, 1])))
+          - |
+            import numpy as np
+
+            def pick(P, y):
+                return P[np.arange(len(y)), y[0]]
+
+            print("[0.7 0.8]")
+        explanation: |
+          `P[:, y]` says: all rows, and the columns listed in `y`. For two examples that is a table of 2 rows and 2 columns, every row with every listed column, which is not what was asked. The task pairs each row with one column: row 0 with `y[0]`, row 1 with `y[1]`. Pairing is what two arrays of positions do, so the rows must be named by an array as well: `np.arange(len(y))` is 0, 1, 2 and so on, and `P[np.arange(len(y)), y]` takes the entries at (0, `y[0]`), (1, `y[1]`) and so on. This expression is at the centre of training a classifier. The loss of a model on an example is found from the probability it gave to the correct class, and this is how those probabilities are gathered for a whole block of examples at once. Taking the largest entry of each row would give the right numbers whenever the model happened to be right, and would hide every mistake it made.
+        hints:
+          - What shape does the result have, and what shape should it have?
+          - A colon takes every row with every listed column. The task needs one column for each row.
+          - Two arrays of positions are paired up. Which array names the rows 0, 1, 2 and so on?
+    - question:
+        id: work-keep
+        type: choice
+        system: s2
+        prompt: |
+          For the table `a` of 4 rows and 6 columns, `a[:, 0]` and `a[:, 0:1]` hold the same four numbers. In what do they differ, and when does it matter?
+        options:
+          - "They do not differ."
+          - "`a[:, 0]` has shape `(4,)`, because the whole number removed axis 1. `a[:, 0:1]` has shape `(4, 1)`, because the slice kept it. The second is still a table with one column, which is what code expecting two axes needs."
+          - "`a[:, 0]` is a copy and `a[:, 0:1]` is a view."
+          - "`a[:, 0:1]` has shape `(1, 4)`."
+        answer: 1
+        explanation: |
+          Both are views of the same four places in the block. The whole-number index asks for one position along axis 1, leaving nothing to count on that axis, so the axis goes. The slice asks for a range of positions, which happens to contain one, and the axis stays with length 1. Code written for tables, such as a function that reads `X.shape[1]` to find the number of features, or the `to_array` check of the last lesson, fails on the first and works on the second. And the next lesson will show that the two behave differently when combined with another array. When a selection of one row or one column must stay a table, use a slice of length 1.
+        hints:
+          - What does a whole-number index do to its axis?
+          - What does a slice do to its axis, even when it selects one position?
+          - Which of the two results still has two axes?
+    - question:
+        id: work-cost
+        type: choice
+        system: s2
+        prompt: |
+          `X` is a `float64` table of 1 000 000 rows and 100 columns, 800 megabytes. A program computes `train = X[:800000]` and `test = X[800000:]`. About how much more memory is used?
+        options:
+          - "800 megabytes, since both parts are new arrays"
+          - "640 megabytes for the first part and 160 for the second"
+          - "Almost none. Both are views, each a small description pointing into the block of `X`"
+          - "It depends on the values in the table"
+        answer: 2
+        explanation: |
+          Each slice is a start, a shape and a step over the block that already exists, a few dozen bytes whatever the size of the table. That is the point of the design. The other side of it is that `train` and `test` are windows onto `X`. If a later step rescales `train` in place, by assigning to a slice of it, the rows of `X` change too, and anything else that views them. When a part of the data must be changed without touching the original, that is the moment to pay for a copy.
+        hints:
+          - Is a slice a view or a copy?
+          - What does a view store?
+          - Does the size of the selected part matter?
+    - question:
+        id: work-lookup
+        type: choice
+        system: s2
+        prompt: |
+          A model holds a table `E` of shape `(50000, 768)`, one row for each word piece. A sentence has been turned into `ids`, an array of 12 whole numbers. What is the shape of `E[ids]`, and does it share memory with `E`?
+        options:
+          - "`(12,)`, a view"
+          - "`(12, 768)`, a copy: one row of `E` for each of the 12 positions, gathered into a new block"
+          - "`(50000, 12)`, a view"
+          - "`(768,)`, a copy"
+        answer: 1
+        explanation: |
+          An array of positions used as the first index takes those rows, in order, with repeats if a word piece occurs twice. Axis 0 of the result has the length of `ids`, 12, and axis 1 is untouched at 768. The rows asked for are scattered through the table and may repeat, so no start and step can describe them, and they are copied. That copy is the input to the rest of the model: a table with one vector for each position of the sentence. Changing it does not change `E`. To change the rows of `E` themselves, as training does, the index goes on the left of an assignment.
+        hints:
+          - One row is taken for each position in ids.
+          - How long is one row of E?
+          - Are the chosen rows evenly spaced in the block?
+    - question:
+        id: work-chain
+        type: choice
+        system: s2
+        prompt: |
+          `a` is a table whose entry in row 0, column 0 is 0. What does `a[0, 0]` hold after each of these two lines, run separately on a fresh `a`?
+
+          ```python
+          a[0:2][0, 0] = 99
+          a[[0, 1]][0, 0] = 99
+          ```
+        options:
+          - "99 after either line"
+          - "0 after either line"
+          - "99 after the first, since `a[0:2]` is a view and the write lands in the block of `a`. 0 after the second, since `a[[0, 1]]` is a copy, the write lands in the copy, and the copy is then thrown away."
+          - "0 after the first and 99 after the second"
+        answer: 2
+        explanation: |
+          Each line does two things in turn: it first evaluates the part before the second pair of brackets, and then assigns into the result. In the first line that result is a slice, a view, so the assignment goes through to `a`. In the second it is a selection by a list of positions, a fresh copy of rows 0 and 1, so the assignment changes the copy, which nothing refers to afterwards. The two lines hold the same rows and look nearly identical, and one of them does nothing. The safe form is a single index expression on the left: `a[0, 0] = 99`, or `a[[0, 1], 0] = 99` to set the first entry of both rows.
+        hints:
+          - Each line first builds the part before the second pair of brackets.
+          - Is a[0:2] a view or a copy? Is a[[0, 1]] a view or a copy?
+          - Where does a write to a copy go?
+  connections:
+    - text: |
+        A slice of a list was a new list, and a slice of an array turned out to be a window onto the old array. The reason was in the last lesson: an array is a block with a rule for reading it, as [[e5.arrays-dtype-and-shape]] set out, and any slice can be described by a new rule over the same block. So a slice copies nothing, costs the same at any size, and passes every write through to the array it came from.
+
+        One rule gives the shape of any index expression: a whole number removes its axis, and a slice keeps it. That is the difference between `a[:, 0]`, a plain list of four numbers, and `a[:, 0:1]`, a table with one column. A column, which the last cluster had to build with a comprehension, is `a[:, j]`.
+
+        Selections that follow no regular pattern exist too. A mask, an array of True and False from a comparison, selects the entries that pass a test. An array of positions gathers entries or rows in any order, with repeats, and two such arrays pair up. Both copy what they select. Both write into the original when they stand on the left of an assignment. With them you wrote a rectifier in two lines and gathered each example's own probability from a table, two operations that every neural network performs.
+
+        How a view really works, as a start place and a step for each axis, is the subject of [[e5.strides-and-memory-layout]], after [[e5.reshaping-views-and-copies]] has shown another way to read a block without moving it. And every loop you removed today by one index expression is an instance of [[e5.vectorisation]].
+
+        There is one thing in this lesson that should have seemed odd, and you may have passed over it. `x < 0` compared an array of four numbers with a single number. `a[:, 1] = 7` wrote one number into four places. `u / 2` in the last lesson divided three entries by one. In each case two things of **different shapes** were combined, and NumPy quietly made the smaller one fit. It does this by a precise rule, which lets a column be added to every column of a table, a row be subtracted from every row, and a column and a row be combined into a whole table. That rule is the next lesson, [[e5.broadcasting]].

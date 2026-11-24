@@ -1,0 +1,817 @@
+concept: e5.log-sum-exp-and-stable-formulations
+minutes: 90
+claim: You can say when an exponential overflows or underflows in floats and what `inf` and `nan` then do to a computation, prove that softmax is unchanged by shifting every score, compute the logarithm of a sum of exponentials without overflow by taking out the largest term, write softmax and its logarithm so that they cannot fail, and explain why long products of probabilities are handled as sums of logarithms.
+recalls: [e5.random-number-generation]
+uses: [e5.axis-operations-and-reductions, e5.broadcasting, e5.vectorisation, e5.indexing-and-slicing, e5.arrays-dtype-and-shape, m2.the-exponential-and-e, m1.logarithms, m1.exponent-laws, m1.inequalities-and-absolute-value, m0.estimation-and-orders-of-magnitude, e0.functions]
+leads: [e5.numerical-error-analysis-in-practice]
+starter: |
+  # Scratch space. The softmax you wrote, on two rows of scores.
+  import numpy as np
+
+  def softmax(S):
+      E = np.exp(S)
+      return E / E.sum(axis=1, keepdims=True)
+
+  S = np.array([[0.0, 1.0, 2.0],
+                [1000.0, 1001.0, 1002.0]])
+  print(softmax(S))
+parts:
+  recall:
+    - text: |
+        [[e5.random-number-generation]] ended with a test: feed large random scores to your `softmax`, and most rows come back as `nan`. Three quick pulls first.
+    - question:
+        id: recall-state
+        type: choice
+        system: s1
+        concepts: [e5.random-number-generation]
+        prompt: |
+          A function creates `np.random.default_rng(0)` inside itself and draws three numbers. It is called twice. How do the two results compare?
+        options: ["They are identical", "They are different", "The second is all zeros", "The second call is an error"]
+        answer: 0
+        explanation: Each call makes a new generator in the same starting state, so each draws the same numbers.
+        hints:
+          - In what state does each new generator begin?
+          - Same state and same rule.
+    - question:
+        id: recall-keepdims
+        type: choice
+        system: s1
+        concepts: [e5.axis-operations-and-reductions]
+        prompt: |
+          `S` has shape `(100, 5)`. What is the shape of `S.max(axis=1, keepdims=True)`?
+        options: ["`(100,)`", "`(100, 1)`", "`(1, 5)`", "`(5,)`"]
+        answer: 1
+        explanation: Axis 1 is reduced, and kept with length 1, so that the result broadcasts against the rows of `S`.
+        hints:
+          - Which axis is reduced?
+          - With keepdims the reduced axis stays, with length 1.
+    - question:
+        id: recall-exponent
+        type: choice
+        system: s1
+        concepts: [m2.the-exponential-and-e]
+        prompt: |
+          Which of these equals $e^{a + c}$?
+        options: ['$e^a + e^c$', '$e^a \, e^c$', '$e^{ac}$', '$c\,e^a$']
+        answer: 1
+        explanation: Adding exponents multiplies the powers.
+        hints:
+          - What happens to powers of the same base when the exponents are added?
+          - Try a = 1 and c = 1.
+  puzzle:
+    - text: |
+        The starter holds the `softmax` you wrote in the lesson on reductions, unchanged: take the exponential of every score, and divide each row by its own total. It is run on a table with two rows of scores.
+
+        The first row is 0, 1, 2. The second is 1000, 1001, 1002.
+
+        Before you run it, think about what the second row **should** give. Softmax turns differences of scores into ratios of probabilities. In both rows the scores step up by 1, so in both rows each class should be $e$ times as likely as the one before. The second row is the first with 1000 added to everything, and adding the same amount to every score ought to change nothing. You will prove that in a moment.
+
+        Run it.
+
+        The first row comes out as about 0.09, 0.24 and 0.67. **The second row comes out as `nan`, `nan`, `nan`.**
+
+        Go through the function line by line and you will find no mistake. The formula is the right formula, and each line does what the formula says. Yet a row whose answer is known, and is perfectly ordinary, has produced nothing at all.
+
+        **How can a correct formula, correctly programmed, give no answer? What is `nan`, and where did it come from? And how do you write softmax so that this cannot happen, for any scores whatever?**
+  intuition:
+    - text: |
+        Follow the second row through by hand.
+
+        The first step is $e^{1000}$. How large is that? Since $e^{2.3} \approx 10$, it is about $10^{434}$: a 1 followed by 434 zeros. The number of atoms in the visible universe is about $10^{80}$.
+
+        A `float64` has 64 binary digits, and with them it can hold numbers up to about $1.8 \times 10^{308}$. That is immense, and $e^{1000}$ is immensely larger. When a result is too large to hold, the float does not wrap round or stop the program. It becomes a special value, **`inf`**, infinity, which means "larger than I can say". This is called **overflow**. The exponential overflows for any input above about 709.8.
+
+        So after the first line, the second row of `E` is `inf`, `inf`, `inf`. Its total is `inf`. And the last line divides `inf` by `inf`.
+
+        What is infinity divided by infinity? It could be anything. The three infinities here stand for $e^{1000}$, $e^{1001}$ and $e^{1002}$, and their ratios to the total are exactly the 0.09, 0.24 and 0.67 you wanted. But the floats no longer know that. Each has forgotten everything about itself except that it was too big. A question with no determinable answer gets the other special value: **`nan`**, "not a number".
+
+        So nothing went wrong with the formula. What went wrong is that it reaches a perfectly modest answer **by way of** numbers too large to write down. The answer is a ratio of two enormous things, and the enormous things did not survive the journey.
+
+        An everyday version. Two people want to know what share of a bill each should pay, and they are told the amounts in units so small that the figures run off the end of the calculator's display. Both displays show "error". The shares were never in doubt: a half each, say. The fault lay in the units. Measure the same amounts in pounds and the calculator is content.
+
+        That is the cure, and you already hold the fact that makes it legitimate: softmax does not care if you add the same number to every score. So **before** exponentiating, subtract from every score the largest score of its row. The row 1000, 1001, 1002 becomes $-2, -1, 0$. The largest exponent is now $e^0 = 1$, the others are smaller, and nothing can overflow.
+
+        The figure does this for three scores at a time. Step the scores upwards and watch the direct route fail while the shifted one carries on.
+    - figure: log-sum-exp
+      props: { shift: 0 }
+    - text: |
+        The figure shows a quantity slightly different from softmax, and more basic: the **logarithm of the sum of the exponentials** of the scores. It is the logarithm of the total by which softmax divides, and it is the thing that actually appears when a model is trained, as you will see. It suffers the same overflow, and the same subtraction cures it.
+
+        Move the scores to 1000 and beyond, and the direct route gives `inf`. The shifted route gives 1002.41, which is right.
+
+        Now go the other way.
+    - figure: log-sum-exp
+      props: { shift: -1000 }
+    - text: |
+        With scores near $-1000$ the direct route fails in the opposite manner. $e^{-1000}$ is a 1 preceded by 434 zeros after the decimal point. The smallest positive `float64` is about $5 \times 10^{-324}$, and anything smaller becomes exactly `0.0`. This is **underflow**. The three exponentials are all zero, their sum is zero, and the logarithm of zero is `-inf`. With softmax, the same scores would give zero divided by zero, which is `nan` again.
+
+        The same subtraction cures this too. Take out the largest score, $-998$, and the row becomes $-2, -1, 0$ once more.
+
+        So the trouble has nothing to do with whether the scores are large or small. It comes from exponentiating numbers far from zero, in either direction, and it is cured by moving the numbers so that the largest sits **at** zero.
+
+        One more thing about `nan` before the detail, since it is why this matters so much in practice. `nan` is contagious. Any arithmetic with a `nan` gives `nan`. In training, one `nan` in one row of one batch flows into the loss, from the loss into every correction, and from the corrections into **every weight of the model**. A run that has been going for days is destroyed in one step, and what you see afterwards is a model made entirely of `nan` with no sign of where it began. Writing the formula so that the first `nan` can never appear is not fastidiousness. It is what makes training possible.
+  derivation:
+    - text: |
+        **The limits.** For `float64`:
+
+        | | value |
+        |---|---|
+        | largest float | about $1.8 \times 10^{308}$ |
+        | `np.exp(x)` is `inf` | for $x$ above about 709.8 |
+        | smallest positive float | about $5 \times 10^{-324}$ |
+        | `np.exp(x)` is `0.0` | for $x$ below about $-745$ |
+
+        **The special values.** `inf` behaves like a number larger than every float: `inf + 1` is `inf`, and `1 / inf` is `0.0`. Where no answer can be determined, the result is `nan`: `inf - inf`, `inf / inf`, `0 * inf` and `0.0 / 0.0` on arrays. `nan` spreads through every operation, and it is not equal to anything, itself included, so it is detected with `np.isnan`, never with `==`. `np.isfinite(x)` is `True` where an entry is neither `inf` nor `nan`.
+
+        Ordinary NumPy prints a warning when an overflow first happens. The Python built into these pages does not, so here the first sign of trouble is the wrong answer itself.
+
+        **Softmax is unchanged by a shift.** Take scores $s_1, \dots, s_n$, and add the same number $c$ to each. The probability of class $k$ becomes
+
+        $$\frac{e^{s_k + c}}{\sum_j e^{s_j + c}} = \frac{e^{c}\, e^{s_k}}{e^{c} \sum_j e^{s_j}} = \frac{e^{s_k}}{\sum_j e^{s_j}}.$$
+
+        The factor $e^c$ comes out of every term of the sum, by the law of exponents you pulled a moment ago, and cancels. Softmax depends only on the **differences** between scores.
+
+        **Choosing the shift.** We are free to pick $c$. Pick $c = -m$, where $m$ is the largest score. Then:
+
+        - The largest shifted score is 0, and every other is negative. So every exponential lies between 0 and 1, and **none can overflow.**
+        - The largest contributes $e^0 = 1$ to the total. So the total is at least 1, and **the division can never be by zero.**
+        - Some of the others may underflow to 0. A term that underflows was smaller than $10^{-323}$ beside a total of at least 1, and a `float64` holds only about 16 significant digits. Its true contribution was far below what the float could have recorded anyway. **Underflow of the small terms does no harm.**
+
+        For a table with one example in each row:
+
+        ```python
+        def softmax(S):
+            Z = S - S.max(axis=1, keepdims=True)
+            E = np.exp(Z)
+            return E / E.sum(axis=1, keepdims=True)
+        ```
+
+        One line added. Each row has its own largest score taken out, which is why the maximum is taken along axis 1 and kept.
+    - question:
+        id: derivation-safe
+        type: choice
+        system: s2
+        prompt: |
+          After the largest score of a row has been subtracted from every score of that row, why can the exponentials neither overflow nor add up to zero?
+        options:
+          - "Because subtracting makes all the scores positive."
+          - "Every shifted score is at most 0, so every exponential is at most $e^0 = 1$, far below the largest float. And the largest score itself has become exactly 0, so one of the terms is exactly 1, and the total is at least 1."
+          - "Because NumPy checks for overflow after a subtraction."
+          - "Because the scores are now all equal."
+        answer: 1
+        explanation: |
+          The shift puts the largest score at zero and leaves every other below it. An exponential of a number that is zero or negative lies between 0 and 1. That disposes of overflow. For the total, it is enough that one term is known to be 1: the rest are not negative, so the sum cannot be less. The other terms may be tiny, or may underflow to zero, and it does not matter, since a total of at least 1 swamps them. Notice that the argument would fail if you subtracted the smallest score, or the mean: the largest shifted score would then be positive and could still overflow.
+        hints:
+          - What is the largest of the shifted scores?
+          - What is the exponential of that?
+          - Can a sum of terms that are not negative be less than one of its terms?
+    - text: |
+        **The logarithm of a sum of exponentials.** Define, for numbers $x_1, \dots, x_n$,
+
+        $$\operatorname{LSE}(x) = \log \sum_i e^{x_i}.$$
+
+        Computed as written, it overflows as softmax did. Apply the same idea: factor $e^m$ out of the sum, with $m$ the largest of the $x_i$.
+
+        $$\log \sum_i e^{x_i} = \log\!\Big( e^{m} \sum_i e^{x_i - m} \Big) = m + \log \sum_i e^{x_i - m}.$$
+
+        The logarithm of a product is the sum of the logarithms, and $\log e^m = m$. The sum that remains is of exponentials between 0 and 1 and is at least 1, so its logarithm is safe, and is 0 or more. This is the **log-sum-exp trick**:
+
+        ```python
+        def logsumexp(x):
+            m = x.max()
+            return m + np.log(np.exp(x - m).sum())
+        ```
+
+        **What it measures.** The sum inside is at least 1, from the largest term, and at most $n$, if all the terms are equal. So
+
+        $$m \;\le\; \operatorname{LSE}(x) \;\le\; m + \log n.$$
+
+        Log-sum-exp is the largest value plus a small correction, between 0 and $\log n$. If one value stands well above the rest, the correction is almost nothing and LSE is almost the maximum. If several are level, it is a little more. It is a **smooth version of the maximum**, and that is where softmax gets its name: it is the "soft" counterpart of picking the largest.
+
+        **Why logarithms at all.** Probabilities multiply. If a model gives each of 2000 words in a passage a probability of about a half, the probability of the passage is $0.5^{2000} \approx 10^{-602}$, which underflows to `0.0`. Every long passage would have probability zero, and nothing could be compared.
+
+        Take the logarithm, and the product becomes a sum: $2000 \times \log 0.5 \approx -1386$. An ordinary number. So in practice probabilities are **stored as their logarithms**, and multiplied by adding. When two probabilities held as logarithms must be **added**, the recipe is: exponentiate, add, take the logarithm. That is log-sum-exp, and it is why the function turns up everywhere.
+
+        **The logarithm of softmax.** Training a classifier means making the probability of the correct class large, and what is actually computed is the logarithm of that probability. From the definition,
+
+        $$\log \frac{e^{s_k}}{\sum_j e^{s_j}} = s_k - \operatorname{LSE}(s).$$
+
+        Compute it **that way**, by subtraction. The other way, softmax first and then `np.log`, fails even with the safe softmax: a class whose score is 800 below the largest gets probability $e^{-800}$, which underflows to 0, and the logarithm of 0 is `-inf`. The true answer is simply $-800$. The exponential and the logarithm should have cancelled on paper before either was computed.
+
+        For a table of scores, with the reductions along axis 1:
+
+        ```python
+        def log_softmax(S):
+            Z = S - S.max(axis=1, keepdims=True)
+            return Z - np.log(np.exp(Z).sum(axis=1, keepdims=True))
+        ```
+
+        **The general lesson.** Two expressions that are equal in algebra can behave quite differently in floats. The algebra is about real numbers, which have no largest and no smallest. Floats have both. So the craft is this: **find the form of the formula whose intermediate values are no more extreme than its answer.** Three habits serve.
+
+        1. If an exponential is followed by a logarithm, or a large factor above by the same factor below, cancel them on paper first.
+        2. Work with logarithms of probabilities, never with long products.
+        3. Before exponentiating, move the largest value to zero.
+
+        A relative of this problem arises at the other end. `np.log(1 + x)` for a tiny `x` gives `0.0`, since `1 + x` rounds to exactly 1, though the true answer is very nearly `x`. NumPy has `np.log1p(x)`, which computes $\log(1 + x)$ without ever forming $1 + x$. That failure is not overflow. It is a loss of digits, and it is the subject of [[e5.numerical-error-analysis-in-practice]].
+    - question:
+        id: order-lse
+        type: order
+        system: s2
+        prompt: Put in order the steps of computing the logarithm of the sum of the exponentials of an array `x` without overflow.
+        steps:
+          - 'Find the largest entry, `m`.'
+          - 'Subtract `m` from every entry, so that the largest becomes 0 and the rest are negative.'
+          - 'Take the exponential of each shifted entry, giving numbers between 0 and 1.'
+          - 'Add them up. The total is at least 1.'
+          - 'Take the logarithm of the total, which is 0 or more.'
+          - 'Add `m` back.'
+        explanation: The shift must come before the exponential, since the exponential is the step that overflows. The logarithm applies to the whole sum, so the adding comes before it. And `m` is added back last, outside the logarithm, where it stands for the factor of $e^m$ that was taken out of the sum. Adding it back before the logarithm would be adding it to the sum and not to its logarithm.
+        hints:
+          - Which step is the dangerous one, and what must happen before it?
+          - The logarithm is taken of the whole sum.
+          - The amount taken out returns at the very end.
+  formal:
+    - text: |
+        **Overflow and underflow.** A `float64` result larger in size than about $1.8 \times 10^{308}$ becomes `inf` or `-inf`. A non-zero result smaller in size than about $5 \times 10^{-324}$ becomes 0. An operation with no determinable value, such as `inf - inf` or `inf / inf`, gives `nan`, and any operation on `nan` gives `nan`.
+
+        **Shift invariance.** For any $c$, the softmax of $(s_1 + c, \dots, s_n + c)$ equals the softmax of $(s_1, \dots, s_n)$.
+
+        **Log-sum-exp.** $\operatorname{LSE}(x) = \log \sum_i e^{x_i}$. With $m = \max_i x_i$,
+
+        $$\operatorname{LSE}(x) = m + \log \sum_i e^{x_i - m}, \qquad m \le \operatorname{LSE}(x) \le m + \log n.$$
+
+        In the second form every exponential lies in $(0, 1]$ and the sum lies in $[1, n]$.
+
+        **Stable softmax.** $\operatorname{softmax}(s)_k = e^{s_k - m} \big/ \sum_j e^{s_j - m}$.
+
+        **Log-softmax.** $\log \operatorname{softmax}(s)_k = s_k - \operatorname{LSE}(s)$.
+
+        **Products as sums.** $\log \prod_i p_i = \sum_i \log p_i$.
+  drill:
+    - text: |
+        Seconds each. Everything is `float64`.
+    - question:
+        id: drill-overflow
+        type: choice
+        system: s1
+        prompt: |
+          What is `np.exp(1000.0)`?
+        options: ["`inf`", "`nan`", "`0.0`", "A float of about 10 to the power 434"]
+        answer: 0
+        explanation: The true value is far above the largest float, so the result overflows to infinity.
+        hints:
+          - The largest float is about 1.8 times 10 to the power 308.
+          - What does a float become when the result is too large?
+    - question:
+        id: drill-underflow
+        type: choice
+        system: s1
+        prompt: |
+          What is `np.exp(-1000.0)`?
+        options: ["`-inf`", "`nan`", "`0.0`", "A small negative number"]
+        answer: 2
+        explanation: The true value is positive and far smaller than the smallest positive float, so it underflows to zero.
+        hints:
+          - An exponential is always positive.
+          - What does a float become when the result is too small to hold?
+    - question:
+        id: drill-inf-inf
+        type: choice
+        system: s1
+        prompt: |
+          `a = np.array([np.inf])`. What is `a / a`?
+        options: ["`[1.]`", "`[inf]`", "`[nan]`", "`[0.]`"]
+        answer: 2
+        explanation: Infinity divided by infinity has no determinable value.
+        hints:
+          - Does an infinity remember how large it really was?
+          - What is the value for a result that cannot be determined?
+    - question:
+        id: drill-nan-spreads
+        type: choice
+        system: s1
+        prompt: |
+          What is `np.nan + 1.0`?
+        options: ["`1.0`", "`nan`", "`inf`", "`0.0`"]
+        answer: 1
+        explanation: Any arithmetic with a `nan` gives `nan`.
+        hints:
+          - It spreads.
+          - Can adding 1 to an undetermined value determine it?
+    - question:
+        id: drill-log-zero
+        type: choice
+        system: s1
+        prompt: |
+          `z = np.array([0.0])`. What is `np.log(z)`?
+        options: ["`[0.]`", "`[-inf]`", "`[nan]`", "`[1.]`"]
+        answer: 1
+        explanation: The logarithm falls without limit as its input approaches zero.
+        hints:
+          - What happens to the logarithm of smaller and smaller positive numbers?
+          - The sign is negative.
+    - question:
+        id: drill-shift
+        type: choice
+        system: s1
+        prompt: |
+          The softmax of the scores 5 and 5 is one half each. What is the softmax of 1005 and 1005, in mathematics?
+        options: ["One half each", "Both 0", "Both 1", "It is not defined"]
+        answer: 0
+        explanation: Adding the same number to every score changes nothing, since softmax depends only on differences.
+        hints:
+          - What is the difference between the two scores in each case?
+          - Softmax depends only on differences.
+    - question:
+        id: drill-subtract
+        type: numeric
+        system: s1
+        prompt: |
+          A row of scores is 2, 5, 3. What number does the stable softmax subtract from each of them?
+        answer: "5"
+        explanation: The largest score of the row, so that it becomes 0.
+        hints:
+          - Which score must become zero?
+          - It is the largest.
+    - question:
+        id: drill-largest-term
+        type: numeric
+        system: s1
+        prompt: |
+          After the largest score has been subtracted, what is the exponential of the largest shifted score?
+        answer: "1"
+        explanation: The largest shifted score is 0, and anything to the power 0 is 1.
+        hints:
+          - What has the largest score become?
+          - What is e to the power 0?
+    - question:
+        id: drill-lse-equal
+        type: choice
+        system: s1
+        prompt: |
+          What is the log-sum-exp of the two numbers 0 and 0?
+        options: ["0", "$\\log 2$, about 0.69", "1", "2"]
+        answer: 1
+        explanation: Each exponential is 1, their sum is 2, and its logarithm is about 0.69.
+        hints:
+          - What is the exponential of 0?
+          - Add the two and take the logarithm.
+    - question:
+        id: drill-lse-max
+        type: choice
+        system: s1
+        prompt: |
+          About what is the log-sum-exp of the two numbers 1000 and 0?
+        options: ["0", "500", "1000", "`inf`"]
+        answer: 2
+        explanation: When one value stands far above the rest, log-sum-exp is almost exactly that value.
+        hints:
+          - Log-sum-exp lies between the largest value and that value plus log n.
+          - How much does the smaller term add beside the larger?
+    - question:
+        id: drill-log-product
+        type: choice
+        system: s1
+        prompt: |
+          Which of these equals $\log(p\,q\,r)$?
+        options: ['$\log p \times \log q \times \log r$', '$\log p + \log q + \log r$', '$\log(p + q + r)$', '$3 \log p$']
+        answer: 1
+        explanation: The logarithm of a product is the sum of the logarithms.
+        hints:
+          - What do logarithms turn multiplication into?
+          - Each factor gives one term.
+    - question:
+        id: drill-log-softmax
+        type: choice
+        system: s1
+        prompt: |
+          Which is the safe way to compute the logarithm of the softmax probability of class $k$?
+        options: ["`np.log(softmax(s))[k]`", "`s[k] - logsumexp(s)`", "`np.log(s[k])`", "`np.exp(s[k])`"]
+        answer: 1
+        explanation: The logarithm and the exponential in the top line cancel on paper, leaving the score itself, less the log-sum-exp.
+        hints:
+          - What does the logarithm of a quotient become?
+          - The logarithm of an exponential is the exponent.
+    - question:
+        id: drill-isnan
+        type: choice
+        system: s1
+        prompt: |
+          Which expression is `True` exactly when the array `x` holds a `nan` somewhere?
+        options: ["`(x == np.nan).any()`", "`np.isnan(x).any()`", "`x.sum() == 0`", "`x.any()`"]
+        answer: 1
+        explanation: A `nan` is not equal to anything, itself included, so it must be detected with `np.isnan`.
+        hints:
+          - Is nan equal to nan?
+          - There is a function made for this test.
+    - question:
+        id: drill-log1p
+        type: choice
+        system: s1
+        prompt: |
+          `x` is a tiny positive number, about $10^{-17}$. Which gives an accurate value of $\log(1 + x)$?
+        options: ["`np.log(1 + x)`", "`np.log1p(x)`", "`np.log(x)`", "`np.exp(x)`"]
+        answer: 1
+        explanation: "`1 + x` rounds to exactly 1, and its logarithm is then 0. `np.log1p` never forms the sum."
+        hints:
+          - What does 1 plus a number that small round to?
+          - One of these functions avoids forming the sum.
+    - question:
+        id: predict-shift
+        type: predict
+        system: s1
+        prompt: The direct route and the shifted one. What does this show?
+        code: |
+          import numpy as np
+
+          x = np.array([1000.0, 1000.0])
+          print(np.exp(x))
+          m = x.max()
+          print(np.exp(x - m))
+          print(m + np.log(np.exp(x - m).sum()))
+        output: |
+          [inf inf]
+          [1. 1.]
+          1000.6931471805599
+        explanation: The exponential of 1000 overflows. With the largest value taken out, both entries are 0 and their exponentials are 1. The sum is 2, its logarithm is about 0.693, and adding back the 1000 gives the answer. Two equal values give the maximum plus log 2.
+        hints:
+          - Is e to the power 1000 within the range of a float?
+          - What are the entries after the largest is subtracted?
+          - The logarithm of 2 is about 0.693.
+    - question:
+        id: predict-product
+        type: predict
+        system: s1
+        prompt: A long product, a sum of logarithms, and a tiny addition. What does this show?
+        code: |
+          import numpy as np
+
+          p = np.full(2000, 0.5)
+          print(np.prod(p))
+          print(round(float(np.log(p).sum()), 2))
+          print(np.log(1.0 + 1e-17), np.log1p(1e-17))
+        output: |
+          0.0
+          -1386.29
+          0.0 1e-17
+        explanation: A half multiplied by itself 2000 times is far below the smallest positive float and underflows to zero. The sum of the 2000 logarithms, each about −0.693, is an ordinary number. In the last line, 1 plus so tiny a number rounds to exactly 1, whose logarithm is 0, while `log1p` returns the right value.
+        hints:
+          - Is one half to the power 2000 within the range of a float?
+          - The logarithm of one half is about −0.693.
+          - What does 1.0 + 1e-17 round to?
+  work:
+    - text: Slower now. For each formula, ask what its largest and smallest intermediate values are before asking what its answer is.
+    - question:
+        id: write-logsumexp
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `logsumexp(x)` for a plain array `x` with at least one entry. Return $\log \sum_i e^{x_i}$, computed so that it is right however large or small the entries are.
+
+          Use no loop and no comprehension.
+        starter: |
+          import numpy as np
+
+          def logsumexp(x):
+              # Replace the next line with your own.
+              return np.log(np.exp(x).sum())
+
+          print(logsumexp(np.array([1000.0, 1000.0])))
+        solution: |
+          import numpy as np
+
+          def logsumexp(x):
+              m = x.max()
+              return m + np.log(np.exp(x - m).sum())
+
+          print(logsumexp(np.array([1000.0, 1000.0])))
+        tests: |
+          import numpy as _np
+          def _close(a, b):
+              return bool(_np.isfinite(a)) and abs(float(a) - b) < 1e-9
+          assert _close(logsumexp(_np.array([1.0, 2.0, 3.0])), 3.4076059644443806), "For 1, 2 and 3 the result is about 3.4076"
+          assert _close(logsumexp(_np.array([1000.0, 1001.0, 1002.0])), 1002.4076059644444), "For 1000, 1001 and 1002 the result is about 1002.4076, not inf"
+          assert _close(logsumexp(_np.array([-1000.0, -1001.0])), -999.6867383124818), "For -1000 and -1001 the result is about -999.6867, not -inf"
+          assert _close(logsumexp(_np.array([0.0, 2000.0])), 2000.0), "For 0 and 2000 the result is 2000"
+          assert _close(logsumexp(_np.array([0.0, -2000.0])), 0.0), "For 0 and -2000 the result is 0"
+          assert _close(logsumexp(_np.array([7.0])), 7.0), "For a single entry the result is that entry"
+          assert _close(logsumexp(_np.array([0.0, 0.0, 0.0, 0.0])), 1.3862943611198906), "For four zeros the result is the logarithm of 4"
+          _x = _np.array([5.0, -3.0, 2.0])
+          logsumexp(_x)
+          assert _x.tolist() == [5.0, -3.0, 2.0], "The array passed in must not be changed"
+          assert "for " not in source and "while " not in source, "Use no loop and no comprehension"
+          assert abs(float(output.strip()) - 1000.6931471805599) < 1e-9, "The program should print about 1000.6931"
+        wrong:
+          - |
+            import numpy as np
+
+            def logsumexp(x):
+                return np.log(np.exp(x).sum())
+
+            print(1000.6931471805599)
+          - |
+            import numpy as np
+
+            def logsumexp(x):
+                m = x.max()
+                return np.log(np.exp(x - m).sum())
+
+            print(1000.6931471805599)
+          - |
+            import numpy as np
+
+            def logsumexp(x):
+                m = x.min()
+                return m + np.log(np.exp(x - m).sum())
+
+            print(logsumexp(np.array([1000.0, 1000.0])))
+          - |
+            import numpy as np
+
+            def logsumexp(x):
+                m = x.mean()
+                return m + np.log(np.exp(x - m).sum())
+
+            print(logsumexp(np.array([1000.0, 1000.0])))
+          - |
+            import numpy as np
+
+            def logsumexp(x):
+                m = x.max()
+                return np.log(m + np.exp(x - m).sum())
+
+            print(1000.6931471805599)
+          - |
+            import numpy as np
+
+            def logsumexp(x):
+                return x.max()
+
+            print(1000.6931471805599)
+        explanation: |
+          Take the largest entry out of the sum as a factor $e^m$, and its logarithm, $m$, comes outside. What is left inside is a sum of exponentials of numbers that are zero or negative: each between 0 and 1, the largest exactly 1. Nothing overflows, and the logarithm is of a number that is at least 1. Subtracting the smallest entry, or the mean, is just as valid in algebra and useless in floats, since the largest shifted entry is then positive and can still overflow, as with 0 and 2000. The amount taken out must go back **outside** the logarithm. And the maximum alone is close but not right: it is short by the correction, which is as much as $\log n$ when the entries are level. You have used an identity that is true for every real $m$, and chosen the one $m$ for which it is also true in floats.
+        hints:
+          - Which entry, taken out as a factor, makes every remaining exponential at most 1?
+          - The logarithm of a product is a sum, so the factor taken out becomes a term added.
+          - Subtract the largest entry before the exponential, and add it back after the logarithm.
+    - question:
+        id: write-log-softmax
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          `S` is a table of scores with one example in each row and one class in each column. Write `log_softmax(S)` to return the table of the same shape holding the **logarithm** of the softmax probability of each class, row by row. It must give finite answers for scores of any size, and for classes whose probability is too small for a float to hold.
+
+          Use no loop and no comprehension.
+        starter: |
+          import numpy as np
+
+          def log_softmax(S):
+              # Replace the next two lines with your own.
+              E = np.exp(S)
+              return np.log(E / E.sum(axis=1, keepdims=True))
+
+          S = np.array([[0.0, -2000.0], [1000.0, 1000.0]])
+          print(log_softmax(S))
+        solution: |
+          import numpy as np
+
+          def log_softmax(S):
+              Z = S - S.max(axis=1, keepdims=True)
+              return Z - np.log(np.exp(Z).sum(axis=1, keepdims=True))
+
+          S = np.array([[0.0, -2000.0], [1000.0, 1000.0]])
+          print(log_softmax(S))
+        tests: |
+          import numpy as _np
+          _h = float(_np.log(0.5))
+          _S = _np.array([[0.0, -2000.0], [1000.0, 1000.0]])
+          _L = log_softmax(_S)
+          assert _L.shape == (2, 2), "The result has the shape of the table of scores"
+          assert _np.isfinite(_L).all(), "Every entry must be finite, with no inf and no nan"
+          assert _np.allclose(_L, [[0.0, -2000.0], [_h, _h]]), "For the rows 0, -2000 and 1000, 1000 the results are 0, -2000 and the logarithm of a half twice"
+          _T = _np.array([[0.0, 1.0, 2.0]])
+          assert _np.allclose(log_softmax(_T), [[-2.4076059644443806, -1.4076059644443806, -0.4076059644443806]]), "For the row 0, 1, 2 the results are about -2.4076, -1.4076 and -0.4076"
+          assert _np.allclose(log_softmax(_T + 5000.0), log_softmax(_T)), "Adding 5000 to every score must change nothing"
+          _U = _np.array([[0.0, 0.0], [-2000.0, -2000.0]])
+          assert _np.allclose(log_softmax(_U), [[_h, _h], [_h, _h]]), "Each row must be shifted by its own largest score"
+          _V = _np.array([[1.0, 2.0, 3.0, 4.0], [0.0, 0.0, 0.0, 0.0], [-5.0, 5.0, 0.0, 1.0]])
+          assert _np.allclose(_np.exp(log_softmax(_V)).sum(axis=1), [1.0, 1.0, 1.0]), "The exponentials of each row of the result must add up to 1"
+          assert _np.allclose(log_softmax(_V)[1], _np.log(0.25)), "Four equal scores give the logarithm of a quarter each"
+          assert _S.tolist() == [[0.0, -2000.0], [1000.0, 1000.0]], "The table passed in must not be changed"
+          assert "for " not in source and "while " not in source, "Use no loop and no comprehension"
+          _got = [float(v) for v in output.replace("[", " ").replace("]", " ").split()]
+          assert _np.allclose(_got, [0.0, -2000.0, _h, _h]), "The program should print 0, -2000 and about -0.6931 twice"
+        wrong:
+          - |
+            import numpy as np
+
+            def log_softmax(S):
+                E = np.exp(S)
+                return np.log(E / E.sum(axis=1, keepdims=True))
+
+            print("0 -2000 -0.69314718 -0.69314718")
+          - |
+            import numpy as np
+
+            def log_softmax(S):
+                Z = S - S.max(axis=1, keepdims=True)
+                E = np.exp(Z)
+                return np.log(E / E.sum(axis=1, keepdims=True))
+
+            print("0 -2000 -0.69314718 -0.69314718")
+          - |
+            import numpy as np
+
+            def log_softmax(S):
+                Z = S - S.max()
+                return Z - np.log(np.exp(Z).sum(axis=1, keepdims=True))
+
+            print("0 -2000 -0.69314718 -0.69314718")
+          - |
+            import numpy as np
+
+            def log_softmax(S):
+                Z = S - S.max(axis=0, keepdims=True)
+                return Z - np.log(np.exp(Z).sum(axis=0, keepdims=True))
+
+            print("0 -2000 -0.69314718 -0.69314718")
+          - |
+            import numpy as np
+
+            def log_softmax(S):
+                Z = S - S.max(axis=1, keepdims=True)
+                return Z
+
+            print("0 -2000 -0.69314718 -0.69314718")
+        explanation: |
+          The logarithm of a quotient is a difference: the score, less the log-sum-exp of its row. With the row's largest score taken out first, `Z` holds numbers that are zero or negative, the sum of their exponentials is at least 1, and its logarithm is the correction to subtract. No probability is ever formed, so none can underflow. Compare the version that computes a safe softmax and then takes `np.log`: in the first row, the second class has probability $e^{-2000}$, which is zero in floats, and the logarithm of zero is `-inf`, though the right answer, $-2000$, is an entirely ordinary number. The exponential and the logarithm cancel in algebra, and the code should not perform either. Shifting by the largest score of the whole table is not enough, since a row far below it underflows completely. Each row needs its own.
+        hints:
+          - What does the logarithm of a quotient become?
+          - The logarithm of the exponential of a score is the score itself.
+          - Subtract the largest score of each row, then subtract the logarithm of the row total of the exponentials.
+    - question:
+        id: fix-softmax
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          This is the `softmax` of the puzzle. For a row of scores 1000, 1001, 1002 it prints `nan` three times, and it should print about 0.09, 0.24 and 0.67. Fix it so that it is right for every table of scores, whatever their size and whether the rows are on similar scales or very different ones.
+        starter: |
+          import numpy as np
+
+          def softmax(S):
+              E = np.exp(S)
+              return E / E.sum(axis=1, keepdims=True)
+
+          print(softmax(np.array([[1000.0, 1001.0, 1002.0]])))
+        solution: |
+          import numpy as np
+
+          def softmax(S):
+              E = np.exp(S - S.max(axis=1, keepdims=True))
+              return E / E.sum(axis=1, keepdims=True)
+
+          print(softmax(np.array([[1000.0, 1001.0, 1002.0]])))
+        tests: |
+          import numpy as _np
+          _w = [0.09003057317038046, 0.24472847105479764, 0.6652409557748219]
+          _P = softmax(_np.array([[1000.0, 1001.0, 1002.0]]))
+          assert _P.shape == (1, 3), "The result has the shape of the table of scores"
+          assert _np.isfinite(_P).all(), "No entry may be nan or inf"
+          assert _np.allclose(_P, [_w]), "For 1000, 1001 and 1002 the probabilities are about 0.09, 0.24 and 0.67"
+          assert _np.allclose(softmax(_np.array([[0.0, 1.0, 2.0], [-1000.0, -999.0, -998.0]])), [_w, _w]), "Rows that differ by a shift must give the same probabilities"
+          assert _np.allclose(softmax(_np.array([[0.0, 0.0], [-2000.0, -2000.0]])), [[0.5, 0.5], [0.5, 0.5]]), "Each row must be shifted by its own largest score"
+          assert _np.allclose(softmax(_np.array([[0.0, 2000.0], [3.0, 3.0]])), [[0.0, 1.0], [0.5, 0.5]]), "For the row 0, 2000 all the probability goes to the second class"
+          assert _np.allclose(softmax(_np.array([[0.0, _np.log(3.0)]])), [[0.25, 0.75]]), "For the scores 0 and log 3 the probabilities are a quarter and three quarters"
+          _R = softmax(_np.array([[1.0, 2.0, 3.0, 4.0], [10.0, -10.0, 0.0, 5.0], [700.0, 800.0, 900.0, 1000.0]]))
+          assert _np.allclose(_R.sum(axis=1), [1.0, 1.0, 1.0]), "Every row must add up to 1"
+          _got = [float(v) for v in output.replace("[", " ").replace("]", " ").split()]
+          assert _np.allclose(_got, _w), "The program should print about 0.09, 0.24 and 0.67"
+        wrong:
+          - |
+            import numpy as np
+
+            def softmax(S):
+                E = np.exp(S)
+                return E / E.sum(axis=1, keepdims=True)
+
+            print("0.09003057 0.24472847 0.66524096")
+          - |
+            import numpy as np
+
+            def softmax(S):
+                E = np.exp(S - S.max())
+                return E / E.sum(axis=1, keepdims=True)
+
+            print(softmax(np.array([[1000.0, 1001.0, 1002.0]])))
+          - |
+            import numpy as np
+
+            def softmax(S):
+                E = np.exp(S - S.min(axis=1, keepdims=True))
+                return E / E.sum(axis=1, keepdims=True)
+
+            print(softmax(np.array([[1000.0, 1001.0, 1002.0]])))
+          - |
+            import numpy as np
+
+            def softmax(S):
+                E = np.exp(S / 1000.0)
+                return E / E.sum(axis=1, keepdims=True)
+
+            print("0.09003057 0.24472847 0.66524096")
+          - |
+            import numpy as np
+
+            def softmax(S):
+                E = np.exp(S)
+                P = E / E.sum(axis=1, keepdims=True)
+                return np.where(np.isnan(P), 1.0 / S.shape[1], P)
+
+            print("0.09003057 0.24472847 0.66524096")
+        explanation: |
+          $e^{1000}$ is beyond the largest float, so the exponentials are all `inf`, and `inf / inf` is `nan`. Softmax depends only on the differences between the scores of a row, so the largest score of each row can be subtracted first, at no cost to the answer. Then the largest exponent is 0, every exponential is between 0 and 1, and the row total is at least 1. Subtracting the smallest score of each row cures this one example and fails on a row such as 0 and 2000. Subtracting the largest score of the whole table fails when another row lies far below it, since that whole row underflows to zero and gives `0 / 0`. Dividing the scores by 1000 changes the answer: softmax is unchanged by adding, and it is very much changed by scaling. And replacing each `nan` with a made-up probability after the event hides the failure without computing the answer. The fix that works is the one that follows from a proof.
+        hints:
+          - Print np.exp(1000.0). What comes out?
+          - What can be done to every score of a row without changing its softmax?
+          - Which amount, subtracted from a row, makes its largest score zero?
+    - question:
+        id: work-why
+        type: choice
+        system: s2
+        prompt: |
+          In the puzzle, the row of scores 1000, 1001, 1002 gave `nan`, though every line of the function follows the formula. What exactly happened?
+        options:
+          - "The formula for softmax is wrong for large scores."
+          - "Each exponential, about $10^{434}$, is beyond the largest float, about $1.8 \\times 10^{308}$, and became `inf`. The row total was `inf`, and `inf / inf` has no determinable value, so it is `nan`. The answer itself is moderate. It was the intermediate values on the way to it that could not be held."
+          - "NumPy cannot divide arrays with three entries."
+          - "The scores were whole numbers stored as floats."
+        answer: 1
+        explanation: |
+          The formula is right for all real scores, and the proof of shift invariance shows the answer here must equal that of the first row. The failure is in the route. Softmax is a ratio, and a ratio of two huge numbers can be perfectly ordinary, but the floats must first hold the huge numbers, and they cannot. Once a value has become `inf` it keeps no record of how large it was, so the ratio is lost. This is the general shape of an overflow bug: a modest answer, reached by way of intermediate values far more extreme than itself. The cure is always to reorganise the algebra so that the extremes cancel before they are computed.
+        hints:
+          - How large is e to the power 1000, and how large can a float be?
+          - What does a float become when it overflows?
+          - What is the value of infinity divided by infinity?
+    - question:
+        id: work-equal
+        type: numeric
+        system: s2
+        prompt: |
+          An array holds 100 entries, every one equal to 500. Its log-sum-exp is 500 plus a correction. To one decimal place, what is the correction? Use $\log 10 \approx 2.3$.
+        answer: "4.6"
+        explanation: |
+          Take out the largest entry, 500. Every shifted entry is 0, every exponential is 1, and the sum is 100. The correction is $\log 100 = 2 \log 10$, twice 2.3. This is the upper end of the bounds: log-sum-exp is at most the maximum plus $\log n$, reached exactly when all $n$ entries are level. Computed directly, $e^{500}$ is about $10^{217}$, which a float can still hold, but a hundred entries of 720 would not have survived.
+        hints:
+          - What is each entry after the largest has been subtracted?
+          - What is the sum of a hundred exponentials of 0?
+          - The logarithm of 100 is twice the logarithm of 10.
+    - question:
+        id: work-logs
+        type: choice
+        system: s2
+        prompt: |
+          A language model assigns a probability to each of the 5000 words of a document, and the probability of the document is their product. Computed with `np.prod`, it is `0.0` for every document, so no two documents can be compared. What should be computed instead?
+        options:
+          - "The product in `float32`, which is faster."
+          - "The sum of the logarithms of the 5000 probabilities. The logarithm of a product is the sum of the logarithms, each of which is an ordinary negative number, so the sum is an ordinary number of a few thousand in size that no float has trouble with, and a larger sum means a more probable document."
+          - "The mean of the probabilities."
+          - "The product of only the first hundred probabilities."
+        answer: 1
+        explanation: |
+          With typical word probabilities of a tenth or less, the product is below $10^{-5000}$, and the smallest positive float is about $10^{-324}$. It underflows after the first few hundred words. Logarithms turn the product into a sum, and sums of moderate numbers do not underflow. Since the logarithm is an increasing function, comparing sums of logarithms is the same as comparing the products. `float32` has a much narrower range and underflows sooner. This is why every quantity in the training of such models, the loss above all, is expressed as a logarithm of a probability, and it is where the name "log-likelihood" that you will meet comes from.
+        hints:
+          - About how small is a product of 5000 numbers each around a tenth?
+          - What does a logarithm turn a product into?
+          - Does taking logarithms change which of two numbers is the larger?
+    - question:
+        id: work-bounds
+        type: choice
+        system: s2
+        prompt: |
+          Which statement is true of the log-sum-exp of **any** $n$ numbers with largest value $m$?
+        options:
+          - "It is always less than $m$."
+          - "It lies between $m$ and $m + \\log n$. The sum of the shifted exponentials contains the term $e^0 = 1$, so it is at least 1, and it has $n$ terms each at most 1, so it is at most $n$."
+          - "It equals the mean of the numbers."
+          - "It is always exactly $m + \\log n$."
+        answer: 1
+        explanation: |
+          After the shift, the sum inside the logarithm is squeezed between 1 and $n$, so its logarithm is squeezed between 0 and $\log n$, and adding $m$ gives the bounds. The lower end is approached when one number stands far above the others, and the upper end is reached when all are equal. So log-sum-exp never differs from the maximum by more than $\log n$, which for a thousand classes is about 6.9. That is why it is called a smooth maximum, and the smoothness is what matters: the plain maximum has a corner wherever two values tie, and a function with corners cannot be differentiated there. Training needs derivatives, as your calculus lessons will shortly make use of.
+        hints:
+          - After subtracting the largest value, what is the largest term of the sum?
+          - How small and how large can a sum of n such terms be?
+          - Take the logarithm of both ends.
+  connections:
+    - text: |
+        The softmax you wrote gave `nan` for the scores 1000, 1001 and 1002, though its formula is correct and the answer is plain. $e^{1000}$ is beyond the largest float and became `inf`, and `inf / inf` is `nan`. A modest answer was being reached by way of numbers too large to hold.
+
+        The cure came from a proof. Softmax is unchanged when the same number is added to every score, since the common factor cancels. So subtract the largest score of each row first. Then every exponential lies between 0 and 1, one of them is exactly 1, and neither overflow nor division by zero is possible. The same step gives the **log-sum-exp**, $m + \log \sum_i e^{x_i - m}$, a smooth version of the maximum that lies between $m$ and $m + \log n$.
+
+        Around that sits a way of working. Long products of probabilities underflow, so probabilities are kept as logarithms and multiplied by adding. Adding them needs log-sum-exp. And the logarithm of a softmax is computed as the score less the log-sum-exp, with the exponential and the logarithm cancelled on paper and never performed. The reductions along an axis with `keepdims`, from the lesson on reductions, carry all of it to whole tables.
+
+        This lesson dealt with the crude failures of floats, the ones at the ends of their range: too large, too small. It closed on a subtler one. `np.log(1 + 1e-17)` gave `0.0`, with nothing overflowing and nothing underflowing. The sum $1 + 10^{-17}$ is a perfectly ordinary size. It simply is not a float: there is no float between 1 and the next float above it, and the gap is much wider than $10^{-17}$. Floats are not the real numbers with the ends cut off. They are a finite set of points with gaps between them, and the gaps grow with the size of the numbers.
+
+        The matrix of ten equations, three lessons ago, whose answer was right to only four digits though its residual was perfect. The remark that the order of operations affects the accuracy of a sum. The square-root law for sampled estimates. All of these were left open, and all are about one question: **given that every number is slightly wrong, how wrong is the answer?** How to ask that of any computation, and what to do about it, is the last lesson of this cluster, [[e5.numerical-error-analysis-in-practice]].

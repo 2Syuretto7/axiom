@@ -8,6 +8,14 @@ function boot() {
   return ready;
 }
 
+/** NumPy is a large download, so it is fetched only for code that names it, and then only once. */
+let numpy;
+function needs(pyodide, code) {
+  if (!/\bnumpy\b/.test(code)) return undefined;
+  numpy ??= pyodide.loadPackage("numpy", { messageCallback: () => {}, errorCallback: () => {} });
+  return numpy;
+}
+
 const LIMIT = 200_000; // characters of output kept per run
 
 /** Keep the part of a traceback that is about the learner's own code. */
@@ -38,6 +46,9 @@ self.onmessage = async (event) => {
     const pyodide = await boot();
     pyodide.setStdout({ batched: write("out") });
     pyodide.setStderr({ batched: write("err") });
+    await needs(pyodide, code);
+    // Python is ready and the learner's code starts now: the page times the run from here.
+    self.postMessage({ id, type: "started" });
     const globals = pyodide.globals.get("dict")();
     try {
       await pyodide.runPythonAsync(code, { globals });

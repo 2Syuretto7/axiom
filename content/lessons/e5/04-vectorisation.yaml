@@ -1,0 +1,828 @@
+concept: e5.vectorisation
+minutes: 90
+claim: You can explain where the time goes in a Python loop over numbers and why one array operation avoids it, estimate the gain and say when there is none, rewrite the common kinds of loop as operations on whole arrays, using element-wise functions, masks and where, shifted slices and running totals, recognise the loops that cannot be removed, and check a rewritten version against the loop it replaces.
+recalls: [e5.broadcasting]
+uses: [e5.indexing-and-slicing, e5.arrays-dtype-and-shape, e1.complexity-and-big-o, e1.comprehensions-and-iterators, e1.testing-with-pytest, e1.modules-and-imports, m10.derivative-as-slope-and-rate, m10.integral-as-accumulation, m10.fundamental-theorem-of-calculus, m10.maxima-and-minima, m5.matrix-vector-product, m4.dot-product, m2.the-exponential-and-e, m0.estimation-and-orders-of-magnitude, e0.loops, e0.booleans-and-conditionals, e0.functions]
+leads: [e5.axis-operations-and-reductions, e5.linear-algebra-routines, e5.einsum, e5.strides-and-memory-layout]
+starter: |
+  # Scratch space. One sum of squares, computed three ways and timed.
+  import time
+  import numpy as np
+
+  n = 200000
+  xs = [0.001 * i for i in range(n)]
+  a = np.array(xs)
+
+  start = time.perf_counter()
+  total = 0.0
+  for x in xs:
+      total += x * x
+  list_loop = time.perf_counter() - start
+
+  start = time.perf_counter()
+  total = 0.0
+  for x in a:
+      total += x * x
+  array_loop = time.perf_counter() - start
+
+  start = time.perf_counter()
+  total = a @ a
+  whole_array = time.perf_counter() - start
+
+  print("loop over the list   ", round(list_loop * 1000, 2), "ms")
+  print("loop over the array  ", round(array_loop * 1000, 2), "ms")
+  print("one array operation  ", round(whole_array * 1000, 2), "ms")
+parts:
+  recall:
+    - text: |
+        [[e5.broadcasting]] ended by looking back: three lessons of adding, comparing, replacing and pairing whole arrays, and not one loop written. The loops still ran, inside NumPy. Three quick pulls before measuring what that is worth.
+    - question:
+        id: recall-broadcast
+        type: choice
+        system: s1
+        concepts: [e5.broadcasting]
+        prompt: |
+          Arrays of shapes `(3, 1)` and `(4,)` are subtracted. What is the shape of the result?
+        options: ["`(3,)`", "`(4,)`", "`(3, 4)`", "They do not fit"]
+        answer: 2
+        explanation: The plain array is filled out to (1, 4), and each position has a 1 to stretch.
+        hints:
+          - Line the shapes up at the right.
+          - Fill the shorter one out with a 1 on the left.
+    - question:
+        id: recall-order
+        type: choice
+        system: s1
+        concepts: [e1.complexity-and-big-o]
+        prompt: |
+          A loop does a fixed amount of work for each of $n$ numbers. How does its running time grow?
+        options: ["It stays the same", "In proportion to $n$", "In proportion to $n^2$", "In proportion to $\\log n$"]
+        answer: 1
+        explanation: Twice as many numbers means twice as many passes through the loop.
+        hints:
+          - How many times does the body of the loop run?
+          - Each pass costs about the same.
+    - question:
+        id: recall-dot
+        type: numeric
+        system: s1
+        concepts: [m4.dot-product]
+        prompt: |
+          What is the dot product of $(1, 2, 2)$ with itself?
+        answer: "9"
+        explanation: 1 + 4 + 4. A vector dotted with itself is the sum of the squares of its entries.
+        hints:
+          - Square each entry.
+          - Add the squares.
+  puzzle:
+    - text: |
+        The starter adds up the squares of two hundred thousand numbers, three times over, and times each attempt.
+
+        The first is the loop you would have written in any earlier lesson: go through a **list**, square each number, add it to a total.
+
+        The second is the same loop, word for word, going through the **array** that holds the same numbers.
+
+        The third has no loop. The sum of the squares of the entries of a vector is the dot product of the vector with itself, and for arrays that is `a @ a`.
+
+        Run it, and run it again, since timings jump about. The exact figures depend on your machine. The pattern does not.
+
+        The single array operation is far faster than the loop over the list: ten times at the least, often thirty or fifty. That much you might have guessed. An array is built for arithmetic.
+
+        Now look at the second line. The loop over the **array** is not faster than the loop over the list. It is **slower**, by a factor of two or three. The array, which was supposed to be the fast way to hold numbers, is the worst of the three when it is walked through one entry at a time.
+
+        **Where does the time go in a Python loop? Why is an array so fast in one operation and so slow in a loop? And how do you turn the loops you would naturally write into operations of the fast kind?**
+  intuition:
+    - text: |
+        Follow one pass of the first loop, the line `total += x * x`. The arithmetic is one multiplication and one addition, which a processor does in about a thousand-millionth of a second each. But Python does much more than the arithmetic.
+
+        It fetches the next reference from the list. It finds the object, and asks what type it is. It looks up what `*` means for that type. It multiplies, and builds a **new object** to hold the product. It asks what type `total` is, looks up `+`, adds, builds another new object, and moves the name `total` to it. The two old objects are discarded. Then it goes round again.
+
+        Every question is asked afresh on every pass, because in Python the answer could be different each time: the next item of a list might be a string. The bookkeeping costs twenty to fifty times what the arithmetic costs. For two hundred thousand numbers it is paid two hundred thousand times.
+
+        The single array operation pays it **once**. Python asks what `a` is, finds that `@` belongs to NumPy, and hands over. NumPy checks the dtypes and shapes one time, and then runs a loop in compiled code: fetch two raw numbers from the block, multiply, add to a running total, step to the next place. No objects, no questions. That inner loop is a handful of machine instructions.
+
+        And the slow middle case? The array holds raw numbers, not objects. A Python loop needs an object for each `x`. So on every pass NumPy must **wrap** a raw number in a new object, only for Python to unwrap it again for the arithmetic. The list at least had its objects ready. A loop over an array has all the bookkeeping of Python and the cost of wrapping as well.
+
+        So an array is not fast in itself. **It is fast when the loop over its entries runs inside NumPy, and slow when the loop runs in Python.** Writing code so that the loops run inside NumPy is called **vectorisation**: you state an operation on whole arrays, and the entry-by-entry work happens out of sight.
+
+        The figure puts typical numbers on the two costs. The loop pays its bookkeeping for each item. The array operation pays a fixed cost once, to get started, and then very little for each item. Step the size down as well as up.
+    - figure: loop-vs-array
+      props: { power: 6 }
+    - text: |
+        At a million numbers the array wins by a large factor. At ten numbers it loses. The fixed cost of an array operation, checking shapes, choosing the loop, setting aside the result, is a couple of microseconds, which is as long as a Python loop takes over thirty or forty numbers. For a handful of values, plain Python is quicker.
+
+        Two things follow, and both will be made exact in the derivation. The gain from vectorising is a **constant factor**: it does not change how the time grows with $n$. And it is a gain only when the arrays are **large** and the number of separate NumPy calls is **small**.
+  derivation:
+    - text: |
+        **The cost model.** Write $c_p$ for the cost of one pass of a Python loop, around 50 nanoseconds, $c_a$ for the cost of one entry inside a NumPy loop, around 1 nanosecond, and $F$ for the fixed cost of one NumPy call, a few microseconds. For $n$ numbers,
+
+        $$T_{\text{loop}} = c_p\,n, \qquad T_{\text{array}} = F + c_a\,n.$$
+
+        For large $n$ the ratio approaches $c_p / c_a$, the factor of fifty. The two are equal when $c_p n = F + c_a n$, at $n = F / (c_p - c_a)$, a few dozen. Below that the loop is faster.
+
+        Both costs are proportional to $n$. In the language of orders of growth, both are $O(n)$. Vectorising does not turn a slow algorithm into a fast one. A method that compares every item with every other does $n^2$ operations whether Python or NumPy runs the loop. What changes is the constant in front, and a constant of fifty is the difference between a job that takes a minute and one that takes most of an hour.
+
+        **The skill.** The rest is learning to see a loop as an operation on whole arrays. Most loops over numbers are one of a small number of kinds, and each kind has its array form.
+
+        **1. The same function of every entry.**
+
+        ```python
+        out = [math.exp(x) for x in xs]
+        ```
+
+        becomes `np.exp(a)`. NumPy has its own version of each function of the `math` module, `np.exp`, `np.log`, `np.sqrt`, `np.sin`, `np.abs`, `np.tanh` and many more, which take an array and apply the function to every entry in a compiled loop. The functions of `math` itself take one number and raise a `TypeError` when handed an array. Arithmetic needs nothing special: `a * a + 1` already acts on every entry.
+
+        Combined with arithmetic these give whole formulas. The logistic function $\sigma(z) = \dfrac{1}{1 + e^{-z}}$, applied to every entry of an array `z`, is
+
+        ```python
+        1 / (1 + np.exp(-z))
+        ```
+
+        **2. A choice for every entry.** A loop with an `if` in its body,
+
+        ```python
+        out = []
+        for x in xs:
+            if x > 0:
+                out.append(x)
+            else:
+                out.append(0.1 * x)
+        ```
+
+        becomes `np.where(a > 0, a, 0.1 * a)`. `np.where(mask, p, q)` builds an array that takes its entry from `p` where the mask is True and from `q` where it is False. All three arguments are broadcast against each other, so either choice may be a single number.
+
+        Note what cannot be written: `if a > 0:` with an array `a`. An `if` needs one True or False, and `a > 0` is a whole array of them. Python refuses, with the message that the truth value of an array is ambiguous. The decision has to be made entry by entry, by a mask.
+
+        For the commonest choice there is a shorter form. `np.maximum(a, 0)` takes the larger of each entry and 0, which is the rectifier of the indexing lesson in one call and without changing `a`. `np.minimum` is its partner.
+
+        **3. A total.** A loop that accumulates,
+
+        ```python
+        total = 0.0
+        for x in xs:
+            total += x * x
+        ```
+
+        becomes `(a * a).sum()`, or here `a @ a`. Totals, means, largest and smallest values are the subject of the next lesson.
+
+        **4. Each entry with its neighbour.** A loop over positions that looks one step ahead,
+
+        ```python
+        steps = []
+        for i in range(len(y) - 1):
+            steps.append(y[i + 1] - y[i])
+        ```
+
+        becomes `y[1:] - y[:-1]`. This one is worth looking at closely. `y[1:]` is the array without its first entry, and `y[:-1]` is the array without its last. Both are views, of the same length, shifted by one place against each other. Subtracting them subtracts each entry from the one after it. **An index like `i + 1` inside a loop turns into a shifted slice.**
+
+        This is the slope of calculus in the form a computer uses. For values `y` of a function at points `x`, the slopes of the lines joining neighbouring points are
+
+        ```python
+        (y[1:] - y[:-1]) / (x[1:] - x[:-1])
+        ```
+
+        **5. A running total.** A loop in which each result depends on the one before in the simplest way, by adding the next entry, is `np.cumsum(a)`: the array of the totals so far. The running total undoes the differences of pattern 4, and the differences undo the running total, as integration and differentiation undo each other.
+
+        **6. Every pairing.** A loop inside a loop, over all pairs, is broadcasting a column against a row, as in the last lesson.
+
+        **7. A lookup.** A loop that fetches `table[i]` for each `i` in a list of positions is `table[positions]`, as in the lesson before that.
+    - question:
+        id: derivation-wrap
+        type: choice
+        system: s2
+        prompt: |
+          In the puzzle the Python loop over the array was slower than the same loop over the list. Why?
+        options:
+          - "Arrays are slower than lists at everything."
+          - "The array holds raw numbers with no objects. On each pass of a Python loop, NumPy has to build a new object round the next raw number so that Python can use it. The list already held an object for each number. So the loop over the array pays all of Python's bookkeeping, and the wrapping on top."
+          - "The array had to be sorted first."
+          - "The array was stored on disk."
+        answer: 1
+        explanation: |
+          The compactness that makes an array fast inside NumPy is a cost at the border with Python. Python can only work with objects, so each raw value that crosses the border one at a time has to be given one. The same happens with `a[i]` inside a loop: each access builds an object. The conclusion is not that arrays are slow, but that an array should cross the border rarely and in bulk: one call that hands the whole block to compiled code, and one result that comes back. Code that keeps its data in arrays and then walks through them entry by entry in Python gets the worst of both.
+        hints:
+          - What does a Python loop need for each item it handles?
+          - Does the block of an array contain such things?
+          - What must be done, on every pass, to hand a raw number to Python?
+    - text: |
+        **A worked translation.** The area under a curve was defined as a limit of sums of thin rectangles. With a loop, the sum for $f$ on the interval from $a$ to $b$ with $n$ rectangles is
+
+        ```python
+        width = (b - a) / n
+        total = 0.0
+        for k in range(n):
+            x = a + k * width
+            total += f(x) * width
+        ```
+
+        Read the body for what varies. `k` runs from 0 to $n - 1$. From it comes `x`, then `f(x)`, then a term of the sum. Do each of those steps for all `k` at once:
+
+        ```python
+        k = np.arange(n)
+        x = a + k * width
+        total = (f(x) * width).sum()
+        ```
+
+        `np.arange(n)` is all the values of `k`. `a + k * width` is all the values of `x`, by arithmetic on the whole array. `f(x)` is all the heights, provided `f` is itself written with array operations, as `lambda x: x ** 2` and `np.exp` are. The `.sum()` is the total. The loop has gone, and the variable that counted its passes has become an array.
+
+        That is the general method. **Find what changes from one pass to the next. Make an array of it. Then carry out the body once, on arrays.**
+
+        **Loops that stay.** Not every loop can go. When each pass needs the **result** of the pass before, in a way more involved than a running total, the passes cannot be done all at once.
+
+        ```python
+        x = 3.0
+        for step in range(100):
+            x = x - 0.1 * slope(x)
+        ```
+
+        This is descent towards a minimum, which you met in calculus. The hundredth `x` cannot be computed before the ninety-ninth. Training a model is a loop of this kind, and so was applying a matrix again and again to a vector. Such loops are kept. What is vectorised is the work **inside** each pass: if `x` is an array of a million weights, the body is a few array operations, and the Python loop runs a hundred times, not a hundred million. The rule of thumb is to keep the loops over **steps** and remove the loops over **data**.
+
+        **The price in memory.** `(a * a).sum()` first builds the whole array `a * a`, and then adds it up. For a moment a second array as large as `a` exists. The Python loop needed room for one number. Vectorised code often trades memory for time in this way, and a long expression such as `1 / (1 + np.exp(-z))` builds several full-sized arrays on the way to its result. For most work this does not matter. For arrays near the size of the machine's memory it decides what can be done, as the table of pairwise differences did in the last lesson.
+
+        **Checking a rewrite.** A vectorised line is short and easy to get subtly wrong: a slice off by one, a mask the wrong way round, a shape that broadcasts where it should not. The defence is the one you learned with tests. **Keep the loop version, and compare.** Run both on a small input and check that the results agree, with `np.allclose(p, q)`, which is True when two arrays are equal to within rounding. The loop is slow and obviously right. The array version is fast and has now been checked against something obviously right. Do this every time, until the loop version is no longer needed.
+    - question:
+        id: order-vectorise
+        type: order
+        system: s2
+        prompt: Put in order the steps for turning a Python loop over numbers into array code.
+        steps:
+          - 'Read the body of the loop and find what changes from one pass to the next.'
+          - 'Make arrays holding all the values of those changing things at once.'
+          - 'Rewrite each line of the body as an operation on those arrays: arithmetic, a function of every entry, a mask for an `if`, a shifted slice for a neighbour.'
+          - 'Replace the accumulation, if there is one, by a total over the resulting array.'
+          - 'Run the loop version and the array version on a small input and check that they agree.'
+        explanation: The arrays cannot be made until you know what varies, and the body cannot be rewritten until the arrays exist. The total is taken over the result of the rewritten body. The comparison comes last, and it is not optional, because the loop is the only statement of what the array version is supposed to compute.
+        hints:
+          - Nothing can be rewritten before you know what varies.
+          - The total is taken over an array that must already have been built.
+          - The check needs both versions to exist.
+  formal:
+    - text: |
+        **Vectorisation.** Expressing a computation as operations on whole arrays, so that the loops over entries run in compiled code inside the library.
+
+        **Cost.** A Python loop over $n$ numbers costs about $c_p n$. One array operation costs about $F + c_a n$, with $c_a \ll c_p$ and $F$ equal to the cost of a few dozen Python passes. Both are $O(n)$. The gain tends to the constant $c_p / c_a$ for large $n$, and there is a loss for small $n$.
+
+        **Element-wise functions.** `np.exp`, `np.log`, `np.sqrt`, `np.abs`, `np.tanh` and the like apply a function to every entry. `np.maximum(p, q)` and `np.minimum(p, q)` take the larger and the smaller of matching entries.
+
+        **Choice.** `np.where(m, p, q)` has the entry of `p` where the mask `m` is True and of `q` elsewhere, with all three broadcast together.
+
+        **Neighbours.** For an array `y` of length $n$, `y[1:] - y[:-1]` is the array of length $n - 1$ with entries $y_{i+1} - y_i$.
+
+        **Running total.** `np.cumsum(a)` is the array with entries $a_0,\; a_0 + a_1,\; a_0 + a_1 + a_2, \dots$
+
+        **Agreement.** `np.allclose(p, q)` is True when every pair of matching entries is equal to within a small tolerance.
+  drill:
+    - text: Seconds each. A loop over data becomes one operation on arrays.
+    - question:
+        id: drill-where-time
+        type: choice
+        system: s1
+        prompt: |
+          In a Python loop that squares a million numbers, most of the time is spent on
+        options: ["the million multiplications", "Python's bookkeeping round each multiplication: finding types, looking up operators, building objects", "printing", "reading the disk"]
+        answer: 1
+        explanation: The arithmetic is a small part of each pass. The questions Python asks on every pass are the rest.
+        hints:
+          - How long does one multiplication take a processor?
+          - What else happens on each pass?
+    - question:
+        id: drill-map
+        type: choice
+        system: s1
+        prompt: |
+          Which expression replaces `[math.sqrt(x) for x in xs]` for an array `a` holding the same numbers?
+        options: ["`math.sqrt(a)`", "`np.sqrt(a)`", "`a.sqrt`", "`sqrt(a[0])`"]
+        answer: 1
+        explanation: The NumPy version of the function is applied to every entry in a compiled loop. The math version accepts only one number.
+        hints:
+          - Which library has functions that accept arrays?
+          - The function of the math module takes a single number.
+    - question:
+        id: drill-neighbour
+        type: choice
+        system: s1
+        prompt: |
+          Which expression gives every entry of `y` minus the entry before it?
+        options: ["`y[1:] - y[:-1]`", "`y[:-1] - y[1:]`", "`y - y`", "`y[1] - y[0]`"]
+        answer: 0
+        explanation: y[1:] starts at the second entry and y[:-1] at the first, so matching places hold an entry and the one before it.
+        hints:
+          - Which slice starts one place later?
+          - The later entry comes first in the subtraction.
+    - question:
+        id: drill-length
+        type: numeric
+        system: s1
+        prompt: |
+          `y` has 10 entries. How many entries has `y[1:] - y[:-1]`?
+        answer: "9"
+        explanation: Ten points have nine gaps between neighbours.
+        hints:
+          - Each slice leaves out one entry.
+          - How many neighbouring pairs are there?
+    - question:
+        id: drill-diff-value
+        type: choice
+        system: s1
+        prompt: |
+          `y = np.array([1, 4, 9, 16])`. What is `y[1:] - y[:-1]`?
+        options: ["`[3 5 7]`", "`[1 4 9]`", "`[5 13 25]`", "`[3 5 7 9]`"]
+        answer: 0
+        explanation: 4 − 1, 9 − 4 and 16 − 9.
+        hints:
+          - Subtract each entry from the next.
+          - There are three neighbouring pairs.
+    - question:
+        id: drill-cumsum
+        type: choice
+        system: s1
+        prompt: |
+          What is `np.cumsum(np.array([1, 2, 3, 4]))`?
+        options: ["`[1 3 6 10]`", "`10`", "`[1 2 3 4]`", "`[10 9 7 4]`"]
+        answer: 0
+        explanation: The totals so far, after one, two, three and four entries.
+        hints:
+          - Each entry is the total up to that place.
+          - The last entry is the total of everything.
+    - question:
+        id: drill-where
+        type: choice
+        system: s1
+        prompt: |
+          `x = np.array([-2.0, 3.0])`. What is `np.where(x > 0, x, 0)`?
+        options: ["`[0. 3.]`", "`[-2. 0.]`", "`[1]`", "`[-2. 3.]`"]
+        answer: 0
+        explanation: Where the mask is True the entry comes from x, and elsewhere it is 0.
+        hints:
+          - The mask is False and then True.
+          - The second argument is used where the mask is True.
+    - question:
+        id: drill-maximum
+        type: choice
+        system: s1
+        prompt: |
+          `x = np.array([-2.0, 3.0])`. What is `np.maximum(x, 0)`?
+        options: ["`[0. 3.]`", "`3.0`", "`[-2. 3.]`", "`[-2. 0.]`"]
+        answer: 0
+        explanation: The larger of each entry and 0, entry by entry.
+        hints:
+          - It compares each entry with 0.
+          - The result has the shape of x.
+    - question:
+        id: drill-if
+        type: choice
+        system: s1
+        prompt: |
+          `a` is an array of four numbers. What does `if a > 0:` do?
+        options: ["Runs the body if every entry is positive", "Runs the body if any entry is positive", "Raises an error, because an array of True and False is not one True or False", "Runs the body four times"]
+        answer: 2
+        explanation: An if needs a single truth value, and the comparison gives one for each entry. Python refuses to choose.
+        hints:
+          - What does a > 0 produce for an array?
+          - How many truth values does an if need?
+    - question:
+        id: drill-order
+        type: choice
+        system: s1
+        prompt: |
+          A Python loop over $n$ numbers is replaced by one array operation. The running time, as $n$ grows,
+        options: ["still grows in proportion to $n$, with a much smaller constant", "no longer depends on $n$", "grows like $\\log n$", "grows like $n^2$"]
+        answer: 0
+        explanation: The compiled loop still visits every entry once. Only the cost of each visit has fallen.
+        hints:
+          - Does NumPy still have to touch every entry?
+          - What changed, the number of visits or the cost of each?
+    - question:
+        id: drill-small
+        type: choice
+        system: s1
+        prompt: |
+          Two arrays of 3 numbers are to be added. Which is quicker?
+        options: ["The array operation, always", "Plain Python on three numbers, because the fixed cost of an array call outweighs so little work", "They are exactly equal", "Neither can be done"]
+        answer: 1
+        explanation: An array call pays a couple of microseconds before it touches an entry. Three Python additions cost less than that.
+        hints:
+          - What does an array call cost before it starts on the entries?
+          - How many passes of a Python loop is that worth?
+    - question:
+        id: drill-keep
+        type: choice
+        system: s1
+        prompt: |
+          Which loop cannot be replaced by a single array expression?
+        options: ["Squaring every entry of a list", "Adding up a list", "Repeating `x = x - 0.1 * slope(x)` a hundred times", "Subtracting each entry from the next"]
+        answer: 2
+        explanation: Each pass needs the result of the pass before, so the passes cannot be done all at once.
+        hints:
+          - In which loop does a pass use the result of the previous pass?
+          - The other three treat each entry independently or simply add.
+    - question:
+        id: drill-sigmoid
+        type: choice
+        system: s1
+        prompt: |
+          `z` is an array. Which expression applies $\dfrac{1}{1 + e^{-z}}$ to every entry?
+        options: ["`1 / (1 + math.exp(-z))`", "`1 / (1 + np.exp(-z))`", "`np.exp(1 / (1 - z))`", "`[1 / (1 + e) for e in z]`"]
+        answer: 1
+        explanation: np.exp acts on every entry, and the arithmetic round it broadcasts the single numbers.
+        hints:
+          - Which exponential accepts an array?
+          - The arithmetic already acts on every entry.
+    - question:
+        id: predict-choose
+        type: predict
+        system: s1
+        prompt: Three ways of treating negative entries. What does this show?
+        code: |
+          import numpy as np
+
+          x = np.array([-2.0, -0.5, 0.0, 1.5])
+          print(np.maximum(x, 0))
+          print(np.where(x > 0, x, 0.1 * x))
+          print(np.abs(x).sum())
+        output: |
+          [0.  0.  0.  1.5]
+          [-0.2  -0.05  0.    1.5 ]
+          4.0
+        explanation: The first replaces negative entries by 0. The second keeps positive entries and takes a tenth of the others, so 0 stays 0. The third adds the sizes, 2 + 0.5 + 0 + 1.5.
+        hints:
+          - np.maximum compares each entry with 0.
+          - Where the mask is False the entry is a tenth of x.
+          - A decimal array prints every entry with the same width.
+    - question:
+        id: predict-undo
+        type: predict
+        system: s1
+        prompt: Differences and running totals. What does this show?
+        code: |
+          import numpy as np
+
+          y = np.array([1.0, 2.0, 4.0, 7.0])
+          steps = y[1:] - y[:-1]
+          print(steps)
+          print(np.cumsum(steps))
+          print(steps.sum(), y[-1] - y[0])
+        output: |
+          [1. 2. 3.]
+          [1. 3. 6.]
+          6.0 6.0
+        explanation: The steps between neighbours are 1, 2 and 3. Their running totals are 1, 3 and 6, the height climbed from the first entry after each step. The sum of all the steps is the whole climb, which is the last entry minus the first. Adding up differences gives back the total change, the fundamental theorem of calculus in the form it takes for a list of numbers.
+        hints:
+          - Subtract each entry from the next.
+          - A running total keeps every total so far.
+          - The sum of all the steps is the whole climb from first to last.
+  work:
+    - text: Slower now. For each loop, say what changes from one pass to the next before writing any array code.
+    - question:
+        id: write-slopes
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A function has been measured at the points `x`, an array in increasing order, giving the values `y`. Write `slopes(x, y)` to return the array of the slopes of the straight lines joining each point to the next: the rise divided by the run, for each neighbouring pair.
+
+          Use no loop and no comprehension. For $n$ points the result has $n - 1$ entries.
+        starter: |
+          import numpy as np
+
+          def slopes(x, y):
+              # Replace the next line with your own.
+              return y
+
+          x = np.array([0.0, 1.0, 2.0, 4.0])
+          print(slopes(x, x ** 2))
+        solution: |
+          import numpy as np
+
+          def slopes(x, y):
+              return (y[1:] - y[:-1]) / (x[1:] - x[:-1])
+
+          x = np.array([0.0, 1.0, 2.0, 4.0])
+          print(slopes(x, x ** 2))
+        tests: |
+          import numpy as _np
+          _x = _np.array([0.0, 1.0, 2.0, 4.0])
+          _s = slopes(_x, _x ** 2)
+          assert _s.shape == (3,), "Four points have three neighbouring pairs"
+          assert _s.tolist() == [1.0, 3.0, 6.0], "For the squares at 0, 1, 2 and 4 the slopes are 1, 3 and 6"
+          assert slopes(_x, 3 * _x + 1).tolist() == [3.0, 3.0, 3.0], "A straight line of slope 3 has slope 3 between every pair of points"
+          assert slopes(_np.array([0.0, 0.5]), _np.array([2.0, 1.0])).tolist() == [-2.0], "A fall of 1 over a run of 0.5 is a slope of -2"
+          assert slopes(_np.array([1.0, 2.0, 3.0]), _np.array([5.0, 5.0, 5.0])).tolist() == [0.0, 0.0], "A constant function has slope 0"
+          assert slopes(_np.array([0.0, 2.0, 3.0]), _np.array([0.0, 2.0, 5.0])).tolist() == [1.0, 3.0], "Unequal gaps between the points must each be used for their own pair"
+          assert _x.tolist() == [0.0, 1.0, 2.0, 4.0], "The arrays passed in must not be changed"
+          assert "for " not in source, "Use no loop and no comprehension"
+          assert output.strip() == "[1. 3. 6.]", "The program should print [1. 3. 6.]"
+        wrong:
+          - |
+            import numpy as np
+
+            def slopes(x, y):
+                return (y[:-1] - y[1:]) / (x[1:] - x[:-1])
+
+            print("[1. 3. 6.]")
+          - |
+            import numpy as np
+
+            def slopes(x, y):
+                return y[1:] - y[:-1]
+
+            print("[1. 3. 6.]")
+          - |
+            import numpy as np
+
+            def slopes(x, y):
+                return (y[1:] - y[:-1]) / (x[1] - x[0])
+
+            print("[1. 3. 6.]")
+          - |
+            import numpy as np
+
+            def slopes(x, y):
+                return (y[1:] - y[:-1]) / x[1:]
+
+            print("[1. 3. 6.]")
+          - |
+            import numpy as np
+
+            def slopes(x, y):
+                return (x[1:] - x[:-1]) / (y[1:] - y[:-1])
+
+            print("[1. 3. 6.]")
+          - |
+            import numpy as np
+
+            def slopes(x, y):
+                return (y[2:] - y[:-2]) / (x[2:] - x[:-2])
+
+            print("[1. 3. 6.]")
+        explanation: |
+          The loop would run over positions `i` and compute `(y[i + 1] - y[i]) / (x[i + 1] - x[i])`. The index `i + 1` becomes the slice `[1:]` and the index `i` becomes `[:-1]`, in both arrays, and the division is entry by entry. The rise of each pair is divided by the run of the **same** pair, which is why the runs must be an array too: with unequal gaps, dividing by the first gap alone is wrong for every pair but the first. For the squares at 0, 1, 2 and 4 the slopes are 1, 3 and 6, each the slope of a chord of the parabola, and each equal to the derivative $2x$ at the middle of its interval. This is how a derivative is estimated from data, and with the points close together it is how software checks a formula for a derivative against the function it claims to describe.
+        hints:
+          - In a loop you would use y[i + 1] - y[i]. Which slices hold the entries at i + 1 and at i?
+          - The run of each pair is found the same way from x.
+          - Divide the array of rises by the array of runs.
+    - question:
+        id: write-riemann
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `riemann(f, a, b, n)` to return the sum of the areas of `n` rectangles of equal width under the function `f` between `a` and `b`, each rectangle taking its height from `f` at its **left** edge.
+
+          `f` accepts an array and returns the array of its values. Call `f` **exactly once**, on an array of all the left edges, and use no loop and no comprehension.
+        starter: |
+          import numpy as np
+
+          def riemann(f, a, b, n):
+              # Replace the next line with your own.
+              return 0.0
+
+          print(round(riemann(lambda x: x ** 2, 0.0, 1.0, 1000), 6))
+        solution: |
+          import numpy as np
+
+          def riemann(f, a, b, n):
+              width = (b - a) / n
+              lefts = a + width * np.arange(n)
+              return (f(lefts) * width).sum()
+
+          print(round(riemann(lambda x: x ** 2, 0.0, 1.0, 1000), 6))
+        tests: |
+          import numpy as _np
+          def _near(got, want):
+              return abs(got - want) < 1e-9
+          _calls = []
+          def _square(x):
+              _calls.append(_np.array(x).shape)
+              return x ** 2
+          _r = riemann(_square, 0.0, 1.0, 4)
+          assert _calls == [(4,)], "f must be called exactly once, on an array of the 4 left edges"
+          assert _near(_r, 0.21875), "Four rectangles under x squared from 0 to 1, with heights at 0, 0.25, 0.5 and 0.75, have total area 0.21875"
+          assert _near(riemann(lambda x: x ** 2, 0.0, 1.0, 1000), 0.3328335), "A thousand rectangles under x squared from 0 to 1 give 0.3328335"
+          assert _near(riemann(lambda x: 0 * x + 3.0, 2.0, 6.0, 8), 12.0), "A constant height of 3 over a width of 4 has area 12"
+          assert _near(riemann(lambda x: x, 0.0, 2.0, 2), 1.0), "Two rectangles under y = x from 0 to 2, with heights 0 and 1, have total area 1"
+          assert _near(riemann(lambda x: x, 1.0, 3.0, 4), 3.5), "Four rectangles under y = x from 1 to 3 have heights 1, 1.5, 2 and 2.5 and total area 3.5"
+          assert _near(riemann(_np.exp, 0.0, 1.0, 1), 1.0), "One rectangle under exp from 0 to 1 has height exp(0) = 1"
+          assert "for " not in source, "Use no loop and no comprehension"
+          assert output.strip() == "0.332834", "The program should print 0.332834"
+        wrong:
+          - |
+            import numpy as np
+
+            def riemann(f, a, b, n):
+                width = (b - a) / n
+                rights = a + width * np.arange(1, n + 1)
+                return (f(rights) * width).sum()
+
+            print(0.332834)
+          - |
+            import numpy as np
+
+            def riemann(f, a, b, n):
+                width = (b - a) / n
+                lefts = a + width * np.arange(n)
+                return f(lefts).sum()
+
+            print(0.332834)
+          - |
+            import numpy as np
+
+            def riemann(f, a, b, n):
+                width = (b - a) / n
+                lefts = width * np.arange(n)
+                return (f(lefts) * width).sum()
+
+            print(0.332834)
+          - |
+            import numpy as np
+
+            def riemann(f, a, b, n):
+                lefts = np.linspace(a, b, n)
+                return (f(lefts) * (b - a) / n).sum()
+
+            print(0.332834)
+          - |
+            import numpy as np
+
+            def riemann(f, a, b, n):
+                width = (b - a) / n
+                total = 0.0
+                k = 0
+                while k < n:
+                    total += f(np.array([a + k * width]))[0] * width
+                    k += 1
+                return total
+
+            print(round(riemann(lambda x: x ** 2, 0.0, 1.0, 1000), 6))
+        explanation: |
+          What changes from one rectangle to the next is its number, $k = 0, 1, \dots, n - 1$. So make an array of all the values of $k$ with `np.arange(n)`, turn it into the array of left edges $a + k \times \text{width}$ by arithmetic, and hand the whole array to `f` in one call. The heights come back as an array, each is multiplied by the width, and `.sum()` adds the areas. `np.linspace(a, b, n)` looks tempting and is wrong here: it includes both ends, so its points are spaced by $(b - a)/(n - 1)$, not by the width of a rectangle, and its last point is the right end, which is the left edge of no rectangle. For $x^2$ on 0 to 1 a thousand rectangles give 0.3328, a little under the true area of one third, since the function is increasing and each rectangle takes its height at its lower end. The sum that defined the integral, which you once worked through term by term, is three lines.
+        hints:
+          - What changes from one rectangle to the next? Make an array of it with np.arange(n).
+          - The left edge of rectangle k is a + k times the width.
+          - Call f on the array of left edges, multiply by the width, and take the sum.
+    - question:
+        id: fix-step
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `step(z)` should return, for an array `z`, an array of the same shape holding 1.0 where the entry of `z` is positive and 0.0 elsewhere. It was written for a single number and now stops with `ValueError: The truth value of an array with more than one element is ambiguous`. Fix it so that it works on an array of any shape, without a loop.
+        starter: |
+          import numpy as np
+
+          def step(z):
+              if z > 0:
+                  return 1.0
+              return 0.0
+
+          print(step(np.array([-1.0, 2.0, 0.5])))
+        solution: |
+          import numpy as np
+
+          def step(z):
+              return np.where(z > 0, 1.0, 0.0)
+
+          print(step(np.array([-1.0, 2.0, 0.5])))
+        tests: |
+          import numpy as _np
+          _s = step(_np.array([-1.0, 2.0, 0.5]))
+          assert isinstance(_s, _np.ndarray), "step must return an array"
+          assert _s.tolist() == [0.0, 1.0, 1.0], "For -1, 2 and 0.5 the result is 0, 1 and 1"
+          assert step(_np.array([0.0, -0.0, 1e-9])).tolist() == [0.0, 0.0, 1.0], "Zero is not positive, and a tiny positive number is"
+          assert step(_np.array([[1.0, -1.0], [-2.0, 3.0]])).tolist() == [[1.0, 0.0], [0.0, 1.0]], "A table keeps its shape"
+          assert step(_np.array([-5.0, -6.0])).tolist() == [0.0, 0.0], "All negative entries give all zeros"
+          assert step(_np.array([5.0, 6.0])).tolist() == [1.0, 1.0], "All positive entries give all ones"
+          assert step(_np.array([7.0])).tolist() == [1.0], "An array of one entry gives an array of one entry"
+          assert "for " not in source and "while " not in source, "Use no loop"
+          assert output.strip() == "[0. 1. 1.]", "The program should print [0. 1. 1.]"
+        wrong:
+          - |
+            import numpy as np
+
+            def step(z):
+                if (z > 0).all():
+                    return 1.0
+                return 0.0
+
+            print("[0. 1. 1.]")
+          - |
+            import numpy as np
+
+            def step(z):
+                if (z > 0).any():
+                    return np.ones(z.shape)
+                return np.zeros(z.shape)
+
+            print("[0. 1. 1.]")
+          - |
+            import numpy as np
+
+            def step(z):
+                return np.where(z >= 0, 1.0, 0.0)
+
+            print(step(np.array([-1.0, 2.0, 0.5])))
+          - |
+            import numpy as np
+
+            def step(z):
+                return np.where(z > 0, 0.0, 1.0)
+
+            print("[0. 1. 1.]")
+          - |
+            import numpy as np
+
+            def step(z):
+                return z[z > 0]
+
+            print("[0. 1. 1.]")
+          - |
+            import numpy as np
+
+            def step(z):
+                return np.maximum(z, 0)
+
+            print("[0. 1. 1.]")
+        explanation: |
+          `if z > 0:` asks one question and expects one answer. For an array, `z > 0` is a whole array of answers, some True and some False, and Python will not guess whether "all" or "any" was meant. The error message suggests `.any()` and `.all()`, and for this task both are wrong: they turn the many answers into one, and the function then returns the same thing for every entry. The decision has to be made separately for each entry, and the tool for that is `np.where(z > 0, 1.0, 0.0)`: a mask, and a value for each of its two cases. A function written with `if` works on one number at a time and must be rewritten before it can take an array. That is the usual first obstacle in vectorising: every `if` on data in the body of the loop has to become a mask.
+        hints:
+          - What does z > 0 produce when z is an array?
+          - The choice between 1.0 and 0.0 must be made for each entry separately.
+          - np.where takes a mask, the value where it is True, and the value where it is False.
+    - question:
+        id: work-constant
+        type: choice
+        system: s2
+        prompt: |
+          A program compares every one of $n$ items with every other, in a Python loop inside a Python loop, and takes an hour for $n = 20\,000$. It is rewritten with broadcasting and now takes one minute. What will the new version take for $n = 200\,000$, if there is memory enough?
+        options:
+          - "About 10 minutes, since it is vectorised"
+          - "About 100 minutes. The work is still proportional to $n^2$, so ten times the items is a hundred times the work. Vectorising reduced the cost of each comparison and left their number alone."
+          - "About 1 minute"
+          - "About 1000 minutes"
+        answer: 1
+        explanation: |
+          Vectorisation divides the time by a constant, here sixty. It does not change how the time grows. The number of comparisons is about $n^2$ either way, and multiplying $n$ by 10 multiplies that by 100. So the lesson of your work on orders of growth stands: for large enough inputs the order decides, and only a better algorithm changes the order. The two kinds of improvement multiply together. Good practice is to choose the algorithm with the right order of growth first, and then vectorise it. And here the memory would fail long before the clock did, since the table of pairs for 200 000 items has $4 \times 10^{10}$ entries.
+        hints:
+          - How does the number of comparisons depend on n?
+          - Did vectorising change the number of comparisons?
+          - Ten times n gives how many times the pairs?
+    - question:
+        id: work-estimate
+        type: numeric
+        system: s2
+        prompt: |
+          A Python loop costs about 60 nanoseconds for each number. About how many seconds does such a loop take over $10^8$ numbers?
+        answer: "6"
+        explanation: |
+          $10^8 \times 60 \times 10^{-9} = 6$ seconds. One array operation, at about a nanosecond for each number, takes about a tenth of a second for the same work. A single pass over a hundred million numbers is small by the standards of machine learning, where a model may have thousands of millions of weights and be updated hundreds of thousands of times. In Python loops that training would take centuries. The whole field rests on the fact that the loops over numbers run in compiled code, on processors built for them, with Python only giving the orders.
+        hints:
+          - Multiply the number of passes by the cost of one.
+          - A nanosecond is a thousand-millionth of a second.
+          - Ten to the power 8 times 60, divided by ten to the power 9.
+    - question:
+        id: work-many-small
+        type: choice
+        system: s2
+        prompt: |
+          A simulation updates 5 numbers at each of a million time steps, and each step needs the result of the last. A programmer stores the 5 numbers in an array and writes the update with array operations, expecting a large gain over plain Python. What happens?
+        options:
+          - "A gain of about fifty times."
+          - "Little gain, or a loss. The loop over a million steps stays in Python, since each step needs the last. Inside it, each array operation on 5 numbers pays its fixed cost, which is more than 5 plain additions cost."
+          - "The code raises an error."
+          - "The time no longer depends on the number of steps."
+        answer: 1
+        explanation: |
+          The cost model says it directly: an array operation costs $F + c_a n$, and with $n = 5$ nearly all of that is $F$. A million steps pay $F$ a million times, several times over if the update has several operations. Arrays pay off when each call does a great deal of work, and here each call does almost none. The loop that could have been removed, over the 5 numbers, was never the expensive one. What would help is a change of plan: to run ten thousand independent simulations at once, as an array of shape `(10000, 5)`, so that each of the million steps works on fifty thousand numbers. The question to ask of any loop is how much work each NumPy call inside it has been given.
+        hints:
+          - Which loop remains in Python?
+          - What does one array operation on 5 numbers cost, compared with 5 Python additions?
+          - How many times is the fixed cost paid?
+    - question:
+        id: work-memory
+        type: choice
+        system: s2
+        prompt: |
+          `z` is a `float64` array of $10^8$ entries, 800 megabytes. A program computes `s = 1 / (1 + np.exp(-z))`. Besides `z` and the final result `s`, roughly how much memory is in use at the worst moment of that line?
+        options:
+          - "None. The expression is evaluated entry by entry."
+          - "Around 800 megabytes or more. Each operation, `-z`, then `np.exp` of it, then `1 +` that, builds a full-sized array before the next begins, so at least one temporary array of 800 megabytes exists alongside its input at every stage."
+          - "8 bytes."
+          - "It depends on the values in `z`."
+        answer: 1
+        explanation: |
+          Python evaluates the expression one operation at a time, from the inside out, and each NumPy operation returns a complete new array. `-z` is a full array. `np.exp(-z)` is another, after which the first can be dropped. `1 + ...` is another, and so on. At each step the input of the step and its output both exist. A loop in Python would have needed a few numbers' worth of memory and a very long time. This is the trade vectorised code makes, and usually it is a good one. When the arrays are close to the size of memory, the usual remedies are to work through the data in blocks of rows, as in the `batches` function, or to ask NumPy to write a result into an existing array.
+        hints:
+          - What does each array operation return?
+          - How many operations are there in the expression?
+          - While one operation runs, which arrays must exist?
+  connections:
+    - text: |
+        The same sum of squares took a long time in a Python loop over a list, longer in a Python loop over an array, and almost no time as one array operation. The time in a Python loop goes on bookkeeping, repeated on every pass: finding types, looking up operators, building objects. One array operation does the bookkeeping once and then runs a compiled loop over raw numbers. An array walked through entry by entry in Python has to wrap each raw number as it goes, and is the slowest of all.
+
+        So the skill is to state computations on whole arrays. You have seen the forms that loops take. The same function of every entry is an element-wise function. An `if` in the body is a mask or `np.where`. An index like `i + 1` is a shifted slice, and with it the slopes of calculus became one line. A running total is `np.cumsum`. Every pairing is a column against a row, by [[e5.broadcasting]]. The loops that remain are the ones where each step needs the last: keep the loops over steps, remove the loops over data.
+
+        The gain is a constant factor, large for large arrays and negative for tiny ones, and it does nothing to the order of growth. It is paid for in temporary arrays. And every rewrite should be checked against the loop it replaces.
+
+        The routines of the last cluster, your `matvec` and `matmul` and `solve`, are loops over data, and their array forms are [[e5.linear-algebra-routines]]. A notation in which a loop over several indices is written as a single string is [[e5.einsum]]. Why a compiled loop over a block is fast, and when it is less fast than it should be, is in [[e5.strides-and-memory-layout]].
+
+        One kind of loop was passed over quickly: the total. `(a * a).sum()` added up every entry of an array. But most data is a table, and a table has totals of more than one kind. The puzzle of the last lesson needed the mean of each **column** and the total of each **row**, and they were handed to you as lists typed in by hand. Where do they come from? Totals, means, largest and smallest values can each be taken along one axis of an array, and choosing the axis, and knowing what shape comes back, is the next lesson, [[e5.axis-operations-and-reductions]].

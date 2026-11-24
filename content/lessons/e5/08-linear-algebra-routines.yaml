@@ -1,0 +1,806 @@
+concept: e5.linear-algebra-routines
+minutes: 90
+claim: You can replace each matrix routine you wrote by hand with the NumPy call that does the same job, predict the shape of any product written with `@`, solve one system or many with `np.linalg.solve` and check the answer, explain by counting work and by following the rounding why solving beats multiplying by an inverse, and say why a determinant is the wrong test for whether a matrix of floats can be inverted and what to use in its place.
+recalls: [e5.strides-and-memory-layout]
+uses: [m5.elimination-and-linear-systems, m5.identity-and-inverse, m5.determinant, m5.rank, m5.matrix-multiplication-as-composition, m5.matrix-vector-product, m5.transpose, m4.norms-and-distance, m4.angle-and-cosine-similarity, m4.dot-product, e5.broadcasting, e5.axis-operations-and-reductions, e5.vectorisation, e5.arrays-dtype-and-shape, e5.indexing-and-slicing, e1.complexity-and-big-o, m0.powers-and-roots, e0.functions]
+leads: [e5.einsum, e5.numerical-error-analysis-in-practice]
+starter: |
+  # Scratch space. One system of ten equations, solved in two ways.
+  import numpy as np
+
+  n = 10
+  i = np.arange(n)
+  A = 1.0 / (i[:, np.newaxis] + i + 1)   # the entry in row r, column c is 1 / (r + c + 1)
+
+  x_true = np.ones(n)                    # choose the answer first: every unknown is 1
+  b = A @ x_true                         # and build the right-hand side that goes with it
+
+  x_inverse = np.linalg.inv(A) @ b       # way one: multiply by the inverse
+  x_solve = np.linalg.solve(A, b)        # way two: ask for the solution
+
+  print("with the inverse, worst error", np.abs(x_inverse - x_true).max())
+  print("with solve,       worst error", np.abs(x_solve - x_true).max())
+parts:
+  recall:
+    - text: |
+        [[e5.strides-and-memory-layout]] finished the account of the array as a container, and said that it was time to treat a table as a matrix. Three quick pulls first, one from the container and two from the matrices.
+    - question:
+        id: recall-strides
+        type: choice
+        system: s1
+        concepts: [e5.strides-and-memory-layout]
+        prompt: |
+          `a` is a freshly made `float64` table of shape `(3, 4)`. What are the strides of `a.T`?
+        options: ["`(32, 8)`", "`(8, 32)`", "`(24, 8)`", "`(8, 24)`"]
+        answer: 1
+        explanation: The table has strides `(32, 8)`, and a transpose exchanges them without moving a number.
+        hints:
+          - What are the strides of the table itself?
+          - A transpose exchanges the two strides.
+    - question:
+        id: recall-pivot
+        type: choice
+        system: s1
+        concepts: [m5.elimination-and-linear-systems]
+        prompt: |
+          In elimination with partial pivoting, which row is exchanged into the pivot position at each column?
+        options:
+          - "The row, from the pivot position down, whose entry in that column is largest in size"
+          - "The row whose entry in that column is smallest in size"
+          - "Always the last row"
+          - "No row is ever exchanged"
+        answer: 0
+        explanation: Dividing by a small pivot magnifies the rounding already present, so the largest entry available is brought into place.
+        hints:
+          - What goes wrong with floats when a pivot is very small?
+          - Which choice of pivot keeps the multipliers small?
+    - question:
+        id: recall-inverse
+        type: choice
+        system: s1
+        concepts: [m5.identity-and-inverse]
+        prompt: |
+          $A$ has an inverse. What is the solution of $A\mathbf{x} = \mathbf{b}$, written with it?
+        options: ['$\mathbf{x} = \mathbf{b}A^{-1}$', '$\mathbf{x} = A^{-1}\mathbf{b}$', '$\mathbf{x} = A\mathbf{b}$', '$\mathbf{x} = \mathbf{b} / A$']
+        answer: 1
+        explanation: Multiply both sides on the left by the inverse. The inverse undoes $A$ and leaves $\mathbf{x}$.
+        hints:
+          - Apply the inverse to both sides.
+          - On which side of the vector does a matrix stand?
+  puzzle:
+    - text: |
+        The starter builds a system of ten equations in ten unknowns in the way an examiner would: it chooses the answer first. Every unknown is to be 1. It multiplies the matrix by that answer to get the right-hand side `b`, and then pretends not to know the answer and solves for it.
+
+        The matrix is built with the broadcasting you know. A column of the numbers 0 to 9 plus a row of the numbers 0 to 9 gives the table of all sums $r + c$, and the entry in row $r$ and column $c$ is $1 / (r + c + 1)$: a top row of $1, \tfrac12, \tfrac13, \dots$, a second row of $\tfrac12, \tfrac13, \tfrac14, \dots$, and so on.
+
+        Then it solves the system twice.
+
+        **Way one** is the formula from your lesson on the inverse: $\mathbf{x} = A^{-1}\mathbf{b}$. Ask NumPy for the inverse, and multiply.
+
+        **Way two** asks NumPy for the solution directly, with a function called `solve`.
+
+        In mathematics these are the same thing. You proved that when $A$ has an inverse the system has exactly one solution, and that it is $A^{-1}\mathbf{b}$. There is one right answer, a row of ten 1s, and both ways are computing it.
+
+        Run it. Neither way gets ten 1s exactly, which should bother you a little and is a matter for the end of this lesson. Look at the two errors, though. **The inverse is wrong in the third decimal place. `solve` is wrong in the fourth, about twenty-five times closer.**
+
+        **Two ways of writing one formula, two different answers. Why is the one you were taught the worse of the two? What is `solve` doing, if it is not multiplying by the inverse? And is the inverse at least quicker?**
+  intuition:
+    - text: |
+        Start with what you already own. In the cluster on matrices you wrote, by hand, on lists of rows: a product of a matrix and a vector, a product of two matrices, `solve`, `inverse2`, `rank` and `det`. Before that, for vectors, a dot product and a length. Each of those has a NumPy counterpart that takes arrays.
+
+        | you wrote | NumPy | what it returns |
+        |---|---|---|
+        | `dot(u, v)` | `u @ v` | a single number |
+        | `matvec(A, x)` | `A @ x` | a plain array |
+        | `matmul(A, B)` | `A @ B` | a table |
+        | `transpose(A)` | `A.T` | a view |
+        | `length(v)` | `np.linalg.norm(v)` | a single number |
+        | `solve(A, b)` | `np.linalg.solve(A, b)` | the solution |
+        | `inverse2(A)` | `np.linalg.inv(A)` | the inverse, for any size |
+        | `rank(A)` | `np.linalg.matrix_rank(A)` | a whole number |
+        | `det(A)` | `np.linalg.det(A)` | a float |
+
+        `linalg` is short for linear algebra. It is a part of NumPy, reached through the dot: `np.linalg.solve`.
+
+        None of these does anything you have not done. `np.linalg.solve` runs the very method you programmed: elimination with partial pivoting, then back-substitution. Step through it once more, and this time read each step as something a library is doing on your behalf.
+    - figure: elimination
+      props: { step: 0 }
+    - text: |
+        What the library adds is **speed** and **care**.
+
+        The speed is of the kind the vectorisation lesson explained, and then some. Your `solve` on lists does every multiplication in Python, with a type check and a boxed number each time. The library does them in compiled code, on a block of floats, walking the block in the order that suits the cache. On a system of 120 unknowns, in the Python built into these pages, the hand-written version takes about 55 milliseconds and the library under one: a factor of sixty or so, and it grows with the size.
+
+        The care is the work of specialists. The routines underneath come from a collection called LAPACK, begun in the 1970s and refined ever since, in which every loop has been arranged to lose as little accuracy as rounding allows. You could not casually write a better one, and neither could anyone else.
+
+        Now the puzzle. Think about what `np.linalg.inv(A)` has to do. The inverse is the matrix $X$ with $AX = I$. Read that one column at a time: column $j$ of $X$ is the solution of $A\mathbf{x} = \mathbf{e}_j$, where $\mathbf{e}_j$ is column $j$ of the identity. **Finding an inverse is solving $n$ systems.** It is not a shortcut to solving one system. It is solving $n$ of them, in order to then answer one.
+
+        A comparison. You want to know what 37 pounds is in rupees. One way is to multiply 37 by today's rate. The other is first to print a complete conversion table for every amount from 1 to 10 000, and then look up 37. The table gives the right answer, and if you had ten thousand lookups to do, it might be worth printing. For one, it is a great deal of work spent on entries you never read. And every entry in a printed table has been **rounded** to fit the page, so what you look up is a rounded number, which you then go on to use.
+
+        That is the shape of the answer to the puzzle. The inverse costs more, since it solves $n$ systems. And it is less accurate, since each of its $n^2$ entries carries its own rounding error, and multiplying by `b` then combines a whole row of slightly wrong numbers for each unknown. `solve` goes from the question to the answer by the shortest road.
+
+        One more picture before the detail. Whether a system can be solved at all was, in the last cluster, a question with a sharp answer: the determinant is zero, or it is not. Tilt the second column in the figure until the parallelogram is flat, and the area, which is the determinant, passes smoothly through small values on the way to zero.
+    - figure: determinant
+      props: { angle: 30 }
+    - text: |
+        On paper, "flat" means an area of exactly 0, and anything else is not flat. With floats there is no such sharpness. A matrix that is exactly singular on paper can have a computed determinant of $0.000\,000\,000\,000\,000\,7$, since rounding nudged it. A perfectly good matrix can have a computed determinant of exactly `0.0`, since the true value was too small for a float to hold. So the test you learned, "is the determinant zero", has to be replaced by a different question: **is this matrix so nearly flat that rounding could not tell the difference?** NumPy has a routine that asks exactly that, and it is not `det`.
+  derivation:
+    - text: |
+        **Products, and their shapes.** The operator `@` is the matrix product. Its rule is the one you derived for composing maps: the inner lengths must agree, and they disappear.
+
+        $$(m, n) \mathbin{@} (n, p) \;\to\; (m, p).$$
+
+        A plain array, with one axis, is treated as whatever makes the product meaningful, and its axis disappears:
+
+        | expression | shapes | result |
+        |---|---|---|
+        | `A @ B` | `(m, n)` and `(n, p)` | `(m, p)` |
+        | `A @ x` | `(m, n)` and `(n,)` | `(m,)`, with `x` taken as a column |
+        | `x @ A` | `(m,)` and `(m, n)` | `(n,)`, with `x` taken as a row |
+        | `x @ y` | `(n,)` and `(n,)` | a single number, the dot product |
+
+        Keep `@` and `*` apart. `A * B` multiplies entry by entry, and broadcasts. `A @ B` takes rows against columns. For two square tables of the same shape both run without complaint and give different answers, so a wrong one is not announced.
+
+        **Solving.** `np.linalg.solve(A, b)` returns the solution of $A\mathbf{x} = \mathbf{b}$ for a square `A`. It copies `A`, eliminates with partial pivoting, back-substitutes, and returns `x`. Your arrays are not changed.
+
+        Count the work, as you did for sorting. Clearing the first column means, for each of about $n$ rows below the pivot, a multiply-and-subtract in each of about $n$ columns: about $n^2$ of them. The second column costs $(n-1)^2$, the next $(n-2)^2$, and so on down. The total is
+
+        $$n^2 + (n-1)^2 + \dots + 1^2 \approx \frac{n^3}{3}.$$
+
+        Back-substitution costs about $\tfrac{n^2}{2}$, which beside $n^3/3$ hardly counts. So solving a system is of order $n^3$: **twice the unknowns, eight times the work.**
+
+        **The elimination does not look at `b`.** Which rows are exchanged, and which multiples are subtracted, is decided by `A` alone. The right-hand side is carried along. So if you have several right-hand sides for the same `A`, the expensive part need be done only once. `np.linalg.solve(A, B)` accepts a **table** `B` whose columns are right-hand sides, and returns a table whose columns are the solutions:
+
+        $$AX = B, \qquad (n, n) \text{ and } (n, k) \;\to\; (n, k).$$
+
+        The cost is one elimination, $n^3/3$, plus about $n^2$ for each column.
+
+        **The inverse.** `np.linalg.inv(A)` is, in effect, `np.linalg.solve(A, np.eye(n))`: $n$ right-hand sides, the columns of the identity. Its cost is the elimination plus $n$ columns at about $n^2$ each, which the special form of the identity brings down a little, to about $n^3$ in all. **Three times the work of one solve**, before the product `inv(A) @ b` is even begun. Measured in these pages on systems of a few hundred unknowns, way one of the puzzle takes between two and three times as long as way two.
+
+        So the inverse is not quicker. It is slower, and it never catches up: with $k$ right-hand sides, hand them all to `solve` as the columns of `B`.
+
+        **The accuracy.** Here is the property that makes `solve` trustworthy. Put its answer back into the equations and look at what is left over, $A\mathbf{x} - \mathbf{b}$, called the **residual**. For elimination with partial pivoting the residual is, in practice, about as small as rounding permits. In the puzzle its largest entry is $4 \times 10^{-16}$: the computed `x` satisfies the ten equations to the last binary digit.
+
+        Way one gives no such assurance. The computed inverse is $n^2$ numbers, each rounded. For the matrix of the puzzle its entries are enormous, up to about $10^{12}$, so their rounding errors are of size $10^{-4}$ and more. `inv(A) @ b` then adds up ten such products for each unknown. Its residual in the puzzle is $5 \times 10^{-5}$: **a hundred thousand million times larger than the residual of `solve`.** The answer it returns does not even satisfy the equations it was asked to solve.
+
+        **The rule.** A formula containing $A^{-1}\mathbf{b}$ is an instruction to **solve**. Write `np.linalg.solve(A, b)`. A formula containing $A^{-1}B$ is the same: `np.linalg.solve(A, B)`. You will meet such formulas all through machine learning, and nearly every one is computed without forming an inverse. Ask for `np.linalg.inv` only when the entries of the inverse are themselves what you want to look at.
+    - question:
+        id: derivation-inverse
+        type: choice
+        system: s2
+        prompt: |
+          `x1 = np.linalg.inv(A) @ b` and `x2 = np.linalg.solve(A, b)` compute the same mathematical object. Why is `x2` both cheaper and more accurate?
+        options:
+          - "Because `solve` uses a cleverer formula for the inverse."
+          - "Finding the inverse means solving $n$ systems, one for each column of the identity, so it costs about three times one solve. And each of its $n^2$ entries is rounded, after which the product with `b` combines a row of rounded numbers for each unknown. `solve` eliminates once, carries `b` along, and returns an answer that satisfies the equations to rounding level."
+          - "Because `inv` is written in Python and `solve` in compiled code."
+          - "Because `solve` returns a view and `inv` returns a copy."
+        answer: 1
+        explanation: |
+          Both are compiled, both return new arrays, and `solve` never forms an inverse at all. The difference is in the amount of arithmetic and in where rounding enters. The inverse answers every possible right-hand side at once, which is $n$ times more than was asked, and the answer for the one right-hand side you care about is then assembled from $n^2$ separately rounded entries. Elimination with the right-hand side carried along does only the arithmetic the question needs, and the leftover $A\mathbf{x} - \mathbf{b}$ of its answer is as small as floats allow. Less arithmetic, fewer places for error to enter.
+        hints:
+          - What is column j of the inverse the solution of?
+          - How many systems is that in all?
+          - How many rounded numbers go into each unknown when you multiply the inverse by b?
+    - text: |
+        **Checking an answer.** Never trust, verify, and never with `==`. Put the answer back:
+
+        ```python
+        x = np.linalg.solve(A, b)
+        print(np.allclose(A @ x, b))
+        ```
+
+        `np.allclose` compares within a small tolerance, as it must with floats.
+
+        **When there is no solution to find.** If `A` is singular, the elimination meets a column with no usable pivot. On an ordinary installation NumPy stops with `LinAlgError: Singular matrix`. The Python built into these pages runs inside the browser, where that particular alarm cannot be raised, and you get an answer filled with `nan`, "not a number", in its place. Either way you are told.
+
+        The dangerous case is the one where you are **not** told. Take
+
+        $$A = \begin{pmatrix} 1 & 2 & 3 \\ 4 & 5 & 6 \\ 7 & 8 & 9 \end{pmatrix}.$$
+
+        On paper it is singular: the middle row is the average of the other two, so the rank is 2 and the determinant is exactly 0. In floats, the elimination produces a last pivot that should be 0 and, after rounding, is about $10^{-16}$. That is not zero. So NumPy carries on. `np.linalg.det(A)` returns `6.66e-16`. `np.linalg.inv(A)` returns, with no warning of any kind, a matrix whose entries are around $10^{16}$, every one of them meaningless.
+
+        **The determinant is the wrong test.** It fails in both directions.
+
+        - It can be non-zero for a singular matrix, as just seen.
+        - It can be zero for a perfectly good one. The determinant of $cA$ is $c^n \det A$, as you proved, so it is extremely sensitive to mere scale. Take the identity of size 400, about as well-behaved as a matrix can be, and multiply it by 0.1. The determinant is $0.1^{400} = 10^{-400}$, far below the smallest number a float can hold, and `np.linalg.det` returns exactly `0.0`. Multiply by 10 instead and it returns `inf`.
+
+        A determinant mixes up two things: how nearly flat the matrix is, and how large its entries happen to be. Only the first matters for solving.
+
+        **The right test: rank, with a tolerance.** `np.linalg.matrix_rank(A)` counts the independent directions of `A`, and it does so with a tolerance scaled to the size of the entries: a direction that is squashed to within rounding error of nothing is counted as nothing. It reports 2 for the matrix above and 400 for the scaled identity, which are the true answers. So:
+
+        ```python
+        can_be_inverted = np.linalg.matrix_rank(A) == A.shape[0]
+        ```
+
+        How `matrix_rank` measures the squashing is a topic of its own, the singular values, which have a cluster to themselves later. For now it is enough to know that it does not use the determinant, and why.
+
+        **Nearly flat.** Between "fine" and "singular" there is a wide borderland, and the matrix of the puzzle lives in it. Its rank is 10 and it has an inverse. But it squashes some directions about $10^{13}$ times more than others, and a float carries only about 16 significant digits. Thirteen of them are spent on that squashing before the solving begins, leaving three or four for the answer. That is why even `solve`, whose residual is perfect, returns ten numbers that are right only to three or four digits. `np.linalg.cond(A)` reports that ratio, the **condition number**, and for the puzzle it prints about $1.6 \times 10^{13}$. A small residual shows that the equations are satisfied. It does not show that the unknowns are right. Why not, and what to do about it, belongs to [[e5.numerical-error-analysis-in-practice]].
+
+        **Lengths.** `np.linalg.norm(v)` is the length of a plain array: the square root of the sum of the squares. Like every reduction it takes `axis` and `keepdims`. For a table `X` with one vector in each row, `np.linalg.norm(X, axis=1)` gives the length of every row. Take care with a table and no `axis`: `np.linalg.norm(X)` gives one number, the square root of the sum of the squares of **all** the entries.
+
+        Dividing each row by its own length is broadcasting with `keepdims`, as when you standardised a table:
+
+        ```python
+        U = X / np.linalg.norm(X, axis=1, keepdims=True)
+        ```
+
+        Every row of `U` has length 1. Then `U @ U.T` holds the dot product of every row with every other, and the dot product of two vectors of length 1 is the cosine of the angle between them. One line gives all the cosine similarities of a set of vectors at once.
+
+        **Stacks of matrices.** Every routine in `np.linalg` treats the **last two** axes as the matrix and any earlier axes as a stack. For `S` of shape `(1000, 3, 3)`, `np.linalg.det(S)` has shape `(1000,)`, one determinant for each matrix, and `np.linalg.inv(S)` has shape `(1000, 3, 3)`. `@` does the same. The loop over the thousand matrices is done inside the library.
+    - question:
+        id: order-solve
+        type: order
+        system: s2
+        prompt: Put in order what happens when you call `np.linalg.solve(A, b)` and then check the answer.
+        steps:
+          - 'The shapes are checked: `A` must be square, and `b` must have one entry for each row.'
+          - '`A` and `b` are copied, so that your arrays are left unchanged.'
+          - 'For each column in turn, the row with the largest entry is exchanged into the pivot position.'
+          - 'Multiples of the pivot row are subtracted from the rows below, with the right-hand side carried along.'
+          - 'With the copy now upper triangular, the unknowns are found from the last upwards.'
+          - 'You put the answer back: `np.allclose(A @ x, b)`.'
+        explanation: This is your own `solve`, step for step, with the looping done in compiled code. The exchange comes before the subtraction within each column, since the multipliers depend on the pivot. Back-substitution needs the triangular form, so it follows all of the elimination. And the check is yours to make, since the library returns an answer without saying how good it is.
+        hints:
+          - Nothing is computed before the shapes are known to fit.
+          - Within a column, the pivot is chosen before anything is subtracted.
+          - Back-substitution needs the triangular form.
+  formal:
+    - text: |
+        **Product.** For `A` of shape $(m, n)$ and `B` of shape $(n, p)$, `A @ B` has shape $(m, p)$ and entry $[i, j]$ equal to $\sum_k A_{ik} B_{kj}$. A plain array is taken as a column on the right of `@` and as a row on the left, and its axis is removed from the result.
+
+        **Solve.** For a square `A` of rank $n$, `np.linalg.solve(A, b)` returns the $\mathbf{x}$ with $A\mathbf{x} = \mathbf{b}$, by elimination with partial pivoting, in about $n^3/3$ multiply-and-subtract steps. With a table `B` of shape $(n, k)$ it returns the $X$ of shape $(n, k)$ with $AX = B$.
+
+        **Inverse.** `np.linalg.inv(A)` returns the solution of $AX = I$, in about $n^3$ steps. Compute $A^{-1}B$ as `np.linalg.solve(A, B)`.
+
+        **Determinant and rank.** `np.linalg.det(A)` is the product of the pivots with the sign of the row exchanges, in floats. It is not a test for invertibility. `np.linalg.matrix_rank(A)` is the rank up to a tolerance scaled to the entries, and `A` can be inverted in floats when that rank equals $n$.
+
+        **Norm.** `np.linalg.norm(x)` is $\sqrt{\sum_i x_i^2}$. With `axis`, it is taken along that axis.
+
+        **Stacks.** The routines of `np.linalg`, and `@`, act on the last two axes and treat earlier axes as a stack.
+  drill:
+    - text: |
+        Seconds each. Say the shape before the answer.
+    - question:
+        id: drill-which
+        type: choice
+        system: s1
+        prompt: |
+          Which call returns the solution of $A\mathbf{x} = \mathbf{b}$?
+        options: ["`np.linalg.solve(A, b)`", "`np.linalg.det(A, b)`", "`A * b`", "`np.linalg.norm(A, b)`"]
+        answer: 0
+        explanation: "`solve` runs elimination with partial pivoting and back-substitution."
+        hints:
+          - The name says what it does.
+          - It is in the linalg part of NumPy.
+    - question:
+        id: drill-shape-product
+        type: choice
+        system: s1
+        prompt: |
+          `A` has shape `(3, 4)` and `B` has shape `(4, 2)`. What is the shape of `A @ B`?
+        options: ["`(3, 2)`", "`(4, 4)`", "`(3, 4, 2)`", "It is an error"]
+        answer: 0
+        explanation: The inner lengths, 4 and 4, agree and disappear. The outer lengths remain.
+        hints:
+          - The inner lengths must agree.
+          - The outer lengths give the shape of the product.
+    - question:
+        id: drill-shape-vector
+        type: choice
+        system: s1
+        prompt: |
+          `A` has shape `(3, 4)` and `x` has shape `(4,)`. What is the shape of `A @ x`?
+        options: ["`(3,)`", "`(3, 1)`", "`(4,)`", "`(3, 4)`"]
+        answer: 0
+        explanation: The plain array is taken as a column, and its axis disappears from the result.
+        hints:
+          - A matrix with 3 rows sends a vector to a vector with 3 components.
+          - The result of a matrix times a plain array is a plain array.
+    - question:
+        id: drill-dot
+        type: numeric
+        system: s1
+        prompt: |
+          `x = np.array([1.0, 2.0])` and `y = np.array([3.0, 4.0])`. What is `x @ y`?
+        answer: "11"
+        explanation: For two plain arrays `@` is the dot product, 1 × 3 + 2 × 4.
+        hints:
+          - Two plain arrays give a single number.
+          - Multiply matching entries and add.
+    - question:
+        id: drill-star
+        type: choice
+        system: s1
+        prompt: |
+          `A` and `B` are square tables of the same shape. Which expression multiplies them entry by entry?
+        options: ["`A @ B`", "`A * B`", "`np.linalg.solve(A, B)`", "`A.T @ B`"]
+        answer: 1
+        explanation: The star works entry by entry, with broadcasting. The matrix product is `@`.
+        hints:
+          - One of the two operators is ordinary arithmetic on matching entries.
+          - The matrix product takes rows against columns.
+    - question:
+        id: drill-norm
+        type: numeric
+        system: s1
+        prompt: |
+          What is `np.linalg.norm(np.array([3.0, 4.0]))`?
+        answer: "5"
+        explanation: The square root of 9 + 16.
+        hints:
+          - Square the entries and add.
+          - Then take the square root.
+    - question:
+        id: drill-norm-axis
+        type: choice
+        system: s1
+        prompt: |
+          `X` has shape `(100, 8)`. What is the shape of `np.linalg.norm(X, axis=1)`?
+        options: ["`(100,)`", "`(8,)`", "`(100, 1)`", "`()`"]
+        answer: 0
+        explanation: Axis 1 disappears, leaving one length for each row.
+        hints:
+          - The axis you name is the one that disappears.
+          - There is one result for each row.
+    - question:
+        id: drill-det
+        type: numeric
+        system: s1
+        prompt: |
+          What is `np.linalg.det(np.array([[2.0, 0.0], [0.0, 3.0]]))`?
+        answer: "6"
+        explanation: A diagonal matrix scales areas by the product of its diagonal entries.
+        hints:
+          - The matrix stretches one direction by 2 and the other by 3.
+          - By what factor does the area of the unit square grow?
+    - question:
+        id: drill-rank
+        type: numeric
+        system: s1
+        prompt: |
+          What is `np.linalg.matrix_rank(np.ones((3, 5)))`?
+        answer: "1"
+        explanation: Every row is the same, so there is one independent direction.
+        hints:
+          - How many different rows does the table have?
+          - The rank counts independent rows.
+    - question:
+        id: drill-many
+        type: choice
+        system: s1
+        prompt: |
+          `A` has shape `(4, 4)` and `B` has shape `(4, 3)`. What is the shape of `np.linalg.solve(A, B)`?
+        options: ["`(4, 3)`", "`(4, 4)`", "`(3, 4)`", "`(4,)`"]
+        answer: 0
+        explanation: Each column of `B` is a right-hand side, and the matching column of the result is its solution.
+        hints:
+          - Each column of B is one right-hand side.
+          - There is one solution, with 4 unknowns, for each column.
+    - question:
+        id: drill-rule
+        type: choice
+        system: s1
+        prompt: |
+          A formula reads $\mathbf{w} = A^{-1}\mathbf{c}$. Which line should compute it?
+        options: ["`w = np.linalg.inv(A) @ c`", "`w = np.linalg.solve(A, c)`", "`w = c / A`", "`w = np.linalg.inv(A) * c`"]
+        answer: 1
+        explanation: An inverse applied to a vector is an instruction to solve, which is cheaper and more accurate.
+        hints:
+          - Is the inverse itself wanted, or what it does to c?
+          - Which routine goes straight from the system to its solution?
+    - question:
+        id: drill-check
+        type: choice
+        system: s1
+        prompt: |
+          Which line is the right check on a computed solution `x` of $A\mathbf{x} = \mathbf{b}$?
+        options: ["`A @ x == b`", "`np.allclose(A @ x, b)`", "`np.linalg.det(A) == 0`", "`x == b`"]
+        answer: 1
+        explanation: Put the answer back, and compare within a tolerance, since floats are rounded.
+        hints:
+          - Floats are never compared with a double equals sign.
+          - Put the answer back into the equations.
+    - question:
+        id: drill-stack
+        type: choice
+        system: s1
+        prompt: |
+          `S` has shape `(10, 3, 3)`. What is the shape of `np.linalg.det(S)`?
+        options: ["`(10,)`", "`(3, 3)`", "`(10, 3)`", "`()`"]
+        answer: 0
+        explanation: The last two axes are the matrix, and the first is a stack of ten of them.
+        hints:
+          - Which axes hold one matrix?
+          - There is one determinant for each matrix of the stack.
+    - question:
+        id: drill-singular
+        type: choice
+        system: s1
+        prompt: |
+          `A` is a square table of floats with `n` rows. Which is the sound test of whether it can be inverted?
+        options: ["`np.linalg.det(A) != 0`", "`np.linalg.matrix_rank(A) == n`", "`A.sum() != 0`", "`np.linalg.norm(A) > 0`"]
+        answer: 1
+        explanation: The rank is counted with a tolerance scaled to the entries. A determinant can be rounded away from zero, or shrink to zero by scale alone.
+        hints:
+          - A computed determinant can miss zero through rounding.
+          - Which routine counts independent directions with a tolerance?
+    - question:
+        id: predict-solve
+        type: predict
+        system: s1
+        prompt: Solve, check, and look at the rank and the determinant. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[2.0, 1.0], [1.0, 3.0]])
+          b = np.array([3.0, 5.0])
+          x = np.linalg.solve(A, b)
+          print(x)
+          print(np.allclose(A @ x, b))
+          print(np.linalg.matrix_rank(A), round(float(np.linalg.det(A)), 6))
+        output: |
+          [0.8 1.4]
+          True
+          2 5.0
+        explanation: Twice the second equation minus the first gives 5y = 7, so y is 1.4, and then x is 0.8. Putting the answer back gives the right-hand side. The two columns point in different directions, so the rank is 2, and the determinant is 2 × 3 − 1 × 1.
+        hints:
+          - The equations are 2x + y = 3 and x + 3y = 5.
+          - Eliminate x to find y first.
+          - The determinant of a two by two matrix is ad − bc.
+    - question:
+        id: predict-norm
+        type: predict
+        system: s1
+        prompt: Three lengths from one table. What does this show?
+        code: |
+          import numpy as np
+
+          X = np.array([[3.0, 4.0], [0.0, 0.0]])
+          print(np.linalg.norm(X, axis=1))
+          print(np.linalg.norm(X, axis=0))
+          print(np.linalg.norm(X))
+        output: |
+          [5. 0.]
+          [3. 4.]
+          5.0
+        explanation: Along axis 1 each row gives its length, 5 and 0. Along axis 0 each column gives its length, 3 and 4. With no axis, all four entries are squared and added before the root is taken.
+        hints:
+          - The axis named is the one that disappears.
+          - The first row is the vector with components 3 and 4.
+          - With no axis there is one number for the whole table.
+  work:
+    - text: Slower now. Before each call, say what shape goes in, what shape comes out, and whether an inverse is really what is wanted.
+    - question:
+        id: write-cosine
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          `X` is a table with one vector in each row, and no row is all zeros. Write `cosine_matrix(X)` to return the square table whose entry `[i, j]` is the cosine of the angle between row `i` and row `j`.
+
+          Use no loop and no comprehension.
+        starter: |
+          import numpy as np
+
+          def cosine_matrix(X):
+              # Replace the next line with your own.
+              return X
+
+          X = np.array([[3.0, 4.0], [1.0, 0.0], [0.0, 2.0]])
+          print(cosine_matrix(X))
+        solution: |
+          import numpy as np
+
+          def cosine_matrix(X):
+              U = X / np.linalg.norm(X, axis=1, keepdims=True)
+              return U @ U.T
+
+          X = np.array([[3.0, 4.0], [1.0, 0.0], [0.0, 2.0]])
+          print(cosine_matrix(X))
+        tests: |
+          import numpy as _np
+          _X = _np.array([[3.0, 4.0], [1.0, 0.0], [0.0, 2.0]])
+          _C = cosine_matrix(_X)
+          assert _C.shape == (3, 3), "Three vectors give a table of shape (3, 3)"
+          assert _np.allclose(_C, [[1.0, 0.6, 0.8], [0.6, 1.0, 0.0], [0.8, 0.0, 1.0]]), "For rows (3, 4), (1, 0) and (0, 2) the cosines are 0.6, 0.8 and 0, with 1 on the diagonal"
+          assert _np.allclose(cosine_matrix(_np.array([[2.0, 0.0], [5.0, 0.0]])), [[1.0, 1.0], [1.0, 1.0]]), "Two vectors along the same direction have cosine 1, whatever their lengths"
+          assert _np.allclose(cosine_matrix(_np.array([[1.0, 1.0], [-1.0, -1.0]])), [[1.0, -1.0], [-1.0, 1.0]]), "Opposite vectors have cosine -1"
+          _Y = _np.array([[1.0, 2.0, 2.0, 0.0], [0.0, 3.0, 0.0, 4.0]])
+          assert cosine_matrix(_Y).shape == (2, 2), "Two vectors of four components give a table of shape (2, 2)"
+          assert _np.allclose(cosine_matrix(_Y), [[1.0, 0.4], [0.4, 1.0]]), "Rows (1, 2, 2, 0) and (0, 3, 0, 4) have lengths 3 and 5 and dot product 6, so cosine 0.4"
+          assert _X.tolist() == [[3.0, 4.0], [1.0, 0.0], [0.0, 2.0]], "The table passed in must not be changed"
+          assert "for " not in source and "while " not in source, "Use no loop and no comprehension"
+          _got = [float(v) for v in output.replace("[", " ").replace("]", " ").split()]
+          assert _np.allclose(_got, [1.0, 0.6, 0.8, 0.6, 1.0, 0.0, 0.8, 0.0, 1.0]), "The program should print the table of cosines for the three rows"
+        wrong:
+          - |
+            import numpy as np
+
+            def cosine_matrix(X):
+                return X @ X.T
+
+            print("1 0.6 0.8 0.6 1 0 0.8 0 1")
+          - |
+            import numpy as np
+
+            def cosine_matrix(X):
+                U = X / np.linalg.norm(X, axis=0, keepdims=True)
+                return U @ U.T
+
+            print("1 0.6 0.8 0.6 1 0 0.8 0 1")
+          - |
+            import numpy as np
+
+            def cosine_matrix(X):
+                U = X / np.linalg.norm(X, axis=1, keepdims=True)
+                return U.T @ U
+
+            print("1 0.6 0.8 0.6 1 0 0.8 0 1")
+          - |
+            import numpy as np
+
+            def cosine_matrix(X):
+                U = X / np.linalg.norm(X)
+                return U @ U.T
+
+            print("1 0.6 0.8 0.6 1 0 0.8 0 1")
+          - |
+            import numpy as np
+
+            def cosine_matrix(X):
+                U = X / np.linalg.norm(X, axis=1, keepdims=True)
+                return U * U
+
+            print("1 0.6 0.8 0.6 1 0 0.8 0 1")
+        explanation: |
+          The cosine of the angle between two vectors is their dot product divided by the product of their lengths, as you derived for vectors. Divide every row by its own length first, and the lengths are all 1, so the cosine is simply the dot product. `np.linalg.norm(X, axis=1, keepdims=True)` has shape $(n, 1)$, a column of lengths, and dividing by it broadcasts across each row. Then `U @ U.T` has shape $(n, d) \mathbin{@} (d, n) \to (n, n)$, and its entry $[i, j]$ is row $i$ of `U` against column $j$ of `U.T`, which is row $j$ of `U`. Shapes decide between that and `U.T @ U`, which is $(d, d)$ and compares **features** with one another. The diagonal is all 1s, since every vector makes an angle of zero with itself, and the table is symmetric. When a model turns words or pictures into vectors, this table is how you ask which of them it considers alike.
+        hints:
+          - The cosine is the dot product divided by both lengths.
+          - Divide each row by its own length first, keeping the axis so that it broadcasts.
+          - Which product of U and its transpose has one row and one column for each vector?
+    - question:
+        id: write-through
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Through $n$ points with different $x$ values there passes exactly one polynomial $c_0 + c_1 x + \dots + c_{n-1} x^{n-1}$. Each point $(x_i, y_i)$ gives one equation in the unknown coefficients:
+
+          $$c_0 + c_1 x_i + c_2 x_i^2 + \dots + c_{n-1} x_i^{n-1} = y_i.$$
+
+          Write `through_points(xs, ys)` for two plain arrays of the same length. Return the plain array of coefficients, $c_0$ first. Build the matrix of the system by broadcasting, with no loop, and do not form an inverse.
+        starter: |
+          import numpy as np
+
+          def through_points(xs, ys):
+              # Replace the next line with your own.
+              return ys
+
+          print(through_points(np.array([0.0, 1.0, 2.0]), np.array([1.0, 3.0, 11.0])))
+        solution: |
+          import numpy as np
+
+          def through_points(xs, ys):
+              V = xs[:, np.newaxis] ** np.arange(len(xs))
+              return np.linalg.solve(V, ys)
+
+          print(through_points(np.array([0.0, 1.0, 2.0]), np.array([1.0, 3.0, 11.0])))
+        tests: |
+          import numpy as _np
+          _c = through_points(_np.array([0.0, 1.0, 2.0]), _np.array([1.0, 3.0, 11.0]))
+          assert _c.shape == (3,), "Three points give three coefficients"
+          assert _np.allclose(_c, [1.0, -1.0, 3.0]), "Through (0, 1), (1, 3) and (2, 11) passes 1 - x + 3x^2"
+          assert _np.allclose(through_points(_np.array([1.0, 3.0]), _np.array([5.0, 9.0])), [3.0, 2.0]), "Through (1, 5) and (3, 9) passes the line 3 + 2x"
+          assert _np.allclose(through_points(_np.array([4.0]), _np.array([7.0])), [7.0]), "Through one point passes the constant with that value"
+          assert _np.allclose(through_points(_np.array([-1.0, 0.0, 1.0, 2.0]), _np.array([-1.0, 0.0, 1.0, 8.0])), [0.0, 0.0, 0.0, 1.0]), "Through (-1, -1), (0, 0), (1, 1) and (2, 8) passes x^3"
+          _xs = _np.array([0.5, 1.5, 2.0, 3.0, 4.5])
+          _ys = _np.array([2.0, -1.0, 0.5, 3.0, 1.0])
+          _k = through_points(_xs, _ys)
+          _back = sum(_k[j] * _xs ** j for j in range(5))
+          assert _np.allclose(_back, _ys), "The polynomial with the returned coefficients must pass through every point"
+          assert "inv" not in source, "Do not form an inverse"
+          assert "for " not in source and "while " not in source, "Use no loop and no comprehension"
+          _got = [float(v) for v in output.replace("[", " ").replace("]", " ").split()]
+          assert _np.allclose(_got, [1.0, -1.0, 3.0]), "The program should print the coefficients 1, -1 and 3"
+        wrong:
+          - |
+            import numpy as np
+
+            def through_points(xs, ys):
+                V = xs[:, np.newaxis] ** np.arange(len(xs))[::-1]
+                return np.linalg.solve(V, ys)
+
+            print("1 -1 3")
+          - |
+            import numpy as np
+
+            def through_points(xs, ys):
+                V = xs[:, np.newaxis] ** np.arange(len(xs))
+                return np.linalg.solve(V.T, ys)
+
+            print("1 -1 3")
+          - |
+            import numpy as np
+
+            def through_points(xs, ys):
+                V = xs[:, np.newaxis] ** np.arange(len(xs))
+                return V @ ys
+
+            print("1 -1 3")
+          - |
+            import numpy as np
+
+            def through_points(xs, ys):
+                V = xs[:, np.newaxis] ** np.arange(1, len(xs) + 1)
+                return np.linalg.solve(V, ys)
+
+            print("1 -1 3")
+          - |
+            import numpy as np
+
+            def through_points(xs, ys):
+                V = xs[:, np.newaxis] ** np.arange(len(xs))
+                return np.linalg.inv(V) @ ys
+
+            print("1 -1 3")
+        explanation: |
+          The unknowns are the coefficients, and the equations are **linear** in them, even though the polynomial is not linear in $x$. Row $i$ of the matrix is $1, x_i, x_i^2, \dots$, the powers of one $x$ value. A column of the $x$ values, of shape $(n, 1)$, raised to a row of the powers 0 to $n - 1$, of shape $(n,)$, broadcasts to exactly that table: entry $[i, j]$ is $x_i^j$. Then the system is $V\mathbf{c} = \mathbf{y}$ and one call solves it. The order of the powers decides the order of the coefficients, so starting the powers at 1, or running them backwards, answers a different question. This is the simplest case of **fitting**: choosing the numbers inside a model so that it agrees with data. Here there are as many coefficients as points, so the agreement is exact. With more points than coefficients no exact fit exists, and choosing the best inexact one is where much of machine learning starts.
+        hints:
+          - Row i of the matrix holds the powers of the x value of point i, starting from the power 0.
+          - A column of x values raised to a row of powers broadcasts to the whole table.
+          - Then it is one system, with the y values on the right-hand side.
+    - question:
+        id: fix-invertible
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `is_invertible(A)` should return `True` exactly when the square table of floats `A` can be inverted. It tests the determinant against zero, as the mathematics suggests, and it is fooled. The matrix with rows 1 2 3, 4 5 6 and 7 8 9 is singular, and the program prints `True` for it where it should print `False`. Fix the function, so that it is also right for matrices whose entries are all very small or all very large.
+        starter: |
+          import numpy as np
+
+          def is_invertible(A):
+              return np.linalg.det(A) != 0
+
+          A = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]])
+          print(is_invertible(A))
+        solution: |
+          import numpy as np
+
+          def is_invertible(A):
+              return np.linalg.matrix_rank(A) == A.shape[0]
+
+          A = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]])
+          print(is_invertible(A))
+        tests: |
+          import numpy as _np
+          _A = _np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]])
+          assert not is_invertible(_A), "The matrix with rows 1 2 3, 4 5 6 and 7 8 9 has rank 2 and cannot be inverted"
+          assert is_invertible(_np.eye(3)), "The identity can be inverted"
+          assert is_invertible(_np.array([[2.0, 1.0], [1.0, 3.0]])), "The matrix with rows 2 1 and 1 3 can be inverted"
+          assert not is_invertible(_np.array([[1.0, 2.0], [2.0, 4.0]])), "The matrix with rows 1 2 and 2 4 has rank 1"
+          assert not is_invertible(_np.zeros((2, 2))), "The zero matrix cannot be inverted"
+          assert is_invertible(0.1 * _np.eye(400)), "A tenth of the identity of size 400 can be inverted, though its determinant is too small for a float"
+          assert is_invertible(10.0 * _np.eye(400)), "Ten times the identity of size 400 can be inverted, though its determinant is too large for a float"
+          assert is_invertible(0.001 * _np.eye(4)), "A thousandth of the identity of size 4 can be inverted"
+          assert not is_invertible(1000.0 * _A), "A thousand times a singular matrix is still singular"
+          assert output.strip() == "False", "The program should print False"
+        wrong:
+          - |
+            import numpy as np
+
+            def is_invertible(A):
+                return np.linalg.det(A) != 0
+
+            print(False)
+          - |
+            import numpy as np
+
+            def is_invertible(A):
+                return abs(np.linalg.det(A)) > 1e-9
+
+            A = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]])
+            print(is_invertible(A))
+          - |
+            import numpy as np
+
+            def is_invertible(A):
+                return abs(np.linalg.det(A)) > 1e-300
+
+            print(False)
+          - |
+            import numpy as np
+
+            def is_invertible(A):
+                return np.linalg.matrix_rank(A) > 0
+
+            print(False)
+          - |
+            import numpy as np
+
+            def is_invertible(A):
+                return not np.isnan(np.linalg.inv(A)).any()
+
+            print(False)
+        explanation: |
+          The computed determinant of the singular matrix is about $7 \times 10^{-16}$, the trace left by rounding in the last pivot, and that is not equal to zero. The natural repair, comparing the size of the determinant with a small threshold, fails in the other direction: a determinant scales as $c^n$, so a thousandth of the identity of size 4 has determinant $10^{-12}$, and a tenth of the identity of size 400 has a determinant no float can hold. No single threshold separates "nearly flat" from "small entries". `np.linalg.matrix_rank` asks the right question, how many directions survive, with a tolerance that scales with the entries, so multiplying the whole matrix by a thousand or a thousandth changes nothing. Asking for the inverse and looking for `nan` does not work either: the inverse of the singular matrix comes back full of numbers around $10^{16}$, every one finite and every one meaningless.
+        hints:
+          - Print the determinant of the matrix in the program. Is it exactly zero?
+          - What happens to a determinant when every entry is multiplied by 0.1, for a matrix of size 400?
+          - Which routine counts the independent directions with a tolerance?
+    - question:
+        id: work-puzzle
+        type: choice
+        system: s2
+        prompt: |
+          In the puzzle, `np.linalg.inv(A) @ b` was wrong in the third decimal place and `np.linalg.solve(A, b)` in the fourth. What accounts for the difference?
+        options:
+          - "`solve` uses more digits than `inv`."
+          - "The entries of the computed inverse, which are as large as $10^{12}$, each carry a rounding error, and the product with `b` adds up ten such entries for each unknown. `solve` eliminates once with `b` carried along, and its answer satisfies the equations to about $10^{-16}$, where the answer from the inverse misses them by about $10^{-5}$."
+          - "The inverse of this matrix does not exist."
+          - "`inv` returns a view of `A`, so the product reads the wrong numbers."
+        answer: 1
+        explanation: |
+          Both routines work in the same `float64` and both run the same elimination. The inverse does exist: the rank is 10. What differs is how much arithmetic stands between the data and the answer. The inverse is the solution for ten right-hand sides that nobody asked about, stored as a hundred rounded numbers, and for a matrix this close to flat those numbers are huge, so their rounding errors are far from negligible. The residual shows it plainly. And the error that remains even with `solve` is of a different kind: it comes from the matrix, which squashes some directions $10^{13}$ times more than others, and no method working in sixteen digits can undo that.
+        hints:
+          - How many numbers does the inverse hold, and is each one exact?
+          - How large are those numbers for this matrix?
+          - Which answer, put back into the equations, leaves less over?
+    - question:
+        id: work-cost
+        type: numeric
+        system: s2
+        prompt: |
+          `np.linalg.solve` takes 2 seconds on a system of 2000 unknowns. About how many seconds will it take on a system of 4000 unknowns, on the same machine?
+        answer: "16"
+        explanation: |
+          The work of elimination grows as $n^3/3$. Doubling $n$ multiplies $n^3$ by $2^3$, so the time grows about eightfold, from 2 seconds to 8 times that. The memory grows only fourfold, since the matrix has $n^2$ entries. This is why the size of the systems that can be solved directly has a practical ceiling of some tens of thousands of unknowns, and why the models of machine learning, with millions of them, are not fitted by solving a system at all.
+        hints:
+          - How does the work of elimination grow with the number of unknowns?
+          - By what factor does the cube of n grow when n doubles?
+          - Multiply the time by that factor.
+    - question:
+        id: work-determinant
+        type: choice
+        system: s2
+        prompt: |
+          `A = 0.1 * np.eye(400)`, a tenth of the identity of size 400. `np.linalg.det(A)` prints `0.0`. Is `A` singular?
+        options:
+          - "Yes, since its determinant is zero."
+          - "No. Its inverse is plainly ten times the identity. The true determinant is $0.1^{400} = 10^{-400}$, which is smaller than any float can hold, so it is rounded to zero. `np.linalg.matrix_rank(A)` reports 400."
+          - "Yes, since multiplying by 0.1 loses information."
+          - "It cannot be decided."
+        answer: 1
+        explanation: |
+          A determinant is the factor by which volumes change, and in 400 dimensions, shrinking every direction to a tenth shrinks volume by a factor of ten, four hundred times over. The smallest positive `float64` is around $10^{-324}$. The result underflows. Nothing about the matrix is nearly flat: it squashes every direction equally and can be undone exactly. This is the standing weakness of the determinant as a numerical tool. It multiplies together $n$ numbers, so it races to zero or to infinity for reasons that have nothing to do with whether the system can be solved.
+        hints:
+          - What matrix undoes multiplying every vector by 0.1?
+          - What is 0.1 raised to the power 400?
+          - Can a float hold a number that small?
+    - question:
+        id: work-many
+        type: choice
+        system: s2
+        prompt: |
+          A simulation must solve $A\mathbf{x} = \mathbf{b}$ for one fixed `A` with 500 unknowns and for 1000 different right-hand sides, all known in advance. A colleague says that here, at last, computing the inverse once is the efficient thing. What is the better course?
+        options:
+          - "Compute the inverse once and multiply each right-hand side by it."
+          - "Put the right-hand sides side by side as the columns of a table `B` of shape `(500, 1000)` and call `np.linalg.solve(A, B)` once. The elimination, which does not depend on the right-hand sides, is done a single time, and each column then costs about $n^2$, the same as a product with the inverse would, with a smaller residual."
+          - "Call `np.linalg.solve(A, b)` in a loop, repeating the elimination a thousand times."
+          - "Compute the determinant first and divide by it."
+        answer: 1
+        explanation: |
+          The colleague is right that repeating the elimination a thousand times would be wasteful, and wrong that the inverse is the way to avoid it. The costly part of solving depends on `A` alone, and `solve` with a table of right-hand sides does it once. After that, each column is a pair of triangular substitutions of about $n^2$ steps, which is what multiplying by an inverse would also cost. So the inverse saves nothing, costs its own $n^3$ to form, and gives answers that fit the equations worse. If the right-hand sides arrived one at a time, the record of the elimination could be kept and reused, and SciPy, the companion library to NumPy, has the tools for that.
+        hints:
+          - Which part of solving depends only on A?
+          - What shape of second argument does solve accept?
+          - How does the cost of each further column compare with a product by the inverse?
+  connections:
+    - text: |
+        One system of ten equations was solved twice, by the inverse and by `solve`, and the inverse was some twenty-five times further from the truth. An inverse is the solution of $n$ systems, one for each column of the identity. It costs about three times as much as the one solve that was wanted, and it delivers the answer through $n^2$ rounded entries. `solve` runs the elimination with partial pivoting that you wrote yourself, carries the right-hand side along, and returns an answer that satisfies the equations to the last digit. A formula that shows $A^{-1}\mathbf{b}$ is an instruction to solve.
+
+        Everything you built by hand in the cluster on matrices is in the library. `@` is the product, with the inner lengths agreeing and disappearing. `np.linalg.solve` takes one right-hand side or a table of them. `np.linalg.norm` takes an axis like any reduction, and with it one line gives every cosine similarity in a set of vectors. Each routine treats the last two axes as the matrix and the rest as a stack. And the determinant, so sharp a test on paper, is useless as a test in floats: rounding lifts it off zero, and scale alone drives it to zero or infinity. Count the rank, which is measured with a tolerance.
+
+        Two threads are left hanging on purpose. The matrix of the puzzle was nearly flat, and even the best method recovered only three or four digits of the answer, though its residual was perfect. How error is magnified by the problem itself, as distinct from the method, is the subject of [[e5.numerical-error-analysis-in-practice]].
+
+        The other thread is the product. `@` multiplies two things and sums over one shared index. That covers the dot product, a matrix times a vector, and a matrix times a matrix. But the computations of machine learning are full of sums over shared indices that are not quite any of those: the dot product of every row of one table with the matching row of another, a product over a stack with the axes in an awkward order, the sum of the diagonal of a product that you would prefer never to form. Each can be coaxed out of `@` with transposes and reshapes, and each time the code says less about what is meant. There is a notation, borrowed from physics, in which you write down the indices themselves and the library works out the loops. That is the next lesson, [[e5.einsum]].

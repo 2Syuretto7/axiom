@@ -1,0 +1,813 @@
+concept: e5.einsum
+minutes: 90
+claim: You can read any `np.einsum` expression as a set of loops, one for each letter, say which letters are summed and what shape comes out, write the expression for a formula given with indices, recognise the dot product, the matrix products, the transpose, the trace, the outer product and the reductions as cases of it, and count the work an expression costs.
+recalls: [e5.linear-algebra-routines]
+uses: [m2.summation-and-product-notation, m5.matrix-multiplication-as-composition, m5.matrix-vector-product, m5.transpose, m4.dot-product, e5.axis-operations-and-reductions, e5.broadcasting, e5.vectorisation, e5.reshaping-views-and-copies, e5.arrays-dtype-and-shape, e1.complexity-and-big-o, e0.loops, e0.strings]
+leads: [e5.random-number-generation]
+starter: |
+  # Scratch space. The dot product of each row of X with the matching row of Y, three ways.
+  import time
+  import numpy as np
+
+  n, d = 1500, 200
+  X = np.linspace(0.0, 1.0, n * d).reshape(n, d)
+  Y = 1.0 - X
+
+  start = time.perf_counter()
+  one = np.diag(X @ Y.T)
+  print("every row against every row, keep the diagonal", round((time.perf_counter() - start) * 1000, 1), "ms")
+
+  start = time.perf_counter()
+  two = (X * Y).sum(axis=1)
+  print("multiply entry by entry, add along each row   ", round((time.perf_counter() - start) * 1000, 1), "ms")
+
+  start = time.perf_counter()
+  three = np.einsum("ij,ij->i", X, Y)
+  print("einsum                                        ", round((time.perf_counter() - start) * 1000, 1), "ms")
+
+  print(np.allclose(one, two), np.allclose(two, three))
+parts:
+  recall:
+    - text: |
+        [[e5.linear-algebra-routines]] ended on the product: `@` multiplies two things and sums over one shared index, and many sums in machine learning are not quite of that form. Three quick pulls first.
+    - question:
+        id: recall-shape
+        type: choice
+        system: s1
+        concepts: [e5.linear-algebra-routines]
+        prompt: |
+          `A` has shape `(5, 3)` and `B` has shape `(3, 7)`. What is the shape of `A @ B`?
+        options: ["`(5, 7)`", "`(3, 3)`", "`(7, 5)`", "It is an error"]
+        answer: 0
+        explanation: The inner lengths agree and disappear, and the outer lengths remain.
+        hints:
+          - The inner lengths must agree.
+          - The outer lengths give the shape.
+    - question:
+        id: recall-sigma
+        type: numeric
+        system: s1
+        concepts: [m2.summation-and-product-notation]
+        prompt: |
+          What is $\sum_{k=1}^{3} k^2$?
+        answer: "14"
+        explanation: 1 + 4 + 9.
+        hints:
+          - Let k take each value from 1 to 3 in turn.
+          - Square each and add.
+    - question:
+        id: recall-entry
+        type: choice
+        system: s1
+        concepts: [m5.matrix-multiplication-as-composition]
+        prompt: |
+          $C = AB$. Which formula gives the entry of $C$ in row $i$ and column $k$?
+        options: ['$\sum_j A_{ij} B_{jk}$', '$\sum_j A_{ji} B_{kj}$', '$A_{ik} B_{ik}$', '$\sum_i A_{ij} B_{jk}$']
+        answer: 0
+        explanation: Row $i$ of $A$ against column $k$ of $B$. The shared index $j$ runs along both and is summed.
+        hints:
+          - It is a row of A against a column of B.
+          - Which index runs along both and does not appear in the result?
+  puzzle:
+    - text: |
+        Here is a job that turns up constantly. You have two tables of the same shape, `X` and `Y`, with one vector in each row, and you want the dot product of each row of `X` with the **matching** row of `Y`: row 0 with row 0, row 1 with row 1. For 1500 rows, that is 1500 numbers. The agreement of a prediction with its target, the similarity of a question to its own answer, the squared length of every row of a table: all are this job.
+
+        The starter does it three ways.
+
+        **The first** reaches for the tool of the last lesson. `X @ Y.T` is the table of the dot product of every row of `X` with every row of `Y`. The ones wanted are those where the two rows match, which lie on the diagonal, and `np.diag` picks the diagonal out.
+
+        **The second** uses older tools: multiply the tables entry by entry, then add along each row.
+
+        **The third** is one call with a small string of letters in it: `np.einsum("ij,ij->i", X, Y)`.
+
+        Run it. The last line confirms that the three agree. Now look at the times. **The first way takes over a second. The second takes a few thousandths of a second. The third takes about one thousandth.** The first is a thousand times slower than the third.
+
+        **What is the first way computing that the others are not? Why could `@`, on its own, not say what was wanted? And what is the language of that little string, in which the right thing could be said in eight characters?**
+  intuition:
+    - text: |
+        The first question has a short answer. `X @ Y.T` has shape `(1500, 1500)`. It holds two and a quarter million dot products, each over 200 entries. Of those, 1500 are kept. **Fourteen hundred and ninety-nine out of every fifteen hundred dot products were computed and thrown away.**
+
+        And `@` could not help it. `@` knows one pattern: rows of the left against columns of the right, every one against every other. "Only the matching ones" is not something it has a way to express.
+
+        So think about what you would do with no library at all. You would write the loops.
+
+        ```python
+        out = np.zeros(n)
+        for i in range(n):
+            for j in range(d):
+                out[i] += X[i, j] * Y[i, j]
+        ```
+
+        There is nothing here to misread. The entry of `X` at $[i, j]$ meets the entry of `Y` at the same $[i, j]$. The products are added into place $i$ of the result. In the notation of sums,
+
+        $$\text{out}_i = \sum_j X_{ij}\, Y_{ij}.$$
+
+        Now look at that formula and at the string in the starter, side by side.
+
+        $$\text{out}_i = \sum_j X_{ij}\, Y_{ij} \qquad\qquad \texttt{"ij,ij->i"}$$
+
+        The string **is** the formula, with everything but the indices rubbed out. Before the arrow, separated by a comma, are the indices of the two inputs: `ij` for `X`, `ij` for `Y`. After the arrow are the indices of the result: `i`. The index `j` appears before the arrow and not after it, and that is exactly the index the formula sums over.
+
+        `np.einsum` takes such a string and the arrays, and runs the loops the string describes, in compiled code. You say **what** is to be multiplied and added, by naming the axes. It works out **how**.
+
+        The name comes from Albert Einstein. Writing out the equations of general relativity, which are thick with sums over indices, he noticed that every summed index appeared exactly twice and every index that appeared twice was summed. So he stopped writing the $\Sigma$ signs. An index that is repeated and does not appear in the result is summed, and that is all there is to it. "Einsum" is short for Einstein summation.
+
+        The figure shows a few expressions with their inputs and their results. Step through them. For each, find the letters after the arrow, which are the axes of the result, and the letters that have vanished, which have been summed.
+    - figure: einsum
+      props: { code: "ij,jk->ik" }
+    - text: |
+        The one in front of you first is `"ij,jk->ik"`. Read it as loops. There are three letters, so three loops, over `i`, `j` and `k`. Inside, the entry of the first input at $[i, j]$ is multiplied by the entry of the second at $[j, k]$, and added into the result at $[i, k]$. The letter `j` has vanished, so it is summed:
+
+        $$C_{ik} = \sum_j A_{ij} B_{jk}.$$
+
+        You answered that formula in the recall. It is the matrix product. So `@` is one einsum expression among many, the one where the last axis of the left and the first axis of the right share a letter.
+
+        Change the letters and you change the computation, with no new function to learn.
+
+        - `"ij,ij->i"`: both inputs share **both** letters. Matching entries meet. That is the puzzle.
+        - `"ij,j->i"`: a table and a plain array sharing `j`. A matrix times a vector.
+        - `"ij->ji"`: one input, nothing summed, the letters exchanged. The transpose.
+        - `"ij->i"`: one input, `j` vanished. The sum along axis 1.
+
+        Each of those you have met as a separate tool with its own name and its own rules about shape. Here they are one tool. That is the worth of the notation: it does not add a capability so much as show that a dozen things you knew are the same thing.
+    - figure: einsum
+      props: { code: "i,j->ij" }
+    - text: |
+        This one is new. `"i,j->ij"`: two plain arrays that share **no** letter, and both letters kept. Nothing is summed. Two loops, and the result at $[i, j]$ is $u_i v_j$: every entry of the first times every entry of the second, laid out as a table. It is called the **outer product**, and you have in fact made it before, by broadcasting a column against a row. When a network learns, the change it makes to a table of weights is very often an outer product, of what came in with how wrong the result was.
+
+        So sharing a letter means "walk these axes together", and not sharing one means "take every combination". Keeping a letter means "this is an axis of the result", and dropping one means "add up along it". Four choices, and every expression is made of them.
+  derivation:
+    - text: |
+        **The rule, exactly.** An einsum expression is a string of the form `"letters,letters->letters"`, with one group of letters for each input, separated by commas, and one group for the result.
+
+        1. **Each group has one letter for each axis** of its array, in order. `"ij"` describes a table and calls its axes `i` and `j`. The letters themselves are free: `"ab,bc->ac"` is the same expression as `"ij,jk->ik"`.
+
+        2. **A letter always stands for one length.** If a letter appears in two places, those two axes must have the same length, and they are walked **together**: the same value of the letter indexes both.
+
+        3. **The loops.** There is one loop for each **distinct** letter. Inside, one entry of each input, the one at its letters' current values, are multiplied together.
+
+        4. **The result.** The product is added into the result at the place given by the letters after the arrow. A letter that does not appear after the arrow is therefore **summed over**. The order of the letters after the arrow is the order of the axes of the result.
+
+        As code, for `"ij,jk->ik"`:
+
+        ```python
+        C = np.zeros((I, K))
+        for i in range(I):
+            for j in range(J):
+                for k in range(K):
+                    C[i, k] += A[i, j] * B[j, k]
+        ```
+
+        Every einsum expression is a block of loops like that one, with a single line inside. To read an expression, write that line.
+
+        **The cases you know.** Here are the tools of this cluster, and of the matrix cluster, as expressions.
+
+        | expression | the line inside the loops | also known as |
+        |---|---|---|
+        | `"i,i->"` | `out += u[i] * v[i]` | `u @ v`, the dot product |
+        | `"ij,j->i"` | `out[i] += A[i, j] * x[j]` | `A @ x` |
+        | `"ij,jk->ik"` | `out[i, k] += A[i, j] * B[j, k]` | `A @ B` |
+        | `"ij->ji"` | `out[j, i] += A[i, j]` | `A.T` |
+        | `"ij->j"` | `out[j] += A[i, j]` | `A.sum(axis=0)` |
+        | `"ij->"` | `out += A[i, j]` | `A.sum()` |
+        | `"i,j->ij"` | `out[i, j] += u[i] * v[j]` | the outer product |
+        | `"ij,ij->i"` | `out[i] += A[i, j] * B[i, j]` | `(A * B).sum(axis=1)` |
+        | `"ii->"` | `out += A[i, i]` | the trace, the sum of the diagonal |
+        | `"ij,kj->ik"` | `out[i, k] += A[i, j] * B[k, j]` | `A @ B.T` |
+
+        Two of these deserve a second look.
+
+        `"ii->"` uses one letter **twice within one input**. By rule 2 both axes are walked together, so only the entries $[0, 0], [1, 1], \dots$ are visited: the diagonal. With the letter dropped they are added, which gives the **trace** of a square matrix, the sum of its diagonal entries, also available as `np.trace(A)`. With the letter kept, `"ii->i"` is the diagonal itself.
+
+        `"ij,kj->ik"` shares the **last** axis of both inputs. That is every row of `A` dotted with every row of `B`, which with `@` needs a transpose to say. In einsum you say it by where you put the `j`.
+
+        **Counting the work.** The loops tell you the cost at once: the number of times the inner line runs is the product of the lengths of all the distinct letters.
+
+        - `"ij,jk->ik"` runs $I \times J \times K$ times.
+        - `"ij,ij->i"` runs $I \times J$ times.
+
+        Apply that to the puzzle. The first way, `X @ Y.T`, is `"ij,kj->ik"` with $I = K = 1500$ and $J = 200$: 450 million multiplications. The third way, `"ij,ij->i"`, is $1500 \times 200$: 300 thousand. The ratio is 1500, and the clock said about a thousand. The second way, `(X * Y).sum(axis=1)`, does the same 300 thousand multiplications as the third, and is a few times slower for a reason you met in the vectorisation lesson: it first builds the whole table `X * Y` in memory, 300 thousand numbers, and then reads it again to add. The einsum adds as it goes and builds nothing.
+    - question:
+        id: derivation-trace
+        type: choice
+        system: s2
+        prompt: |
+          `M` and `N` are square tables of shape `(300, 300)`. `np.trace(M @ N)` and `np.einsum("ij,ji->", M, N)` return the same number, and the einsum is about fifty times faster. Why are they equal, and why the difference in speed?
+        options:
+          - "They are equal by coincidence for square tables, and einsum is faster because it is newer."
+          - "The entry $[i, i]$ of the product is $\\sum_j M_{ij} N_{ji}$, and the trace adds those over $i$, which is the sum of $M_{ij} N_{ji}$ over both letters: the einsum, with $300 \\times 300$ steps. `M @ N` computes all $300 \\times 300$ entries of the product, each a sum of 300 terms, and all but the 300 on the diagonal are thrown away."
+          - "The einsum skips the off-diagonal entries of `M`."
+          - "`np.trace` copies the product before adding its diagonal."
+        answer: 1
+        explanation: |
+          Write the line inside the loops. For `"ij,ji->"` it is `out += M[i, j] * N[j, i]`, over two letters: 90 thousand steps. The product `M @ N` has three letters, 27 million steps, to fill a table of which only the diagonal is wanted. Every entry of `M` and of `N` is used by both, so nothing is skipped in the inputs. What is skipped is the computing of results nobody asked for. The pattern is the same as in the puzzle: with `@` you had to make the whole table and then select from it, and in einsum you describe only the entries you want.
+        hints:
+          - What is the formula for the entry of the product at [i, i]?
+          - What does the trace do with those entries?
+          - How many letters does each computation loop over?
+    - text: |
+        **Stacks.** Add a letter to stand for the stack and keep it after the arrow. For `S` of shape `(b, m, n)` and `T` of shape `(b, n, p)`,
+
+        ```python
+        np.einsum("bij,bjk->bik", S, T)
+        ```
+
+        is the product of each matrix of `S` with the matching matrix of `T`. The letter `b` is shared, so the two stacks are walked together, and it is kept, so the result is a stack. `j` is shared and dropped, so it is summed.
+
+        This is where einsum pays best. In real models the arrays have three and four axes, a batch of examples, a sequence of positions, a set of features, and the question is always which axes are matched, which are combined, and which are summed. With `@`, transposes and reshapes, the answer is spread across several lines and hidden in axis numbers. In einsum it is in one string, and the names can be chosen to mean something: `"bqd,bkd->bqk"` scores every **q**uery against every **k**ey over their **d** features, within each example of the **b**atch.
+
+        **More than two inputs.** The rule is unchanged. `np.einsum("i,ij,j->", x, A, y)` has the line `out += x[i] * A[i, j] * y[j]`, which is the single number $\mathbf{x}^{\mathsf T} A\, \mathbf{y}$.
+
+        One caution. With three or more inputs, running the loops as written can be wasteful. `"ij,jk,kl->il"`, a product of three matrices, has four letters, so $n^4$ steps as written, where two matrix products one after the other take $2n^3$. Passing `optimize=True` tells einsum to look for such an order and use it.
+
+        **When to use it, and when not.** For a plain matrix product, write `@`. It says what it is, and it is handed to a routine tuned over decades for exactly that. For a plain sum along an axis, write `.sum(axis=...)`. Reach for einsum when the thing you mean is **not** one of the named tools: matching rows, an awkward order of axes, a diagonal of something you would rather not build, three things multiplied at once. Its strength is that the expression is the documentation.
+
+        **Writing an expression from a formula.** Always the same steps. Write the formula with indices. Give each input its letters in the order of its axes. Use the same letter wherever the formula uses the same index. After the arrow, put the indices of the left-hand side of the formula, in order. Then check: every letter after the arrow appears before it, and the lengths that share a letter agree.
+
+        Always write the arrow. If you leave it out, einsum guesses the result: the letters that appear exactly once, in alphabetical order. That is a rule to forget and a bug in waiting.
+    - question:
+        id: order-write
+        type: order
+        system: s2
+        prompt: Put in order the steps for turning a formula such as $s_b = \sum_i \sum_j x_{bi} A_{ij} x_{bj}$ into an einsum call.
+        steps:
+          - 'Write the formula with every index shown.'
+          - 'For each input, list its letters in the order of its own axes: `bi`, `ij`, `bj`.'
+          - 'Join the groups with commas.'
+          - 'After the arrow, put the indices of the left-hand side, in order: `b`.'
+          - 'Check that every letter dropped is one the formula sums over, and that axes sharing a letter have the same length.'
+          - 'Call `np.einsum` with the string and the arrays in the same order as the groups.'
+        explanation: The string is copied off the formula, input by input, so the formula comes first. The groups must exist before they can be joined, and the result letters are read off the left-hand side. The check comes before the call, since an expression with a wrong letter often still runs and returns something of a plausible shape. Here the result is `"bi,ij,bj->b"`, in which `i` and `j` are summed and `b` is kept.
+        hints:
+          - The string is read off the formula, so the formula comes first.
+          - The inputs are described before the result.
+          - Check before you call.
+  formal:
+    - text: |
+        **Expression.** `np.einsum("g1,g2,...->r", A1, A2, ...)`, where each group $g_m$ has one letter for each axis of $A_m$, and $r$ lists letters that occur among the groups, each at most once.
+
+        **Lengths.** Every letter has one length. All axes labelled with a letter must have that length.
+
+        **Meaning.** For each assignment of a value to every distinct letter, take the entry of each input at the values of its letters, and multiply them. The entry of the result at the values of the letters of $r$ is the sum of those products over all values of the letters not in $r$.
+
+        **Shape.** The result has one axis for each letter of $r$, in order, with that letter's length.
+
+        **Cost.** Carried out directly, the number of products is the product of the lengths of all distinct letters.
+
+        **Diagonal.** A letter repeated within one group restricts that input to the entries where those axes have equal index.
+  drill:
+    - text: |
+        Seconds each. For every expression, say the line that sits inside the loops.
+    - question:
+        id: drill-matvec
+        type: choice
+        system: s1
+        prompt: |
+          What is `np.einsum("ij,j->i", A, x)`?
+        options: ["The matrix `A` times the vector `x`", "The transpose of `A`", "The dot product of two vectors", "The outer product"]
+        answer: 0
+        explanation: The line is `out[i] += A[i, j] * x[j]`, each row of the table against the vector.
+        hints:
+          - Which letter is shared and dropped?
+          - The result has one entry for each row of A.
+    - question:
+        id: drill-transpose
+        type: choice
+        system: s1
+        prompt: |
+          What is `np.einsum("ij->ji", A)`?
+        options: ["The sum of all entries", "The transpose of `A`", "The diagonal of `A`", "`A` itself"]
+        answer: 1
+        explanation: Nothing is dropped, so nothing is summed. The entry at $[i, j]$ goes to $[j, i]$.
+        hints:
+          - Is any letter missing after the arrow?
+          - The two letters have changed places.
+    - question:
+        id: drill-dot
+        type: choice
+        system: s1
+        prompt: |
+          What is `np.einsum("i,i->", u, v)`?
+        options: ["The outer product", "The entry-by-entry product", "The dot product, a single number", "An error, since nothing follows the arrow"]
+        answer: 2
+        explanation: The shared letter walks both arrays together, and it is dropped, so the products are all added.
+        hints:
+          - No letter follows the arrow, so the result has no axes.
+          - Matching entries are multiplied and all are added.
+    - question:
+        id: drill-sum-shape
+        type: choice
+        system: s1
+        prompt: |
+          `A` has shape `(2, 3)`. What is the shape of `np.einsum("ij->j", A)`?
+        options: ["`(2,)`", "`(3,)`", "`(2, 3)`", "`()`"]
+        answer: 1
+        explanation: The result has the one axis `j`, of length 3. The letter `i` was dropped, so the rows are added together.
+        hints:
+          - Which letter follows the arrow?
+          - What is the length of that axis of A?
+    - question:
+        id: drill-outer-shape
+        type: choice
+        system: s1
+        prompt: |
+          `u` has 3 entries and `v` has 4. What is the shape of `np.einsum("i,j->ij", u, v)`?
+        options: ["`(3, 4)`", "`(4, 3)`", "`(7,)`", "`()`"]
+        answer: 0
+        explanation: Both letters are kept, in the order `i` then `j`, with lengths 3 and 4.
+        hints:
+          - Which letters follow the arrow, and in which order?
+          - Each letter brings its own length.
+    - question:
+        id: drill-summed
+        type: choice
+        system: s1
+        prompt: |
+          In `"ij,jk->ik"`, which letter is summed over?
+        options: ["`i`", "`j`", "`k`", "None of them"]
+        answer: 1
+        explanation: It appears before the arrow and not after it.
+        hints:
+          - Which letter is missing after the arrow?
+          - A dropped letter is summed.
+    - question:
+        id: drill-trace
+        type: choice
+        system: s1
+        prompt: |
+          `A` is a square table. What is `np.einsum("ii->", A)`?
+        options: ["The sum of all entries", "The sum of the diagonal entries, the trace", "The diagonal as an array", "The determinant"]
+        answer: 1
+        explanation: One letter for both axes visits only the entries where the two indices are equal, and dropping it adds them.
+        hints:
+          - Both axes carry the same letter, so they are walked together.
+          - Which entries have the same row and column number?
+    - question:
+        id: drill-product-shape
+        type: choice
+        system: s1
+        prompt: |
+          `A` has shape `(2, 3)` and `B` has shape `(3, 4)`. What is the shape of `np.einsum("ij,jk->ik", A, B)`?
+        options: ["`(2, 4)`", "`(2, 3, 4)`", "`(3,)`", "`(4, 2)`"]
+        answer: 0
+        explanation: The result has axes `i` and `k`, of lengths 2 and 4.
+        hints:
+          - Which letters follow the arrow?
+          - Read their lengths off the inputs.
+    - question:
+        id: drill-dot-value
+        type: numeric
+        system: s1
+        prompt: |
+          `u = np.array([1.0, 2.0, 3.0])` and `v = np.array([4.0, 5.0, 6.0])`. What is `np.einsum("i,i->", u, v)`?
+        answer: "32"
+        explanation: 1 × 4 + 2 × 5 + 3 × 6.
+        hints:
+          - Matching entries are multiplied.
+          - The three products are added.
+    - question:
+        id: drill-total
+        type: numeric
+        system: s1
+        prompt: |
+          What is `np.einsum("ij->", np.ones((3, 4)))`?
+        answer: "12"
+        explanation: Both letters are dropped, so all twelve entries, each 1, are added.
+        hints:
+          - No letter follows the arrow.
+          - How many entries does the table have?
+    - question:
+        id: drill-rows
+        type: choice
+        system: s1
+        prompt: |
+          `A` and `B` have the same shape. What is `np.einsum("ij,ij->i", A, B)`?
+        options: ["The matrix product of `A` and `B`", "The dot product of each row of `A` with the matching row of `B`", "The dot product of each column of `A` with the matching column of `B`", "The entry-by-entry product"]
+        answer: 1
+        explanation: Matching entries are multiplied, and `j`, which runs along a row, is summed. One number is left for each row.
+        hints:
+          - Both inputs share both letters, so matching entries meet.
+          - Which letter is dropped, and along what does it run?
+    - question:
+        id: drill-stack
+        type: choice
+        system: s1
+        prompt: |
+          `S` has shape `(10, 2, 3)` and `T` has shape `(10, 3, 4)`. What is the shape of `np.einsum("bij,bjk->bik", S, T)`?
+        options: ["`(10, 2, 4)`", "`(2, 4)`", "`(10, 10, 2, 4)`", "`(10, 2, 3, 4)`"]
+        answer: 0
+        explanation: The letters `b`, `i` and `k` are kept, with lengths 10, 2 and 4. It is ten matrix products.
+        hints:
+          - Which letters follow the arrow?
+          - The letter b is shared, so the two stacks are walked together.
+    - question:
+        id: drill-rows-against-rows
+        type: choice
+        system: s1
+        prompt: |
+          Which expression with `@` equals `np.einsum("ij,kj->ik", A, B)`?
+        options: ["`A @ B`", "`A @ B.T`", "`A.T @ B`", "`A * B`"]
+        answer: 1
+        explanation: The shared letter is the last axis of both, so rows of `A` meet rows of `B`. With `@` the second must be transposed for its rows to stand as columns.
+        hints:
+          - Which axis of B carries the shared letter?
+          - The matrix product needs the shared letter first in its second input.
+    - question:
+        id: drill-steps
+        type: numeric
+        system: s1
+        prompt: |
+          `A` and `B` have shape `(5, 6)`. How many times does the line inside the loops of `"ij,ij->i"` run?
+        answer: "30"
+        explanation: There are two distinct letters, of lengths 5 and 6, and one loop for each.
+        hints:
+          - How many distinct letters are there?
+          - Multiply their lengths.
+    - question:
+        id: predict-basics
+        type: predict
+        system: s1
+        prompt: Three expressions on one table. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.arange(6.0).reshape(2, 3)
+          x = np.array([1.0, 2.0, 3.0])
+          print(np.einsum("ij,j->i", A, x))
+          print(np.einsum("ij->j", A))
+          print(np.einsum("ij,ij->i", A, A))
+        output: |
+          [ 8. 26.]
+          [3. 5. 7.]
+          [ 5. 50.]
+        explanation: The rows of the table are 0, 1, 2 and 3, 4, 5. Against the vector they give 0 + 2 + 6 and 3 + 8 + 15. Dropping `i` adds the two rows. The last is each row dotted with itself, 0 + 1 + 4 and 9 + 16 + 25.
+        hints:
+          - The table has rows 0, 1, 2 and 3, 4, 5.
+          - In the second, which letter was dropped?
+          - In the third, each row meets itself.
+    - question:
+        id: predict-outer
+        type: predict
+        system: s1
+        prompt: An outer product and a diagonal. What does this show?
+        code: |
+          import numpy as np
+
+          u = np.array([1.0, 2.0])
+          v = np.array([1.0, 10.0, 100.0])
+          print(np.einsum("i,j->ij", u, v))
+          print(np.einsum("i,j->ji", u, v).shape)
+          M = np.arange(9.0).reshape(3, 3)
+          print(np.einsum("ii->", M), np.einsum("ii->i", M))
+        output: |
+          [[  1.  10. 100.]
+           [  2.  20. 200.]]
+          (3, 2)
+          12.0 [0. 4. 8.]
+        explanation: No letter is shared, so every entry of `u` meets every entry of `v`. The order of the letters after the arrow is the order of the axes, so `ji` gives the transposed shape. The diagonal of the square table holds 0, 4 and 8, kept as an array when the letter is kept and added when it is dropped.
+        hints:
+          - With no shared letter, every combination is taken.
+          - The letters after the arrow give the axes of the result in order.
+          - Which entries of the square table have equal row and column numbers?
+  work:
+    - text: Slower now. For each one, write the formula with its indices before you write the string.
+    - question:
+        id: write-quadratic
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          `X` is a table of shape `(b, n)` with one vector in each row, and `A` is a square table of shape `(n, n)`. For each row $\mathbf{x}$ of `X`, the number $\mathbf{x}^{\mathsf T} A\, \mathbf{x}$ is
+
+          $$s_b = \sum_i \sum_j x_{bi}\, A_{ij}\, x_{bj}.$$
+
+          Write `quadratic(X, A)` to return the plain array of these numbers, one for each row, with a single call of `np.einsum` and no loop.
+        starter: |
+          import numpy as np
+
+          def quadratic(X, A):
+              # Replace the next line with your own.
+              return X
+
+          X = np.array([[1.0, 2.0], [0.0, 1.0], [3.0, -1.0]])
+          A = np.array([[2.0, 1.0], [0.0, 3.0]])
+          print(quadratic(X, A))
+        solution: |
+          import numpy as np
+
+          def quadratic(X, A):
+              return np.einsum("bi,ij,bj->b", X, A, X)
+
+          X = np.array([[1.0, 2.0], [0.0, 1.0], [3.0, -1.0]])
+          A = np.array([[2.0, 1.0], [0.0, 3.0]])
+          print(quadratic(X, A))
+        tests: |
+          import numpy as _np
+          _X = _np.array([[1.0, 2.0], [0.0, 1.0], [3.0, -1.0]])
+          _A = _np.array([[2.0, 1.0], [0.0, 3.0]])
+          _s = quadratic(_X, _A)
+          assert _s.shape == (3,), "Three rows give three numbers"
+          assert _np.allclose(_s, [16.0, 3.0, 18.0]), "For these rows and this matrix the numbers are 16, 3 and 18"
+          assert _np.allclose(quadratic(_X, _np.eye(2)), [5.0, 1.0, 10.0]), "With the identity matrix the result is the squared length of each row"
+          _B = _np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 2.0], [3.0, 0.0, 0.0]])
+          _Y = _np.array([[1.0, 2.0, 3.0], [1.0, 0.0, -1.0]])
+          _want = [float(_Y[r] @ _B @ _Y[r]) for r in range(2)]
+          assert _np.allclose(quadratic(_Y, _B), _want), "For each row x the result must be x times A times x"
+          assert quadratic(_np.ones((7, 4)), _np.ones((4, 4))).shape == (7,), "Seven rows give seven numbers"
+          assert _np.allclose(quadratic(_np.ones((7, 4)), _np.ones((4, 4))), 16.0), "A row of four 1s with a matrix of 1s gives 16"
+          assert "einsum" in source, "Use np.einsum"
+          assert "for " not in source and "while " not in source, "Use no loop and no comprehension"
+          _got = [float(v) for v in output.replace("[", " ").replace("]", " ").split()]
+          assert _np.allclose(_got, [16.0, 3.0, 18.0]), "The program should print the numbers 16, 3 and 18"
+        wrong:
+          - |
+            import numpy as np
+
+            def quadratic(X, A):
+                return np.einsum("bi,ij,bj->", X, A, X)
+
+            print("16 3 18")
+          - |
+            import numpy as np
+
+            def quadratic(X, A):
+                return np.einsum("bi,ij,cj->b", X, A, X)
+
+            print("16 3 18")
+          - |
+            import numpy as np
+
+            def quadratic(X, A):
+                return np.einsum("bi,ii,bi->b", X, A, X)
+
+            print("16 3 18")
+          - |
+            import numpy as np
+
+            def quadratic(X, A):
+                return np.einsum("bi,ij->b", X, A)
+
+            print("16 3 18")
+          - |
+            import numpy as np
+
+            def quadratic(X, A):
+                return np.einsum("bi,ij,bj->bi", X, A, X)
+
+            print("16 3 18")
+        explanation: |
+          Read the string off the formula. The first factor is $x_{bi}$, so `bi`. The second is $A_{ij}$, so `ij`. The third is $x_{bj}$, the **same** row $b$ of `X` with a different index along it, so `bj`. The left-hand side has the single index $b$. So `"bi,ij,bj->b"`, with `X` passed twice. The letter `b` is shared by the first and third inputs, which is what makes each row meet itself and not every other row: with a different letter there, the third factor would be summed over all rows. Dropping `b` adds the answers for all rows into one number. Using `ii` for the matrix visits only its diagonal. This number, a vector on both sides of a matrix, is called a quadratic form. It measures a squared length in which the directions are weighted and mixed by $A$, and it is the exponent of the bell curve in many dimensions, which you will meet in the probability clusters.
+        hints:
+          - Each factor of the formula gives one group of letters, read straight off its indices.
+          - The same array is passed twice, with the same first letter and different second letters.
+          - Only the index on the left-hand side of the formula follows the arrow.
+    - question:
+        id: write-scores
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          `Q` has shape `(b, q, d)`: for each of `b` examples, `q` vectors of `d` features called queries. `K` has shape `(b, k, d)`: for each example, `k` vectors called keys. Write `scores(Q, K)` to return the array of shape `(b, q, k)` whose entry `[e, m, n]` is the dot product of query `m` of example `e` with key `n` of the **same** example.
+
+          Use a single call of `np.einsum` and no loop.
+        starter: |
+          import numpy as np
+
+          def scores(Q, K):
+              # Replace the next line with your own.
+              return Q
+
+          Q = np.arange(12.0).reshape(1, 3, 4)
+          K = np.arange(8.0).reshape(1, 2, 4)
+          print(scores(Q, K).shape)
+        solution: |
+          import numpy as np
+
+          def scores(Q, K):
+              return np.einsum("bqd,bkd->bqk", Q, K)
+
+          Q = np.arange(12.0).reshape(1, 3, 4)
+          K = np.arange(8.0).reshape(1, 2, 4)
+          print(scores(Q, K).shape)
+        tests: |
+          import numpy as _np
+          _Q = _np.arange(12.0).reshape(1, 3, 4)
+          _K = _np.arange(8.0).reshape(1, 2, 4)
+          _S = scores(_Q, _K)
+          assert _S.shape == (1, 3, 2), "One example, three queries and two keys give shape (1, 3, 2)"
+          assert _np.allclose(_S, [[[14.0, 38.0], [38.0, 126.0], [62.0, 214.0]]]), "The first query (0, 1, 2, 3) against the keys (0, 1, 2, 3) and (4, 5, 6, 7) gives 14 and 38"
+          _Q2 = _np.array([[[1.0, 0.0], [0.0, 1.0]], [[1.0, 1.0], [2.0, 0.0]]])
+          _K2 = _np.array([[[3.0, 4.0], [5.0, 6.0], [7.0, 8.0]], [[1.0, 2.0], [0.0, 1.0], [-1.0, 0.0]]])
+          _S2 = scores(_Q2, _K2)
+          assert _S2.shape == (2, 2, 3), "Two examples, two queries and three keys give shape (2, 2, 3)"
+          _want = _np.zeros((2, 2, 3))
+          for _e in range(2):
+              for _m in range(2):
+                  for _n in range(3):
+                      _want[_e, _m, _n] = float(_Q2[_e, _m] @ _K2[_e, _n])
+          assert _np.allclose(_S2, _want), "Each query must meet only the keys of its own example"
+          assert _np.allclose(scores(_Q2, _Q2)[0], [[1.0, 0.0], [0.0, 1.0]]), "The queries of the first example scored against themselves give the identity"
+          assert "einsum" in source, "Use np.einsum"
+          assert "for " not in source and "while " not in source, "Use no loop and no comprehension"
+          assert output.strip() == "(1, 3, 2)", "The program should print (1, 3, 2)"
+        wrong:
+          - |
+            import numpy as np
+
+            def scores(Q, K):
+                return np.einsum("bqd,bkd->bkq", Q, K)
+
+            print("(1, 3, 2)")
+          - |
+            import numpy as np
+
+            def scores(Q, K):
+                return np.einsum("bqd,ckd->bqk", Q, K)
+
+            print("(1, 3, 2)")
+          - |
+            import numpy as np
+
+            def scores(Q, K):
+                return np.einsum("bqd,bkd->qk", Q, K)
+
+            print("(1, 3, 2)")
+          - |
+            import numpy as np
+
+            def scores(Q, K):
+                return np.einsum("bqd,bkd->bqkd", Q, K)
+
+            print("(1, 3, 2)")
+          - |
+            import numpy as np
+
+            def scores(Q, K):
+                return np.einsum("bqd,bkd->bq", Q, K)
+
+            print("(1, 3, 2)")
+        explanation: |
+          Name the axes for what they are. `Q` is `bqd` and `K` is `bkd`. A dot product runs over the features, so `d` is shared and dropped. Each query meets each key, so `q` and `k` are different letters and both are kept. And a query meets only the keys of its own example, so `b` is the **same** letter in both and is kept. `"bqd,bkd->bqk"`. Giving the keys their own batch letter would let every query see the keys of every example and add the results together, which still returns the right shape and is quite wrong. With `@` the same computation is `Q @ K.transpose(0, 2, 1)`, in which you must work out which axes to exchange. This array of scores is the first step of the mechanism called attention, on which the large language models are built: each position of a sequence asks a question, and the scores say how well every other position answers it.
+        hints:
+          - Give each axis a letter that says what it counts.
+          - Which letter does a dot product sum over?
+          - Which letter must be the same in both inputs so that examples are not mixed?
+    - question:
+        id: fix-trace
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `trace_product(A, B)` should return the trace of the matrix product $AB$, the sum of its diagonal entries, without forming the product. For the two tables in the program the right answer is `69.0`, and it prints `70.0`. Fix the expression.
+        starter: |
+          import numpy as np
+
+          def trace_product(A, B):
+              return np.einsum("ij,ij->", A, B)
+
+          A = np.array([[1.0, 2.0], [3.0, 4.0]])
+          B = np.array([[5.0, 6.0], [7.0, 8.0]])
+          print(trace_product(A, B))
+        solution: |
+          import numpy as np
+
+          def trace_product(A, B):
+              return np.einsum("ij,ji->", A, B)
+
+          A = np.array([[1.0, 2.0], [3.0, 4.0]])
+          B = np.array([[5.0, 6.0], [7.0, 8.0]])
+          print(trace_product(A, B))
+        tests: |
+          import numpy as _np
+          _A = _np.array([[1.0, 2.0], [3.0, 4.0]])
+          _B = _np.array([[5.0, 6.0], [7.0, 8.0]])
+          assert abs(float(trace_product(_A, _B)) - 69.0) < 1e-9, "The product has diagonal entries 19 and 50, so the trace is 69"
+          assert abs(float(trace_product(_A, _np.eye(2))) - 5.0) < 1e-9, "With the identity the result is the trace of A, which is 5"
+          _C = _np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+          _D = _np.array([[1.0, 0.0], [2.0, 1.0], [0.0, 3.0]])
+          assert abs(float(trace_product(_C, _D)) - float(_np.trace(_C @ _D))) < 1e-9, "For a table of shape (2, 3) times one of shape (3, 2) the result must be the trace of the product, 28"
+          _E = _np.array([[0.0, 1.0], [0.0, 0.0]])
+          assert abs(float(trace_product(_E, _E))) < 1e-9, "This matrix times itself is the zero matrix, with trace 0"
+          assert abs(float(trace_product(_E, _E.T)) - 1.0) < 1e-9, "This matrix times its transpose has trace 1"
+          assert "@" not in source and "matmul" not in source and "dot(" not in source, "Do not form the product"
+          assert output.strip() == "69.0", "The program should print 69.0"
+        wrong:
+          - |
+            import numpy as np
+
+            def trace_product(A, B):
+                return np.einsum("ij,ij->", A, B)
+
+            print(69.0)
+          - |
+            import numpy as np
+
+            def trace_product(A, B):
+                return np.einsum("ii,ii->", A, B)
+
+            print(69.0)
+          - |
+            import numpy as np
+
+            def trace_product(A, B):
+                return np.einsum("ij,jk->", A, B)
+
+            print(69.0)
+          - |
+            import numpy as np
+
+            def trace_product(A, B):
+                return np.trace(A @ B)
+
+            A = np.array([[1.0, 2.0], [3.0, 4.0]])
+            B = np.array([[5.0, 6.0], [7.0, 8.0]])
+            print(trace_product(A, B))
+          - |
+            import numpy as np
+
+            def trace_product(A, B):
+                return np.einsum("ij,ji->i", A, B).max()
+
+            print(69.0)
+        explanation: |
+          Write the formula. The entry of the product at $[i, i]$ is $\sum_j A_{ij} B_{ji}$: row $i$ of $A$ against **column** $i$ of $B$. So the second input must be indexed `ji`, and adding over the diagonal drops both letters: `"ij,ji->"`. The expression in the program, `"ij,ij->"`, multiplies matching entries, 5 + 12 + 21 + 32, which is the sum you would get from $A$ and the **transpose** of $B$. For a symmetric $B$ the two agree, which is how a bug like this survives a careless test. One letter out of place, a result of the right shape, and no error. That is the price of a notation this compact, and the defence is the habit of this lesson: write the line that sits inside the loops, `out += A[i, j] * B[j, i]`, and read it against the formula.
+        hints:
+          - What is the formula for the entry of the product AB at [i, i]?
+          - In that formula, which index of B comes first?
+          - The order of the letters of the second group must match the order of the indices of B.
+    - question:
+        id: work-wasted
+        type: choice
+        system: s2
+        prompt: |
+          In the puzzle, `np.diag(X @ Y.T)` took about a thousand times as long as `np.einsum("ij,ij->i", X, Y)`, for tables of shape `(1500, 200)`. What accounts for the difference?
+        options:
+          - "`np.diag` is a slow function."
+          - "`X @ Y.T` is the expression `\"ij,kj->ik\"`, with three distinct letters and $1500 \\times 200 \\times 1500$ steps. It forms every one of 2 250 000 dot products, and only the 1500 on the diagonal are kept. `\"ij,ij->i\"` has two distinct letters and $1500 \\times 200$ steps, computing only the dot products that were wanted."
+          - "The transpose `Y.T` has to be copied."
+          - "einsum uses lower precision."
+        answer: 1
+        explanation: |
+          Count the distinct letters. The first way ranges over a row of `X`, a row of `Y` and the features: three letters, 450 million steps. The third ranges over a row and the features: two letters, 300 thousand steps. The ratio is 1500, the number of rows, since each row was matched against all 1500 when it needed to meet only one. Picking out the diagonal is trivial, and the transpose is a view that costs nothing to make. The lesson is general: when you find yourself building a large table in order to keep a thin slice of it, there is a way of naming only the slice, and einsum will usually let you say it.
+        hints:
+          - What is the shape of X @ Y.T?
+          - How many of its entries are kept?
+          - Count the distinct letters of each expression and multiply their lengths.
+    - question:
+        id: work-count
+        type: numeric
+        system: s2
+        prompt: |
+          `A` has shape `(100, 200)` and `B` has shape `(200, 300)`. How many times does the line inside the loops of `np.einsum("ij,jk->ik", A, B)` run?
+        answer: "6000000"
+        explanation: |
+          There is one loop for each distinct letter: `i` of length 100, `j` of length 200 and `k` of length 300. The line runs once for every combination, which is the product of the three lengths. The result holds only 100 × 300 entries, and each of those is a sum of 200 products. This is the same count you made for multiplying matrices by hand, read straight off the letters.
+        hints:
+          - How many distinct letters are there?
+          - Read the length of each letter off the shapes.
+          - Multiply the three lengths.
+    - question:
+        id: work-read
+        type: choice
+        system: s2
+        prompt: |
+          `P` has shape `(n, c)`, one row of predicted probabilities for each example, and `T` has the same shape, with a single 1 in each row marking the correct class and 0 elsewhere. What does `np.einsum("nc,nc->n", P, T)` return?
+        options:
+          - "The matrix product of `P` and `T`."
+          - "For each example, the probability the model gave to the correct class: the row of `P` dotted with the matching row of `T`, in which the single 1 picks out one entry."
+          - "The total of all the probabilities."
+          - "For each class, the number of examples that belong to it."
+        answer: 1
+        explanation: |
+          The line inside the loops is `out[n] += P[n, c] * T[n, c]`. Both inputs share both letters, so matching entries meet, and `c` is dropped, so the products are added along each row. In each row of `T` every entry but one is 0, so the sum has a single surviving term, the entry of `P` in the correct column. You have computed this before as `P[np.arange(n), y]`, with the correct classes held as an array of positions. Here they are held as rows of 0s and a 1, and the dot product does the picking. The two are the same selection written in two ways, and you will see both in real code.
+        hints:
+          - Write the line that sits inside the loops.
+          - Which letter is dropped, and along what does it run?
+          - What does multiplying by a row with a single 1 do to a row of numbers?
+    - question:
+        id: work-three
+        type: choice
+        system: s2
+        prompt: |
+          `A`, `B` and `C` are square tables with 500 rows. Run as written, `np.einsum("ij,jk,kl->il", A, B, C)` is far slower than `A @ B @ C`. Why, and what is the remedy within einsum?
+        options:
+          - "einsum cannot multiply three tables."
+          - "As written the expression has four distinct letters, so the line inside the loops runs $500^4$ times. Two matrix products one after the other have three letters each, $2 \\times 500^3$ steps, which is 250 times fewer. Passing `optimize=True` lets einsum find and use such an order."
+          - "The letters `k` and `l` look alike and confuse it."
+          - "The result is of a different shape."
+        answer: 1
+        explanation: |
+          The count of work is the product of the lengths of the distinct letters, and here there are four. But the sum can be done in stages: first sum over `j` to make a table with letters `i` and `k`, then sum over `k`. Each stage has three letters. The mathematics is the same, since a product of sums can be regrouped, and the cost falls from $n^4$ to $2n^3$. einsum does not regroup unless asked, so with three or more inputs, ask. This is your first sight of a fact that runs deep in numerical computing: the same expression can be evaluated in orders that differ enormously in cost, and choosing the order is a problem in its own right.
+        hints:
+          - How many distinct letters does the expression have?
+          - How many letters does a single matrix product have?
+          - Compare 500 to the fourth power with twice 500 cubed.
+  connections:
+    - text: |
+        Three ways of taking the dot product of matching rows agreed, and one took a thousand times as long as another. `X @ Y.T` formed every row against every row and kept one in fifteen hundred. `@` has one pattern, and "only the matching ones" is not it.
+
+        `np.einsum` takes the formula itself. Give every axis of every input a letter. A letter shared between inputs means those axes are walked together. A letter left out after the arrow is summed. The letters after the arrow are the axes of the result, in order. Behind any expression is a block of loops, one for each distinct letter, with a single line inside, and to read an expression is to write that line. The count of work is the product of the lengths of the distinct letters.
+
+        Seen this way, much of what you have learned in this cluster and the one before is a single operation. The dot product is `"i,i->"`. A matrix times a vector is `"ij,j->i"`, and the product you met in [[e5.linear-algebra-routines]] is `"ij,jk->ik"`. The transpose is `"ij->ji"`, the reductions drop a letter, the outer product shares none, and the trace repeats one. For those, keep using their own names. Use einsum for what has no name: matching rows, stacks with axes in an awkward order, a diagonal of a product you would prefer not to build.
+
+        There is one thing every array in this cluster has had in common, and you may not have noticed. They were all made with `arange`, `ones`, `linspace` or typed in by hand. They were tidy. Real data is not tidy, and neither is the starting point of a model: the weights of a network begin as **random** numbers, the examples are shown to it in a **random** order, and the experiments you ran in the lessons on timing would have meant more on data with no pattern in it. But a computer is a machine that does exactly what it is told, the same way every time. How does such a machine produce numbers that look like chance? And if they are chance, how can an experiment ever be repeated? That is the next lesson, [[e5.random-number-generation]].
