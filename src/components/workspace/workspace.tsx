@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { signOutAction } from "@/lib/auth/actions";
 import { codeTests, reportCode, saveCode, type AnswerResult } from "@/lib/learning/actions";
 import { checkProgram, explainFailure } from "@/lib/lessons/harness";
@@ -10,8 +10,30 @@ import { WorkspaceContext, type CodeVerdict, type WorkspaceApi } from "./context
 import { ThemeToggle } from "../theme";
 import { CodeEditor, type EditorHandle } from "./code-editor";
 import { SymbolBar } from "./symbol-bar";
+import { Tutor, type TutorContext, type TutorSetup } from "./tutor";
 
-type Pane = "lesson" | "code";
+type Pane = "lesson" | "code" | "tutor";
+const TUTOR_OPEN = "axiom-tutor-open";
+
+// Whether the tutor column is open is remembered on this device.
+const tutorListeners = new Set<() => void>();
+const watchTutor = (listener: () => void) => {
+  tutorListeners.add(listener);
+  return () => void tutorListeners.delete(listener);
+};
+const readTutor = () => {
+  try {
+    return localStorage.getItem(TUTOR_OPEN) === "1";
+  } catch {
+    return false;
+  }
+};
+const writeTutor = (open: boolean) => {
+  try {
+    localStorage.setItem(TUTOR_OPEN, open ? "1" : "0");
+  } catch {}
+  tutorListeners.forEach((listener) => listener());
+};
 type Snapshots = Record<string, { code: string; at: number }>;
 type Doc = { key: string; starter: string; question: { id: string; number: number } | null };
 
@@ -34,6 +56,7 @@ export function Workspace({
   starterCode,
   snapshots = {},
   lesson,
+  tutor,
   children,
 }: {
   id: string;
@@ -41,6 +64,7 @@ export function Workspace({
   starterCode: string;
   snapshots?: Snapshots;
   lesson?: { total: number; solved: string[]; complete: boolean };
+  tutor: TutorSetup;
   children: React.ReactNode;
 }) {
   const [scratch] = useState<Doc>(() => ({ key: `axiom-code:${id}`, starter: starterCode, question: null }));
@@ -48,6 +72,8 @@ export function Workspace({
   const docRef = useRef(doc);
   const [pane, setPane] = useState<Pane>("lesson");
   const [split, setSplit] = useState(50);
+  // On a phone the tutor is a third pane; on wider screens it is a column that opens beside the other two.
+  const tutorOpen = useSyncExternalStore(watchTutor, readTutor, () => false);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<RunResult | null>(null);
   const [saved, setSaved] = useState(true);
@@ -63,6 +89,23 @@ export function Workspace({
   const tests = useRef(new Map<string, string>());
   const openedAt = useRef(0);
   const main = useRef<HTMLDivElement>(null);
+  const resultRef = useRef<RunResult | null>(null);
+
+  useEffect(() => {
+    resultRef.current = result;
+  }, [result]);
+
+  const toggleTutor = useCallback((open: boolean) => {
+    writeTutor(open);
+    setPane((before) => (open ? before : before === "tutor" ? "lesson" : before));
+  }, []);
+
+  /** What the tutor is told about the screen when a question is asked. */
+  const tutorContext = useCallback((): TutorContext => {
+    const last = resultRef.current;
+    const output = last ? [...last.out.map((chunk) => chunk.text), last.error ?? ""].join("\n").trim() : "";
+    return { code: code.current, output, questionId: docRef.current.question?.id ?? null };
+  }, []);
 
   useEffect(() => {
     const instance = new PythonRunner();
@@ -178,11 +221,14 @@ export function Workspace({
       } else if (event.altKey && event.key === "2") {
         setPane("code");
         editor.current?.focus();
+      } else if (event.altKey && event.key === "3") {
+        setPane("tutor");
+        toggleTutor(true);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [run, check]);
+  }, [run, check, toggleTutor]);
 
   const api = useMemo<WorkspaceApi>(
     () => ({
@@ -219,7 +265,7 @@ export function Workspace({
 
   return (
     <WorkspaceContext value={api}>
-    <div className="ws" data-pane={pane}>
+    <div className="ws" data-pane={pane} data-tutor={tutorOpen ? "open" : "closed"}>
       <header className="ws-top">
         <Link href="/" className="bar-item font-mono text-[13px] tracking-[0.32em] text-ink" aria-label="Axiom home">
           AXIOM
@@ -230,6 +276,9 @@ export function Workspace({
           ))}
         </ol>
         <div className="ws-controls">
+          <button type="button" className="label bar-item ws-tutor-toggle" aria-pressed={tutorOpen} onClick={() => toggleTutor(!tutorOpen)}>
+            Tutor
+          </button>
           <Link href="/map" className="label bar-item" prefetch={false}>
             Map
           </Link>
@@ -245,6 +294,7 @@ export function Workspace({
         </div>
       </header>
 
+      <div className="ws-body">
       <div ref={main} className="ws-main" style={{ "--split": `${split}%` } as React.CSSProperties}>
         <section className="ws-pane ws-lesson" aria-label="Lesson">
           <div className="ws-scroll">{children}</div>
@@ -327,10 +377,15 @@ export function Workspace({
         </section>
       </div>
 
+        <aside className="ws-tutor" aria-label="Tutor">
+          <Tutor conceptId={id} setup={tutor} context={tutorContext} onClose={() => toggleTutor(false)} />
+        </aside>
+      </div>
+
       <nav className="ws-tabs" aria-label="Panes">
-        {(["lesson", "code"] as const).map((name) => (
+        {(["lesson", "code", "tutor"] as const).map((name) => (
           <button key={name} type="button" className="ws-tab" aria-pressed={pane === name} onClick={() => setPane(name)}>
-            {name === "lesson" ? "Lesson" : "Code"}
+            {name === "lesson" ? "Lesson" : name === "code" ? "Code" : "Tutor"}
           </button>
         ))}
       </nav>

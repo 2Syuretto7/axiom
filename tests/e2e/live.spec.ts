@@ -1,13 +1,19 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Runs against the deployed production site. Read-only: it never signs up or
+ * Runs against a deployed site: production, and the preview of every pull request. Read-only: it never signs up or
  * signs in, so it cannot touch the learner's data.
  */
-test("the site is healthy and connected to its database", async ({ request }) => {
+test("the site is healthy, connected to its database, and the tutor has its key", async ({ request }) => {
   const response = await request.get("/api/health");
   expect(response.status()).toBe(200);
-  expect(await response.json()).toEqual({ ok: true });
+  expect(await response.json()).toEqual({ ok: true, tutor: true });
+});
+
+test("the tutor does not answer anyone who is signed out", async ({ request }) => {
+  const response = await request.post("/api/tutor", { data: { conceptId: "scratch", message: "Hello" }, maxRedirects: 0 });
+  expect(response.status()).toBeGreaterThanOrEqual(300);
+  expect(response.status()).toBeLessThan(500);
 });
 
 test("visitors without a session are sent to sign-in", async ({ page }) => {

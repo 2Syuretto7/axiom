@@ -73,3 +73,14 @@ export const codeSnapshots = pgTable(
   },
   (t) => [primaryKey({ columns: [t.userId, t.key] })],
 );
+
+export const tutorMessages = pgTable("tutor_messages", {
+  id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+  userId: uuid("user_id").notNull(),
+  conceptId: text("concept_id").notNull(),
+  role: text("role").$type<"user" | "assistant">().notNull(),
+  content: text("content").notNull(),
+  costMicroUsd: bigint("cost_micro_usd", { mode: "number" }).notNull().default(0),
+  clearedAt: timestamp("cleared_at", { withTimezone: true }),
+  createdAt: createdAt(),
+});

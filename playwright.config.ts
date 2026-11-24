@@ -10,6 +10,7 @@ import { defineConfig } from "@playwright/test";
  */
 const previewUrl = process.env.LIVE_URL;
 const port = 3100;
+const mockPort = 3199;
 const e2eDatabase = process.env.E2E_DATABASE_URL ?? "postgres://axiom:axiom@localhost:5432/axiom_e2e";
 
 const sizes = {
@@ -39,7 +40,7 @@ export default defineConfig({
         { name: "flow", testMatch: /flow\.spec\.ts/, use: { viewport: sizes.laptop } },
         ...Object.entries(sizes).map(([name, viewport]) => ({
           name,
-          testMatch: /(layout|workspace)\.spec\.ts/,
+          testMatch: /(layout|workspace|tutor)\.spec\.ts/,
           dependencies: ["flow"],
           use: { viewport, hasTouch: name !== "laptop", storageState: "test-results/.auth/learner.json" },
         })),
@@ -53,13 +54,27 @@ export default defineConfig({
       ],
   webServer: previewUrl
     ? undefined
-    : {
-        command: `npm run build && npm run start -- --port ${port}`,
-        url: `http://localhost:${port}/api/health`,
-        timeout: 240_000,
-        reuseExistingServer: false,
-        // A three-lesson curriculum, so tests do not depend on what has been written so far.
-        env: { DATABASE_URL: e2eDatabase, AXIOM_CONTENT_DIR: path.resolve("tests", "fixtures") },
-      },
+    : [
+        // The tutor talks to this stand-in instead of the real Anthropic API: no key, no cost.
+        {
+          command: "node tests/e2e/mock-anthropic.mjs",
+          url: `http://localhost:${mockPort}/`,
+          reuseExistingServer: false,
+          env: { MOCK_ANTHROPIC_PORT: String(mockPort) },
+        },
+        {
+          command: `npm run build && npm run start -- --port ${port}`,
+          url: `http://localhost:${port}/api/health`,
+          timeout: 240_000,
+          reuseExistingServer: false,
+          env: {
+            DATABASE_URL: e2eDatabase,
+            // A three-lesson curriculum, so tests do not depend on what has been written so far.
+            AXIOM_CONTENT_DIR: path.resolve("tests", "fixtures"),
+            ANTHROPIC_API_KEY: "not-a-real-key",
+            ANTHROPIC_BASE_URL: `http://localhost:${mockPort}`,
+          },
+        },
+      ],
   globalSetup: previewUrl ? undefined : "./tests/e2e/global-setup.ts",
 });

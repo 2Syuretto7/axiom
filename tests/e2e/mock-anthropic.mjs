@@ -1,0 +1,56 @@
+/**
+ * Stands in for the Anthropic API in browser tests, so they need no key and spend nothing.
+ * It speaks just enough of the streaming Messages API for the SDK: every request is
+ * answered with one short reply, and GET /last returns the request it was last sent.
+ */
+import http from "node:http";
+
+const port = Number(process.env.MOCK_ANTHROPIC_PORT ?? 3199);
+let last = null;
+
+const REPLY = [
+  "Think of the **pebbles** again. ",
+  "Each sheep that comes home takes one away, so $12 - 3 = 9$.\n\n",
+  "<b>What</b> do the pebbles left over stand for?",
+];
+
+http
+  .createServer(async (request, response) => {
+    if (request.method === "GET" && request.url === "/last") {
+      response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(last));
+      return;
+    }
+    if (request.method === "GET") {
+      response.writeHead(200).end("ok");
+      return;
+    }
+    let raw = "";
+    for await (const chunk of request) raw += chunk;
+    last = { url: request.url, beta: request.headers["anthropic-beta"] ?? null, body: JSON.parse(raw) };
+
+    response.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+    const send = (event) => response.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+    send({
+      type: "message_start",
+      message: {
+        id: "msg_mock",
+        type: "message",
+        role: "assistant",
+        model: last.body.model,
+        content: [],
+        stop_reason: null,
+        stop_sequence: null,
+        usage: { input_tokens: 2000, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+      },
+    });
+    send({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
+    for (const text of REPLY) {
+      send({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text } });
+      await new Promise((done) => setTimeout(done, 30));
+    }
+    send({ type: "content_block_stop", index: 0 });
+    send({ type: "message_delta", delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 600 } });
+    send({ type: "message_stop" });
+    response.end();
+  })
+  .listen(port);
