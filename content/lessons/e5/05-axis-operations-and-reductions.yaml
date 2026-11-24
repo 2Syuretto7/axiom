@@ -1,0 +1,784 @@
+concept: e5.axis-operations-and-reductions
+minutes: 90
+claim: You can take a total, a mean, a largest or smallest value, the position of the largest, or a standard deviation along a chosen axis of an array, predict the shape of the result from the rule that the named axis is the one that disappears, keep that axis with length 1 so that the result broadcasts back against the array it came from, and use these to standardise the columns of a table, turn rows of scores into probabilities and measure the accuracy of a classifier.
+recalls: [e5.vectorisation]
+uses: [e5.broadcasting, e5.indexing-and-slicing, e5.arrays-dtype-and-shape, m4.norms-and-distance, m2.summation-and-product-notation, m2.the-exponential-and-e, m10.maxima-and-minima, e1.modules-and-imports, e0.booleans-and-conditionals, e0.functions]
+leads: [e5.reshaping-views-and-copies, e5.linear-algebra-routines, e5.einsum, e5.log-sum-exp-and-stable-formulations]
+starter: |
+  # Scratch space. Four flats, with rooms and bathrooms.
+  import numpy as np
+
+  X = np.array([[3.0, 1.0], [2.0, 1.0], [4.0, 2.0], [1.0, 1.0]])
+
+  print(X.sum(axis=0))
+  print(X.sum(axis=1))
+
+  print(X - X.mean(axis=0))
+  print(X / X.sum(axis=1))
+parts:
+  recall:
+    - text: |
+        [[e5.vectorisation]] turned loops into operations on whole arrays, and one kind of loop was left for today: the total. It was needed two lessons ago as well, when the means of the columns of a table and the totals of its rows were typed in by hand. Three quick pulls first.
+    - question:
+        id: recall-total
+        type: choice
+        system: s1
+        concepts: [e5.vectorisation]
+        prompt: |
+          Which expression replaces a Python loop that adds up the squares of the entries of an array `a`?
+        options: ["`(a * a).sum()`", "`a * a`", "`sum(a) * 2`", "`a.sum() * a.sum()`"]
+        answer: 0
+        explanation: Square every entry in one operation, then take the total of the result.
+        hints:
+          - First an array of the squares.
+          - Then one total over it.
+    - question:
+        id: recall-column
+        type: choice
+        system: s1
+        concepts: [e5.broadcasting]
+        prompt: |
+          `X` has shape `(4, 2)`. Which shape must an array of four numbers have to act on `X` row by row?
+        options: ["`(4,)`", "`(4, 1)`", "`(1, 4)`", "`(2, 4)`"]
+        answer: 1
+        explanation: Lined up at the right, the 1 meets the 2 columns and is stretched, and the 4 meets the 4 rows.
+        hints:
+          - A plain array of four lines up with the last axis, which has length 2.
+          - Which shape puts the 4 under the 4?
+    - question:
+        id: recall-remove
+        type: choice
+        system: s1
+        concepts: [e5.indexing-and-slicing]
+        prompt: |
+          `a` has shape `(4, 6)`. A whole number is used as the index on axis 0, as in `a[2]`. What is the shape of the result?
+        options: ["`(4,)`", "`(6,)`", "`(1, 6)`", "`(4, 6)`"]
+        answer: 1
+        explanation: A whole-number index removes its axis, leaving the other.
+        hints:
+          - Which axis did the index name?
+          - That axis is removed.
+  puzzle:
+    - text: |
+        The table of flats is back: four rows, one for each flat, with rooms in the first column and bathrooms in the second. Its shape is `(4, 2)`. Axis 0 has length 4 and counts the flats. Axis 1 has length 2 and counts the kinds of space.
+
+        Run the starter. `X.sum(axis=0)` prints `[10.  5.]`, and `X.sum(axis=1)` prints `[4. 3. 6. 2.]`.
+
+        Look at which is which. 10 is the total number of rooms and 5 the total number of bathrooms: one total for each **column**. Yet it was asked for with `axis=0`, and axis 0 is the axis of **rows**. The four totals of the rows came from `axis=1`, the axis of columns. Nearly everyone guesses these the other way round the first time.
+
+        Then the two lines that started all this. `X - X.mean(axis=0)` works: each column has its mean taken away. `X / X.sum(axis=1)` stops with the error you have seen before:
+
+        ```
+        ValueError: operands could not be broadcast together with shapes (4,2) (4,)
+        ```
+
+        The totals are now computed, not typed, and they still come out in a shape that will not divide the rows.
+
+        **Is the naming of the axes backwards? What exactly does `axis=0` say? And how can a total be asked for in a shape that fits back against the table it came from?**
+  intuition:
+    - text: |
+        The naming is not backwards. It answers a different question from the one people expect.
+
+        The expected question is "one total **for each** what?". The question `axis` actually answers is "add up **along** what?".
+
+        To add along axis 0 is to move down the rows, with the column held fixed, adding as you go. When you reach the bottom you have one number, and you have it for that column. Do this for each column and there is one total for each column. **The axis you add along is used up. The other axis is what remains.**
+
+        So `sum(axis=0)` walks along axis 0 and collapses it. A table of shape `(4, 2)` loses its 4 and becomes an array of shape `(2,)`. And `sum(axis=1)` walks along axis 1, across each row, collapses that, and leaves shape `(4,)`.
+
+        In the figure the table has 3 rows and 4 columns. Switch between the axes and watch which way the adding runs, and what is left.
+    - figure: axis-reduce
+      props: { axis: 0 }
+    - text: |
+        You have met this rule already, in other clothes. When a whole number was used as an index on some axis, that axis disappeared from the shape and the rest stayed. A total along an axis does the same to the shape. In both cases an axis is named and that axis goes. **The `axis` argument names the axis that disappears.**
+
+        This also explains the second half of the puzzle. The totals of the rows have shape `(4,)`: axis 1 has gone, and what is left is a plain array of four numbers. A plain array lines up with the **last** axis of the table, which has length 2. It does not fit. The totals need to be a column of shape `(4, 1)`.
+
+        The column means were luckier. Removing axis 0 from `(4, 2)` leaves `(2,)`, which happens to line up with the last axis of the table exactly as it should.
+
+        What is needed is a way to collapse an axis without removing it: to leave it in the shape, with length 1. Then the result has as many axes as the table, with a 1 exactly where the adding happened, and broadcasting stretches it straight back. Switch on `keepdims` in the figure and read the shapes.
+  derivation:
+    - text: |
+        **Reductions.** An operation that turns many numbers into one is called a **reduction**. The common ones are methods of every array.
+
+        | method | gives |
+        |---|---|
+        | `a.sum()` | the total |
+        | `a.mean()` | the mean, the total divided by the count |
+        | `a.max()`, `a.min()` | the largest and smallest values |
+        | `a.argmax()`, `a.argmin()` | the **position** of the largest and of the smallest |
+        | `a.std()`, `a.var()` | the standard deviation and its square, the variance |
+        | `a.prod()` | the product |
+        | `a.any()`, `a.all()` | whether any entry, or every entry, is True |
+
+        Called with no argument, each takes the **whole** array, whatever its shape, and gives one number. For the flats, `X.sum()` is 15 and `X.mean()` is 1.875.
+
+        **Along an axis.** With `axis=k`, the reduction is done separately along axis $k$ for every setting of the other indices. The shape of the result is the shape of the array with entry $k$ **deleted**.
+
+        ```
+        X.shape              (4, 2)
+        X.sum(axis=0).shape     (2,)     axis 0 deleted
+        X.sum(axis=1).shape  (4,)        axis 1 deleted
+        ```
+
+        For a table, then: `axis=0` gives one result for each column, and `axis=1` gives one result for each row. If the words slip, the shape rule will not. **Write down the shape, cross out the axis you named, and read what is left.**
+
+        The rule is the same for any number of axes. A batch of 32 pictures of 28 by 28 has shape `(32, 28, 28)`.
+
+        - `batch.mean(axis=0)` has shape `(28, 28)`: the mean picture, each pixel averaged over the batch.
+        - `batch.mean(axis=(1, 2))` has shape `(32,)`: a tuple of axes removes them all, giving the mean brightness of each picture.
+        - `axis=-1` means the last axis, whatever the number of axes.
+
+        **Keeping the axis.** With `keepdims=True` the axis is not deleted. It stays in the shape with length 1.
+
+        ```
+        X.sum(axis=1).shape                  (4,)
+        X.sum(axis=1, keepdims=True).shape   (4, 1)
+        ```
+
+        The four totals are the same numbers, now arranged as a column. And a result with a 1 where the reduction happened is exactly what broadcasting stretches. So
+
+        ```python
+        fractions = X / X.sum(axis=1, keepdims=True)
+        ```
+
+        divides each row by its own total. The rows of the result each add up to 1. The line that failed in the puzzle works with one more argument, and it works for a table of any shape, including the square table that fooled the plain version two lessons ago.
+
+        **A result kept with `keepdims=True` always broadcasts back against the array it came from**, whichever axis was reduced. Make it a habit whenever a reduction is about to be combined with its own array.
+
+        **The mean of a mask.** A mask is True and False, counted as 1 and 0. Its sum is the number of Trues. Its mean is the number of Trues divided by the count, which is the **fraction** that are True. So `(x > 0).mean()` is the fraction of positive entries, and with an axis it is a fraction for each column or each row.
+
+        **Standard deviation.** The mean says where a column of numbers is centred. The standard deviation says how widely it is spread. Take the deviations of the entries from their mean, square them, take the mean of the squares, and take the square root:
+
+        $$\sigma = \sqrt{\frac{1}{n}\sum_{i=1}^{n}(x_i - \bar{x})^2}.$$
+
+        It is the length of the vector of deviations, divided by $\sqrt{n}$: a typical distance of an entry from the mean, in the units of the entries themselves. The square of it, before the root is taken, is the variance. For the numbers 2, 4, 4, 4, 5, 5, 7, 9 the mean is 5, the squared deviations are 9, 1, 1, 1, 0, 0, 4, 16, their mean is 4, and the standard deviation is 2.
+
+        In array form the formula is `np.sqrt(((x - x.mean()) ** 2).mean())`, and it is built in as `x.std()`.
+    - question:
+        id: derivation-axis
+        type: choice
+        system: s2
+        prompt: |
+          `X` has shape `(4, 2)`, with a flat in each row. Why does `X.sum(axis=0)` give one total for each **column**, when axis 0 is the axis of rows?
+        options:
+          - "Because NumPy numbers its axes in reverse."
+          - "Because `axis=0` says which axis to add **along**. Adding along axis 0 runs down the rows with the column held fixed, so the rows are used up and one number is left for each column. The result has the shape of `X` with axis 0 deleted, `(2,)`."
+          - "Because the table is stored column by column."
+          - "Because `sum` always returns the shorter of the two possibilities."
+        answer: 1
+        explanation: |
+          The argument names the axis that disappears, not the axis that survives. Both descriptions are of the same operation: "add down the rows" and "one total for each column". The second is how people usually think of what they want, and the first is what the argument says. When in doubt, use the shapes. The total for each column must have one entry for each column, shape `(2,)`. Which axis must be deleted from `(4, 2)` to leave `(2,)`? Axis 0. This check costs a few seconds and works for arrays with any number of axes, where words like "row" and "column" run out.
+        hints:
+          - What happens to the axis you add along?
+          - Which axis must be deleted from (4, 2) to leave one entry for each column?
+          - Adding down the rows uses up the rows.
+    - text: |
+        **Standardising a table.** The columns of a table of data are usually in different units and of different sizes: rooms run from 1 to 4, and a column of prices would run into the lakhs. A model that works by descent takes a step in every direction at once, and when one column is thousands of times larger than another, no single step length suits both. The standard remedy is to give every column mean 0 and standard deviation 1:
+
+        ```python
+        Z = (X - X.mean(axis=0)) / X.std(axis=0)
+        ```
+
+        Both reductions remove axis 0 and leave shape `(2,)`, one number for each column, and both broadcast against the rows. Each entry of `Z` says how many standard deviations its original was above or below the mean of its column. This single line is the first step of a very large share of all machine-learning code.
+
+        **Rows of scores into probabilities.** A classifier produces, for each example, one score for each class, in a table `S` with examples in rows. To turn a row of scores into probabilities, positive numbers that add up to 1, apply the exponential to each score, which makes it positive, and divide by the total of the row:
+
+        ```python
+        E = np.exp(S)
+        P = E / E.sum(axis=1, keepdims=True)
+        ```
+
+        This is called **softmax**. The exponential keeps the order of the scores, so the largest score gets the largest probability, and it turns a difference of scores into a ratio of probabilities. The row total is taken along axis 1, and kept, so that it divides its own row.
+
+        **The position of the largest.** `P.argmax(axis=1)` gives, for each row, the **position** of its largest entry: the class the model thinks most likely. If `y` holds the correct classes,
+
+        ```python
+        accuracy = (P.argmax(axis=1) == y).mean()
+        ```
+
+        is the fraction of examples the model got right. Three things from this cluster in one short line: a reduction along an axis, a comparison giving a mask, and the mean of the mask.
+
+        Without an axis, `argmax` treats the array as one long list and gives a position in that, which for a table is rarely what is wanted.
+
+        **Lengths of rows.** The length of each row of a table, as a vector, is `np.sqrt((X ** 2).sum(axis=1))`. With `keepdims=True` it divides the table to give rows of length 1, after which the dot product of two rows is the cosine of the angle between them.
+
+        **Two cautions about dtype.** The mean of whole numbers is a decimal, and NumPy returns `float64` for it. But the **sum** of an array of a small whole-number dtype may be kept in a small whole-number dtype, depending on the machine, and can overflow as any other arithmetic can. When adding many whole numbers, state a wide dtype: `a.sum(dtype=np.int64)`.
+
+        **What a reduction costs.** A reduction is a loop over the entries, run inside NumPy. It is the third pattern of the last lesson, and the reason this lesson needed no loops.
+    - question:
+        id: order-normalise
+        type: order
+        system: s2
+        prompt: Put in order what happens when NumPy evaluates `X / X.sum(axis=1, keepdims=True)` for `X` of shape `(4, 2)`.
+        steps:
+          - 'The entries of each row are added, along axis 1.'
+          - 'The four totals are returned with axis 1 kept at length 1, as an array of shape `(4, 1)`.'
+          - 'The shapes `(4, 2)` and `(4, 1)` are lined up at the right: 2 meets 1, and 4 meets 4.'
+          - 'The column of totals is stretched across the two columns, so each row meets its own total.'
+          - 'The division is done entry by entry, giving a table of shape `(4, 2)` whose rows each add up to 1.'
+        explanation: The reduction is finished, and its shape settled, before the division begins. The shape `(4, 1)` is what lets the broadcasting rule put each total beside its own row. Without `keepdims` the totals would have shape `(4,)`, the rule would line them up with the columns, and the division would fail, or for a square table go wrong in silence.
+        hints:
+          - The totals must exist before anything can be divided by them.
+          - The shapes are compared before any stretching.
+          - The division is the last operation.
+  formal:
+    - text: |
+        **Reduction along an axis.** For an array `a` of shape $(n_0, \dots, n_{d-1})$ and a reduction $r$, `a.r(axis=k)` has shape $(n_0, \dots, n_{k-1}, n_{k+1}, \dots, n_{d-1})$. Its entry at an index is $r$ applied to the $n_k$ entries of `a` obtained by letting the index along axis $k$ run and holding the others fixed.
+
+        **Whole array.** With no axis, the reduction is over all entries and the result is a single number.
+
+        **Several axes.** A tuple of axes removes each of them. `axis=-1` is the last axis.
+
+        **Keeping the axis.** With `keepdims=True` the reduced axis remains with length 1, and the result broadcasts against `a`.
+
+        **Mean and standard deviation.** $\bar{x} = \frac{1}{n}\sum x_i$ and $\sigma = \sqrt{\frac{1}{n}\sum (x_i - \bar{x})^2}$.
+
+        **Position of the largest.** `a.argmax(axis=k)` holds, in place of each largest value along axis $k$, its index along that axis.
+
+        **Mask.** For a mask `m`, `m.sum()` is the number of True entries and `m.mean()` the fraction.
+  drill:
+    - text: |
+        Seconds each. Throughout, `A` is the table of the figure, with rows 1 to 4, 5 to 8 and 9 to 12, of shape `(3, 4)`.
+    - question:
+        id: drill-axis0
+        type: choice
+        system: s1
+        prompt: |
+          What is `A.sum(axis=0)`?
+        options: ["`[15 18 21 24]`", "`[10 26 42]`", "`78`", "`[6 8 10 12]`"]
+        answer: 0
+        explanation: Adding down the rows gives one total for each of the four columns.
+        hints:
+          - Axis 0 is the one that disappears.
+          - The result has one entry for each column.
+    - question:
+        id: drill-axis1
+        type: choice
+        system: s1
+        prompt: |
+          What is `A.sum(axis=1)`?
+        options: ["`[15 18 21 24]`", "`[10 26 42]`", "`78`", "`[4 8 12]`"]
+        answer: 1
+        explanation: Adding across the columns gives one total for each of the three rows.
+        hints:
+          - Axis 1 is the one that disappears.
+          - The result has one entry for each row.
+    - question:
+        id: drill-all
+        type: numeric
+        system: s1
+        prompt: |
+          What is `A.sum()`?
+        answer: "78"
+        explanation: With no axis every entry is added. The whole numbers from 1 to 12 add up to 12 × 13 ÷ 2.
+        hints:
+          - No axis means the whole array.
+          - Add the three row totals, or use the formula for the sum of the first n whole numbers.
+    - question:
+        id: drill-shape-keep
+        type: choice
+        system: s1
+        prompt: |
+          What is the shape of `A.sum(axis=1, keepdims=True)`?
+        options: ["`(3,)`", "`(3, 1)`", "`(1, 4)`", "`(4,)`"]
+        answer: 1
+        explanation: Axis 1 is reduced and kept with length 1.
+        hints:
+          - Which axis was reduced?
+          - With keepdims it stays, with length 1.
+    - question:
+        id: drill-shape-3d
+        type: choice
+        system: s1
+        prompt: |
+          `T` has shape `(2, 3, 4)`. What is the shape of `T.sum(axis=1)`?
+        options: ["`(2, 4)`", "`(3, 4)`", "`(2, 3)`", "`(3,)`"]
+        answer: 0
+        explanation: Delete the entry at position 1 of the shape.
+        hints:
+          - Cross out the axis that was named.
+          - Position 1 of the shape holds the 3.
+    - question:
+        id: drill-last
+        type: choice
+        system: s1
+        prompt: |
+          `T` has shape `(2, 3, 4)`. What is the shape of `T.mean(axis=-1)`?
+        options: ["`(2, 4)`", "`(3, 4)`", "`(2, 3)`", "`(2,)`"]
+        answer: 2
+        explanation: Axis −1 is the last axis, of length 4, and it is deleted.
+        hints:
+          - A negative axis counts from the end.
+          - The last axis has length 4.
+    - question:
+        id: drill-max
+        type: choice
+        system: s1
+        prompt: |
+          What is `A.max(axis=1)`?
+        options: ["`[4 8 12]`", "`[9 10 11 12]`", "`12`", "`[3 3 3]`"]
+        answer: 0
+        explanation: The largest entry of each row.
+        hints:
+          - One result for each row.
+          - Each row is in increasing order.
+    - question:
+        id: drill-argmax
+        type: choice
+        system: s1
+        prompt: |
+          What is `A.argmax(axis=1)`?
+        options: ["`[4 8 12]`", "`[3 3 3]`", "`[2 2 2 2]`", "`11`"]
+        answer: 1
+        explanation: The position, not the value, of the largest entry of each row. In every row it is the last, at position 3.
+        hints:
+          - argmax gives a position.
+          - Positions are counted from 0.
+    - question:
+        id: drill-mean
+        type: numeric
+        system: s1
+        prompt: |
+          What is the first entry of `A.mean(axis=0)`?
+        answer: "5"
+        explanation: The first column holds 1, 5 and 9, which add up to 15, over 3 entries.
+        hints:
+          - The first column is 1, 5, 9.
+          - Divide its total by the number of rows.
+    - question:
+        id: drill-mask-mean
+        type: numeric
+        system: s1
+        prompt: |
+          What is `np.array([True, False, True, True]).mean()`?
+        answer: "0.75"
+        explanation: True counts as 1, so the mean is the fraction of entries that are True, three out of four.
+        hints:
+          - True counts as 1 and False as 0.
+          - Divide the number of Trues by the number of entries.
+    - question:
+        id: drill-count
+        type: numeric
+        system: s1
+        prompt: |
+          What is `(A > 6).sum()`?
+        answer: "6"
+        explanation: The entries greater than 6 are 7, 8, 9, 10, 11 and 12.
+        hints:
+          - The comparison gives a mask.
+          - Count the entries from 7 to 12.
+    - question:
+        id: drill-argmax-flat
+        type: numeric
+        system: s1
+        prompt: |
+          What is `np.array([3, 9, 2]).argmax()`?
+        answer: "1"
+        explanation: The largest value, 9, is at position 1.
+        hints:
+          - Find the largest value.
+          - Give its position, counting from 0.
+    - question:
+        id: drill-std
+        type: numeric
+        system: s1
+        prompt: |
+          What is the standard deviation of the four numbers 1, 1, 3, 3?
+        answer: "1"
+        explanation: The mean is 2, every entry is 1 away from it, so the mean squared deviation is 1 and so is its root.
+        hints:
+          - Find the mean first.
+          - How far is each entry from the mean?
+    - question:
+        id: predict-axes
+        type: predict
+        system: s1
+        prompt: The table of the figure, reduced four ways. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
+          print(A.sum(axis=0))
+          print(A.sum(axis=1))
+          print(A.sum(axis=1, keepdims=True).shape)
+          print(A.max(), A.argmax(axis=1))
+        output: |
+          [15 18 21 24]
+          [10 26 42]
+          (3, 1)
+          12 [3 3 3]
+        explanation: Along axis 0 the rows are used up, leaving a total for each column. Along axis 1 the columns are used up, leaving a total for each row, and keepdims arranges those as a column. With no axis the largest value of all is 12, and the position of the largest in each row is 3.
+        hints:
+          - The axis named is the one that disappears.
+          - keepdims leaves that axis in the shape with length 1.
+          - argmax gives positions, counted from 0.
+    - question:
+        id: predict-accuracy
+        type: predict
+        system: s1
+        prompt: Four examples, three classes. What does this show?
+        code: |
+          import numpy as np
+
+          P = np.array([[0.7, 0.2, 0.1], [0.1, 0.8, 0.1], [0.3, 0.3, 0.4], [0.5, 0.4, 0.1]])
+          y = np.array([0, 1, 2, 1])
+          guess = P.argmax(axis=1)
+          print(guess)
+          print(guess == y)
+          print((guess == y).mean())
+        output: |
+          [0 1 2 0]
+          [ True  True  True False]
+          0.75
+        explanation: For each row the position of its largest probability is the class guessed. Three of the four guesses match the correct classes, and the mean of the mask is that fraction.
+        hints:
+          - Find the largest entry of each row and give its position.
+          - Compare each guess with the correct class.
+          - The mean of True and False is the fraction of Trues.
+  work:
+    - text: Slower now. For every reduction, write the shape before and cross out the axis.
+    - question:
+        id: write-standardise
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `standardise(X)` for a table `X` with one example in each row and one feature in each column. Return a new table in which every **column** has had its mean subtracted and has then been divided by its standard deviation, so that every column has mean 0 and standard deviation 1.
+
+          No column of `X` is constant. `X` itself must be left unchanged.
+        starter: |
+          import numpy as np
+
+          def standardise(X):
+              # Replace the next line with your own.
+              return X
+
+          X = np.array([[1.0, 10.0], [1.0, 30.0], [3.0, 10.0], [3.0, 30.0]])
+          print(standardise(X))
+        solution: |
+          import numpy as np
+
+          def standardise(X):
+              return (X - X.mean(axis=0)) / X.std(axis=0)
+
+          X = np.array([[1.0, 10.0], [1.0, 30.0], [3.0, 10.0], [3.0, 30.0]])
+          print(standardise(X))
+        tests: |
+          import numpy as _np
+          _X = _np.array([[1.0, 10.0], [1.0, 30.0], [3.0, 10.0], [3.0, 30.0]])
+          _Z = standardise(_X)
+          assert _Z.shape == (4, 2), "The result has the shape of the table"
+          assert _np.allclose(_Z, [[-1, -1], [-1, 1], [1, -1], [1, 1]]), "Each entry becomes -1 or 1: one standard deviation below or above the mean of its column"
+          assert _X.tolist() == [[1.0, 10.0], [1.0, 30.0], [3.0, 10.0], [3.0, 30.0]], "The table passed in must not be changed"
+          _S = _np.array([[1.0, 2.0], [3.0, 8.0]])
+          assert _np.allclose(standardise(_S), [[-1, -1], [1, 1]]), "For a square table it is still the columns, not the rows, that are standardised"
+          _F = _np.array([[3.0, 1.0], [2.0, 1.0], [4.0, 2.0], [1.0, 1.0]])
+          _G = standardise(_F)
+          assert _np.allclose(_G.mean(axis=0), 0), "Every column of the result must have mean 0"
+          assert _np.allclose(_G.std(axis=0), 1), "Every column of the result must have standard deviation 1"
+          assert _np.allclose(_G[2], [1.3416407865, 1.7320508076]), "The flat with 4 rooms and 2 bathrooms is 1.34 and 1.73 standard deviations above the means"
+          _T = _np.array([[0.0, 0.0, 6.0], [2.0, 4.0, 6.5], [4.0, 8.0, 7.0]])
+          assert _np.allclose(standardise(_T)[0], [-1.2247448714, -1.2247448714, -1.2247448714]), "Columns of different sizes with the same pattern standardise to the same values"
+          assert _np.allclose([float(v) for v in output.replace("[", " ").replace("]", " ").split()], [-1, -1, -1, 1, 1, -1, 1, 1]), "The program should print the table with rows -1 -1, -1 1, 1 -1 and 1 1"
+        wrong:
+          - |
+            import numpy as np
+
+            def standardise(X):
+                return (X - X.mean()) / X.std()
+
+            X = np.array([[1.0, 10.0], [1.0, 30.0], [3.0, 10.0], [3.0, 30.0]])
+            print(np.array([[-1.0, -1.0], [-1.0, 1.0], [1.0, -1.0], [1.0, 1.0]]))
+          - |
+            import numpy as np
+
+            def standardise(X):
+                return (X - X.mean(axis=1, keepdims=True)) / X.std(axis=1, keepdims=True)
+
+            X = np.array([[1.0, 10.0], [1.0, 30.0], [3.0, 10.0], [3.0, 30.0]])
+            print(np.array([[-1.0, -1.0], [-1.0, 1.0], [1.0, -1.0], [1.0, 1.0]]))
+          - |
+            import numpy as np
+
+            def standardise(X):
+                return X - X.mean(axis=0)
+
+            X = np.array([[1.0, 10.0], [1.0, 30.0], [3.0, 10.0], [3.0, 30.0]])
+            print(np.array([[-1.0, -1.0], [-1.0, 1.0], [1.0, -1.0], [1.0, 1.0]]))
+          - |
+            import numpy as np
+
+            def standardise(X):
+                return (X - X.mean(axis=0)) / X.var(axis=0)
+
+            X = np.array([[1.0, 10.0], [1.0, 30.0], [3.0, 10.0], [3.0, 30.0]])
+            print(np.array([[-1.0, -1.0], [-1.0, 1.0], [1.0, -1.0], [1.0, 1.0]]))
+          - |
+            import numpy as np
+
+            def standardise(X):
+                return X / X.std(axis=0) - X.mean(axis=0)
+
+            X = np.array([[1.0, 10.0], [1.0, 30.0], [3.0, 10.0], [3.0, 30.0]])
+            print(np.array([[-1.0, -1.0], [-1.0, 1.0], [1.0, -1.0], [1.0, 1.0]]))
+          - |
+            import numpy as np
+
+            def standardise(X):
+                X -= X.mean(axis=0)
+                X /= X.std(axis=0)
+                return X
+
+            X = np.array([[1.0, 10.0], [1.0, 30.0], [3.0, 10.0], [3.0, 30.0]])
+            print(standardise(X))
+        explanation: |
+          One number is wanted for each column, so the axis to delete is axis 0: the rows are used up. `X.mean(axis=0)` and `X.std(axis=0)` each have shape `(2,)`, which lines up with the last axis of the table and is stretched down the rows. The mean is subtracted first and the division done second. In the other order the mean, still in the old units, would be taken from numbers already in the new ones. In the example the first column runs between 1 and 3 and the second between 10 and 30, and after standardising both hold only $-1$ and 1. The two columns now tell the same story on the same scale, which is the purpose. A model trained by descent on the raw table would be pushed about almost entirely by the second column, only because its numbers are larger.
+        hints:
+          - One mean is wanted for each column. Which axis must be deleted to leave one entry for each column?
+          - Subtract the column means, and then divide by the column standard deviations.
+          - Both reductions take axis=0, and both broadcast against the rows without any new axis.
+    - question:
+        id: write-softmax
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `softmax(S)` for a table of scores `S` with one example in each row and one class in each column. Return the table of the same shape in which each entry is the exponential of its score divided by the total of the exponentials **in its own row**, so that every row is positive and adds up to 1.
+
+          It must work for a table of any shape, including a square one.
+        starter: |
+          import numpy as np
+
+          def softmax(S):
+              # Replace the next line with your own.
+              return S
+
+          S = np.array([[0.0, 0.0], [0.0, np.log(3.0)]])
+          print(softmax(S))
+        solution: |
+          import numpy as np
+
+          def softmax(S):
+              E = np.exp(S)
+              return E / E.sum(axis=1, keepdims=True)
+
+          S = np.array([[0.0, 0.0], [0.0, np.log(3.0)]])
+          print(softmax(S))
+        tests: |
+          import numpy as _np
+          _S = _np.array([[0.0, 0.0], [0.0, _np.log(3.0)]])
+          _P = softmax(_S)
+          assert _P.shape == (2, 2), "The result has the shape of the table of scores"
+          assert _np.allclose(_P, [[0.5, 0.5], [0.25, 0.75]]), "Equal scores share the probability equally, and a score larger by log 3 gets three times the probability"
+          _T = _np.array([[2.0, 1.0, 0.1], [0.5, 2.5, 0.2], [1.0, 1.0, 1.0], [-1.0, 0.0, 1.0]])
+          _Q = softmax(_T)
+          assert _Q.shape == (4, 3), "Four examples and three classes give a table of shape (4, 3)"
+          assert _np.allclose(_Q.sum(axis=1), 1), "Every row must add up to 1"
+          assert _np.allclose(_Q[0], [0.6590011388, 0.2424329707, 0.0985658905]), "The scores 2, 1 and 0.1 become about 0.659, 0.242 and 0.099"
+          assert _np.allclose(_Q[2], [1 / 3, 1 / 3, 1 / 3]), "Three equal scores each get one third"
+          assert (_Q.argmax(axis=1) == _T.argmax(axis=1))[[0, 1, 3]].all(), "The largest score of a row must get the largest probability"
+          assert _np.allclose(softmax(_np.array([[5.0, 5.0, 5.0, 5.0]])), [[0.25, 0.25, 0.25, 0.25]]), "One row of four equal scores gives four quarters"
+          assert _np.allclose(softmax(_np.array([[0.0, _np.log(3.0)]])), [[0.25, 0.75]]), "A table with one row works too"
+          assert _np.allclose([float(v) for v in output.replace("[", " ").replace("]", " ").split()], [0.5, 0.5, 0.25, 0.75]), "The program should print the table with rows 0.5 0.5 and 0.25 0.75"
+        wrong:
+          - |
+            import numpy as np
+
+            def softmax(S):
+                E = np.exp(S)
+                return E / E.sum(axis=1)
+
+            print(np.array([[0.5, 0.5], [0.25, 0.75]]))
+          - |
+            import numpy as np
+
+            def softmax(S):
+                E = np.exp(S)
+                return E / E.sum(axis=0, keepdims=True)
+
+            print(np.array([[0.5, 0.5], [0.25, 0.75]]))
+          - |
+            import numpy as np
+
+            def softmax(S):
+                E = np.exp(S)
+                return E / E.sum()
+
+            print(np.array([[0.5, 0.5], [0.25, 0.75]]))
+          - |
+            import numpy as np
+
+            def softmax(S):
+                return S / S.sum(axis=1, keepdims=True)
+
+            print(np.array([[0.5, 0.5], [0.25, 0.75]]))
+          - |
+            import numpy as np
+
+            def softmax(S):
+                E = np.exp(S)
+                return E / E.max(axis=1, keepdims=True)
+
+            print(np.array([[0.5, 0.5], [0.25, 0.75]]))
+        explanation: |
+          The exponential is applied to every score, and each row is then divided by its own total. The total of a row is taken along axis 1, the axis that runs across a row, and `keepdims=True` leaves it as a column of shape (rows, 1), which broadcasting sets beside the rows. Without `keepdims` the totals have shape (rows,). For most tables that fails with an error. For a square table it runs and divides each column by the total of some row, and the rows no longer add up to 1. Dividing the raw scores without the exponential fails for a different reason: scores may be negative or add up to zero. The exponential makes every entry positive and keeps the order, so the class with the largest score is the class with the largest probability. For large scores `np.exp` overflows, and a later lesson of this cluster is about computing this same function safely.
+        hints:
+          - Apply np.exp to the whole table first.
+          - The total of each row is a sum along axis 1.
+          - Keep that axis, so that the totals form a column that divides each row.
+    - question:
+        id: fix-accuracy
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          Each row of `P` holds the probabilities a model gave to the classes for one example, and `y` holds the correct classes. `accuracy(P, y)` should return the fraction of examples for which the class with the largest probability in the row is the correct one. For the table below it should print `0.75`. It prints `0.0`. Fix it.
+        starter: |
+          import numpy as np
+
+          def accuracy(P, y):
+              return (P.argmax() == y).mean()
+
+          P = np.array([[0.7, 0.2, 0.1], [0.1, 0.8, 0.1], [0.3, 0.3, 0.4], [0.5, 0.4, 0.1]])
+          print(accuracy(P, np.array([0, 1, 2, 1])))
+        solution: |
+          import numpy as np
+
+          def accuracy(P, y):
+              return (P.argmax(axis=1) == y).mean()
+
+          P = np.array([[0.7, 0.2, 0.1], [0.1, 0.8, 0.1], [0.3, 0.3, 0.4], [0.5, 0.4, 0.1]])
+          print(accuracy(P, np.array([0, 1, 2, 1])))
+        tests: |
+          import numpy as _np
+          def _near(got, want):
+              return abs(got - want) < 1e-9
+          _P = _np.array([[0.7, 0.2, 0.1], [0.1, 0.8, 0.1], [0.3, 0.3, 0.4], [0.5, 0.4, 0.1]])
+          assert _near(accuracy(_P, _np.array([0, 1, 2, 1])), 0.75), "Three of the four examples are classified correctly"
+          assert _near(accuracy(_P, _np.array([0, 1, 2, 0])), 1.0), "With correct classes 0, 1, 2, 0 every example is right"
+          assert _near(accuracy(_P, _np.array([1, 0, 0, 2])), 0.0), "With correct classes 1, 0, 0, 2 no example is right"
+          _Q = _np.array([[0.9, 0.1], [0.2, 0.8]])
+          assert _near(accuracy(_Q, _np.array([0, 1])), 1.0), "In a square table the largest of each row, not of each column, is the guess"
+          assert _near(accuracy(_np.array([[0.1, 0.9], [0.2, 0.8]]), _np.array([1, 0])), 0.5), "Two examples that both favour class 1, with correct classes 1 and 0, give one half"
+          assert _near(accuracy(_np.array([[0.2, 0.3, 0.5]]), _np.array([2])), 1.0), "A single example whose largest probability is for its correct class gives 1"
+          assert output.strip() == "0.75", "The program should print 0.75"
+        wrong:
+          - |
+            import numpy as np
+
+            def accuracy(P, y):
+                return (P.argmax() == y).mean()
+
+            print(0.75)
+          - |
+            import numpy as np
+
+            def accuracy(P, y):
+                return (P.argmax(axis=0) == y).mean()
+
+            print(0.75)
+          - |
+            import numpy as np
+
+            def accuracy(P, y):
+                return (P.argmax(axis=1) == y).sum()
+
+            print(0.75)
+          - |
+            import numpy as np
+
+            def accuracy(P, y):
+                return (P.max(axis=1) == y).mean()
+
+            print(0.75)
+          - |
+            import numpy as np
+
+            def accuracy(P, y):
+                return (P.argmax(axis=1) == y).sum() / P.shape[1]
+
+            print(0.75)
+        explanation: |
+          `P.argmax()` with no axis treats the whole table as one list of twelve numbers and returns a single position in it, here 4, the place of the 0.8. That one number was then compared with each correct class, and none of them is 4. What was wanted is one position for each **row**, so the axis to delete is axis 1: `P.argmax(axis=1)` has shape `(4,)`, like `y`. Along axis 0 it would give one position for each class, an array of 3 that does not line up with the 4 correct classes at all. For a square table that version raises no error. The shapes are the check: `y` has one entry for each example, so the guesses must too. The mean of the comparison is then the fraction right, and the sum would be the count.
+        hints:
+          - What does argmax return when no axis is given?
+          - How many guesses are needed, and what shape must they have to be compared with y?
+          - One position is wanted for each row, so the axis that runs across a row must be the one that disappears.
+    - question:
+        id: work-pictures
+        type: choice
+        system: s2
+        prompt: |
+          A batch of pictures is an array of shape `(32, 28, 28)`: 32 pictures, each 28 by 28. What are `batch.mean(axis=0)` and `batch.mean(axis=(1, 2))`?
+        options:
+          - "Both are the mean brightness of the whole batch."
+          - "`batch.mean(axis=0)` has shape `(28, 28)`: the mean picture, each pixel averaged over the 32 pictures. `batch.mean(axis=(1, 2))` has shape `(32,)`: the mean brightness of each picture, averaged over its pixels."
+          - "`batch.mean(axis=0)` has shape `(32,)` and `batch.mean(axis=(1, 2))` has shape `(28, 28)`."
+          - "The second raises an error, since an axis must be one number."
+        answer: 1
+        explanation: |
+          Cross out the named axes. From `(32, 28, 28)`, deleting axis 0 leaves `(28, 28)`: for each pixel position, a mean over the pictures. Deleting axes 1 and 2 leaves `(32,)`: for each picture, a mean over its pixels. Words such as "row" and "column" have stopped helping, and the shape rule goes on working. To subtract each picture's own brightness from its pixels, the second would be taken with `keepdims=True`, giving shape `(32, 1, 1)`, which broadcasts against the batch. Subtracting the mean picture needs nothing extra, since `(28, 28)` lines up with the last two axes already.
+        hints:
+          - Write the shape and cross out the axes named.
+          - What does each remaining entry average over?
+          - A tuple of axes removes every axis in it.
+    - question:
+        id: work-keepdims
+        type: choice
+        system: s2
+        prompt: |
+          For `X` of shape `(4, 2)`, `X - X.mean(axis=0)` works and `X - X.mean(axis=1)` raises an error. Why does one need `keepdims=True` and not the other?
+        options:
+          - "Means along axis 1 are not allowed."
+          - "Deleting axis 0 leaves shape `(2,)`, which lines up with the last axis of `X`, as wanted. Deleting axis 1 leaves `(4,)`, which also lines up with the last axis, of length 2, and does not fit. With `keepdims=True` it has shape `(4, 1)` and lines up with the rows."
+          - "Because axis 0 is always kept."
+          - "Because the means along axis 1 are decimals."
+        answer: 1
+        explanation: |
+          Broadcasting lines shapes up from the right. A reduction along the **first** axis of a table leaves a shape that sits under the last axis, where it belongs, by luck of position. A reduction along the **last** axis leaves a shape that sits under the last axis too, where it does not belong. `keepdims=True` takes the luck out: the result has a 1 in the place of whichever axis was reduced, and so lines up correctly in every case. For a square table the version without it would not even raise an error. Using `keepdims=True` every time a reduction is combined with its own array costs nothing and removes a whole family of mistakes.
+        hints:
+          - What shape is left when axis 0 is deleted? When axis 1 is deleted?
+          - Which axis of X does a plain array line up with?
+          - What shape does keepdims give in each case?
+    - question:
+        id: work-std
+        type: numeric
+        system: s2
+        prompt: |
+          What is the standard deviation of the eight numbers 2, 4, 4, 4, 5, 5, 7, 9?
+        answer: "2"
+        explanation: |
+          The mean is $40 / 8 = 5$. The deviations from it are $-3, -1, -1, -1, 0, 0, 2, 4$, with squares $9, 1, 1, 1, 0, 0, 4, 16$, which add up to 32. The mean of the squares is $32 / 8 = 4$, the variance, and its square root is the standard deviation. In array form: `np.sqrt(((x - x.mean()) ** 2).mean())`, which is `x.std()`. The answer is in the units of the data, and says that a typical entry lies about 2 away from the mean.
+        hints:
+          - Find the mean of the eight numbers.
+          - Square each deviation from the mean, and take the mean of the squares.
+          - Take the square root of that.
+    - question:
+        id: work-leak
+        type: choice
+        system: s2
+        prompt: |
+          A table of 1000 examples is split into 800 rows for training a model and 200 held back to test it. The features are to be standardised. Which is the right way?
+        options:
+          - "Compute the column means and standard deviations from all 1000 rows, and apply them to both parts."
+          - "Compute the column means and standard deviations from the 800 training rows only, and use those same numbers to standardise both the training rows and the test rows."
+          - "Standardise each part separately, with its own means and standard deviations."
+          - "Standardise each row by its own mean."
+        answer: 1
+        explanation: |
+          The test rows stand for data the model has never seen, and the test is honest only if nothing about them reached the model during training. Means taken over all 1000 rows contain the test rows, so a little information leaks. The amount is small here and can be large in other settings. Standardising the test rows by their own means is wrong in another way: the model was trained on numbers measured against the training means, and must be given numbers measured against the same ones, as a thermometer must be read on the scale it was marked in. So the means and standard deviations are computed once, with `axis=0` on the training rows, kept, and applied wherever the model is used. They are part of the model.
+        hints:
+          - What should the model know about the test rows while it is being trained?
+          - On what scale were the numbers the model learned from?
+          - Should new data be measured against its own mean, or against the one used in training?
+  connections:
+    - text: |
+        `sum(axis=0)` gave a total for each column, although axis 0 is the axis of rows. The argument names the axis that is added **along**, and that axis disappears from the shape. Write the shape, cross out the named axis, and read what is left. It is the same rule by which a whole-number index removed its axis, and it holds for any reduction, total, mean, largest, smallest or position of the largest, and for arrays with any number of axes.
+
+        A reduced array has lost an axis, and so may not line up with the array it came from. `keepdims=True` leaves the axis in place with length 1, and then the rule of [[e5.broadcasting]] always puts each result beside the right entries. That closed the puzzle that had been open for two lessons: dividing each row by its own total.
+
+        With these you standardised the columns of a table, turned rows of scores into probabilities with softmax, and measured accuracy as the mean of a mask. Those three lines appear, nearly unchanged, in almost every program that trains a classifier. They are loops over data, written in the way [[e5.vectorisation]] asked for.
+
+        Some threads lead on. The exponential in softmax overflows when a score is large, and computing it safely is [[e5.log-sum-exp-and-stable-formulations]]. A notation that says which axes are summed by naming them is [[e5.einsum]]. And totals along an axis are the simplest of the routines that treat a table as a matrix, the subject of [[e5.linear-algebra-routines]].
+
+        One thing has been taken for granted since the first lesson of this cluster. The mean brightness of each picture was a reduction over axes 1 and 2 of an array of shape `(32, 28, 28)`. But a model that takes a picture as a list of 784 numbers needs the same data as shape `(32, 784)`. A table of 12 numbers may be wanted as 3 by 4 at one moment and as 4 by 3 or 2 by 6 at the next. The first lesson showed that the shape is only a way of reading the block. So changing the shape ought to cost nothing and move nothing. When is that true, when does NumPy have to copy after all, and how do you tell which has happened? That is the next lesson, [[e5.reshaping-views-and-copies]].
