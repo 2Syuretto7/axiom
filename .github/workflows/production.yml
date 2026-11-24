@@ -6,42 +6,30 @@ name: Production check
 # Vercel reports each deployment as a commit status named "Vercel", so that is what
 # starts this. (It does not send GitHub's deployment events for this project, which is
 # why an earlier version of this workflow, waiting for those, never ran.)
+#
+# PRODUCTION_URL is a repository variable, not a secret: the public address of the live
+# site, for example https://axiom.example.com. The address cannot be worked out from
+# here, because Vercel's own <project>-<account>.vercel.app address sits behind a Vercel
+# login. Until the variable is set this check is skipped rather than failing.
 on:
   status:
 
 permissions:
   contents: read
-  deployments: read
 
 jobs:
   smoke:
     name: Verify production
+    # Skipped until the site's public address is known; see PRODUCTION_URL above.
     if: >-
       github.event.context == 'Vercel' && github.event.state == 'success' &&
-      contains(github.event.branches.*.name, 'main')
+      contains(github.event.branches.*.name, 'main') && vars.PRODUCTION_URL != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.sha }}
-      # The address GitHub has on record for production if there is one, otherwise the
-      # address Vercel gives every project: <project>-<account>.vercel.app.
-      - name: Find the production address
-        id: site
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            let url = "https://axiom-arnav-a698.vercel.app";
-            const { data: deployments } = await github.rest.repos.listDeployments({ owner, repo, sha: context.payload.sha, per_page: 10 });
-            for (const deployment of deployments.filter((d) => /production/i.test(d.environment))) {
-              const { data: statuses } = await github.rest.repos.listDeploymentStatuses({ owner, repo, deployment_id: deployment.id, per_page: 10 });
-              const live = statuses.find((status) => status.state === "success" && status.environment_url);
-              if (live) url = live.environment_url;
-            }
-            core.info(`Checking ${url}`);
-            core.setOutput("url", url);
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -50,4 +38,4 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
         env:
-          LIVE_URL: ${{ steps.site.outputs.url }}
+          LIVE_URL: ${{ vars.PRODUCTION_URL }}
