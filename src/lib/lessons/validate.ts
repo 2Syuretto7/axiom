@@ -74,7 +74,7 @@ export async function validateLessons(options: ValidateOptions): Promise<Issue[]
   }
 
   // One unbroken chain: every lesson builds directly on the one Learn offers before it.
-  const { broken } = teachingPath(graph, new Set(lessons.keys()));
+  const { path: taught, broken } = teachingPath(graph, new Set(lessons.keys()));
   if (broken) issues.push({ file: "graph", where: "chain", message: broken });
 
   const dependants = new Map<string, Set<string>>();
@@ -102,6 +102,13 @@ export async function validateLessons(options: ValidateOptions): Promise<Issue[]
       if (!future.has(id)) add("leads", `${id} does not depend on ${concept}, so it is not what comes next`);
     }
     if (future.size > 0 && lesson.leads.length === 0) add("leads", "Name at least one later concept this lesson prepares for");
+    // What a lesson says comes next is the lesson Learn gives next.
+    const following = taught.includes(concept) ? taught[taught.indexOf(concept) + 1] : undefined;
+    if (following) {
+      if (!lesson.leads.includes(following)) add("leads", `Learn gives ${following} after this lesson, so leads must list it`);
+      const closing = lesson.parts.connections.flatMap((block) => ("text" in block ? conceptRefs(block.text) : []));
+      if (!closing.includes(following)) add("connections", `Learn gives ${following} after this lesson, so the connections must point to [[${following}]]`);
+    }
 
     const near = new Set([concept, ...lesson.recalls, ...lesson.uses]);
     const mentionable = new Set([...near, ...lesson.leads]);
