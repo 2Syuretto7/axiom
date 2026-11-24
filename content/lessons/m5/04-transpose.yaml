@@ -1,0 +1,727 @@
+concept: m5.transpose
+minutes: 85
+claim: You can form the transpose of a matrix and say what it does to shapes and entries, write the dot product as a row times a column, prove that moving a matrix across a dot product transposes it and that the transpose of a product is the product of the transposes in reverse order, recognise symmetric matrices and the table of dot products between columns, and explain why errors travel backwards through a model by the transpose.
+recalls: [m5.matrix-multiplication-as-composition]
+uses: [m5.matrix-vector-product, m5.matrices-as-linear-maps, m4.dot-product, m4.norms-and-distance, m4.projection-onto-a-vector, m4.linear-independence, m10.maxima-and-minima, m10.chain-rule, m2.summation-and-product-notation, e3.graphs-and-traversal, e1.comprehensions-and-iterators, e0.functions, e0.loops, e0.lists-and-tuples]
+leads: [m5.identity-and-inverse, m5.column-space-and-null-space, m7.least-squares-and-the-normal-equations]
+starter: |
+  # Scratch space. Predictions go forwards through X. Blame comes backwards.
+  X = [[3, 1], [2, 1], [4, 2], [1, 1]]
+  w = [3, 1]
+  rents = [12, 7, 13, 5]
+
+  predicted = [sum([a * b for a, b in zip(row, w)]) for row in X]
+  errors = [p - y for p, y in zip(predicted, rents)]
+  print(errors)
+
+  # For each feature: add up error times that feature's value, over the flats.
+  print([sum([e * row[j] for e, row in zip(errors, X)]) for j in range(2)])
+parts:
+  recall:
+    - text: |
+        [[m5.matrix-multiplication-as-composition]] built the product of two matrices from the demand that $(AB)\mathbf{x} = A(B\mathbf{x})$, found its entries as rows of the first against columns of the second, and asked what becomes of a matrix when its rows and columns change places. Three quick pulls first.
+    - question:
+        id: recall-entry
+        type: numeric
+        system: s1
+        concepts: [m5.matrix-multiplication-as-composition]
+        prompt: |
+          $A$ has rows $(1, 2)$ and $(3, 4)$. $B$ has rows $(5, 6)$ and $(7, 8)$. What is the entry of $AB$ in row 1, column 2?
+        answer: "22"
+        explanation: Row 1 of A is (1, 2). Column 2 of B is (6, 8). Their dot product is 6 + 16.
+        hints:
+          - Take the first row of A.
+          - Take the second column of B, read downwards.
+    - question:
+        id: recall-shape
+        type: choice
+        system: s1
+        concepts: [m5.matrix-multiplication-as-composition]
+        prompt: |
+          $A$ is $4 \times 2$ and $B$ is $2 \times 4$. What is the shape of $BA$?
+        options: ["4 by 4", "2 by 2", "4 by 2", "It is not defined"]
+        answer: 1
+        explanation: B is 2 by 4 and A is 4 by 2. The inner sizes, 4 and 4, match and disappear, leaving 2 by 2.
+        hints:
+          - Write the shapes in the order of the product, B first.
+          - The outer sizes are the shape of the result.
+    - question:
+        id: recall-rows
+        type: choice
+        system: s1
+        concepts: [m5.matrix-vector-product]
+        prompt: |
+          The $i$-th component of $A\mathbf{x}$ is
+        options: ["column i of A dotted with x", "row i of A dotted with x", "the sum of row i of A", "x scaled by the entry in row i, column i"]
+        answer: 1
+        explanation: By rows, a matrix asks one question of its input for each row, and each question is a dot product.
+        hints:
+          - One output for each row.
+          - Each output is a dot product.
+  puzzle:
+    - text: |
+        The four flats again, with a design matrix $X$ of four rows and two columns, and a model with weights $\mathbf{w} = (3, 1)$. The model runs **forwards**: two weights go in and four predictions come out, $X\mathbf{w} = (10, 7, 14, 4)$.
+
+        Now the true rents arrive: 12, 7, 13 and 5. The model is off by $-2$, $0$, $1$ and $-1$. Those four errors live where the predictions live, one to each flat.
+
+        You want to improve the weights. So you need to know, for each **weight**, which way to move it. The errors must be carried back from the four flats to the two weights. A sensible rule suggests itself. The room weight touched every flat in proportion to that flat's number of rooms, so its share of the blame is each error times the rooms of that flat, added up over the flats. The same for bathrooms.
+
+        Run the starter. The blame comes out as $(-3, -1)$. Both are negative: both weights should go up.
+
+        Look at the shape of what just happened. Four numbers went in and two came out. Each output is a weighted sum of the inputs. That is a linear map from $\mathbb{R}^4$ to $\mathbb{R}^2$, running in the opposite direction to $X$, and it must have a matrix of shape $2 \times 4$.
+
+        **What is that matrix? How is it related to $X$? And is the rule for blame merely sensible, or is it forced?**
+  intuition:
+    - text: |
+        Look at which numbers were multiplied by the errors. For the room weight: 3, 2, 4, 1, the **column** of rooms. For the bathroom weight: 1, 1, 2, 1, the column of bathrooms. Each output of the backward map is a dot product of the errors with one column of $X$.
+
+        But the outputs of a matrix are dot products with its **rows**. So the matrix of the backward map has the columns of $X$ as its rows:
+
+        $$X = \begin{pmatrix} 3 & 1 \\ 2 & 1 \\ 4 & 2 \\ 1 & 1 \end{pmatrix}, \qquad \text{backward matrix} = \begin{pmatrix} 3 & 2 & 4 & 1 \\ 1 & 1 & 2 & 1 \end{pmatrix}.$$
+
+        The same eight numbers, with rows and columns exchanged. It is $X$ turned about its diagonal. This matrix is called the **transpose** of $X$.
+
+        The figure does the same to a smaller matrix. Choose an entry and flip between the matrix and its transpose. Watch where the entry goes, and what happens to its row.
+    - figure: transpose-flip
+      props: { entry: 2 }
+    - text: |
+        The entry 2 sits in row 1, column 2. In the transpose it sits in row 2, column 1. Its row, $1, 2, 3$, has become a column. The entries on the diagonal, 1 and 5, do not move. A matrix of 2 rows and 3 columns has become one of 3 rows and 2 columns.
+
+        Why should the backward map be the same matrix on its side? Think of $X$ as a set of wires. The entry in row $i$, column $j$ is the strength of the wire from weight $j$ to flat $i$: how much that weight affects that prediction. Forwards, a signal at weight $j$ arrives at flat $i$ multiplied by that strength. Backwards, blame at flat $i$ returns to weight $j$ **along the same wire**, multiplied by the same strength. The wires are the same. Only the direction of travel has changed, and so inputs and outputs, columns and rows, change places.
+
+        **The transpose is the matrix you get by running the wires backwards.** The derivation makes that exact with a single identity, and shows why it is not merely sensible but forced.
+  derivation:
+    - text: |
+        **The definition.** The **transpose** of an $m \times n$ matrix $A$ is the $n \times m$ matrix $A^{\mathsf{T}}$ whose entry in row $i$, column $j$ is the entry of $A$ in row $j$, column $i$:
+
+        $$(A^{\mathsf{T}})_{ij} = a_{ji}.$$
+
+        Row $i$ of $A^{\mathsf{T}}$ is column $i$ of $A$, and column $j$ of $A^{\mathsf{T}}$ is row $j$ of $A$. Transposing twice returns the matrix, $(A^{\mathsf{T}})^{\mathsf{T}} = A$, and the transpose of a sum is the sum of the transposes. In Python the outer loop runs over the columns of the original:
+
+        ```python
+        [[A[i][j] for i in range(len(A))] for j in range(len(A[0]))]
+        ```
+
+        **Vectors as columns, and the dot product.** A vector with $n$ components may be treated as an $n \times 1$ matrix, a single column. Its transpose $\mathbf{x}^{\mathsf{T}}$ is then a $1 \times n$ matrix, a single row. Multiply a row by a column, with the rule of rows against columns:
+
+        $$\mathbf{x}^{\mathsf{T}}\mathbf{y} = \begin{pmatrix} x_1 & x_2 & \dots & x_n \end{pmatrix}\begin{pmatrix} y_1 \\ y_2 \\ \vdots \\ y_n \end{pmatrix} = x_1y_1 + x_2y_2 + \dots + x_ny_n.$$
+
+        The shapes are $1 \times n$ times $n \times 1$, giving $1 \times 1$: a single number, and it is the dot product. **$\mathbf{x} \cdot \mathbf{y} = \mathbf{x}^{\mathsf{T}}\mathbf{y}$.** From here on you will see the dot product written in this way far more often than with a dot. The squared length is $\lVert \mathbf{x} \rVert^2 = \mathbf{x}^{\mathsf{T}}\mathbf{x}$.
+
+        In the other order the shapes are $n \times 1$ times $1 \times m$, and the result $\mathbf{x}\mathbf{y}^{\mathsf{T}}$ is a whole $n \times m$ matrix, with entry $x_i y_j$ in row $i$, column $j$. It is called the **outer product**. Every one of its columns is a multiple of $\mathbf{x}$. Keep it in mind. It returns when you count how many independent directions a matrix has.
+
+        **The identity that gives the transpose its meaning.** Let $A$ be $m \times n$, let $\mathbf{x}$ have $n$ components and $\mathbf{y}$ have $m$. Then $A\mathbf{x}$ and $\mathbf{y}$ both have $m$ components, and $\mathbf{x}$ and $A^{\mathsf{T}}\mathbf{y}$ both have $n$. The claim is
+
+        $$(A\mathbf{x}) \cdot \mathbf{y} = \mathbf{x} \cdot (A^{\mathsf{T}}\mathbf{y}).$$
+
+        *Proof.* Write out the left side, using the row rule for $A\mathbf{x}$:
+
+        $$(A\mathbf{x}) \cdot \mathbf{y} = \sum_{i=1}^{m}\Big(\sum_{j=1}^{n} a_{ij}\,x_j\Big)\,y_i = \sum_{i}\sum_{j} a_{ij}\,x_j\,y_i.$$
+
+        It is a sum over every entry of the matrix, each multiplied by one component of $\mathbf{x}$ and one of $\mathbf{y}$. Gather the same terms by $j$ first:
+
+        $$\sum_{j=1}^{n} x_j\Big(\sum_{i=1}^{m} a_{ij}\,y_i\Big) = \sum_j x_j\,(A^{\mathsf{T}}\mathbf{y})_j = \mathbf{x} \cdot (A^{\mathsf{T}}\mathbf{y}),$$
+
+        because $\sum_i a_{ij}\,y_i$ runs down column $j$ of $A$, which is row $j$ of $A^{\mathsf{T}}$. $\blacksquare$
+
+        It is the regrouping from the puzzle of two lessons ago, the woman working across the table and the man working down it. **A matrix may be moved from one side of a dot product to the other, at the price of transposing it.** No other matrix will do in place of $A^{\mathsf{T}}$: if $(A\mathbf{x}) \cdot \mathbf{y} = \mathbf{x} \cdot (B\mathbf{y})$ for all $\mathbf{x}$ and $\mathbf{y}$, put $\mathbf{x} = \mathbf{e}_j$ and $\mathbf{y} = \mathbf{e}_i$ and the two sides read $a_{ij} = b_{ji}$. So this identity could have been the definition.
+
+        In the notation of rows and columns it is almost invisible. The left side is $(A\mathbf{x})^{\mathsf{T}}\mathbf{y}$ and the right side is $\mathbf{x}^{\mathsf{T}}(A^{\mathsf{T}}\mathbf{y})$.
+
+        **The transpose of a product.** For $A$ of shape $m \times n$ and $B$ of shape $n \times p$,
+
+        $$(AB)^{\mathsf{T}} = B^{\mathsf{T}}A^{\mathsf{T}}.$$
+
+        **The order reverses.** Check the shapes first, since they already rule out the alternative. $AB$ is $m \times p$, so its transpose is $p \times m$. $B^{\mathsf{T}}$ is $p \times n$ and $A^{\mathsf{T}}$ is $n \times m$, and their product in that order is $p \times m$. In the other order, $A^{\mathsf{T}}B^{\mathsf{T}}$ would be $n \times m$ times $p \times n$, which is not even defined unless $m = p$.
+
+        The identity proves it in one line. Move the factors across a dot product one at a time, the outer one first:
+
+        $$(AB\mathbf{x}) \cdot \mathbf{y} = (B\mathbf{x}) \cdot (A^{\mathsf{T}}\mathbf{y}) = \mathbf{x} \cdot (B^{\mathsf{T}}A^{\mathsf{T}}\mathbf{y}).$$
+
+        The matrix that ends up on the other side is $B^{\mathsf{T}}A^{\mathsf{T}}$, and it must be the transpose of $AB$. It is socks and shoes once more: put on in one order, taken off in the other. If the forward path is "first $B$, then $A$", the backward path is "first $A^{\mathsf{T}}$, then $B^{\mathsf{T}}$".
+    - question:
+        id: derivation-move
+        type: choice
+        system: s2
+        prompt: |
+          $A$ is a $4 \times 2$ matrix, $\mathbf{x}$ has 2 components and $\mathbf{y}$ has 4. Which expression equals $(A\mathbf{x}) \cdot \mathbf{y}$?
+        options:
+          - '$(A\mathbf{y}) \cdot \mathbf{x}$'
+          - '$\mathbf{x} \cdot (A^{\mathsf{T}}\mathbf{y})$'
+          - '$(A^{\mathsf{T}}\mathbf{x}) \cdot \mathbf{y}$'
+          - '$\mathbf{x} \cdot \mathbf{y}$'
+        answer: 1
+        explanation: |
+          Moving $A$ off $\mathbf{x}$ and onto $\mathbf{y}$ transposes it. The shapes confirm it. $A^{\mathsf{T}}$ is $2 \times 4$, so $A^{\mathsf{T}}\mathbf{y}$ has 2 components and can be dotted with $\mathbf{x}$. The first option asks $A$, which has 2 columns, to multiply a vector of 4 components. The third asks $A^{\mathsf{T}}$, with 4 columns, to multiply a vector of 2. The fourth dots vectors of different lengths. Only one of the four expressions is defined at all, which is a reason to form the habit of checking shapes before anything else.
+        hints:
+          - Check which products are defined, from the shapes alone.
+          - The transpose of a 4 by 2 matrix is 2 by 4.
+          - Moving a matrix across the dot transposes it.
+    - text: |
+        **Symmetric matrices.** A matrix is **symmetric** if it equals its own transpose, $A^{\mathsf{T}} = A$, that is, $a_{ij} = a_{ji}$ for all $i$ and $j$. It must be square, and it reads the same along row $i$ as down column $i$. A table of distances between cities is symmetric. So is the adjacency matrix of a graph whose links run both ways. For a directed graph, with $g_{ij} = 1$ for an arrow from $i$ to $j$, the transpose has a 1 for an arrow from $j$ to $i$: **$G^{\mathsf{T}}$ is the graph with every arrow reversed**, the wires run backwards again.
+
+        **The table of dot products.** For **any** matrix $A$, of any shape, form $A^{\mathsf{T}}A$. If $A$ is $m \times n$ this is $n \times m$ times $m \times n$, a square $n \times n$ matrix. Its entry in row $i$, column $j$ is row $i$ of $A^{\mathsf{T}}$ against column $j$ of $A$, and row $i$ of $A^{\mathsf{T}}$ is column $i$ of $A$. So
+
+        $$(A^{\mathsf{T}}A)_{ij} = \mathbf{a}_i \cdot \mathbf{a}_j.$$
+
+        **$A^{\mathsf{T}}A$ is the table of dot products between the columns of $A$.** On its diagonal are the squared lengths of the columns. Off the diagonal, a zero says two columns are perpendicular. It is symmetric, as a table of dot products must be, and the rule for products shows it without looking at entries: $(A^{\mathsf{T}}A)^{\mathsf{T}} = A^{\mathsf{T}}(A^{\mathsf{T}})^{\mathsf{T}} = A^{\mathsf{T}}A$.
+
+        For the flats, $X^{\mathsf{T}}X$ has rows $(30, 14)$ and $(14, 7)$: rooms with rooms, rooms with bathrooms, bathrooms with bathrooms. It summarises how the features relate to each other, in a table whose size depends on the number of features and not on the number of flats. A million flats would still give a $2 \times 2$ table.
+
+        The same matrix measures lengths after the map. Using the identity,
+
+        $$\lVert A\mathbf{x} \rVert^2 = (A\mathbf{x}) \cdot (A\mathbf{x}) = \mathbf{x} \cdot (A^{\mathsf{T}}A\,\mathbf{x}) = \mathbf{x}^{\mathsf{T}}A^{\mathsf{T}}A\,\mathbf{x}.$$
+
+        **Blame is forced.** Now the puzzle. Measure how wrong the weights are by half the total squared error,
+
+        $$L(\mathbf{w}) = \tfrac{1}{2}\sum_{i} \big((X\mathbf{w})_i - y_i\big)^2,$$
+
+        as you did when you found that the mean minimises squared error. Hold every weight still except $w_j$, and ask for the rate at which $L$ changes as $w_j$ alone moves. The prediction for flat $i$ is $\sum_k x_{ik}w_k$, and its rate with respect to $w_j$ is $x_{ij}$, the entry of the table for that flat and that feature. By the chain rule, with $e_i = (X\mathbf{w})_i - y_i$ the error on flat $i$,
+
+        $$\text{rate of } L \text{ with respect to } w_j \;=\; \sum_i e_i\,x_{ij} \;=\; (X^{\mathsf{T}}\mathbf{e})_j.$$
+
+        That is the rule the puzzle called sensible: each error times that flat's value of the feature, added over the flats. All the rates together are the single vector
+
+        $$X^{\mathsf{T}}\mathbf{e} = X^{\mathsf{T}}(X\mathbf{w} - \mathbf{y}).$$
+
+        The model computes forwards with $X$. The rates of the loss come backwards with $X^{\mathsf{T}}$. For the starter's numbers they are $(-3, -1)$: raising either weight lowers the loss, so descent raises both.
+
+        At the best weights no small change of any weight can lower the loss, so every rate is zero: $X^{\mathsf{T}}(X\mathbf{w} - \mathbf{y}) = \mathbf{0}$, or
+
+        $$X^{\mathsf{T}}X\,\mathbf{w} = X^{\mathsf{T}}\mathbf{y}.$$
+
+        A square system, with the table of dot products on the left, whose solution is the best-fitting weights. Solving such a system is the business of the lessons just ahead, and this particular one has a lesson to itself later.
+
+        **Backwards through a layer.** The same holds for any linear layer $\mathbf{z} = W\mathbf{x}$. If you know the rate of a loss with respect to each output, collected in a vector $\mathbf{g}$, then the rates with respect to the inputs are $W^{\mathsf{T}}\mathbf{g}$: input $j$ reached output $i$ through the weight $w_{ij}$, and collects blame back through it. For a chain of layers the forward product $W_3W_2W_1$ becomes, going back, $W_1^{\mathsf{T}}W_2^{\mathsf{T}}W_3^{\mathsf{T}}$, the reversed order that the product rule demands. The method by which networks learn, which sends errors from the output back to every weight, is at bottom this.
+
+        **Turns.** One last observation. Transpose the matrix of the turn through $\theta$ and you get columns $(\cos\theta, -\sin\theta)$ and $(\sin\theta, \cos\theta)$, which is the turn through $-\theta$. For this kind of matrix the transpose does not merely run the wires backwards. It **undoes** the map.
+    - question:
+        id: order-product
+        type: order
+        system: s2
+        prompt: Put the steps in order to prove, entry by entry, that $(AB)^{\mathsf{T}} = B^{\mathsf{T}}A^{\mathsf{T}}$.
+        steps:
+          - 'By the definition of the transpose, the entry of $(AB)^{\mathsf{T}}$ in row $i$, column $j$ is $(AB)_{ji}$.'
+          - 'By the rule for products, $(AB)_{ji} = \sum_k a_{jk}\,b_{ki}$.'
+          - 'Rewrite each factor as an entry of a transpose: $a_{jk} = (A^{\mathsf{T}})_{kj}$ and $b_{ki} = (B^{\mathsf{T}})_{ik}$.'
+          - 'So the entry is $\sum_k (B^{\mathsf{T}})_{ik}\,(A^{\mathsf{T}})_{kj}$, with the factors written in the order that puts $k$ in the middle.'
+          - 'That sum is the entry of $B^{\mathsf{T}}A^{\mathsf{T}}$ in row $i$, column $j$.'
+        explanation: The proof unwraps the transpose, then the product, rewrites each entry with its indices exchanged, and then has to reorder the two factors so that the summed index sits in the middle, which is where the rule for products needs it. Numbers may be reordered freely. The effect is that the matrices change places.
+        hints:
+          - Start by saying what an entry of a transpose is.
+          - The product must be expanded before its factors can be rewritten.
+          - The summed index must end in the middle, between the two matrices.
+  formal:
+    - text: |
+        **Transpose.** For $A$ of shape $m \times n$, $A^{\mathsf{T}}$ is the $n \times m$ matrix with $(A^{\mathsf{T}})_{ij} = a_{ji}$.
+
+        **Rules.** $(A^{\mathsf{T}})^{\mathsf{T}} = A$. $(A + B)^{\mathsf{T}} = A^{\mathsf{T}} + B^{\mathsf{T}}$. $(cA)^{\mathsf{T}} = c\,A^{\mathsf{T}}$. $(AB)^{\mathsf{T}} = B^{\mathsf{T}}A^{\mathsf{T}}$.
+
+        **Dot product.** $\mathbf{x} \cdot \mathbf{y} = \mathbf{x}^{\mathsf{T}}\mathbf{y}$, and $\lVert \mathbf{x} \rVert^2 = \mathbf{x}^{\mathsf{T}}\mathbf{x}$. The outer product $\mathbf{x}\mathbf{y}^{\mathsf{T}}$ is the matrix with entries $x_iy_j$.
+
+        **Across a dot product.** $(A\mathbf{x}) \cdot \mathbf{y} = \mathbf{x} \cdot (A^{\mathsf{T}}\mathbf{y})$ for all $\mathbf{x}$ and $\mathbf{y}$ of fitting sizes, and $A^{\mathsf{T}}$ is the only matrix with this property.
+
+        **Symmetric.** $A$ is symmetric if $A^{\mathsf{T}} = A$.
+
+        **Table of dot products.** $(A^{\mathsf{T}}A)_{ij} = \mathbf{a}_i \cdot \mathbf{a}_j$ for the columns $\mathbf{a}_i$ of $A$. It is symmetric, and $\lVert A\mathbf{x} \rVert^2 = \mathbf{x}^{\mathsf{T}}A^{\mathsf{T}}A\,\mathbf{x}$.
+
+        **Squared error.** For $L(\mathbf{w}) = \frac{1}{2}\lVert X\mathbf{w} - \mathbf{y} \rVert^2$, the rate of $L$ with respect to $w_j$ is component $j$ of $X^{\mathsf{T}}(X\mathbf{w} - \mathbf{y})$.
+  drill:
+    - text: Seconds each. Rows become columns. Row i, column j goes to row j, column i.
+    - question:
+        id: drill-shape
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ is a $2 \times 3$ matrix. How many rows has $A^{\mathsf{T}}$?
+        answer: "3"
+        explanation: The transpose of a 2 by 3 matrix is 3 by 2. Each of the 3 columns becomes a row.
+        hints:
+          - Rows and columns change places.
+          - How many columns had A?
+    - question:
+        id: drill-entry-31
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has rows $(1, 2, 3)$ and $(4, 5, 6)$. What is the entry of $A^{\mathsf{T}}$ in row 3, column 1?
+        answer: "3"
+        explanation: It is the entry of A in row 1, column 3.
+        hints:
+          - Exchange the two indices.
+          - Look in row 1, column 3 of A.
+    - question:
+        id: drill-entry-12
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has rows $(1, 2, 3)$ and $(4, 5, 6)$. What is the entry of $A^{\mathsf{T}}$ in row 1, column 2?
+        answer: "4"
+        explanation: It is the entry of A in row 2, column 1.
+        hints:
+          - Exchange the two indices.
+          - Look in row 2, column 1 of A.
+    - question:
+        id: drill-twice
+        type: choice
+        system: s1
+        prompt: |
+          What is $(A^{\mathsf{T}})^{\mathsf{T}}$?
+        options: ['$A$', '$A^{\mathsf{T}}$', '$A^2$', 'The do-nothing matrix']
+        answer: 0
+        explanation: Exchanging rows and columns twice puts every entry back.
+        hints:
+          - Where does the entry in row i, column j go?
+          - Where does it go the second time?
+    - question:
+        id: drill-product
+        type: choice
+        system: s1
+        prompt: |
+          What is $(AB)^{\mathsf{T}}$?
+        options: ['$A^{\mathsf{T}}B^{\mathsf{T}}$', '$B^{\mathsf{T}}A^{\mathsf{T}}$', '$BA$', '$AB$']
+        answer: 1
+        explanation: The transpose of a product is the product of the transposes in the reverse order.
+        hints:
+          - Socks and shoes.
+          - The order reverses.
+    - question:
+        id: drill-symmetric
+        type: choice
+        system: s1
+        prompt: |
+          Which matrix is symmetric?
+        options: ['Rows $(1, 2)$ and $(3, 4)$', 'Rows $(1, 2)$ and $(2, 5)$', 'Rows $(0, 1)$ and $(-1, 0)$', 'Rows $(1, 2, 3)$ and $(2, 5, 6)$']
+        answer: 1
+        explanation: Its entry in row 1, column 2 equals its entry in row 2, column 1. The last option is not square, so it cannot equal its transpose.
+        hints:
+          - Compare the two entries off the diagonal.
+          - A symmetric matrix must be square.
+    - question:
+        id: drill-row-column
+        type: numeric
+        system: s1
+        prompt: |
+          With $\mathbf{x} = (1, 2, 3)$ and $\mathbf{y} = (4, 5, 6)$, what is $\mathbf{x}^{\mathsf{T}}\mathbf{y}$?
+        answer: "32"
+        explanation: A row times a column is the dot product, 4 + 10 + 18.
+        hints:
+          - It is the dot product of x and y.
+          - Multiply matching components and add.
+    - question:
+        id: drill-outer
+        type: choice
+        system: s1
+        prompt: |
+          $\mathbf{x}$ has 3 components and $\mathbf{y}$ has 2. What is the shape of $\mathbf{x}\mathbf{y}^{\mathsf{T}}$?
+        options: ["A single number", "3 by 2", "2 by 3", "It is not defined"]
+        answer: 1
+        explanation: A 3 by 1 column times a 1 by 2 row. The inner sizes, 1 and 1, match, and the outer sizes give 3 by 2.
+        hints:
+          - x is a 3 by 1 matrix.
+          - The transpose of y is a 1 by 2 matrix.
+    - question:
+        id: drill-gram-shape
+        type: choice
+        system: s1
+        prompt: |
+          $A$ is a $4 \times 2$ matrix. What is the shape of $A^{\mathsf{T}}A$?
+        options: ["4 by 4", "2 by 2", "4 by 2", "2 by 4"]
+        answer: 1
+        explanation: 2 by 4 times 4 by 2. One row and one column for each column of A.
+        hints:
+          - The transpose is 2 by 4.
+          - The outer sizes give the shape.
+    - question:
+        id: drill-gram-off
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has columns $(1, 2)$ and $(3, 4)$. What is the entry of $A^{\mathsf{T}}A$ in row 1, column 2?
+        answer: "11"
+        explanation: It is the dot product of the first column with the second, 3 + 8.
+        hints:
+          - The entries of this matrix are dot products of columns.
+          - Dot the first column with the second.
+    - question:
+        id: drill-gram-diagonal
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has columns $(3, 4)$ and $(0, 1)$. What is the entry of $A^{\mathsf{T}}A$ in row 1, column 1?
+        answer: "25"
+        explanation: It is the first column dotted with itself, its squared length, 9 + 16.
+        hints:
+          - A diagonal entry is a column dotted with itself.
+          - Square each component of the first column and add.
+    - question:
+        id: drill-reverse
+        type: choice
+        system: s1
+        prompt: |
+          $G$ is the adjacency matrix of a directed graph. $G^{\mathsf{T}}$ is the adjacency matrix of
+        options: ["the same graph", "the graph with every arrow reversed", "the graph with no arrows", "the graph of walks of two steps"]
+        answer: 1
+        explanation: An arrow from i to j is a 1 in row i, column j. The transpose puts it in row j, column i, an arrow from j to i.
+        hints:
+          - What does a 1 in row i, column j mean?
+          - Where does that 1 go in the transpose?
+    - question:
+        id: drill-across
+        type: choice
+        system: s1
+        prompt: |
+          $(A\mathbf{x}) \cdot \mathbf{y}$ is always equal to
+        options: ['$\mathbf{x} \cdot (A\mathbf{y})$', '$\mathbf{x} \cdot (A^{\mathsf{T}}\mathbf{y})$', '$(A^{\mathsf{T}}\mathbf{x}) \cdot \mathbf{y}$', '$A\,(\mathbf{x} \cdot \mathbf{y})$']
+        answer: 1
+        explanation: Moving a matrix to the other side of a dot product transposes it.
+        hints:
+          - The matrix leaves x and arrives at y.
+          - It is transposed on the way.
+    - question:
+        id: predict-transpose
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          A = [[1, 2, 3], [4, 5, 6]]
+          T = [[A[i][j] for i in range(2)] for j in range(3)]
+
+          print(T)
+          print(T[2][0], A[0][2])
+        output: |
+          [[1, 4], [2, 5], [3, 6]]
+          3 3
+        explanation: The outer comprehension runs over the 3 columns of A, and each becomes a row of T. The entry of T in row 2, column 0 is the entry of A in row 0, column 2.
+        hints:
+          - For each j, the inner comprehension collects column j of A.
+          - T[j][i] is A[i][j].
+    - question:
+        id: predict-blame
+        type: predict
+        system: s1
+        prompt: Errors on four flats, carried back to two weights. What does this show?
+        code: |
+          X = [[3, 1], [2, 1], [4, 2], [1, 1]]
+          errors = [-2, 0, 1, -1]
+          XT = [[row[j] for row in X] for j in range(2)]
+
+          print(XT)
+          print([sum([a * e for a, e in zip(row, errors)]) for row in XT])
+        output: |
+          [[3, 2, 4, 1], [1, 1, 2, 1]]
+          [-3, -1]
+        explanation: The transpose has the column of rooms and the column of bathrooms as its rows. Each is dotted with the errors. −6 + 0 + 4 − 1 = −3, and −2 + 0 + 2 − 1 = −1.
+        hints:
+          - XT has 2 rows of 4 entries.
+          - Dot each of them with the errors.
+  work:
+    - text: Slower now. When in doubt about a formula with transposes, write the shapes under every factor.
+    - question:
+        id: write-transpose
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `transpose(A)` for a matrix stored as a non-empty list of rows. Return a new matrix, as a list of rows, in which the rows of `A` have become columns. Leave `A` itself unchanged.
+        starter: |
+          def transpose(A):
+              # Replace the next line with your own.
+              return A
+
+          print(transpose([[3, 1], [2, 1], [4, 2], [1, 1]]))
+        solution: |
+          def transpose(A):
+              return [[A[i][j] for i in range(len(A))] for j in range(len(A[0]))]
+
+          print(transpose([[3, 1], [2, 1], [4, 2], [1, 1]]))
+        tests: |
+          assert transpose([[3, 1], [2, 1], [4, 2], [1, 1]]) == [[3, 2, 4, 1], [1, 1, 2, 1]], "The design matrix of the flats becomes two rows of four: [3, 2, 4, 1] and [1, 1, 2, 1]"
+          assert transpose([[1, 2, 3], [4, 5, 6]]) == [[1, 4], [2, 5], [3, 6]], "A 2 by 3 matrix becomes 3 by 2: [1, 4], [2, 5], [3, 6]"
+          assert transpose([[1, 2], [3, 4]]) == [[1, 3], [2, 4]], "Rows [1, 2] and [3, 4] become rows [1, 3] and [2, 4]"
+          assert transpose([[1, 2, 3]]) == [[1], [2], [3]], "A single row becomes a single column"
+          assert transpose([[1], [2], [3]]) == [[1, 2, 3]], "A single column becomes a single row"
+          assert transpose([[7]]) == [[7]], "A 1 by 1 matrix is its own transpose"
+          assert transpose([[1, 2], [2, 5]]) == [[1, 2], [2, 5]], "A symmetric matrix is its own transpose"
+          _A = [[1, 2], [3, 4]]
+          _T = transpose(_A)
+          assert _A == [[1, 2], [3, 4]], "The function must not change the matrix it was given"
+          assert transpose(transpose([[1, 2, 3], [4, 5, 6]])) == [[1, 2, 3], [4, 5, 6]], "Transposing twice gives back the matrix"
+          assert output.strip() == "[[3, 2, 4, 1], [1, 1, 2, 1]]", "The program should print [[3, 2, 4, 1], [1, 1, 2, 1]]"
+        wrong:
+          - |
+            def transpose(A):
+                size = min(len(A), len(A[0]))
+                return [[A[i][j] for i in range(size)] for j in range(size)]
+
+            print([[3, 2, 4, 1], [1, 1, 2, 1]])
+          - |
+            def transpose(A):
+                return [[A[i][len(A[0]) - 1 - j] for i in range(len(A))] for j in range(len(A[0]))]
+
+            print([[3, 2, 4, 1], [1, 1, 2, 1]])
+          - |
+            def transpose(A):
+                return [[row[len(row) - 1 - j] for j in range(len(row))] for row in A]
+
+            print([[3, 2, 4, 1], [1, 1, 2, 1]])
+          - |
+            def transpose(A):
+                if len(A) == len(A[0]):
+                    for i in range(len(A)):
+                        for j in range(i + 1, len(A)):
+                            kept = A[i][j]
+                            A[i][j] = A[j][i]
+                            A[j][i] = kept
+                    return A
+                return [[A[i][j] for i in range(len(A))] for j in range(len(A[0]))]
+
+            print([[3, 2, 4, 1], [1, 1, 2, 1]])
+          - |
+            def transpose(A):
+                return [[A[j][i] for i in range(len(A[0]))] for j in range(len(A))]
+
+            print([[3, 2, 4, 1], [1, 1, 2, 1]])
+        explanation: |
+          The answer has one row for each **column** of `A`, so the outer loop runs over `range(len(A[0]))`, and each new row collects that column from top to bottom, one entry from each of the `len(A)` rows. Getting the two ranges the wrong way round is invisible on square matrices, where they are equal, so the tests lean on matrices that are not square. Transposing is not reversing: no row or column is read backwards. And the function builds a new list of lists. Exchanging entries inside the matrix it was handed would surprise whoever still holds the original, the same hazard of shared lists you met with arrays.
+        hints:
+          - How many rows will the answer have?
+          - Row j of the answer is column j of A, which is A[i][j] for each row i.
+          - The outer loop is over columns of A and the inner one over its rows.
+    - question:
+        id: write-gram
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `gram(A)` for a matrix stored as a non-empty list of rows. Return $A^{\mathsf{T}}A$, the table of dot products between the **columns** of `A`, as a list of rows. For a matrix with $n$ columns the answer is $n \times n$.
+        starter: |
+          def gram(A):
+              # Replace the next line with your own.
+              return []
+
+          print(gram([[3, 1], [2, 1], [4, 2], [1, 1]]))
+        solution: |
+          def gram(A):
+              n = len(A[0])
+              columns = [[row[j] for row in A] for j in range(n)]
+              return [[sum([p * q for p, q in zip(columns[i], columns[j])]) for j in range(n)] for i in range(n)]
+
+          print(gram([[3, 1], [2, 1], [4, 2], [1, 1]]))
+        tests: |
+          assert gram([[3, 1], [2, 1], [4, 2], [1, 1]]) == [[30, 14], [14, 7]], "For the flats: rooms with rooms is 30, rooms with bathrooms is 14, bathrooms with bathrooms is 7"
+          assert gram([[1, 3], [2, 4]]) == [[5, 11], [11, 25]], "Columns [1, 2] and [3, 4] have squared lengths 5 and 25 and dot product 11"
+          assert gram([[1, 0], [0, 1]]) == [[1, 0], [0, 1]], "Perpendicular unit columns give the do-nothing matrix"
+          assert gram([[1, 2, 3], [4, 5, 6]]) == [[17, 22, 27], [22, 29, 36], [27, 36, 45]], "A 2 by 3 matrix has three columns, so the table is 3 by 3"
+          assert gram([[1, 2, 3]]) == [[1, 2, 3], [2, 4, 6], [3, 6, 9]], "A single row has three columns of one entry each"
+          assert gram([[1], [2], [3]]) == [[14]], "A single column gives a 1 by 1 table holding its squared length"
+          assert gram([[1, 1], [1, -1]]) == [[2, 0], [0, 2]], "Columns [1, 1] and [1, -1] are perpendicular, so the entries off the diagonal are 0"
+          assert gram([[0, 2], [0, 0], [1, 0]]) == [[1, 0], [0, 4]], "Columns [0, 0, 1] and [2, 0, 0] are perpendicular with squared lengths 1 and 4"
+          assert output.strip() == "[[30, 14], [14, 7]]", "The program should print [[30, 14], [14, 7]]"
+        wrong:
+          - |
+            def gram(A):
+                m = len(A)
+                return [[sum([p * q for p, q in zip(A[i], A[j])]) for j in range(m)] for i in range(m)]
+
+            print([[30, 14], [14, 7]])
+          - |
+            def gram(A):
+                n = len(A[0])
+                columns = [[row[j] for row in A] for j in range(n)]
+                return [[sum([p * q for p, q in zip(columns[i], columns[i])]) for j in range(n)] for i in range(n)]
+
+            print([[30, 14], [14, 7]])
+          - |
+            def gram(A):
+                n = len(A[0])
+                columns = [[row[j] for row in A] for j in range(n)]
+                return [[sum(columns[i]) * sum(columns[j]) for j in range(n)] for i in range(n)]
+
+            print([[30, 14], [14, 7]])
+          - |
+            def gram(A):
+                n = len(A[0])
+                columns = [[row[j] for row in A] for j in range(n)]
+                return [[sum([p * q for p, q in zip(columns[i], columns[j])]) if i == j else 0 for j in range(n)] for i in range(n)]
+
+            print([[30, 14], [14, 7]])
+          - |
+            def gram(A):
+                n = len(A[0])
+                return [[sum([A[i][k] * A[k][j] for k in range(n)]) for j in range(n)] for i in range(n)]
+
+            print([[30, 14], [14, 7]])
+        explanation: |
+          The entry in row $i$, column $j$ of $A^{\mathsf{T}}A$ is column $i$ of $A$ dotted with column $j$. So the function first collects the columns, then fills an $n \times n$ table with their dot products. Dotting the **rows** with each other gives a different matrix, $AA^{\mathsf{T}}$, which is $m \times m$ and compares examples where this one compares features. Multiplying $A$ by itself is something else again and is defined only for square matrices. The result is always symmetric, since the dot product does not care about order, and its diagonal holds the squared lengths of the columns. For the flats it is $(30, 14)$ and $(14, 7)$, and it is exactly the matrix on the left of the system $X^{\mathsf{T}}X\,\mathbf{w} = X^{\mathsf{T}}\mathbf{y}$ whose solution is the best-fitting weights.
+        hints:
+          - Collect the columns of A first, as lists.
+          - The answer has one row and one column for each column of A.
+          - Each entry is the dot product of two of the columns.
+    - question:
+        id: fix-symmetric
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `is_symmetric(A)` should return `True` exactly when the matrix `A` equals its own transpose. A matrix of 2 rows and 3 columns cannot, so the program should print `False`. It prints `True`. Fix it.
+        starter: |
+          def is_symmetric(A):
+              for i in range(len(A)):
+                  for j in range(len(A)):
+                      if A[i][j] != A[j][i]:
+                          return False
+              return True
+
+          print(is_symmetric([[1, 2, 3], [2, 5, 6]]))
+        solution: |
+          def is_symmetric(A):
+              if len(A) != len(A[0]):
+                  return False
+              for i in range(len(A)):
+                  for j in range(len(A)):
+                      if A[i][j] != A[j][i]:
+                          return False
+              return True
+
+          print(is_symmetric([[1, 2, 3], [2, 5, 6]]))
+        tests: |
+          assert is_symmetric([[1, 2, 3], [2, 5, 6]]) is False, "A 2 by 3 matrix cannot equal its transpose, which is 3 by 2"
+          assert is_symmetric([[1, 2], [2, 5]]) is True, "Rows [1, 2] and [2, 5] form a symmetric matrix"
+          assert is_symmetric([[1, 2], [3, 4]]) is False, "The entries off the diagonal, 2 and 3, differ"
+          assert is_symmetric([[30, 14], [14, 7]]) is True, "A table of dot products is symmetric"
+          assert is_symmetric([[1, 2, 3], [2, 5, 6], [3, 6, 9]]) is True, "This 3 by 3 matrix reads the same along row i as down column i"
+          assert is_symmetric([[1, 2, 3], [2, 5, 6], [3, 7, 9]]) is False, "The entry in row 2, column 3 is 6 and the entry in row 3, column 2 is 7"
+          assert is_symmetric([[1, 2], [2, 5], [3, 6]]) is False, "A 3 by 2 matrix cannot equal its transpose"
+          assert is_symmetric([[4]]) is True, "A 1 by 1 matrix is symmetric"
+          assert is_symmetric([[0, 1, 0], [1, 0, 0], [0, 1, 0]]) is False, "The entry in row 3, column 2 is 1 and the entry in row 2, column 3 is 0"
+          assert output.strip() == "False", "The program should print False"
+        wrong:
+          - |
+            def is_symmetric(A):
+                for i in range(len(A)):
+                    for j in range(len(A)):
+                        if A[i][j] != A[j][i]:
+                            return False
+                return True
+
+            print(False)
+          - |
+            def is_symmetric(A):
+                return len(A) == len(A[0])
+
+            print(False)
+          - |
+            def is_symmetric(A):
+                if len(A) != len(A[0]):
+                    return False
+                for j in range(len(A)):
+                    if A[0][j] != A[j][0]:
+                        return False
+                return True
+
+            print(False)
+          - |
+            def is_symmetric(A):
+                if len(A) != len(A[0]):
+                    return False
+                for i in range(len(A)):
+                    for j in range(len(A)):
+                        if A[i][j] == A[j][i]:
+                            return True
+                return False
+
+            print(False)
+          - |
+            def is_symmetric(A):
+                if len(A) < len(A[0]):
+                    return False
+                for i in range(len(A[0])):
+                    for j in range(len(A[0])):
+                        if A[i][j] != A[j][i]:
+                            return False
+                return True
+
+            print(False)
+        explanation: |
+          The starter compared entries only within the first `len(A)` columns and never looked at the third. For the $2 \times 3$ matrix it examined a $2 \times 2$ corner, found that corner symmetric, and said yes. The transpose of a $2 \times 3$ matrix is $3 \times 2$, and matrices of different shapes are never equal, so the shape has to be checked before any entry. With a tall matrix the same starter would have raised an `IndexError` instead, which at least is honest. The quiet wrong answer came from a loop bound that happened to stay inside the lists. Shape first, entries second, is the order for every comparison of matrices.
+        hints:
+          - Which entries of the 2 by 3 matrix does the loop never read?
+          - What is the shape of the transpose of a 2 by 3 matrix?
+          - Return False at once when the matrix is not square.
+    - question:
+        id: work-across
+        type: numeric
+        system: s2
+        prompt: |
+          $A$ has rows $(1, 2)$ and $(3, 4)$, $\mathbf{x} = (1, 1)$ and $\mathbf{y} = (1, -1)$. Compute $\mathbf{x} \cdot (A^{\mathsf{T}}\mathbf{y})$.
+        answer: "-4"
+        explanation: |
+          $A^{\mathsf{T}}$ has rows $(1, 3)$ and $(2, 4)$, so $A^{\mathsf{T}}\mathbf{y} = (1 - 3,\; 2 - 4) = (-2, -2)$, and its dot product with $(1, 1)$ is $-4$. The other side of the identity gives the same: $A\mathbf{x} = (3, 7)$ and $(3, 7) \cdot (1, -1) = -4$. Either route adds up the four entries of $A$, each times one component of $\mathbf{x}$ and one of $\mathbf{y}$: $1 - 3 + 2 - 4$.
+        hints:
+          - Write down the transpose of A first.
+          - Apply it to y, then dot the result with x.
+          - Check by computing Ax and dotting it with y.
+    - question:
+        id: work-shapes
+        type: choice
+        system: s2
+        prompt: |
+          $A$ is $2 \times 3$ and $B$ is $3 \times 4$. A student writes $(AB)^{\mathsf{T}} = A^{\mathsf{T}}B^{\mathsf{T}}$. Which reply is right?
+        options:
+          - "It is correct, since transposing is done to each factor."
+          - "It cannot be correct. $A^{\\mathsf{T}}$ is $3 \\times 2$ and $B^{\\mathsf{T}}$ is $4 \\times 3$, so $A^{\\mathsf{T}}B^{\\mathsf{T}}$ is not defined, while $B^{\\mathsf{T}}A^{\\mathsf{T}}$ is $4 \\times 2$, the shape of $(AB)^{\\mathsf{T}}$."
+          - "It is correct only because $AB$ is defined."
+          - "It cannot be correct, because a product has no transpose."
+        answer: 1
+        explanation: |
+          $AB$ is $2 \times 4$, so its transpose is $4 \times 2$. In the student's order the inner sizes are 2 and 4, which do not match. In the reverse order, $4 \times 3$ times $3 \times 2$, they do, and the result has the right shape. Shapes alone cannot prove a formula, but they refute this one, and they would have told the student which order to try. For square matrices of one size both orders are defined and only one is correct, so there the reversal has to be remembered.
+        hints:
+          - Find the shape of each transpose.
+          - Is the student's product defined?
+          - What shape must the transpose of AB have?
+    - question:
+        id: work-backward
+        type: choice
+        system: s2
+        prompt: |
+          A layer computes $\mathbf{z} = W\mathbf{x}$ with $W$ of shape $3 \times 2$: two inputs feeding three neurons. The rates of a loss with respect to the three outputs are $\mathbf{g} = (g_1, g_2, g_3)$. What is the rate of the loss with respect to the first input, $x_1$?
+        options:
+          - '$g_1$'
+          - '$w_{11}g_1 + w_{21}g_2 + w_{31}g_3$, the first component of $W^{\mathsf{T}}\mathbf{g}$'
+          - '$w_{11}g_1 + w_{12}g_2$, the first component of $W\mathbf{g}$'
+          - '$g_1 + g_2 + g_3$'
+        answer: 1
+        explanation: |
+          The input $x_1$ feeds all three neurons, reaching neuron $i$ through the weight $w_{i1}$. A small change in $x_1$ changes $z_i$ at the rate $w_{i1}$, and the loss changes with $z_i$ at the rate $g_i$. By the chain rule the effects add: $\sum_i w_{i1}\,g_i$. The weights involved are the first **column** of $W$, which is the first row of $W^{\mathsf{T}}$. The third option is not even defined, since $W$ has 2 columns and $\mathbf{g}$ has 3 components. Blame flows back along every wire that carried the signal forwards, weighted by the same number.
+        hints:
+          - Which neurons does the first input feed, and through which weights?
+          - Those weights form a column of W.
+          - A column of W is a row of its transpose.
+    - question:
+        id: work-normal
+        type: choice
+        system: s2
+        prompt: |
+          For the four flats, $X^{\mathsf{T}}X$ has rows $(30, 14)$ and $(14, 7)$, and with rents $\mathbf{y} = (12, 7, 13, 5)$, $X^{\mathsf{T}}\mathbf{y} = (107, 50)$. Which statement about the best-fitting weights is right?
+        options:
+          - "They are $(107, 50)$."
+          - "They satisfy the two equations $30w_1 + 14w_2 = 107$ and $14w_1 + 7w_2 = 50$, at which point the blame $X^{\\mathsf{T}}(X\\mathbf{w} - \\mathbf{y})$ is zero for both weights."
+          - "They cannot be found without trying every pair of weights."
+          - "They are $(3, 1)$, since those were given."
+        answer: 1
+        explanation: |
+          At the best weights the rate of the loss with respect to each weight is zero, which says $X^{\mathsf{T}}X\,\mathbf{w} = X^{\mathsf{T}}\mathbf{y}$. Written out with the numbers, that is the pair of equations in the second option. Subtract twice the second from the first: $2w_1 = 7$, so $w_1 = 3.5$, and then $w_2 = \frac{1}{7}$. Four flats and a search over all possible weights have been reduced to two equations in two unknowns, built from dot products of columns. The weights $(3, 1)$ were a guess, and the blame $(-3, -1)$ said in which direction it was wrong.
+        hints:
+          - What must the blame be at the best weights?
+          - Write that condition out as equations.
+          - The matrix on the left is the table of dot products.
+  connections:
+    - text: |
+        The model ran forwards through $X$, from two weights to four predictions. The errors had to come back, from four flats to two weights, and the rule that suggested itself, each error times the feature's value on that flat, turned out to be multiplication by the same numbers with rows and columns exchanged. That matrix is the transpose. Thinking of the entries as wires from inputs to outputs, the transpose is the same wiring used in the opposite direction.
+
+        One identity carries the meaning: $(A\mathbf{x}) \cdot \mathbf{y} = \mathbf{x} \cdot (A^{\mathsf{T}}\mathbf{y})$. It was proved by the regrouping of [[m5.matrix-vector-product]], and it gave the reversal rule $(AB)^{\mathsf{T}} = B^{\mathsf{T}}A^{\mathsf{T}}$ for the products of [[m5.matrix-multiplication-as-composition]] in a single line. With the dot product rewritten as a row times a column, $\mathbf{x}^{\mathsf{T}}\mathbf{y}$, everything in this subject can be written as products of matrices, and that is the notation you will read from now on.
+
+        Two constructions will keep returning. $A^{\mathsf{T}}A$, the symmetric table of dot products between columns, records lengths and angles among the features and measures $\lVert A\mathbf{x} \rVert^2$. And $X^{\mathsf{T}}(X\mathbf{w} - \mathbf{y})$, the errors carried back, vanishes at the best weights, giving the square system that [[m7.least-squares-and-the-normal-equations]] will solve and interpret. The relation between what a matrix reaches and what its transpose sends to zero is part of [[m5.column-space-and-null-space]].
+
+        The lesson ended on turns, where the transpose is the reverse turn: multiply a turn by its transpose and you get the matrix that does nothing. That is a special privilege of turns and reflections. In general the transpose carries blame backwards but does **not** undo the map. Apply $X^{\mathsf{T}}$ to $X\mathbf{w}$ and you do not get $\mathbf{w}$ back. So a sharper question is waiting. Given the output of a matrix, when can the input be recovered exactly, by what matrix, and what has gone wrong when it cannot be? The shear could be undone by the opposite shear. The map that crushed the plane onto a line could not be undone by anything. The matrix that does nothing, and the matrices that undo others, are the next lesson, [[m5.identity-and-inverse]].
