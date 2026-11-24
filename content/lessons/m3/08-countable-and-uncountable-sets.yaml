@@ -1,0 +1,659 @@
+concept: m3.countable-and-uncountable-sets
+minutes: 105
+claim: You can say what it means for two sets, finite or infinite, to have the same size, show that the integers, the pairs of natural numbers and the rationals are countable by listing them, prove by the diagonal argument that the infinite binary sequences and the real numbers are not, and explain why most functions cannot be computed by any program.
+recalls: [m3.equivalence-relations-and-partitions]
+uses: [m3.quantifiers-and-their-negation, m3.direct-proof, m3.contrapositive-and-contradiction, m3.induction-and-strong-induction, m2.sets, m2.functions-as-machines, m2.composition-and-inverses, m2.injective-surjective-and-bijective-maps, m2.sequences-and-series, m0.fractions, m0.decimals-and-percentages, e0.strings, e0.loops, e0.functions, e1.comprehensions-and-iterators, e1.modules-and-imports, e1.generators-and-context-managers]
+leads: [m3.reading-and-writing-epsilon-style-arguments]
+starter: |
+  # Scratch space. A list of every whole number, positive and negative. Where is -4?
+  import itertools
+
+  def integers():
+      yield 0
+      n = 1
+      while True:
+          yield n
+          yield -n
+          n += 1
+
+  print(list(itertools.islice(integers(), 11)))
+parts:
+  recall:
+    - text: |
+        [[m3.equivalence-relations-and-partitions]] showed that a notion of sameness needs three properties, and it closed with one such notion for whole sets: two sets are "the same size" when their elements can be paired off exactly. Three quick pulls first.
+    - question:
+        id: recall-three
+        type: choice
+        system: s1
+        concepts: [m3.equivalence-relations-and-partitions]
+        prompt: |
+          Which three properties make a relation an equivalence relation?
+        options:
+          - "Reflexive, symmetric, transitive"
+          - "Injective, surjective, bijective"
+          - "Reflexive, symmetric, exhaustive"
+          - "Commutative, associative, distributive"
+        answer: 0
+        explanation: Everything is related to itself, relatedness is mutual, and it chains.
+        hints:
+          - One concerns a single element, one a pair, one a triple.
+          - The second option lists properties of functions.
+    - question:
+        id: recall-classes
+        type: numeric
+        system: s1
+        concepts: [m3.equivalence-relations-and-partitions]
+        prompt: |
+          Congruence modulo 2 sorts the integers into how many classes?
+        answer: "2"
+        explanation: The even numbers and the odd numbers.
+        hints:
+          - What are the possible remainders on division by 2?
+          - Even and odd.
+    - question:
+        id: recall-key
+        type: choice
+        system: s1
+        concepts: [m3.equivalence-relations-and-partitions]
+        prompt: |
+          For any function $f$, the relation "$f(a) = f(b)$" is an equivalence relation. What are its classes?
+        options:
+          - "The sets of inputs that $f$ sends to the same output"
+          - "The outputs of $f$"
+          - "The inputs for which $f$ is not defined"
+          - "The pairs $(a, f(a))$"
+        answer: 0
+        explanation: Each class gathers all the inputs that share one output. Grouping by a key forms exactly these classes.
+        hints:
+          - When are two inputs related?
+          - Think of grouping by a key.
+  puzzle:
+    - text: |
+        A hotel has infinitely many rooms, numbered $0, 1, 2, 3, \dots$, with no last room. Tonight every room is taken.
+
+        A traveller arrives and asks for a room. In an ordinary hotel a full house means no vacancy. Here the manager makes an announcement: "Would every guest please move to the room whose number is one higher." The guest in room 0 goes to room 1, the guest in room 1 to room 2, and so on. Every guest has a room to go to, because there is no last room. Room 0 is now free, and the traveller takes it.
+
+        An hour later a bus arrives with **infinitely many** passengers, in seats numbered $0, 1, 2, \dots$ The manager announces: "Would every guest please move to the room whose number is double." Room $n$ empties into room $2n$. Now all the odd-numbered rooms are free, and passenger $k$ takes room $2k + 1$.
+
+        Then infinitely many buses arrive, each with infinitely many passengers. The manager, with rather more thought, fits them all in. You will see how below.
+
+        This is **Hilbert's hotel**, a story that the mathematician David Hilbert told in the 1920s. Something is plainly odd. The hotel was full, and it took in infinitely many more, repeatedly, without building a room. The even-numbered rooms alone turned out to be "as many" as all the rooms.
+
+        Galileo had noticed the same oddity three centuries earlier. Every whole number has a square, and different numbers have different squares, so there are exactly as many squares as numbers. Yet the squares $0, 1, 4, 9, 16, \dots$ are a vanishingly thin part of the numbers. He concluded that "more", "fewer" and "equal" simply make no sense for infinite collections, and for a long time everybody agreed.
+
+        So here is the question. **Is every infinite collection "the same size" as every other, so that the hotel can absorb any crowd whatever? Or is there a crowd so large that it cannot be fitted into the rooms $0, 1, 2, \dots$, however cleverly the manager arranges it?**
+
+        In 1874 Georg Cantor answered it, and the answer was not what Galileo thought.
+  intuition:
+    - text: |
+        How do you tell whether two collections are the same size without counting them? A shepherd who cannot count puts one pebble in a bag for each sheep that leaves in the morning. In the evening he takes one pebble out for each sheep that returns. If the bag is empty when the last sheep comes in, none is missing. He has **paired** sheep with pebbles, one to one, with nothing left over on either side.
+
+        That pairing is a function you know well. A function that pairs every element of one set with exactly one element of another, missing none and doubling none, is a **bijection**: injective and surjective at once. For finite sets, a bijection exists exactly when the two sets have the same number of elements.
+
+        Cantor's idea was to take this as the **definition** of "same size" for all sets, infinite ones included, and then follow it wherever it led without flinching. By that definition, the manager's announcements are bijections. "Move to room $n + 1$" pairs the rooms $0, 1, 2, \dots$ with the rooms $1, 2, 3, \dots$ So those two sets are the same size, even though one is the other with a room removed. For infinite sets, a part can be as large as the whole. That is strange, but it is not a contradiction. It is what makes a set infinite.
+
+        The useful picture for a programmer is a **list that never ends**. To say that a set is the same size as the natural numbers is to say that its elements can be arranged as a zeroth, a first, a second, and so on, so that **every element turns up at some finite position**. In Python terms: there is a **generator** that yields the elements one by one, and any particular element you care about will come out if you wait long enough. The starter does it for the integers. Find the position of $-4$ in its output.
+
+        A set whose elements can be listed in this way is called **countable**. The hotel can accommodate exactly the countable crowds: give the guest at position $n$ of the list room $n$.
+
+        Now you can restate the puzzle. **Can every infinite set be listed?** Try it with a set that looks hard. The figure shows the beginning of a list of infinite sequences of 0s and 1s. Suppose somebody claims that their list contains every such sequence there is. Step through the rows and watch a new sequence being built, one digit per row.
+    - figure: diagonal
+      props: { list: 1, k: 1 }
+    - text: |
+        The new sequence is made to disagree with row 1 in the first place, with row 2 in the second place, with row 3 in the third, and so on down the diagonal. So it is not row 1, since it differs from row 1 somewhere. It is not row 2. It is not row $n$ for any $n$. It is nowhere in the list.
+
+        Change to another list in the figure and the same thing happens. Nothing about the argument depended on what the list contained. **Whatever** list you are shown, the diagonal recipe produces a sequence that the list has missed. So no list contains them all. Here is a crowd that Hilbert's hotel cannot house.
+  derivation:
+    - text: |
+        **Same size.** Two sets $A$ and $B$ have the **same cardinality**, written $\lvert A \rvert = \lvert B \rvert$, when there is a bijection $f : A \to B$.
+
+        This is an equivalence relation on sets, and the three proofs are facts about functions that you already have. It is reflexive, because the identity function on $A$ is a bijection. It is symmetric, because a bijection has an inverse, which is a bijection the other way. It is transitive, because the composition of two bijections is a bijection. So "same size" really is a notion of sameness, and sets fall into classes by size.
+
+        A set is **finite** with $n$ elements when it has the same cardinality as $\{1, 2, \dots, n\}$, and counting a set aloud is building that bijection. For finite sets, a proper part is always smaller than the whole. That is the pigeonhole principle: there is no injection from a set of $n + 1$ elements into a set of $n$.
+
+        For infinite sets that rule fails. Let $E = \{0, 2, 4, 6, \dots\}$ be the set of even natural numbers. Then
+
+        $$f : \mathbb{N} \to E, \qquad f(n) = 2n$$
+
+        is a bijection. It is injective, since $2m = 2n$ forces $m = n$, and surjective, since every even natural number is $2n$ for some $n$. So $\lvert \mathbb{N} \rvert = \lvert E \rvert$, although $E$ is a proper subset of $\mathbb{N}$. Galileo's squares are the same story with $f(n) = n^2$. Being the same size as a proper part of oneself turns out to be **exactly** what distinguishes infinite sets from finite ones.
+
+        **Countable sets.** A set is **countably infinite** if it has the same cardinality as $\mathbb{N}$. A set is **countable** if it is finite or countably infinite. Otherwise it is **uncountable**.
+
+        A bijection $f : \mathbb{N} \to A$ is the same thing as a **list** $a_0, a_1, a_2, \dots$ of the elements of $A$, in which each element appears exactly once: put $a_n = f(n)$. To prove that a set is countable you describe such a list, clearly enough that it is certain that every element appears. (A list in which elements repeat is good enough, since repeats can be skipped.)
+
+        **The integers are countable.** One might think there are "twice as many" integers as natural numbers. List them outwards from 0, alternating sides:
+
+        $$0,\ 1,\ -1,\ 2,\ -2,\ 3,\ -3,\ \dots$$
+
+        Every integer appears: the positive integer $k$ at position $2k - 1$, and $-k$ at position $2k$. Notice what would **not** work: listing $0, 1, 2, 3, \dots$ first and the negatives "afterwards". There is no afterwards. In that arrangement $-1$ has no finite position, and it is not a list at all. Making a list of an infinite set is the art of never getting stuck in one infinite part while another waits.
+
+        **Pairs are countable.** Now the infinitely many buses. Passenger $b$ of bus $a$ is the pair $(a, b)$, and the set of all such pairs is $\mathbb{N} \times \mathbb{N}$, an infinite grid. Going along the first row for ever would never reach the second. Cantor's way round is to go along the **diagonals** on which $a + b$ is constant. Each diagonal is finite.
+
+        $$\underbrace{(0,0)}_{\text{sum } 0},\ \underbrace{(0,1),\ (1,0)}_{\text{sum } 1},\ \underbrace{(0,2),\ (1,1),\ (2,0)}_{\text{sum } 2},\ \underbrace{(0,3),\ (1,2),\ (2,1),\ (3,0)}_{\text{sum } 3},\ \dots$$
+
+        The pair $(a, b)$ lies on diagonal number $a + b$, and before it come only the finitely many pairs of the earlier diagonals and a few on its own. So it has a finite position, which can even be written down: $\dfrac{(a + b)(a + b + 1)}{2} + a$. Every passenger of every bus gets a room.
+
+        The consequence is worth stating by itself: **a countable collection of countable sets has a countable union**. Put the $b$th element of the $a$th set at the grid point $(a, b)$ and walk the diagonals.
+
+        **The rationals are countable.** This one surprises everybody. Between any two rational numbers there is another, their average, and so infinitely many others. The rationals are packed densely along the whole number line, with no "next" one after any given one. Surely there are more of them than natural numbers?
+
+        There are not. A positive rational is a fraction $\tfrac{p}{q}$ with $p, q \ge 1$, which is a pair. Walk the diagonals $p + q = 2, 3, 4, \dots$ and skip every fraction that is not in lowest terms, since its value has appeared already:
+
+        $$\tfrac{1}{1},\ \ \tfrac{1}{2},\ \tfrac{2}{1},\ \ \tfrac{1}{3},\ \tfrac{3}{1},\ \ \tfrac{1}{4},\ \tfrac{2}{3},\ \tfrac{3}{2},\ \tfrac{4}{1},\ \ \tfrac{1}{5},\ \tfrac{5}{1},\ \dots$$
+
+        Every positive rational appears exactly once. Put 0 in front and alternate signs as for the integers, and all of $\mathbb{Q}$ is listed. So $\lvert \mathbb{Q} \rvert = \lvert \mathbb{N} \rvert$. The list jumps about wildly along the number line. Nothing says a list must respect the order of size.
+
+        **Strings, and programs.** Fix a finite alphabet, say the hundred or so characters of a keyboard. The set of all **finite** strings over it is countable: list the strings of length 0, then those of length 1 in alphabetical order, then those of length 2, and so on. Each length contributes finitely many, and every string has some finite length.
+
+        Now, every Python program is a finite string of characters. So is every English sentence, every mathematical formula, and every proof. Therefore **the set of all programs that could ever be written is countable**. So is the set of all definitions, and the set of all descriptions of anything. Hold on to that.
+    - question:
+        id: why-not-rows
+        type: choice
+        system: s2
+        prompt: |
+          Someone proposes to list all pairs of natural numbers like this: first $(0,0), (0,1), (0,2), (0,3), \dots$, all the pairs that start with 0, and then all the pairs that start with 1, and so on. Why is this not a valid list?
+        options:
+          - "Some pairs appear twice."
+          - "The pair $(1, 0)$ never appears at any finite position, because infinitely many pairs come before it."
+          - "The pairs are not in order of size."
+          - "It is valid. Every pair is mentioned."
+        answer: 1
+        explanation: |
+          A list must give each element a position that is a natural number. Here every position $n$ is occupied by $(0, n)$, so nothing that starts with 1 is ever reached. A generator written this way would yield pairs for ever and never yield $(1, 0)$. The diagonals work because each diagonal is finite, so the walk always moves on.
+        hints:
+          - At which position would (1, 0) appear?
+          - How many pairs start with 0?
+          - What would a generator written this way yield?
+    - text: |
+        **An uncountable set.** So far every infinite set has turned out countable, and you might guess that they all are. Here is Cantor's proof that they are not.
+
+        An **infinite binary sequence** is an unending sequence of 0s and 1s, such as $0, 1, 0, 1, 0, 1, \dots$ or $1, 1, 0, 1, 0, 0, 0, 1, \dots$ Formally it is a function from $\mathbb{N}$ to $\{0, 1\}$.
+
+        > **Theorem (Cantor).** The set of all infinite binary sequences is uncountable.
+        >
+        > **Proof.** Suppose, for contradiction, that it is countable. Then its elements can be listed as $s_0, s_1, s_2, \dots$, with every infinite binary sequence appearing somewhere. Write $s_n(k)$ for the term of $s_n$ in place $k$.
+        >
+        > Define a sequence $d$ by
+        >
+        > $$d(n) = 1 - s_n(n) \qquad\text{for every } n \in \mathbb{N}.$$
+        >
+        > That is, the term of $d$ in place $n$ is the opposite of the term of $s_n$ in place $n$. Then $d$ is an infinite binary sequence, so by our supposition it appears in the list: $d = s_m$ for some $m$. But then, in place $m$,
+        >
+        > $$d(m) = 1 - s_m(m) = 1 - d(m),$$
+        >
+        > which would make $d(m) = \tfrac{1}{2}$. That is impossible, since $d(m)$ is 0 or 1. This contradiction shows that no such list exists. $\blacksquare$
+
+        This is the **diagonal argument**, and it is worth reading until every word is clear. Three remarks.
+
+        First, the proof never asks what the list looks like. It works against **every** proposed list at once. Said without contradiction: for every function $f : \mathbb{N} \to \{\text{binary sequences}\}$, there is a sequence that is not a value of $f$. So no such $f$ is surjective.
+
+        Second, the obvious objection, "add $d$ to the list, then", misses the point. The new list is a list, and the same recipe produces a sequence that is missing from **it**. The claim was never that one particular sequence is hard to list. It is that every list is incomplete.
+
+        Third, compare with the rationals. Every single binary sequence could be put at position 0 of some list. What cannot be done is to give **all** of them positions at once. A countable set is one where the elements can be made to wait in a queue. Here there are too many for any queue.
+
+        **The real numbers are uncountable.** A real number between 0 and 1 has a decimal expansion $0.d_0 d_1 d_2 \dots$ with infinitely many digits. Suppose the real numbers between 0 and 1 could be listed as $x_0, x_1, x_2, \dots$ Build a new number $y$ digit by digit: let the digit of $y$ in place $n$ be 5 if the digit of $x_n$ in place $n$ is not 5, and 4 if it is. Then $y$ is between 0 and 1, and it differs from each $x_n$ in the digit in place $n$. So $y$ is not in the list. (The digits 4 and 5 are chosen to step round a nuisance. Some numbers have two decimal expansions, as $0.4999\ldots = 0.5000\ldots$ A number whose digits are all 4s and 5s has only one expansion, so differing in a digit really does mean being a different number.)
+
+        So $\mathbb{R}$ is **uncountable**. There are strictly more real numbers than natural numbers, in the precise sense that the naturals can be paired with some of the reals, and can never be paired with all of them. **Infinity comes in more than one size.**
+
+        And now a striking consequence. The rationals are countable. If the irrationals were countable too, then $\mathbb{R}$, the union of the two, would be countable. It is not. So **the irrational numbers are uncountable**. Two lessons ago it took real work to exhibit one irrational number, $\sqrt{2}$. Now it turns out that the irrationals are not the exception. The rationals are a countable sprinkling, and essentially every real number is irrational. This proof shows that irrational numbers exist in overwhelming abundance without naming one of them. It is non-constructive, like the pigeonhole principle, and for the same underlying reason: it is a counting argument.
+
+        **Sets of subsets.** A subset of $\mathbb{N}$ can be described by an infinite binary sequence, with a 1 in place $n$ if $n$ is in the subset and a 0 if it is not. This is a bijection between the subsets of $\mathbb{N}$ and the binary sequences. So the set of **all subsets of $\mathbb{N}$**, its power set, is uncountable.
+
+        Cantor proved more: **no set can be put in bijection with the set of its own subsets**. The power set is always strictly larger. For a finite set with $n$ elements this is the statement that $2^n > n$. For infinite sets it means that there is no largest infinity: the subsets of $\mathbb{R}$ form a set larger than $\mathbb{R}$, the subsets of that are larger again, and so on without end. The proof is the diagonal argument once more. Given any $f$ from $A$ to the subsets of $A$, the set $D = \{x \in A : x \notin f(x)\}$ is a subset of $A$ that $f$ never produces: if $D = f(m)$, then $m \in D$ exactly when $m \notin f(m) = D$.
+
+        **What cannot be computed.** Put two facts side by side.
+
+        - The set of all programs is **countable**.
+        - The set of all functions from $\mathbb{N}$ to $\{0, 1\}$, which are the infinite binary sequences, is **uncountable**.
+
+        Each program computes at most one such function. So the functions that some program computes form a countable set, and it cannot be all of them. **There are functions that no program computes**, and indeed almost all functions are of that kind. Counting alone proves that computation has limits, before any particular hard problem has been named. Alan Turing found a specific one in 1936: no program can decide, for every program and input, whether that program will eventually stop. His proof is the diagonal argument, applied to programs that examine programs.
+
+        The same count applies to numbers. Every description of a number, a formula, a decimal with a repeating rule, a program that prints its digits, is a finite string, so the **describable** real numbers are countable. Almost every real number has no finite description of any kind. And a `float` is 64 bits, so there are at most $2^{64}$ of them, a finite set. The continuum that calculus works on is, almost all of it, beyond the reach of any notation. What makes it usable is the next lesson's idea: we cannot name most real numbers, but we can **approximate** any of them as closely as we like by ones we can name.
+    - question:
+        id: order-diagonal
+        type: order
+        system: s2
+        prompt: Put the steps of the diagonal argument in order.
+        steps:
+          - "Suppose, for contradiction, that all infinite binary sequences can be listed as $s_0, s_1, s_2, \\dots$"
+          - "Define a sequence $d$ whose term in place $n$ is the opposite of the term of $s_n$ in place $n$, for every $n$."
+          - "Since $d$ is an infinite binary sequence, it must be in the list, so $d = s_m$ for some $m$."
+          - "But $d$ and $s_m$ differ in place $m$, by the way $d$ was defined."
+          - "This contradiction shows that no list contains every infinite binary sequence."
+        explanation: The supposition supplies a list. The diagonal recipe turns the list into a new sequence. The supposition then says the new sequence is somewhere in the list, and the recipe says it differs from whatever is there. Both cannot be true.
+        hints:
+          - A proof by contradiction opens with the supposition.
+          - The new sequence must be defined before anything can be said about where it is.
+          - The clash is between "it is in the list" and "it differs from every row".
+  formal:
+    - text: |
+        Sets $A$ and $B$ have the **same cardinality**, $\lvert A \rvert = \lvert B \rvert$, if there is a bijection $A \to B$. This is an equivalence relation on sets.
+
+        | Term | Meaning |
+        | --- | --- |
+        | finite, with $n$ elements | same cardinality as $\{1, \dots, n\}$ |
+        | countably infinite | same cardinality as $\mathbb{N}$ |
+        | countable | finite or countably infinite |
+        | uncountable | not countable |
+
+        A set $A$ is countably infinite exactly when its elements can be listed as $a_0, a_1, a_2, \dots$ with each element appearing exactly once.
+
+        | Set | Size | Reason |
+        | --- | --- | --- |
+        | even natural numbers | countable | $n \mapsto 2n$ |
+        | $\mathbb{Z}$ | countable | $0, 1, -1, 2, -2, \dots$ |
+        | $\mathbb{N} \times \mathbb{N}$ | countable | list by diagonals $a + b = 0, 1, 2, \dots$ |
+        | $\mathbb{Q}$ | countable | fractions in lowest terms, by diagonals |
+        | finite strings over a finite alphabet | countable | by length, then alphabetically |
+        | all programs | countable | they are finite strings |
+        | infinite binary sequences | uncountable | diagonal argument |
+        | subsets of $\mathbb{N}$ | uncountable | they correspond to binary sequences |
+        | $\mathbb{R}$, and the irrationals | uncountable | diagonal argument on decimal digits |
+
+        **Facts.** Every subset of a countable set is countable. A union of countably many countable sets is countable.
+
+        **Cantor's theorem.** For every set $A$ there is no surjection from $A$ onto the set of all subsets of $A$.
+
+        **Corollary.** There are functions $\mathbb{N} \to \{0, 1\}$ that no program computes.
+  drill:
+    - text: Seconds each. A set is countable when you can say how to list it so that everything gets a finite position.
+    - question:
+        id: drill-hotel-shift
+        type: numeric
+        system: s1
+        prompt: |
+          In Hilbert's hotel a bus of infinitely many passengers arrives, and every guest moves from room $n$ to room $2n$. Where does the guest in room 7 go?
+        answer: "14"
+        explanation: The room number is doubled.
+        hints:
+          - Apply the rule to n = 7.
+          - Double it.
+    - question:
+        id: drill-bus-seat
+        type: numeric
+        system: s1
+        prompt: |
+          After that move, the passenger in seat $k$ of the bus takes room $2k + 1$. Which room does the passenger in seat 5 get?
+        answer: "11"
+        explanation: |
+          $2 \times 5 + 1$. The passengers fill exactly the odd-numbered rooms.
+        hints:
+          - Substitute k = 5.
+          - Double and add one.
+    - question:
+        id: drill-integer-position
+        type: numeric
+        system: s1
+        prompt: |
+          In the list $0, 1, -1, 2, -2, 3, -3, \dots$, with positions counted from 0, at which position is $-3$?
+        answer: "6"
+        explanation: The negative integer $-k$ is at position $2k$.
+        hints:
+          - Count along the list, starting with position 0 for the number 0.
+          - Each positive number and its negative take two neighbouring positions.
+    - question:
+        id: drill-diagonal-size
+        type: numeric
+        system: s1
+        prompt: |
+          How many pairs $(a, b)$ of natural numbers, with 0 allowed, have $a + b = 4$?
+        answer: "5"
+        explanation: |
+          $(0,4), (1,3), (2,2), (3,1), (4,0)$. The diagonal with sum $s$ has $s + 1$ pairs, which is finite, and that is why the walk never gets stuck.
+        hints:
+          - Let a run from 0 to 4.
+          - For each a there is exactly one b.
+    - question:
+        id: drill-same-size
+        type: choice
+        system: s1
+        prompt: |
+          What shows that the natural numbers and the even natural numbers have the same cardinality?
+        options:
+          - "Both are infinite."
+          - "The function $n \\mapsto 2n$ is a bijection between them."
+          - "The even numbers are a subset of the natural numbers."
+          - "They do not have the same cardinality. There are half as many even numbers."
+        answer: 1
+        explanation: Same cardinality means that a bijection exists. Being infinite is not enough, as the real numbers show.
+        hints:
+          - What is the definition of same cardinality?
+          - Which option exhibits a pairing?
+    - question:
+        id: drill-which-uncountable
+        type: choice
+        system: s1
+        prompt: |
+          Which of these sets is uncountable?
+        options: ["$\\mathbb{Z}$", "$\\mathbb{Q}$", "The set of all Python programs", "$\\mathbb{R}$"]
+        answer: 3
+        explanation: The integers and the rationals can be listed, and programs are finite strings, which can be listed by length. The real numbers cannot be listed, by the diagonal argument.
+        hints:
+          - Which of them have you seen a list for?
+          - Which one did the diagonal argument deal with?
+    - question:
+        id: drill-subsets
+        type: numeric
+        system: s1
+        prompt: |
+          How many subsets has a set with 5 elements?
+        answer: "32"
+        explanation: |
+          Each element is in or out: $2^5$. The power set is always larger than the set.
+        hints:
+          - Each element is either in the subset or not.
+          - Two choices, five times over.
+    - question:
+        id: drill-diagonal-flip
+        type: choice
+        system: s1
+        prompt: |
+          Three sequences begin $s_0 = 1, 0, 0, \dots$, $\ s_1 = 0, 0, 1, \dots$, $\ s_2 = 1, 1, 1, \dots$ What are the first three terms of the diagonal sequence $d$, where $d(n) = 1 - s_n(n)$?
+        options: ["$1, 0, 1$", "$0, 1, 0$", "$0, 0, 0$", "$1, 1, 1$"]
+        answer: 1
+        explanation: |
+          The diagonal terms are $s_0(0) = 1$, $s_1(1) = 0$, $s_2(2) = 1$. Flip each.
+        hints:
+          - Read off the term in place n of the sequence number n.
+          - Then replace each 0 by 1 and each 1 by 0.
+    - question:
+        id: drill-strings
+        type: choice
+        system: s1
+        prompt: |
+          Is the set of all finite strings of the letters a and b countable?
+        options:
+          - "Yes: list them by length, and alphabetically within each length."
+          - "No: there are infinitely many of them."
+          - "No, by the diagonal argument."
+          - "Yes, because there are only finitely many."
+        answer: 0
+        explanation: There are $2^k$ strings of length $k$, finitely many, so listing by length reaches every string. The diagonal argument needs infinitely long sequences. A diagonal of finite strings would not be a finite string.
+        hints:
+          - How many strings are there of each length?
+          - Can you say where a given string would appear?
+    - question:
+        id: drill-rational-skip
+        type: choice
+        system: s1
+        prompt: |
+          In listing the positive rationals by diagonals, why is $\tfrac{2}{4}$ skipped?
+        options:
+          - "It is too small."
+          - "Its value, $\\tfrac{1}{2}$, has already appeared, and each rational should be listed once."
+          - "It is not a rational number."
+          - "Its numerator is even."
+        answer: 1
+        explanation: Fractions not in lowest terms repeat a value listed earlier. Keeping only fractions in lowest terms lists each rational exactly once.
+        hints:
+          - Which number does the fraction name?
+          - Has that number been listed before?
+    - question:
+        id: predict-integers
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          import itertools
+
+          def integers():
+              yield 0
+              n = 1
+              while True:
+                  yield n
+                  yield -n
+                  n += 1
+
+          print(list(itertools.islice(integers(), 7)))
+        output: "[0, 1, -1, 2, -2, 3, -3]"
+        explanation: The generator is the list that proves the integers countable. It never finishes, and every integer comes out at some finite position.
+        hints:
+          - After 0, each pass of the loop yields a number and then its negative.
+          - Seven values are taken.
+    - question:
+        id: predict-flip
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          rows = ["0101", "1111", "0000", "1001"]
+          print("".join("1" if rows[i][i] == "0" else "0" for i in range(4)))
+        output: "1010"
+        explanation: It reads the diagonal of the four rows, which is 0, 1, 0, 1, and flips each digit. The result differs from row i in place i, so it is none of the four rows.
+        hints:
+          - rows[i][i] is the digit in place i of row i.
+          - Each of those digits is replaced by the other digit.
+  work:
+    - text: Slower now. For countable, describe the list. For uncountable, look for a diagonal.
+    - question:
+        id: work-finite-subsets
+        type: choice
+        system: s2
+        prompt: |
+          The set of **all** subsets of $\mathbb{N}$ is uncountable. What about the set of all **finite** subsets of $\mathbb{N}$?
+        options:
+          - "Uncountable as well, since it is a set of subsets."
+          - "Countable. A finite subset can be written as a finite string of digits and commas, and finite strings can be listed."
+          - "Finite."
+          - "It cannot be decided."
+        answer: 1
+        explanation: |
+          Each finite subset has a finite description, for example its members in increasing order, and finite strings over a finite alphabet are countable. The diagonal argument does not apply: the diagonal set built from a list of finite subsets would in general be **infinite**, so it is no surprise, and no contradiction, that it is missing from a list of finite ones. Uncountability comes entirely from the infinite subsets.
+        hints:
+          - Can a finite subset be written down completely?
+          - What do you know about the set of all finite strings?
+          - Would the diagonal set be a finite set?
+    - question:
+        id: work-diagonal-rationals
+        type: choice
+        system: s2
+        prompt: |
+          The rationals between 0 and 1 can be listed. Apply the diagonal recipe to the decimal expansions of that list. A number $y$ comes out that differs from every number in the list. Does this contradict the fact that the rationals are countable?
+        options:
+          - "Yes. It shows that the rationals are uncountable after all."
+          - "No. The number $y$ differs from every rational in the list, so $y$ is simply not rational. The recipe proves that an irrational number exists."
+          - "No, because the recipe cannot be applied to rationals."
+          - "Yes. It shows that the list was badly chosen."
+        answer: 1
+        explanation: |
+          For a contradiction, $y$ would have to belong to the set that the list was supposed to exhaust. With binary sequences, the diagonal sequence is certainly a binary sequence. Here, the diagonal number is a real number, and nothing makes it rational. Since the list contains every rational, and $y$ is not in it, $y$ is irrational. Always check that the diagonal object lies in the set in question. That is the step that makes or breaks every diagonal argument.
+        hints:
+          - What kind of number is y guaranteed to be?
+          - For a contradiction, where would y have to belong?
+          - The list contains every rational. What does that say about y?
+    - question:
+        id: write-pairs
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write a generator function `pairs()` that yields **every** pair `(a, b)` of natural numbers, with 0 included, by Cantor's diagonals: first the pair with $a + b = 0$, then the pairs with $a + b = 1$, then those with $a + b = 2$, and so on for ever. Within a diagonal, `a` goes upwards from 0.
+
+          The program prints the first ten.
+        starter: |
+          import itertools
+
+          def pairs():
+              # Replace the next line with your own.
+              yield (0, 0)
+
+          print(list(itertools.islice(pairs(), 10)))
+        solution: |
+          import itertools
+
+          def pairs():
+              for total in itertools.count():
+                  for a in range(total + 1):
+                      yield (a, total - a)
+
+          print(list(itertools.islice(pairs(), 10)))
+        tests: |
+          import itertools as _it
+          _first = list(_it.islice(pairs(), 10))
+          assert _first[:1] == [(0, 0)], "The first pair is (0, 0)"
+          assert len(_first) == 10, "The generator must not stop. It should yield pairs for as long as it is asked."
+          assert _first == [(0, 0), (0, 1), (1, 0), (0, 2), (1, 1), (2, 0), (0, 3), (1, 2), (2, 1), (3, 0)], "Diagonals in order of a + b, and within a diagonal a goes up from 0"
+          _many = list(_it.islice(pairs(), 300))
+          assert len(set(_many)) == 300, "No pair should be yielded twice"
+          for _a in range(8):
+              for _b in range(8):
+                  assert (_a, _b) in _many, "The pair " + str((_a, _b)) + " should appear among the first 300. Every pair must be reached after finitely many steps."
+          assert _many[(3 + 4) * (3 + 4 + 1) // 2 + 3] == (3, 4), "The pair (a, b) should be at position (a + b)(a + b + 1)/2 + a"
+          assert output.strip() == "[(0, 0), (0, 1), (1, 0), (0, 2), (1, 1), (2, 0), (0, 3), (1, 2), (2, 1), (3, 0)]", "The program should print the first ten pairs"
+        wrong:
+          - "import itertools\n\ndef pairs():\n    for a in itertools.count():\n        for b in itertools.count():\n            yield (a, b)\n\nprint([(0, 0), (0, 1), (1, 0), (0, 2), (1, 1), (2, 0), (0, 3), (1, 2), (2, 1), (3, 0)])\n"
+          - "import itertools\n\ndef pairs():\n    for total in itertools.count():\n        for a in range(total + 1):\n            yield (total - a, a)\n\nprint([(0, 0), (0, 1), (1, 0), (0, 2), (1, 1), (2, 0), (0, 3), (1, 2), (2, 1), (3, 0)])\n"
+          - "import itertools\n\ndef pairs():\n    for total in itertools.count():\n        for a in range(total):\n            yield (a, total - a)\n\nprint([(0, 0), (0, 1), (1, 0), (0, 2), (1, 1), (2, 0), (0, 3), (1, 2), (2, 1), (3, 0)])\n"
+          - "import itertools\n\ndef pairs():\n    for total in range(4):\n        for a in range(total + 1):\n            yield (a, total - a)\n\nprint([(0, 0), (0, 1), (1, 0), (0, 2), (1, 1), (2, 0), (0, 3), (1, 2), (2, 1), (3, 0)])\n"
+        explanation: |
+          The outer loop is endless and the inner loop is **finite**, and that is the entire trick: each diagonal is completed, so the generator always moves on to the next. Two nested endless loops would stay in the first row for ever and never yield $(1, 0)$. This generator is a proof that $\mathbb{N} \times \mathbb{N}$ is countable, in executable form. It is also a practical pattern. When you must search a space with two unbounded dimensions, such as every program length against every running time, you search it by diagonals, so that no point is postponed for ever.
+        hints:
+          - Loop over the sum a + b = 0, 1, 2, … without end. itertools.count gives such a loop.
+          - For a fixed sum, a runs from 0 up to the sum, and b is the sum minus a.
+          - range leaves out its end value, so use the sum plus 1.
+    - question:
+        id: write-rationals
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write a generator function `rationals()` that yields every **positive** rational number exactly once, as a pair `(p, q)` standing for the fraction $\tfrac{p}{q}$ in lowest terms. Go by diagonals $p + q = 2, 3, 4, \dots$, with `p` going upwards from 1 within each, and skip the fractions that are not in lowest terms. `math.gcd(p, q)` is 1 exactly when $\tfrac{p}{q}$ is in lowest terms.
+
+          The program prints the first eleven.
+        starter: |
+          import itertools
+          import math
+
+          def rationals():
+              # Replace the next line with your own.
+              yield (1, 1)
+
+          print(list(itertools.islice(rationals(), 11)))
+        solution: |
+          import itertools
+          import math
+
+          def rationals():
+              for total in itertools.count(2):
+                  for p in range(1, total):
+                      q = total - p
+                      if math.gcd(p, q) == 1:
+                          yield (p, q)
+
+          print(list(itertools.islice(rationals(), 11)))
+        tests: |
+          import itertools as _it
+          import math as _m
+          _first = list(_it.islice(rationals(), 11))
+          assert len(_first) == 11, "The generator must not stop"
+          assert _first == [(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (1, 4), (2, 3), (3, 2), (4, 1), (1, 5), (5, 1)], "By diagonals p + q = 2, 3, 4, ..., with p going up, skipping fractions not in lowest terms such as 2/2"
+          _many = list(_it.islice(rationals(), 200))
+          assert all(_p >= 1 and _q >= 1 for _p, _q in _many), "Numerator and denominator are both at least 1"
+          assert all(_m.gcd(_p, _q) == 1 for _p, _q in _many), "Every fraction yielded must be in lowest terms"
+          for _i in range(len(_many)):
+              for _j in range(_i):
+                  assert _many[_i][0] * _many[_j][1] != _many[_j][0] * _many[_i][1], "The same rational number was yielded twice: " + str(_many[_j]) + " and " + str(_many[_i])
+          for _p in range(1, 12):
+              for _q in range(1, 12):
+                  if _m.gcd(_p, _q) == 1:
+                      assert (_p, _q) in _many, "The fraction " + str(_p) + "/" + str(_q) + " should appear among the first 200"
+          assert output.strip() == "[(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (1, 4), (2, 3), (3, 2), (4, 1), (1, 5), (5, 1)]", "The program should print the first eleven"
+        wrong:
+          - "import itertools\nimport math\n\ndef rationals():\n    for total in itertools.count(2):\n        for p in range(1, total):\n            yield (p, total - p)\n\nprint([(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (1, 4), (2, 3), (3, 2), (4, 1), (1, 5), (5, 1)])\n"
+          - "import itertools\nimport math\n\ndef rationals():\n    for q in itertools.count(1):\n        for p in itertools.count(1):\n            if math.gcd(p, q) == 1:\n                yield (p, q)\n\nprint([(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (1, 4), (2, 3), (3, 2), (4, 1), (1, 5), (5, 1)])\n"
+          - "import itertools\nimport math\n\ndef rationals():\n    for total in itertools.count(2):\n        for p in range(1, total):\n            q = total - p\n            if math.gcd(p, q) == 1:\n                yield (q, p)\n\nprint([(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (1, 4), (2, 3), (3, 2), (4, 1), (1, 5), (5, 1)])\n"
+          - "import itertools\nimport math\n\ndef rationals():\n    for total in itertools.count(2):\n        for p in range(1, total):\n            q = total - p\n            if p % 2 == 1 or q % 2 == 1:\n                yield (p, q)\n\nprint([(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (1, 4), (2, 3), (3, 2), (4, 1), (1, 5), (5, 1)])\n"
+        explanation: |
+          This is the pairs generator with a filter. Every positive rational has exactly one representation in lowest terms, its canonical form from the last lesson, so keeping only those lists each number once. The output hops about the number line: 1, a half, 2, a third, 3, a quarter, two thirds, and so on. No list of the rationals can go in order of size, since there is no smallest positive rational to start with and no next rational after any given one. Being countable has nothing to do with being arranged in order. It asks only that everything gets a turn.
+        hints:
+          - Start from the pairs generator, with the sum beginning at 2 and p beginning at 1.
+          - For each p on a diagonal, q is the sum minus p.
+          - Yield the pair only when the greatest common divisor of p and q is 1.
+    - question:
+        id: fix-missing-row
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `missing_row(rows)` is given a list of $n$ strings of 0s and 1s, each of length $n$. It should return a string of length $n$ that is **not in the list**, built by the diagonal recipe: its character in place $i$ is the opposite of the character in place $i$ of row $i$. For the four rows in the program it returns `1001`, which is the second row. Fix it.
+        starter: |
+          def missing_row(rows):
+              return "".join("1" if rows[i][0] == "0" else "0" for i in range(len(rows)))
+
+          print(missing_row(["0110", "1001", "1010", "0101"]))
+        solution: |
+          def missing_row(rows):
+              return "".join("1" if rows[i][i] == "0" else "0" for i in range(len(rows)))
+
+          print(missing_row(["0110", "1001", "1010", "0101"]))
+        tests: |
+          assert missing_row(["0110", "1001", "1010", "0101"]) == "1100", "The diagonal of these rows is 0, 0, 1, 1, so the answer is 1100"
+          assert missing_row(["0"]) == "1", "One row, one character, flipped"
+          assert missing_row(["11", "01"]) == "00", "The diagonal is 1, 1"
+          _bits = ["00", "01", "10", "11"]
+          for _r0 in _bits:
+              for _r1 in _bits:
+                  _rows = [_r0, _r1]
+                  _d = missing_row(_rows)
+                  assert len(_d) == 2 and all(_ch in "01" for _ch in _d), "The result should be a string of 0s and 1s of the same length as the rows"
+                  assert _d not in _rows, "For the rows " + str(_rows) + " the result " + _d + " is one of the rows"
+          _big = ["".join("1" if (_i * _j + _i) % 3 == 0 else "0" for _j in range(9)) for _i in range(9)]
+          _d = missing_row(_big)
+          assert all(_d[_i] != _big[_i][_i] for _i in range(9)), "The result must differ from row i in place i, for every i"
+          assert output.strip() == "1100", "The program should print 1100"
+        wrong:
+          - "def missing_row(rows):\n    return \"\".join(rows[i][i] for i in range(len(rows)))\n\nprint(\"1100\")\n"
+          - "def missing_row(rows):\n    return \"\".join(\"1\" if ch == \"0\" else \"0\" for ch in rows[0])\n\nprint(\"1100\")\n"
+          - "def missing_row(rows):\n    return \"\".join(\"1\" if rows[0][i] == \"0\" else \"0\" for i in range(len(rows)))\n\nprint(\"1100\")\n"
+          - "def missing_row(rows):\n    return \"1\" * len(rows)\n\nprint(\"1100\")\n"
+        explanation: |
+          The starter read down the **first column**, place 0 of every row, where the recipe reads down the **diagonal**, place $i$ of row $i$. The difference is the whole proof. A string built from the diagonal disagrees with row $i$ in a place of its own, place $i$, so it disagrees with every row. A string built from column 0 only records what the rows start with, and nothing stops it from coinciding with one of them. The tests try every possible list of two rows of length 2, sixteen lists in all, and a correct diagonal survives all sixteen, as the theorem promises it must.
+        hints:
+          - Which character of row i does the recipe look at?
+          - The starter looks at the same place in every row.
+          - Place i of row i is rows[i][i].
+    - question:
+        id: work-add-to-list
+        type: choice
+        system: s2
+        prompt: |
+          A student objects to Cantor's proof: "The diagonal sequence $d$ is missing from the list. Fine. Put $d$ at the front of the list. Now the list is complete, so the set is countable after all." What is the right reply?
+        options:
+          - "The student is right. Adding $d$ repairs the list."
+          - "The new list is again a list, and the diagonal recipe applied to it produces a sequence that is missing from it. The proof shows that every list is incomplete, not that one particular sequence is hard to include."
+          - "$d$ cannot be added, because the list is already infinite."
+          - "$d$ is not really a binary sequence."
+        answer: 1
+        explanation: |
+          The theorem is a universal statement: **for every** list there is a sequence it misses. Repairing one list does nothing to that. The repaired list has its own diagonal, and its own missing sequence. An infinite list can always take one more at the front, as Hilbert's hotel shows, so the third option is false. The student has refuted "this list is the only possible one", which nobody claimed.
+        hints:
+          - What is the quantifier in the theorem?
+          - Apply the recipe to the new list.
+          - Does the proof depend on which list is given?
+    - question:
+        id: work-uncomputable
+        type: choice
+        system: s2
+        prompt: |
+          Why must there be a function from $\mathbb{N}$ to $\{0, 1\}$ that no Python program computes?
+        options:
+          - "Because some functions take too long to compute."
+          - "Because programs are finite strings, so there are countably many, while there are uncountably many such functions. A countable set of programs cannot account for an uncountable set of functions."
+          - "Because Python is not powerful enough, though another language might be."
+          - "Because computers have limited memory."
+        answer: 1
+        explanation: |
+          It is a counting argument. Each program computes at most one function, so the computable functions form a countable set, and the set of all functions from $\mathbb{N}$ to $\{0, 1\}$ is uncountable. The argument uses only the fact that programs are finite strings over a finite alphabet, so it holds for every programming language there is or could be, and even with unlimited time and memory. It is non-constructive: it proves that uncomputable functions exist, in overwhelming majority, without exhibiting one.
+        hints:
+          - How many programs are there?
+          - How many functions from the natural numbers to 0 and 1 are there?
+          - Can a countable set be mapped onto an uncountable one?
+  connections:
+    - text: |
+        The diagonal argument is one of the great ideas, and it will keep returning in different clothes. Turing's proof that no program can decide whether programs halt is a diagonal argument. So is the proof that some problems need more time than others to solve, on which the theory of complexity rests. So is Gödel's theorem that any consistent set of axioms strong enough for arithmetic leaves some true statements unprovable. Each takes a supposed complete list, of programs or of proofs, and builds something that disagrees with the $n$th item about the $n$th thing.
+
+        For the mathematics ahead, the distinction between countable and uncountable is practical. Probability treats the two kinds of set differently. Over a countable set you can give each outcome its own probability and add them up, as with the faces of a die or the words in a vocabulary. Over the real numbers each single value has probability zero, and probability has to be spread as a density and measured by integrals. The reason for the difference is exactly this lesson's: a sum can run over a list, and the reals cannot be listed. When you meet discrete and continuous distributions, sums and integrals, token probabilities and probability densities, you are meeting countable and uncountable.
+
+        For engineering, the lesson is one of humility about representation. A program has finitely many bits. The parameters of a model are `float`s, of which there are finitely many. The real numbers that the theory talks about, the true minimum of a loss, the exact value of a gradient, are almost never among them. Everything a computer does with real numbers is approximation.
+
+        And that is where the cluster has been heading from its first page. If almost no real number can be written down exactly, then to work with real numbers at all one must be able to say, with complete precision, what it means to get **close**: within any tolerance you name, from some point on. That was the sentence this cluster began with, the definition of convergence, with its "for every" and its "there is". You now have everything needed to read such a sentence, to negate it, and to prove it: quantifiers, direct proof, cases, the triangle inequality. The last lesson of the cluster puts them all to work: [[m3.reading-and-writing-epsilon-style-arguments]].

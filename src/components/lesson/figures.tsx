@@ -972,6 +972,335 @@ function GrowthRates(props: Props) {
   );
 }
 
+function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <span className="fig-stepper">
+      <span className="label">{label}</span>
+      <button type="button" className="q-move" aria-label={`Switch ${label}`} aria-pressed={value} onClick={() => onChange(!value)}>
+        {value ? "T" : "F"}
+      </button>
+    </span>
+  );
+}
+
+const CONNECTIVES: { head: string; name: string; f: (p: boolean, q: boolean) => boolean }[] = [
+  { head: "¬P", name: "not P", f: (p) => !p },
+  { head: "P∧Q", name: "P and Q", f: (p, q) => p && q },
+  { head: "P∨Q", name: "P or Q", f: (p, q) => p || q },
+  { head: "P⇒Q", name: "P implies Q", f: (p, q) => !p || q },
+  { head: "P⇔Q", name: "P if and only if Q", f: (p, q) => p === q },
+];
+
+/** The truth table of the five connectives, with the row for the chosen P and Q picked out. */
+function TruthTable(props: Props) {
+  const [p, setP] = useState(props.p !== false);
+  const [q, setQ] = useState(props.q !== false);
+  const word = (v: boolean) => (v ? "true" : "false");
+  const note = !p ? "A false P makes “P implies Q” true whatever Q is: the promise was never put to the test." : q ? "P held and Q followed: the promise was kept." : "This is the only row in which “P implies Q” is false: P held and Q did not, so the promise was broken.";
+  const rows: [boolean, boolean][] = [
+    [true, true],
+    [true, false],
+    [false, true],
+    [false, false],
+  ];
+  const heads = ["P", "Q", ...CONNECTIVES.map((c) => c.head)];
+  return (
+    <Frame
+      title="Truth table"
+      summary={`P is ${word(p)} and Q is ${word(q)}. ${CONNECTIVES.map((c) => `${c.name} is ${word(c.f(p, q))}`).join(". ")}. ${note}`}
+      controls={
+        <>
+          <Toggle label="P" value={p} onChange={setP} />
+          <Toggle label="Q" value={q} onChange={setQ} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`Truth table of not, and, or, implies and if and only if, with the row for P ${word(p)} and Q ${word(q)} marked`}>
+        {heads.map((h, j) => (
+          <text key={h} x={52 + j * 56} y="36" textAnchor="middle" className="fig-small" style={{ fontSize: 13 }}>
+            {h}
+          </text>
+        ))}
+        <line x1="24" x2="416" y1="50" y2="50" className="fig-axis" />
+        {rows.map(([a, b], i) => {
+          const here = a === p && b === q;
+          const cells = [a, b, ...CONNECTIVES.map((c) => c.f(a, b))];
+          return (
+            <g key={i}>
+              {here ? <rect x="24" y={60 + i * 50} width="392" height="40" className="fig-accent" /> : null}
+              {cells.map((v, j) => (
+                <text key={j} x={52 + j * 56} y={86 + i * 50} textAnchor="middle" className="fig-mono" style={here ? { fill: "var(--bg)" } : undefined}>
+                  {v ? "T" : "F"}
+                </text>
+              ))}
+            </g>
+          );
+        })}
+      </svg>
+    </Frame>
+  );
+}
+
+/** Induction as a row of dominoes: a first push and a rule that each knocks over the next. */
+function Dominoes(props: Props) {
+  const count = 8;
+  const [base, setBase] = useState(props.base !== false);
+  const [gap, setGap] = useState(clamp(Math.round(num(props.gap, 0)), 0, count - 1));
+  const fallen = !base ? 0 : gap === 0 ? count : gap;
+  const summary = !base
+    ? `The base case P(1) has not been shown. ${gap === 0 ? "Every step from P(k) to P(k + 1) holds, and yet" : "So"} no domino falls: nothing starts the chain.`
+    : gap === 0
+      ? `The base case P(1) holds, and every step from P(k) to P(k + 1) holds. All ${count} dominoes fall, and so would any number of them: P(n) is true for every n.`
+      : `The base case P(1) holds, but the step from P(${gap}) to P(${gap + 1}) fails. ${gap === 1 ? "Domino 1 falls" : `Dominoes 1 to ${gap} fall`} and the rest stand: nothing is proved beyond the gap.`;
+  return (
+    <Frame
+      title="Induction as falling dominoes"
+      summary={summary}
+      controls={
+        <>
+          <Toggle label="base case" value={base} onChange={setBase} />
+          <Stepper label="broken step" value={gap} onChange={setGap} min={0} max={count - 1} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`${count} dominoes in a row, ${fallen} of them fallen`}>
+        <line x1="20" x2="420" y1="230" y2="230" className="fig-axis" />
+        {Array.from({ length: count }, (_, i) => {
+          const x = 40 + i * 48;
+          const down = i < fallen;
+          return (
+            <g key={i}>
+              {down ? <rect x={x} y="216" width="42" height="14" className="fig-accent" /> : <rect x={x} y="120" width="14" height="110" className="fig-fill" />}
+              <text x={x + 7} y="254" textAnchor="middle" className="fig-small">
+                P({i + 1})
+              </text>
+              {base && gap === i + 1 ? (
+                <text x={x + 21} y="208" textAnchor="middle" className="fig-small">
+                  gap
+                </text>
+              ) : null}
+            </g>
+          );
+        })}
+      </svg>
+    </Frame>
+  );
+}
+
+const BIT_LISTS = [
+  ["010101", "111111", "000000", "100100", "001101", "110010"],
+  ["000000", "100000", "010000", "110000", "001000", "101000"],
+  ["101010", "011011", "110110", "000111", "111000", "010010"],
+];
+
+/** Cantor's diagonal argument: flip the diagonal of any list of bit sequences to build one the list missed. */
+function Diagonal(props: Props) {
+  const [list, setList] = useState(clamp(Math.round(num(props.list, 1)), 1, BIT_LISTS.length));
+  const [k, setK] = useState(clamp(Math.round(num(props.k, 1)), 1, 6));
+  const rows = BIT_LISTS[list - 1];
+  const flipped = rows.map((row, i) => (row[i] === "0" ? "1" : "0"));
+  const soFar = flipped.slice(0, k).join("");
+  return (
+    <Frame
+      title="The diagonal argument"
+      summary={`Row ${k} has ${rows[k - 1][k - 1]} in place ${k}, so the new sequence gets ${flipped[k - 1]} there. So far the new sequence starts ${soFar}. It differs from ${k === 1 ? "row 1" : `each of rows 1 to ${k}`} in at least one place${k === 6 ? ", and continuing in the same way it differs from every row of the list, however long the list is. The list has missed it." : "."}`}
+      controls={
+        <>
+          <Stepper label="row" value={k} onChange={setK} min={1} max={6} />
+          <Stepper
+            label="list"
+            value={list}
+            onChange={(v) => {
+              setList(v);
+              setK(1);
+            }}
+            min={1}
+            max={BIT_LISTS.length}
+          />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`A list of six sequences of bits with the first ${k} diagonal entries marked, and a new sequence that starts ${soFar}`}>
+        {rows.map((row, i) => (
+          <g key={i}>
+            <text x="60" y={36 + i * 32} textAnchor="end" className="fig-small">
+              row {i + 1}
+            </text>
+            {row.split("").map((bit, j) => {
+              const marked = i === j && i < k;
+              return (
+                <g key={j}>
+                  {marked ? <rect x={82 + j * 40} y={16 + i * 32} width="28" height="28" className="fig-fill" /> : null}
+                  <text x={96 + j * 40} y={37 + i * 32} textAnchor="middle" className="fig-mono">
+                    {bit}
+                  </text>
+                </g>
+              );
+            })}
+            <text x={96 + 6 * 40} y={37 + i * 32} textAnchor="middle" className="fig-small">
+              …
+            </text>
+          </g>
+        ))}
+        <line x1="20" x2="420" y1="214" y2="214" className="fig-axis" />
+        <text x="60" y="246" textAnchor="end" className="fig-small">
+          new
+        </text>
+        {flipped.map((bit, j) =>
+          j < k ? (
+            <g key={j}>
+              <rect x={82 + j * 40} y="226" width="28" height="28" className="fig-accent" />
+              <text x={96 + j * 40} y="247" textAnchor="middle" className="fig-mono" style={{ fill: "var(--bg)" }}>
+                {bit}
+              </text>
+            </g>
+          ) : null,
+        )}
+      </svg>
+    </Frame>
+  );
+}
+
+/** The terms of a convergent sequence and a band of tolerance about its limit: from some N onwards every term is inside. */
+function EpsilonBand(props: Props) {
+  const [hundredths, setHundredths] = useState(clamp(Math.round(num(props.tolerance, 0.2) * 20) * 5, 5, 50));
+  const eps = hundredths / 100;
+  const outside = Math.floor(100 / hundredths); // terms with 1/n >= eps
+  const from = outside + 1;
+  const gx = (n: number) => 44 + ((n - 1) / 29) * 380;
+  const gy = (v: number) => 250 - (v / 2) * 230;
+  return (
+    <Frame
+      title="A tolerance and the point where the terms stay inside it"
+      summary={`The sequence aₙ = 1 + (−1)ⁿ ÷ n has the limit 1. For the tolerance ε = ${fmt(eps)}, every term from N = ${from} onwards is within ${fmt(eps)} of 1. The first ${outside} term${outside === 1 ? " is" : "s are"} not. A smaller ε needs a larger N, but some N always works.`}
+      controls={<Slider label="tolerance in hundredths" value={hundredths} onChange={setHundredths} min={5} max={50} step={5} />}
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`The first 30 terms of a sequence with limit 1, a band of half-width ${fmt(eps)} about 1, and a line at N = ${from}`}>
+        <rect x={gx(1)} y={gy(1 + eps)} width={gx(30) - gx(1)} height={gy(1 - eps) - gy(1 + eps)} className="fig-fill" opacity="0.45" />
+        <line x1={gx(1)} x2={gx(30)} y1={gy(0)} y2={gy(0)} className="fig-axis" />
+        <line x1={gx(1)} x2={gx(30)} y1={gy(1)} y2={gy(1)} className="fig-guide" />
+        <text x={gx(1) - 14} y={gy(1) + 4} textAnchor="end" className="fig-small">
+          1
+        </text>
+        <text x={gx(1) - 14} y={gy(0) + 4} textAnchor="end" className="fig-small">
+          0
+        </text>
+        <text x={gx(1) - 14} y={gy(2) + 4} textAnchor="end" className="fig-small">
+          2
+        </text>
+        {from <= 30 ? (
+          <>
+            <line x1={gx(from)} x2={gx(from)} y1={gy(0)} y2={gy(2)} className="fig-guide" />
+            <text x={gx(from)} y={gy(0) + 16} textAnchor="middle" className="fig-small">
+              N = {from}
+            </text>
+          </>
+        ) : null}
+        {Array.from({ length: 30 }, (_, i) => {
+          const n = i + 1;
+          const v = 1 + (n % 2 === 0 ? 1 : -1) / n;
+          return <circle key={n} cx={gx(n)} cy={gy(v)} r="4" className={n >= from ? "fig-accent" : "fig-line"} />;
+        })}
+      </svg>
+    </Frame>
+  );
+}
+
+/** The whole numbers sorted into classes by their remainder: an equivalence relation seen as a partition. */
+function RemainderClasses(props: Props) {
+  const [m, setM] = useState(clamp(Math.round(num(props.modulus, 3)), 2, 6));
+  const [pick, setPick] = useState(clamp(Math.round(num(props.number, 14)), 0, 17));
+  const r = pick % m;
+  const mates = Array.from({ length: 18 }, (_, k) => k).filter((k) => k % m === r);
+  const width = 380 / m;
+  return (
+    <Frame
+      title="Classes of whole numbers with the same remainder"
+      summary={`Call two numbers related when their difference is a multiple of ${m}. The numbers fall into ${m} classes, one for each remainder, and every number is in exactly one class. ${pick} leaves the remainder ${r}, and its class is shown: ${mates.join(", ")}, and so on.`}
+      controls={
+        <>
+          <Stepper label="modulus" value={m} onChange={setM} min={2} max={6} />
+          <Stepper label="number" value={pick} onChange={setPick} min={0} max={17} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`The numbers 0 to 17 in ${m} columns by remainder on division by ${m}, with the class of ${pick} marked`}>
+        {Array.from({ length: m }, (_, c) => (
+          <g key={c}>
+            {c === r ? <rect x={30 + c * width + 4} y="34" width={width - 8} height="240" className="fig-fill" opacity="0.45" /> : <rect x={30 + c * width + 4} y="34" width={width - 8} height="240" className="fig-ghost" />}
+            <text x={30 + c * width + width / 2} y="24" textAnchor="middle" className="fig-small">
+              remainder {c}
+            </text>
+          </g>
+        ))}
+        {Array.from({ length: 18 }, (_, k) => {
+          const x = 30 + (k % m) * width + width / 2;
+          const y = 58 + Math.floor(k / m) * 25;
+          return (
+            <g key={k}>
+              {k === pick ? <rect x={x - 16} y={y - 17} width="32" height="23" className="fig-accent" /> : null}
+              <text x={x} y={y} textAnchor="middle" className="fig-mono" style={k === pick ? { fill: "var(--bg)", fontSize: 15 } : { fontSize: 15 }}>
+                {k}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </Frame>
+  );
+}
+
+const KEY_PATTERNS: { name: string; opens: (lock: number, key: number) => boolean }[] = [
+  { name: "one key for each lock", opens: (l, k) => l === k },
+  { name: "a master key", opens: (l, k) => l === k || k === 1 },
+  { name: "a lock with no key", opens: (l, k) => l === k && l !== 2 },
+  { name: "no key opens anything", opens: () => false },
+  { name: "every key opens every lock", opens: () => true },
+];
+
+/** A grid of which key opens which lock: "for every … there is" reads along rows, "there is … for every" down a column. */
+function QuantifierGrid(props: Props) {
+  const [pattern, setPattern] = useState(clamp(Math.round(num(props.pattern, 1)), 1, KEY_PATTERNS.length));
+  const { name, opens } = KEY_PATTERNS[pattern - 1];
+  const four = [0, 1, 2, 3];
+  const bareRow = four.find((l) => !four.some((k) => opens(l, k)));
+  const fullColumn = four.find((k) => four.every((l) => opens(l, k)));
+  const each = bareRow === undefined;
+  const master = fullColumn !== undefined;
+  return (
+    <Frame
+      title="Which key opens which lock"
+      summary={`Pattern ${pattern}, ${name}. “For every lock there is a key that opens it” is ${each ? "true: every row has a mark" : `false: the row of lock ${bareRow + 1} has no mark`}. “There is a key that opens every lock” is ${master ? `true: the column of key ${fullColumn + 1} is full` : "false: no column is full"}.`}
+      controls={<Stepper label="pattern" value={pattern} onChange={setPattern} min={1} max={KEY_PATTERNS.length} />}
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`A grid of four locks against four keys for the pattern ${name}`}>
+        {four.map((k) => (
+          <text key={k} x={150 + k * 60} y="34" textAnchor="middle" className="fig-small">
+            key {k + 1}
+          </text>
+        ))}
+        {four.map((l) => (
+          <g key={l}>
+            <text x="104" y={76 + l * 54} textAnchor="end" className="fig-small">
+              lock {l + 1}
+            </text>
+            {four.map((k) => (
+              <g key={k}>
+                <rect x={126 + k * 60} y={48 + l * 54} width="48" height="44" className={opens(l, k) ? (k === fullColumn ? "fig-accent" : "fig-fill") : "fig-ghost"} />
+                {opens(l, k) ? (
+                  <text x={150 + k * 60} y={77 + l * 54} textAnchor="middle" className="fig-mono" style={k === fullColumn ? { fill: "var(--bg)" } : undefined}>
+                    ✓
+                  </text>
+                ) : null}
+              </g>
+            ))}
+          </g>
+        ))}
+      </svg>
+    </Frame>
+  );
+}
+
 const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "place-value": PlaceValue,
   "number-line": NumberLine,
@@ -992,6 +1321,12 @@ const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "partial-sums": PartialSums,
   "call-stack": CallStack,
   "growth-rates": GrowthRates,
+  "truth-table": TruthTable,
+  dominoes: Dominoes,
+  diagonal: Diagonal,
+  "epsilon-band": EpsilonBand,
+  "remainder-classes": RemainderClasses,
+  "quantifier-grid": QuantifierGrid,
 };
 
 export function Figure({ name, props }: { name: string; props?: Props }) {
