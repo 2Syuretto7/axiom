@@ -9,7 +9,6 @@ const PRICES: Record<string, { input: number; output: number; cacheRead: number 
 const CACHE_WRITE_FACTOR = 2;
 
 export const DEFAULT_MODEL = "claude-opus-5-5";
-export const DEFAULT_MONTHLY_USD = 20;
 export const MAX_MESSAGE_CHARS = 4000;
 /** Earlier turns sent with each question. Older ones stay on screen but are not sent again. */
 export const HISTORY_TURNS = 16;
@@ -23,12 +22,6 @@ export function tutorEffort(): (typeof EFFORTS)[number] {
   return value && EFFORTS.includes(value) ? value : "medium";
 }
 
-/** The most the tutor may spend in a calendar month. It stops answering once this is reached. */
-export function monthlyBudgetUsd(): number {
-  const value = Number(process.env.AXIOM_TUTOR_MONTHLY_USD);
-  return Number.isFinite(value) && value > 0 ? value : DEFAULT_MONTHLY_USD;
-}
-
 export const tutorConnected = () => Boolean(process.env.ANTHROPIC_API_KEY);
 
 export type Usage = {
@@ -40,7 +33,7 @@ export type Usage = {
 
 /**
  * What one reply cost, in millionths of a dollar, rounded up.
- * A model that is not in the table is charged at the dearest rate, so the budget errs on the safe side.
+ * A model that is not in the table is charged at the dearest rate, so the recorded cost errs on the high side.
  */
 export function costMicroUsd(model: string, usage: Usage): number {
   const price = PRICES[model] ?? PRICES[DEFAULT_MODEL];

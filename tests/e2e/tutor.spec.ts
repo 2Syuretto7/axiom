@@ -49,7 +49,8 @@ test("the tutor answers beside the lesson, knows the lesson and the editor, and 
   await expect(reply.locator("b")).toHaveCount(0);
   await expect(reply).toContainText("<b>What</b>");
   await expect(box).toHaveValue("");
-  await expect(tutor.getByTestId("tutor-budget")).toHaveText(/USD 0\.(?!00)\d\d of 20\.00 used this month/i);
+  // The spend is neither shown nor capped.
+  await expect(tutor).not.toContainText(/used this month/i);
 
   // What the model was sent: the teaching style, the learner's place in the curriculum, the lesson, and the editor.
   const sent = (await (await request.get(`${MOCK}/last`)).json()) as {

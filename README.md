@@ -25,7 +25,7 @@ npm run dev
 
 The tutor sits beside the lesson and the editor (a third tab on a phone). It is told the lesson in progress, the lessons already finished and what comes next, and it sees the code in the editor when a question is asked.
 
-It needs `ANTHROPIC_API_KEY` in the deployment. It stops answering once a month's spend reaches `AXIOM_TUTOR_MONTHLY_USD` (USD 20 unless set), and shows the spend so far under the question box. Tests use a stand-in for the API (`tests/e2e/mock-anthropic.mjs`), so CI needs no key.
+It needs `ANTHROPIC_API_KEY` in the deployment. Its spend is not capped; the cost of each reply is recorded in `tutor_messages`. Tests use a stand-in for the API (`tests/e2e/mock-anthropic.mjs`), so CI needs no key.
 
 ## Layout
 

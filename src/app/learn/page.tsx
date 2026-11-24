@@ -9,14 +9,13 @@ import { nextAfter, nextConcept } from "@/lib/learning/next";
 import { completedConcepts, hintLevels, snapshotsFor, solvedQuestions } from "@/lib/learning/service";
 import { content } from "@/lib/lessons/content";
 import { questionsOf } from "@/lib/lessons/load";
-import { monthlyBudgetUsd, tutorConnected } from "@/lib/tutor/config";
-import { spentThisMonthUsd, tutorHistory } from "@/lib/tutor/service";
+import { tutorConnected } from "@/lib/tutor/config";
+import { tutorHistory } from "@/lib/tutor/service";
 import type { Db } from "@/lib/db";
 
 /** The tutor's conversation on this lesson so far, and how much of the month's budget is left. */
 async function tutorSetup(db: Db, userId: string, conceptId: string) {
-  const [messages, spentUsd] = await Promise.all([tutorHistory(db, userId, conceptId), spentThisMonthUsd(db, userId)]);
-  return { messages, spentUsd, budgetUsd: monthlyBudgetUsd(), connected: tutorConnected() };
+  return { messages: await tutorHistory(db, userId, conceptId), connected: tutorConnected() };
 }
 
 export const metadata: Metadata = { title: "Learn" };

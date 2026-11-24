@@ -6,11 +6,11 @@ import * as schema from "@/lib/db/schema";
 import { signUp } from "@/lib/auth/service";
 import { loadGraph } from "@/lib/graph/load";
 import { loadLessons } from "@/lib/lessons/load";
-import { costMicroUsd, monthlyBudgetUsd, tutorEffort, tutorModel } from "@/lib/tutor/config";
+import { costMicroUsd, tutorEffort, tutorModel } from "@/lib/tutor/config";
 import { systemPrompt, workspaceNote } from "@/lib/tutor/prompt";
 import { renderReply } from "@/lib/tutor/render";
 import { recordAttempt } from "@/lib/learning/service";
-import { clearTutorHistory, questionEffort, saveTutorMessage, spentThisMonthUsd, tutorHistory } from "@/lib/tutor/service";
+import { clearTutorHistory, questionEffort, saveTutorMessage, tutorHistory } from "@/lib/tutor/service";
 import { migrate } from "../../scripts/migrate";
 
 const root = path.join(import.meta.dirname, "..", "fixtures");
@@ -98,15 +98,11 @@ describe("the tutor's cost", () => {
   it("has modest defaults that the environment can change", () => {
     expect(tutorModel()).toBe("claude-opus-5-5");
     expect(tutorEffort()).toBe("medium");
-    expect(monthlyBudgetUsd()).toBe(20);
-    process.env.AXIOM_TUTOR_MONTHLY_USD = "5";
     process.env.AXIOM_TUTOR_EFFORT = "low";
-    expect(monthlyBudgetUsd()).toBe(5);
     // Low effort is never used, even if asked for.
     expect(tutorEffort()).toBe("medium");
     process.env.AXIOM_TUTOR_EFFORT = "high";
     expect(tutorEffort()).toBe("high");
-    delete process.env.AXIOM_TUTOR_MONTHLY_USD;
     delete process.env.AXIOM_TUTOR_EFFORT;
   });
 });
@@ -154,16 +150,11 @@ describe("the tutor's conversation", () => {
     expect((await questionEffort(db, userId, "m0.adding")).size).toBe(0);
   });
 
-  it("counts the month's spend, and clearing a conversation does not erase it", async () => {
-    expect(await spentThisMonthUsd(db, userId)).toBe(0);
+  it("clears one lesson's conversation and leaves the others", async () => {
     await saveTutorMessage(db, userId, "m0.counting", "assistant", "a", 20_000);
     await saveTutorMessage(db, userId, "m0.adding", "assistant", "b", 1_500_000);
     await clearTutorHistory(db, userId, "m0.counting");
     expect(await tutorHistory(db, userId, "m0.counting")).toEqual([]);
     expect(await tutorHistory(db, userId, "m0.adding")).toHaveLength(1);
-    expect(await spentThisMonthUsd(db, userId)).toBeCloseTo(1.52, 6);
-    // Last month's spend does not count against this month.
-    await pool.query("update tutor_messages set created_at = now() - interval '40 days' where content = 'b'");
-    expect(await spentThisMonthUsd(db, userId)).toBeCloseTo(0.02, 6);
   });
 });

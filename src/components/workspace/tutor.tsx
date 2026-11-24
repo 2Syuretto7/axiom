@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { clearTutor } from "@/lib/learning/actions";
 
 export type TutorMessage = { id: number | string; role: "user" | "assistant"; content: string };
-export type TutorSetup = { messages: TutorMessage[]; spentUsd: number; budgetUsd: number; connected: boolean };
+export type TutorSetup = { messages: TutorMessage[]; connected: boolean };
 /** What is on screen when a question is asked: the code, its last output and the open question. */
 export type TutorContext = { code: string; output: string; questionId: string | null };
 
@@ -45,7 +45,6 @@ export function Tutor({
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const [spent, setSpent] = useState(setup.spentUsd);
   const [render, setRender] = useState<Render | null>(null);
   const list = useRef<HTMLOListElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
@@ -98,14 +97,11 @@ export function Tutor({
             pending = lines.pop()!;
             for (const line of lines) {
               if (!line) continue;
-              const event = JSON.parse(line) as { delta?: string; replace?: string; done?: boolean; spentUsd?: number; error?: string };
+              const event = JSON.parse(line) as { delta?: string; replace?: string; done?: boolean; error?: string };
               if (event.delta) update((before) => before + event.delta);
               if (event.replace) update(() => event.replace!);
               if (event.error) failed = event.error;
-              if (event.done) {
-                finished = true;
-                if (typeof event.spentUsd === "number") setSpent(event.spentUsd);
-              }
+              if (event.done) finished = true;
             }
           }
           if (!finished && !failed) failed = OFFLINE;
@@ -131,9 +127,7 @@ export function Tutor({
     box.current?.focus();
   };
 
-  const left = Math.max(0, setup.budgetUsd - spent);
-  const exhausted = left <= 0;
-  const off = !setup.connected || exhausted;
+  const off = !setup.connected;
 
   return (
     <>
@@ -192,7 +186,7 @@ export function Tutor({
           className="tutor-input"
           aria-label="Ask the tutor"
           placeholder={
-            !setup.connected ? "The tutor is not connected yet" : exhausted ? "This month's tutor budget is used up" : "Ask the tutor"
+            setup.connected ? "Ask the tutor" : "The tutor is not connected yet"
           }
           rows={2}
           maxLength={MAX}
@@ -211,11 +205,7 @@ export function Tutor({
           {busy ? "Answering" : "Ask"}
         </button>
       </form>
-      <p className="tutor-foot label" data-testid="tutor-budget">
-        {setup.connected
-          ? `USD ${spent.toFixed(2)} of ${setup.budgetUsd.toFixed(2)} used this month`
-          : "Needs ANTHROPIC_API_KEY in this deployment"}
-      </p>
+      {setup.connected ? null : <p className="tutor-foot label">Needs ANTHROPIC_API_KEY in this deployment</p>}
     </>
   );
 }
