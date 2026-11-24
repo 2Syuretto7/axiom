@@ -2865,6 +2865,439 @@ function BeamSearch(props: Props) {
   );
 }
 
+/* Matrices are drawn on the same grid as vectors. A matrix here is two rows of two numbers. */
+type M2 = [Pair, Pair];
+const mv = (m: M2, [x, y]: Pair): Pair => [m[0][0] * x + m[0][1] * y, m[1][0] * x + m[1][1] * y];
+const mm = (a: M2, b: M2): M2 => [
+  [a[0][0] * b[0][0] + a[0][1] * b[1][0], a[0][0] * b[0][1] + a[0][1] * b[1][1]],
+  [a[1][0] * b[0][0] + a[1][1] * b[1][0], a[1][0] * b[0][1] + a[1][1] * b[1][1]],
+];
+const rowsOf = (m: M2) => `rows (${dp(m[0][0])}, ${dp(m[0][1])}) and (${dp(m[1][0])}, ${dp(m[1][1])})`;
+const IDENTITY: M2 = [
+  [1, 0],
+  [0, 1],
+];
+
+/** The grid lines of the plane after a matrix has moved every point. */
+function Warped({ m }: { m: M2 }) {
+  const lines: [Pair, Pair][] = [];
+  for (let i = -8; i <= 8; i++) {
+    lines.push([mv(m, [i, -8]), mv(m, [i, 8])]);
+    lines.push([mv(m, [-8, i]), mv(m, [8, i])]);
+  }
+  return (
+    <g clipPath="url(#grid-clip)">
+      {lines.map(([p, q], i) => (
+        <line key={i} x1={gx(p[0])} y1={gy(p[1])} x2={gx(q[0])} y2={gy(q[1])} className="fig-guide" />
+      ))}
+    </g>
+  );
+}
+
+/** A filled outline through the given points. */
+function Outline({ points, accent = false }: { points: Pair[]; accent?: boolean }) {
+  return <polygon points={points.map(([x, y]) => `${gx(x).toFixed(1)},${gy(y).toFixed(1)}`).join(" ")} className={accent ? "fig-accent" : "fig-fill"} opacity={accent ? 0.35 : 0.6} />;
+}
+
+const MAPS: { name: string; m: M2; does: string }[] = [
+  { name: "stretch", m: [[2, 0], [0, 1]], does: "Every point moves to twice its distance from the vertical axis." },
+  { name: "shear", m: [[1, 1], [0, 1]], does: "Each point slides sideways by its own height, so the square leans over and keeps its area." },
+  { name: "quarter turn", m: [[0, -1], [1, 0]], does: "The whole plane turns a quarter of the way round, anticlockwise." },
+  { name: "reflection", m: [[1, 0], [0, -1]], does: "The plane is flipped over the horizontal axis." },
+  { name: "squash", m: [[1, 2], [0.5, 1]], does: "The two columns point the same way, so the whole plane is flattened onto one line." },
+];
+
+/** A matrix as a movement of the whole plane, fixed by where it sends the two unit vectors. */
+function LinearMap(props: Props) {
+  const [which, setWhich] = useState(clamp(MAPS.findIndex((map) => map.name === props.map), 0, MAPS.length - 1));
+  const [quarters, setQuarters] = useState(clamp(Math.round(num(props.amount, 1) * 4), 0, 4));
+  const { name, m: full, does } = MAPS[which];
+  const t = quarters / 4;
+  const m: M2 = [
+    [1 + t * (full[0][0] - 1), t * full[0][1]],
+    [t * full[1][0], 1 + t * (full[1][1] - 1)],
+  ];
+  const point: Pair = [2, 1];
+  const image = mv(m, point);
+  return (
+    <Frame
+      title="A matrix moves the plane"
+      summary={`The ${name}, with ${rowsOf(full)}${quarters < 4 ? `, shown ${quarters} quarter${quarters === 1 ? "" : "s"} of the way from doing nothing` : ""}. The unit vector (1, 0) lands on ${pair([m[0][0], m[1][0]])}, the first column. The unit vector (0, 1) lands on ${pair([m[0][1], m[1][1]])}, the second column. The point (2, 1) is 2 of the first and 1 of the second, so it lands on 2 × ${pair([m[0][0], m[1][0]])} + 1 × ${pair([m[0][1], m[1][1]])} = ${pair(image)}.${quarters === 4 ? ` ${does}` : ""}`}
+      controls={
+        <>
+          <Stepper label="quarters of the way" value={quarters} onChange={setQuarters} min={0} max={4} />
+          <button type="button" className="btn btn-secondary btn-small" onClick={() => setWhich((which + 1) % MAPS.length)}>
+            Next matrix
+          </button>
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`The plane moved by the ${name}, with the unit square and the point (2, 1)`}>
+        <Grid />
+        <Warped m={m} />
+        <Outline points={[[0, 0], [1, 0], [1, 1], [0, 1]].map((p) => mv(m, p as Pair))} accent />
+        <Arrow to={[m[0][0], m[1][0]]} name="col 1" />
+        <Arrow to={[m[0][1], m[1][1]]} name="col 2" />
+        <circle cx={gx(image[0])} cy={gy(image[1])} r="5" className="fig-accent" />
+      </svg>
+    </Frame>
+  );
+}
+
+const COLUMNS: M2 = [
+  [2, -1],
+  [1, 1],
+];
+
+/** A matrix times a vector, as a combination of the columns and as one dot product for each row. */
+function MatrixVector(props: Props) {
+  const [xh, setX] = useState(clamp(Math.round(num(props.x, 1) * 2), -3, 3));
+  const [yh, setY] = useState(clamp(Math.round(num(props.y, 1) * 2), -3, 3));
+  const x: Pair = [xh / 2, yh / 2];
+  const a: Pair = [COLUMNS[0][0], COLUMNS[1][0]];
+  const b: Pair = [COLUMNS[0][1], COLUMNS[1][1]];
+  const first: Pair = [x[0] * a[0], x[0] * a[1]];
+  const out = mv(COLUMNS, x);
+  return (
+    <Frame
+      title="A matrix times a vector"
+      summary={`The matrix has columns ${pair(a)} and ${pair(b)}, and x = ${pair(x)}. By columns: ${dp(x[0])} × ${pair(a)} + ${dp(x[1])} × ${pair(b)} = ${pair(out)}. By rows: (2, −1) · x = ${dp(out[0])} and (1, 1) · x = ${dp(out[1])}. Both give Ax = ${pair(out)}.`}
+      controls={
+        <>
+          <Stepper label="first entry of x in halves" value={xh} onChange={setX} min={-3} max={3} />
+          <Stepper label="second entry of x in halves" value={yh} onChange={setY} min={-3} max={3} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`The columns ${pair(a)} and ${pair(b)} combined with weights ${dp(x[0])} and ${dp(x[1])}, reaching ${pair(out)}`}>
+        <Grid />
+        <Arrow to={first} dashed />
+        <Arrow from={first} to={out} dashed />
+        <Arrow to={a} name="col 1" />
+        <Arrow to={b} name="col 2" />
+        <Arrow to={out} accent name="Ax" />
+      </svg>
+    </Frame>
+  );
+}
+
+const FLAG: Pair[] = [
+  [0, 0],
+  [2, 0],
+  [2, 0.5],
+  [0.5, 0.5],
+  [0.5, 1],
+  [0, 1],
+];
+const TURN: M2 = [
+  [0, -1],
+  [1, 0],
+];
+const LEAN: M2 = [
+  [1, 1],
+  [0, 1],
+];
+const UNLEAN: M2 = [
+  [1, -1],
+  [0, 1],
+];
+
+/** Two matrices applied one after the other, in either order, and the single matrix that does both. */
+function ComposeMaps(props: Props) {
+  const undo = props.pair === "undo";
+  const [swapped, setSwapped] = useState(props.swapped === true);
+  const [stage, setStage] = useState(clamp(Math.round(num(props.stage, 0)), 0, 2));
+  const names = undo ? ["shear", "opposite shear"] : ["shear", "quarter turn"];
+  const maps: M2[] = undo ? [LEAN, UNLEAN] : [LEAN, TURN];
+  const order = swapped ? [1, 0] : [0, 1];
+  const [firstMap, secondMap] = [maps[order[0]], maps[order[1]]];
+  const both = mm(secondMap, firstMap);
+  const now = stage === 0 ? IDENTITY : stage === 1 ? firstMap : both;
+  const corner = mv(now, [2, 0.5]);
+  return (
+    <Frame
+      title="One matrix after another"
+      summary={`First the ${names[order[0]]}, with ${rowsOf(firstMap)}, then the ${names[order[1]]}, with ${rowsOf(secondMap)}. ${
+        stage === 0 ? "Nothing has been applied yet." : stage === 1 ? `The ${names[order[0]]} has been applied.` : `Both have been applied. Together they are the one matrix with ${rowsOf(both)}, the product of the second and the first.`
+      } The corner that began at (2, 0.5) is now at ${pair(corner)}.${
+        stage === 2 ? (undo ? " The second matrix undoes the first, and the product is the identity, which moves nothing." : ` In the other order the product would have ${rowsOf(mm(firstMap, secondMap))}, a different matrix.`) : ""
+      }`}
+      controls={
+        <>
+          <Stepper label="matrices applied" value={stage} onChange={setStage} min={0} max={2} />
+          <button
+            type="button"
+            className="btn btn-secondary btn-small"
+            onClick={() => {
+              setSwapped(!swapped);
+              setStage(0);
+            }}
+          >
+            Swap the order
+          </button>
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`A flag shape after ${stage} of two matrices, its corner at ${pair(corner)}`}>
+        <Grid />
+        <Warped m={now} />
+        <Outline points={FLAG} />
+        <Outline points={FLAG.map((p) => mv(now, p))} accent />
+        <circle cx={gx(corner[0])} cy={gy(corner[1])} r="5" className="fig-accent" />
+      </svg>
+    </Frame>
+  );
+}
+
+const TABLE = [
+  [1, 2, 3],
+  [4, 5, 6],
+];
+
+/** A matrix and its transpose: rows become columns, and the entry in row i, column j moves to row j, column i. */
+function TransposeFlip(props: Props) {
+  const [flipped, setFlipped] = useState(props.flipped === true);
+  const [entry, setEntry] = useState(clamp(Math.round(num(props.entry, 2)), 1, 6));
+  const [r, c] = [Math.floor((entry - 1) / 3), (entry - 1) % 3];
+  const shown = flipped ? [0, 1, 2].map((j) => [TABLE[0][j], TABLE[1][j]]) : TABLE;
+  const [hr, hc] = flipped ? [c, r] : [r, c];
+  const [w, h] = [56, 44];
+  return (
+    <Frame
+      title="Rows become columns"
+      summary={`${flipped ? "The transpose, with 3 rows and 2 columns" : "The matrix, with 2 rows and 3 columns"}. The entry ${TABLE[r][c]} is in row ${r + 1}, column ${c + 1} of the matrix and in row ${c + 1}, column ${r + 1} of the transpose. Row ${r + 1} of the matrix, ${TABLE[r].join(", ")}, is column ${r + 1} of the transpose.`}
+      controls={
+        <>
+          <Stepper label="entry" value={entry} onChange={setEntry} min={1} max={6} />
+          <button type="button" className="btn btn-secondary btn-small" onClick={() => setFlipped(!flipped)}>
+            {flipped ? "Show the matrix" : "Show the transpose"}
+          </button>
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 190" role="img" aria-label={`${flipped ? "The transpose" : "The matrix"} with the entry ${TABLE[r][c]} marked`}>
+        {shown.map((line, i) => (
+          <Cells key={i} values={line} x={130} y={24 + i * h} w={w} h={h - 6} hot={i === hr ? [hc] : []} />
+        ))}
+        <line x1={130} y1={24} x2={130 + 2 * w} y2={24 + 2 * h} className="fig-guide" />
+        <text x="130" y={flipped ? 176 : 132} className="fig-small">
+          flipped across the dashed diagonal
+        </text>
+      </svg>
+    </Frame>
+  );
+}
+
+const ELIMINATION: { rows: number[][]; changed: number; did: string }[] = [
+  { rows: [[1, 1, 1, 6], [2, 3, 1, 11], [1, -1, 2, 5]], changed: -1, did: "The three equations x + y + z = 6, 2x + 3y + z = 11 and x − y + 2z = 5, written as rows of numbers. Nothing has been done yet." },
+  { rows: [[1, 1, 1, 6], [0, 1, -1, -1], [1, -1, 2, 5]], changed: 1, did: "Row 2 has had 2 times row 1 subtracted from it, which removes x from the second equation." },
+  { rows: [[1, 1, 1, 6], [0, 1, -1, -1], [0, -2, 1, -1]], changed: 2, did: "Row 3 has had row 1 subtracted from it, which removes x from the third equation." },
+  { rows: [[1, 1, 1, 6], [0, 1, -1, -1], [0, 0, -1, -3]], changed: 2, did: "Row 3 has had 2 times row 2 added to it, which removes y. The rows now form a triangle, and the last says −z = −3." },
+  { rows: [[1, 1, 1, 6], [0, 1, -1, -1], [0, 0, 1, 3]], changed: 2, did: "Row 3 has been divided by −1, so z = 3." },
+  { rows: [[1, 1, 1, 6], [0, 1, 0, 2], [0, 0, 1, 3]], changed: 1, did: "Row 3 has been added to row 2, which puts z = 3 into the second equation and leaves y = 2." },
+  { rows: [[1, 0, 0, 1], [0, 1, 0, 2], [0, 0, 1, 3]], changed: 0, did: "Rows 2 and 3 have been subtracted from row 1, leaving x = 1. The solution is x = 1, y = 2, z = 3." },
+];
+
+/** Three equations solved by row operations, one step at a time. */
+function Elimination(props: Props) {
+  const [step, setStep] = useState(clamp(Math.round(num(props.step, 0)), 0, ELIMINATION.length - 1));
+  const { rows, changed, did } = ELIMINATION[step];
+  return (
+    <Frame
+      title="Clearing one unknown at a time"
+      summary={`Step ${step} of ${ELIMINATION.length - 1}. ${did} The rows are now ${rows.map((row) => `(${row.slice(0, 3).map((v) => dp(v)).join(", ")} | ${dp(row[3])})`).join(", ")}.`}
+      controls={<Stepper label="step" value={step} onChange={setStep} min={0} max={ELIMINATION.length - 1} />}
+    >
+      <svg viewBox="0 0 440 190" role="img" aria-label={`Three equations as rows of numbers at step ${step} of elimination`}>
+        {["x", "y", "z", "="].map((head, j) => (
+          <text key={head} x={120 + j * 56 + (j === 3 ? 22 : 0) + 26} y="22" textAnchor="middle" className="fig-small">
+            {head}
+          </text>
+        ))}
+        {rows.map((row, i) => (
+          <g key={i}>
+            <text x="110" y={56 + i * 46} textAnchor="end" className="fig-small">
+              row {i + 1}
+            </text>
+            <Cells values={row.slice(0, 3).map((v) => dp(v))} x={120} y={32 + i * 46} w={56} h={38} hot={i === changed ? [0, 1, 2] : []} />
+            <Cells values={[dp(row[3])]} x={310} y={32 + i * 46} w={56} h={38} hot={i === changed ? [0] : []} />
+          </g>
+        ))}
+        <line x1="299" x2="299" y1="30" y2="166" className="fig-axis" />
+      </svg>
+    </Frame>
+  );
+}
+
+const FLAT: M2 = [
+  [1, 2],
+  [0.5, 1],
+];
+const FULL: M2 = [
+  [1, 0.5],
+  [0.5, 1],
+];
+
+/** A matrix of rank 1 flattens the plane onto a line, and a whole line of inputs lands on each output. */
+function NullSpace(props: Props) {
+  const [full, setFull] = useState(props.full === true);
+  const [tq, setT] = useState(clamp(Math.round(num(props.t, 1) * 2), -4, 4));
+  const [sq, setS] = useState(clamp(Math.round(num(props.s, 0) * 2), -4, 4));
+  const [t, s] = [tq / 2, sq / 2];
+  const m = full ? FULL : FLAT;
+  const x: Pair = [0.4 * t + s, 0.8 * t - 0.5 * s];
+  const out = mv(m, x);
+  return (
+    <Frame
+      title="What a matrix reaches and what it loses"
+      summary={
+        full
+          ? `The matrix with ${rowsOf(m)} has columns pointing in different directions, so its rank is 2. The input x = ${pair(x)} goes to Ax = ${pair(out)}. Every point of the plane is reached, and only x = (0, 0) is sent to (0, 0). Moving x always moves Ax.`
+          : `The matrix with ${rowsOf(m)} has a second column that is twice the first, so its rank is 1. The input x = ${pair(x)} goes to Ax = ${pair(out)}, which is on the line through (2, 1): that line is the column space. Sliding x along the direction (2, −1) does not move Ax at all, because the matrix sends (2, −1) to (0, 0): that direction is the null space.`
+      }
+      controls={
+        <>
+          <Stepper label="along (1, 2) in halves" value={tq} onChange={setT} min={-4} max={4} />
+          <Stepper label="along (2, −1) in halves" value={sq} onChange={setS} min={-4} max={4} />
+          <button type="button" className="btn btn-secondary btn-small" onClick={() => setFull(!full)}>
+            {full ? "Make the columns parallel" : "Turn the columns apart"}
+          </button>
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`The input ${pair(x)} and its output ${pair(out)} under a matrix of rank ${full ? 2 : 1}`}>
+        <Grid />
+        {full ? null : (
+          <g clipPath="url(#grid-clip)">
+            <line x1={gx(-12)} y1={gy(-6)} x2={gx(12)} y2={gy(6)} className="fig-accent-line" opacity="0.4" />
+            <line x1={gx(x[0] - 12)} y1={gy(x[1] + 6)} x2={gx(x[0] + 12)} y2={gy(x[1] - 6)} className="fig-guide" />
+          </g>
+        )}
+        <Arrow to={x} name="x" />
+        <Arrow to={out} accent name="Ax" />
+      </svg>
+    </Frame>
+  );
+}
+
+/** One point described by two sets of coordinates: along the usual axes, and along a different pair of basis vectors. */
+function BasisGrid(props: Props) {
+  const [c1h, setC1] = useState(clamp(Math.round(num(props.c1, 1) * 2), -2, 2));
+  const [c2h, setC2] = useState(clamp(Math.round(num(props.c2, 2) * 2), -4, 4));
+  const c: Pair = [c1h / 2, c2h / 2];
+  const b1: Pair = [COLUMNS[0][0], COLUMNS[1][0]];
+  const b2: Pair = [COLUMNS[0][1], COLUMNS[1][1]];
+  const p = mv(COLUMNS, c);
+  const along: Pair = [c[0] * b1[0], c[0] * b1[1]];
+  return (
+    <Frame
+      title="Two descriptions of one point"
+      summary={`The basis vectors are b₁ = ${pair(b1)} and b₂ = ${pair(b2)}, and the dashed lines are their grid. The point is ${dp(c[0])} of b₁ and ${dp(c[1])} of b₂, so its coordinates in this basis are ${pair(c)}. In the usual coordinates the same point is ${dp(c[0])} × ${pair(b1)} + ${dp(c[1])} × ${pair(b2)} = ${pair(p)}. The point has not moved. Only its description has changed.`}
+      controls={
+        <>
+          <Stepper label="amount of b₁ in halves" value={c1h} onChange={setC1} min={-2} max={2} />
+          <Stepper label="amount of b₂ in halves" value={c2h} onChange={setC2} min={-4} max={4} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`A point at ${pair(p)} in the usual coordinates and ${pair(c)} in the basis ${pair(b1)}, ${pair(b2)}`}>
+        <Grid />
+        <Warped m={COLUMNS} />
+        <Arrow to={along} dashed />
+        <Arrow from={along} to={p} dashed />
+        <Arrow to={b1} name="b₁" />
+        <Arrow to={b2} name="b₂" />
+        <circle cx={gx(p[0])} cy={gy(p[1])} r="5" className="fig-accent" />
+      </svg>
+    </Frame>
+  );
+}
+
+/** The determinant as the area of the parallelogram on the two columns, with a sign for their order. */
+function Determinant(props: Props) {
+  const a: Pair = [2, 0];
+  const [angle, setAngle] = useState(clamp(Math.round(num(props.angle, 90) / 30) * 30, 0, 330));
+  const tidy = (v: number) => (Math.abs(v) < 1e-9 ? 0 : Math.round(v * 1e6) / 1e6);
+  const b: Pair = [tidy(1.5 * Math.cos((angle * Math.PI) / 180)), tidy(1.5 * Math.sin((angle * Math.PI) / 180))];
+  const d = tidy(a[0] * b[1] - a[1] * b[0]);
+  const sum: Pair = [a[0] + b[0], a[1] + b[1]];
+  return (
+    <Frame
+      title="The determinant as an area"
+      summary={`The columns are ${pair(a)} and ${pair(b)}, with the second at ${angle}° from the first. The determinant is 2 × ${dp(b[1])} − 0 × ${dp(b[0])} = ${dp(d)}. ${
+        d === 0
+          ? "The columns lie along one line, the parallelogram is squashed flat, and the matrix flattens the plane: it has no inverse."
+          : d > 0
+            ? `The unit square, of area 1, is sent to a parallelogram of area ${dp(d)}. The second column is anticlockwise from the first, as (0, 1) is from (1, 0), so the sign is positive.`
+            : `The unit square, of area 1, is sent to a parallelogram of area ${dp(-d)}. The second column is clockwise from the first, so the plane has been turned over and the sign is negative.`
+      }`}
+      controls={<Stepper label="angle in steps of 30°" value={angle / 30} onChange={(v) => setAngle(v * 30)} min={0} max={11} />}
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`The parallelogram on the columns ${pair(a)} and ${pair(b)}, of signed area ${dp(d)}`}>
+        <Grid />
+        <Outline points={[[0, 0], a, sum, b]} accent={d >= 0} />
+        <Arrow to={a} name="col 1" />
+        <Arrow to={b} name={d === 0 ? undefined : "col 2"} />
+      </svg>
+    </Frame>
+  );
+}
+
+const NET: Record<string, Spot> = { A: [70, 60], B: [190, 60], C: [70, 190], D: [190, 190] };
+const NET_NAMES = ["A", "B", "C", "D"];
+const NET_LINKS: [string, string][] = [
+  ["A", "B"],
+  ["A", "C"],
+  ["B", "C"],
+  ["B", "D"],
+  ["C", "D"],
+  ["D", "A"],
+];
+
+/** A directed graph written as a table of 0s and 1s, and the powers of that table, which count walks. */
+function AdjacencyMatrix(props: Props) {
+  const [steps, setSteps] = useState(clamp(Math.round(num(props.steps, 1)), 1, 3));
+  const [from, setFrom] = useState(clamp(Math.round(num(props.from, 1)), 1, 4) - 1);
+  const one: number[][] = NET_NAMES.map((a) => NET_NAMES.map((b) => (NET_LINKS.some(([p, q]) => p === a && q === b) ? 1 : 0)));
+  let power = one;
+  for (let k = 1; k < steps; k++) power = power.map((row) => NET_NAMES.map((_, j) => row.reduce((sum, value, m) => sum + value * one[m][j], 0)));
+  const start = NET_NAMES[from];
+  return (
+    <Frame
+      title="A graph as a table of numbers"
+      summary={`The entry in row i, column j of the table counts the walks of exactly ${plural(steps, "step")} from node i to node j${steps === 1 ? ", which is 1 where there is an arrow and 0 where there is none" : `, and the table is the first one multiplied by itself ${steps === 2 ? "once" : "twice"}`}. From ${start}: ${NET_NAMES.map((name, j) => `${power[from][j]} to ${name}`).join(", ")}.`}
+      controls={
+        <>
+          <Stepper label="steps" value={steps} onChange={setSteps} min={1} max={3} />
+          <Stepper label="row" value={from + 1} onChange={(v) => setFrom(v - 1)} min={1} max={4} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 250" role="img" aria-label={`A graph of four nodes beside the table counting walks of ${steps} steps, with the row for ${start} marked`}>
+        {NET_LINKS.map(([a, b]) => (
+          <Link key={a + b} from={NET[a]} to={NET[b]} arrow hot={a === start && steps === 1} />
+        ))}
+        {NET_NAMES.map((name) => (
+          <Dot key={name} at={NET[name]} name={name} mark={name === start ? "now" : "done"} />
+        ))}
+        {NET_NAMES.map((name, j) => (
+          <text key={name} x={282 + j * 38 + 17} y="42" textAnchor="middle" className="fig-small">
+            {name}
+          </text>
+        ))}
+        {power.map((row, i) => (
+          <g key={i}>
+            <text x="264" y={72 + i * 38} className="fig-small">
+              {NET_NAMES[i]}
+            </text>
+            <Cells values={row} x={282} y={50 + i * 38} w={38} h={32} hot={i === from ? [0, 1, 2, 3] : []} />
+          </g>
+        ))}
+      </svg>
+    </Frame>
+  );
+}
+
 const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "place-value": PlaceValue,
   "number-line": NumberLine,
@@ -2918,6 +3351,15 @@ const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "topo-order": TopoOrder,
   "shortest-path": ShortestPath,
   "beam-search": BeamSearch,
+  "linear-map": LinearMap,
+  "matrix-vector": MatrixVector,
+  "compose-maps": ComposeMaps,
+  "transpose-flip": TransposeFlip,
+  elimination: Elimination,
+  "null-space": NullSpace,
+  "basis-grid": BasisGrid,
+  determinant: Determinant,
+  "adjacency-matrix": AdjacencyMatrix,
 };
 
 export function Figure({ name, props }: { name: string; props?: Props }) {

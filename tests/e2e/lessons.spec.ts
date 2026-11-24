@@ -40,7 +40,7 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   await grid.getByRole("button", { name: "Increase rows" }).click();
   await expect(grid).toContainText("4 × 12 = 4 × 10 + 4 × 2 = 40 + 8 = 48");
   // The coordinate plane: a point, a line, two lines meeting, and a parabola.
-  const point = page.getByRole("figure").filter({ hasText: "Coordinates" });
+  const point = page.getByRole("figure", { name: "Coordinates", exact: true });
   await expect(point).toContainText("The point (3, 2): 3 right, 2 up. It is in quadrant I. Distance from the origin: √13 ≈ 3.61.");
   for (let i = 0; i < 4; i++) await point.getByRole("button", { name: "Decrease x" }).click();
   await point.getByRole("button", { name: "Decrease y" }).click();
@@ -281,6 +281,45 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   await expect(beam).toContainText('the best one is kept: "the cat" (0.2). The most probable sentence of all is "a cat" at 0.36, which this beam missed, because it dropped "a" after the first word.');
   await press(beam, "Increase beam width");
   await expect(beam).toContainText('6 candidates, and the best 2 are kept: "a cat" (0.36), "the cat" (0.2). The most probable sentence of all is "a cat" at 0.36, which this beam found.');
+  const moved = fig("A matrix moves the plane");
+  await expect(moved).toContainText("The shear, with rows (1, 1) and (0, 1). The unit vector (1, 0) lands on (1, 0), the first column. The unit vector (0, 1) lands on (1, 1), the second column. The point (2, 1) is 2 of the first and 1 of the second, so it lands on 2 × (1, 0) + 1 × (1, 1) = (3, 1).");
+  await press(moved, "Next matrix");
+  await expect(moved).toContainText("The quarter turn, with rows (0, −1) and (1, 0).");
+  await expect(moved).toContainText("so it lands on 2 × (0, 1) + 1 × (−1, 0) = (−1, 2).");
+  const product = fig("A matrix times a vector");
+  await expect(product).toContainText("By columns: 1 × (2, 1) + 1 × (−1, 1) = (1, 2). By rows: (2, −1) · x = 1 and (1, 1) · x = 2. Both give Ax = (1, 2).");
+  await press(product, "Increase first entry of x in halves");
+  await expect(product).toContainText("Both give Ax = (2, 2.5).");
+  const twoMaps = fig("One matrix after another");
+  await expect(twoMaps).toContainText("First the shear, with rows (1, 1) and (0, 1), then the quarter turn, with rows (0, −1) and (1, 0). Nothing has been applied yet. The corner that began at (2, 0.5) is now at (2, 0.5).");
+  await press(twoMaps, "Increase matrices applied", 2);
+  await expect(twoMaps).toContainText("Together they are the one matrix with rows (0, −1) and (1, 1), the product of the second and the first. The corner that began at (2, 0.5) is now at (−0.5, 2.5). In the other order the product would have rows (1, −1) and (1, 0), a different matrix.");
+  const flip = fig("Rows become columns");
+  await expect(flip).toContainText("The matrix, with 2 rows and 3 columns. The entry 2 is in row 1, column 2 of the matrix and in row 2, column 1 of the transpose. Row 1 of the matrix, 1, 2, 3, is column 1 of the transpose.");
+  await press(flip, "Show the transpose");
+  await expect(flip).toContainText("The transpose, with 3 rows and 2 columns.");
+  const rowsFig = fig("Clearing one unknown at a time");
+  await expect(rowsFig).toContainText("Step 0 of 6.");
+  await press(rowsFig, "Increase step", 3);
+  await expect(rowsFig).toContainText("The rows are now (1, 1, 1 | 6), (0, 1, −1 | −1), (0, 0, −1 | −3).");
+  await press(rowsFig, "Increase step", 3);
+  await expect(rowsFig).toContainText("The solution is x = 1, y = 2, z = 3. The rows are now (1, 0, 0 | 1), (0, 1, 0 | 2), (0, 0, 1 | 3).");
+  const lost = fig("What a matrix reaches and what it loses");
+  await expect(lost).toContainText("The input x = (0.4, 0.8) goes to Ax = (2, 1), which is on the line through (2, 1): that line is the column space.");
+  await press(lost, "Increase along (2, −1) in halves");
+  await expect(lost).toContainText("The input x = (0.9, 0.55) goes to Ax = (2, 1)");
+  await press(lost, "Turn the columns apart");
+  await expect(lost).toContainText("so its rank is 2.");
+  const basis = fig("Two descriptions of one point");
+  await expect(basis).toContainText("its coordinates in this basis are (1, 2). In the usual coordinates the same point is 1 × (2, 1) + 2 × (−1, 1) = (0, 3).");
+  const area = fig("The determinant as an area");
+  await expect(area).toContainText("The determinant is 2 × 1.5 − 0 × 0 = 3. The unit square, of area 1, is sent to a parallelogram of area 3.");
+  await press(area, "Decrease angle in steps of 30°", 3);
+  await expect(area).toContainText("The determinant is 2 × 0 − 0 × 1.5 = 0. The columns lie along one line");
+  const table = fig("A graph as a table of numbers");
+  await expect(table).toContainText("From A: 0 to A, 1 to B, 1 to C, 0 to D.");
+  await press(table, "Increase steps");
+  await expect(table).toContainText("From A: 0 to A, 0 to B, 1 to C, 2 to D.");
   await expect(page.locator(".prose-lesson img")).toHaveCount(0);
 
   // Wrong, then a hint, then right. Fractions and words are handled by the grader.
