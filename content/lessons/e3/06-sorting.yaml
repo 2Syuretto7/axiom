@@ -1,0 +1,705 @@
+concept: e3.sorting
+minutes: 90
+claim: You can sort a list by insertion and by merging, count the comparisons each needs, explain where the $n^2$ of one and the $n \log_2 n$ of the other come from, say why no method that works by comparing can do better, and use Python's sort with keys and stability to rank things.
+recalls: [e3.graphs-and-traversal]
+uses: [e3.trees-and-heaps, e3.arrays-and-linked-lists, e1.recursion, e1.complexity-and-big-o, e1.modules-and-imports, e0.lists-and-tuples, e0.dictionaries-and-sets, e0.loops, e0.functions, m1.logarithms, m2.composition-and-inverses, m4.angle-and-cosine-similarity]
+leads: [e3.binary-search, e3.divide-and-conquer]
+starter: |
+  # Scratch space. Sort by moving each item left until it is in place, and count the comparisons.
+  # Each list is twice as long as the one before. How does the count grow?
+  import random
+
+  def comparisons_to_sort(items):
+      items = list(items)
+      count = 0
+      for i in range(1, len(items)):
+          j = i
+          while j > 0:
+              count += 1
+              if items[j - 1] <= items[j]:
+                  break
+              items[j - 1], items[j] = items[j], items[j - 1]
+              j -= 1
+      return count
+
+  random.seed(1)
+  for n in [250, 500, 1000, 2000]:
+      items = [random.random() for _ in range(n)]
+      print(n, comparisons_to_sort(items))
+parts:
+  recall:
+    - text: |
+        [[e3.graphs-and-traversal]] ended on a debt. Since your first lessons you have called `sorted` and been told its cost, and nothing has said how a list is put in order. Today that is settled. Three quick pulls first.
+    - question:
+        id: recall-bfs-cost
+        type: choice
+        system: s1
+        concepts: [e3.graphs-and-traversal]
+        prompt: |
+          Breadth-first search on a graph with $\lvert V \rvert$ nodes and $\lvert E \rvert$ edges takes time
+        options: ["$O(\\lvert V \\rvert \\cdot \\lvert E \\rvert)$", "$O(\\lvert V \\rvert + \\lvert E \\rvert)$", "$O(\\lvert V \\rvert^2)$ always", "$O(\\log \\lvert V \\rvert)$"]
+        answer: 1
+        explanation: Each node leaves the queue once and each edge is looked at once from each end.
+        hints:
+          - How many times is each node processed?
+          - How many times is each edge looked at?
+    - question:
+        id: recall-heap-pop
+        type: choice
+        system: s1
+        concepts: [e3.trees-and-heaps]
+        prompt: |
+          Removing the smallest item from a heap of $n$ items costs
+        options: ["$O(1)$", "$O(\\log n)$", "$O(n)$", "$O(n \\log n)$"]
+        answer: 1
+        explanation: The last item is moved to the root and sinks at most the height of the tree, which is about $\log_2 n$.
+        hints:
+          - How far can the item placed at the root sink?
+          - What is the height of a heap of $n$ items?
+    - question:
+        id: recall-halvings
+        type: numeric
+        system: s1
+        concepts: [m1.logarithms]
+        prompt: |
+          How many times must 1024 be halved to reach 1?
+        answer: "10"
+        explanation: $1024 = 2^{10}$, so $\log_2 1024 = 10$.
+        hints:
+          - Write 1024 as a power of 2.
+          - The number of halvings is the logarithm to base 2.
+  puzzle:
+    - text: |
+        Eight cards lie face down in a row, carrying the numbers 5, 2, 8, 1, 9, 3, 7 and 4. You cannot read them. All you may do is point at two cards and ask which is larger, and swap cards if you wish. Each question costs one rupee.
+
+        **How much must you spend to be sure the row is in order? And how much for a million cards?**
+
+        The second question is the one that matters. Run the starter. It sorts lists of 250, 500, 1000 and 2000 random numbers by the method most people use on a hand of cards, and counts the questions asked. Each time the list doubles, the count is multiplied by about four. For 2000 items it is about a million. Carry on doubling and a million items would need about $2.5 \times 10^{11}$, a quarter of a trillion comparisons, and several hours of a computer's time.
+
+        Yet `sorted` puts a million numbers in order in under a second. It is not a faster computer. It asks far fewer questions: about twenty million.
+
+        **What does it know that the hand of cards does not? And could some cleverer method ask fewer still?**
+  intuition:
+    - text: |
+        Begin with the hand of cards. You pick up cards one at a time, and each new card is slid left past every card larger than it until it meets one that is not. The cards already in your hand are always in order, and each new card is **inserted** into its place among them. That is **insertion sort**.
+
+        Step through it on the row of the puzzle and watch the count of comparisons.
+    - figure: sort-steps
+    - text: |
+        After seven passes the row is sorted, at a cost of 18 comparisons. Notice which passes were dear. The 9 cost one comparison, because it was already larger than everything before it. The 1 cost three and the 4 cost five, because each had to pass nearly everything placed so far. A small item arriving late is the expensive case, and in a random list an item passes about half of those before it. Item number $i$ costs about $i/2$ comparisons, and those add up to about $n^2/4$. That is the fourfold growth the starter showed.
+
+        The waste is that insertion sort moves an item **one place per comparison**. An item a thousand places from home costs a thousand comparisons.
+
+        Now a different observation. Suppose someone hands you two piles of cards, **each already in order**, and asks for one pile in order. This is easy. Look at the top card of each pile, take the smaller, and repeat. Each comparison places one card for good, and it never needs revisiting. Two sorted piles of half a million are merged into one sorted million with fewer than a million comparisons.
+
+        So a million cards can be sorted cheaply **if the two halves are already sorted**. And the halves? Each can be sorted cheaply if its own halves are sorted. Carry on halving and you reach piles of one card, which are sorted already. Then merge your way back up. That is **merge sort**. Switch the figure to it.
+    - figure: sort-steps
+      props: { method: merge }
+    - text: |
+        Three rounds of merging, since eight halves three times to reach one. The rounds cost 4, 6 and 7 comparisons, 17 in all. For eight cards that is no better than insertion sort's 18. The difference is in how the two grow. Every round of merging costs fewer than $n$ comparisons, and there are only $\log_2 n$ rounds.
+  derivation:
+    - text: |
+        **Insertion sort.** In code, the item at position `i` is swapped leftwards while the item before it is larger.
+
+        ```python
+        def insertion_sort(items):
+            for i in range(1, len(items)):
+                j = i
+                while j > 0 and items[j - 1] > items[j]:
+                    items[j - 1], items[j] = items[j], items[j - 1]
+                    j -= 1
+        ```
+
+        The line with two names on each side of the `=` swaps two items: the right side is built first, as a tuple, and then unpacked into the two places. The function changes the list it is given, and returns nothing. That is called sorting **in place**.
+
+        Why is it correct? Before each pass, the first `i` items are in order among themselves. The pass slides item `i` left until the item before it is no larger, and now the first `i + 1` items are in order. A statement like that, true before every pass and kept true by each pass, is a **loop invariant**, and it is induction from [[e1.recursion]] written as a loop. When the last pass ends, "the first $n$ items are in order" says the list is sorted.
+
+        **Counting its work.** How many comparisons? It depends on the list.
+
+        If the list is **already sorted**, every pass asks one question, gets the answer "no larger", and stops: $n - 1$ comparisons.
+
+        If the list is **in reverse**, item $i$ passes all $i$ items before it. The total is
+
+        $$1 + 2 + \dots + (n-1) = \frac{n(n-1)}{2}.$$
+
+        For anything between, count **inversions**. An inversion is a pair of items in the wrong order: a larger one somewhere before a smaller one. The row 5, 2, 8, 1, 9, 3, 7, 4 has 13 of them. A sorted list has none, and a reversed list has every pair, $n(n-1)/2$.
+
+        Each swap of insertion sort exchanges two **neighbours** that are in the wrong order. That removes exactly one inversion, the pair itself, and changes no other, since every other item stays on the same side of both. So
+
+        $$\text{swaps} = \text{inversions}.$$
+
+        The number of swaps is fixed by the list, not by the luck of the method. In a random list each pair is equally likely to be either way round, so half of all pairs are inversions: about $n(n-1)/4$. Insertion sort is $O(n^2)$ on average and in the worst case, and $O(n)$ on a list that is nearly sorted. Keep that last fact. It will be used.
+    - question:
+        id: derive-inversions
+        type: numeric
+        system: s2
+        prompt: |
+          The list `[4, 1, 3, 2]` is sorted by insertion sort. How many swaps does it make?
+        answer: "4"
+        explanation: |
+          Count the inversions, the pairs with the larger item first: (4, 1), (4, 3), (4, 2) and (3, 2). There are four, and each swap of neighbours removes exactly one. Check by running it: 1 passes 4, one swap. 3 passes 4, one swap. 2 passes 4 and 3, two swaps.
+        hints:
+          - Each swap removes exactly one pair that is in the wrong order.
+          - List the pairs in which a larger number stands before a smaller one.
+          - 4 stands before three smaller numbers. What about 3?
+    - text: |
+        **Merging.** Two sorted lists are merged by walking a finger along each.
+
+        ```python
+        def merge(left, right):
+            result = []
+            i = 0
+            j = 0
+            while i < len(left) and j < len(right):
+                if left[i] <= right[j]:
+                    result.append(left[i])
+                    i += 1
+                else:
+                    result.append(right[j])
+                    j += 1
+            return result + left[i:] + right[j:]
+        ```
+
+        Each trip round the loop asks one question and places one item. When one list runs out, whatever remains of the other is already in order and larger than everything placed, so it is added whole. One of the two slices on the last line is always empty.
+
+        To merge lists of lengths $a$ and $b$, the loop runs at most $a + b - 1$ times, because the last item is never compared with anything. At best it runs $\min(a, b)$ times, when one list lies wholly below the other.
+
+        **Merge sort.** Now the recursion writes itself.
+
+        ```python
+        def merge_sort(items):
+            if len(items) <= 1:
+                return items
+            middle = len(items) // 2
+            return merge(merge_sort(items[:middle]), merge_sort(items[middle:]))
+        ```
+
+        A list of one item or none is sorted. Otherwise sort each half and merge. This is the leap of faith of [[e1.recursion]]: trust that the function sorts lists shorter than this one, and it follows that it sorts this one.
+
+        **Counting its work.** Take $n$ a power of 2 and lay the calls out in levels. At the top, one merge producing $n$ items. Below it, two merges producing $n/2$ each. Below that, four producing $n/4$ each. On every level the merges together produce $n$ items, and so ask fewer than $n$ questions. How many levels? The lists halve until they reach length 1, which takes $\log_2 n$ halvings. So
+
+        $$\text{comparisons} \le n \log_2 n.$$
+
+        For the eight cards that is at most $8 \times 3 = 24$, and the figure counted 17. For a million items, $\log_2 10^6$ is about 20, so about twenty million comparisons against insertion sort's quarter of a trillion. That is the gap of the puzzle: a factor of more than ten thousand, from one idea.
+
+        There is a price. Merge sort builds new lists, so it needs room for a second copy of the data, $O(n)$ extra space, where insertion sort needs none.
+    - question:
+        id: derive-merge-rounds
+        type: order
+        system: s2
+        prompt: Merge sort runs on the row 5, 2, 8, 1, 9, 3, 7, 4. Put these stages in the order they occur, from the moment the list has been split into single items.
+        steps:
+          - "[5] [2] [8] [1] [9] [3] [7] [4]"
+          - "[2, 5] [1, 8] [3, 9] [4, 7]"
+          - "[1, 2, 5, 8] [3, 4, 7, 9]"
+          - "[1, 2, 3, 4, 5, 7, 8, 9]"
+        explanation: Neighbouring runs are merged in pairs, so the length of the sorted runs doubles each round, from 1 to 2 to 4 to 8. Three doublings reach eight, which is $\log_2 8$ rounds.
+        hints:
+          - Each round merges neighbouring sorted runs in pairs.
+          - The runs double in length each round.
+          - The last stage is one run holding everything.
+    - text: |
+        **Can anything do better?** Here is an argument that settles it for every method at once, including ones nobody has invented.
+
+        Think of the puzzle as a game of questions. The cards are in one of $n!$ possible orders, and you must find out which, since different orders need different rearrangements. Each comparison has two possible answers. So after $k$ comparisons, a method can have seen at most $2^k$ different sequences of answers, and can tell apart at most $2^k$ orders. To tell apart all $n!$ it needs
+
+        $$2^k \ge n!, \qquad \text{so} \qquad k \ge \log_2 (n!).$$
+
+        How large is that? The larger half of the factors of $n!$ are each at least $n/2$, so $n! \ge (n/2)^{n/2}$ and
+
+        $$\log_2 (n!) \ge \frac{n}{2} \log_2 \frac{n}{2}.$$
+
+        That grows like $n \log_2 n$. **No method that sorts by comparing can beat $n \log n$ in the worst case**, and merge sort reaches it. For the eight cards, $8! = 40320$ lies between $2^{15}$ and $2^{16}$, so sixteen rupees are needed in the worst case whatever you do, and merge sort's worst case of seventeen is within one of the best possible.
+
+        The same count of questions is the reason a heap can be no faster than it is. Push $n$ items into a heap and pop them all, and they come out in order. That is a sort, **heap sort**, costing $O(n \log n)$. If pushing and popping were both $O(1)$, it would sort in $O(n)$, which has just been shown impossible.
+
+        **Sorting in Python.** `sorted(items)` returns a new sorted list and leaves the original alone. The method `items.sort()` sorts the list in place and returns `None`. Both use a method called Timsort, which is merge sort with one refinement: it first looks for stretches that are already in order, and it sorts short stretches by insertion sort, which you saw is fastest on small and nearly sorted lists. On a list that is already sorted it costs $O(n)$.
+
+        Both take a **key**, a function applied to each item to produce the value it is sorted by.
+
+        ```python
+        words = ["pear", "fig", "apple", "kiwi"]
+        print(sorted(words, key=len))             # ['fig', 'pear', 'kiwi', 'apple']
+        print(sorted(words, key=len, reverse=True))  # ['apple', 'pear', 'kiwi', 'fig']
+        ```
+
+        Look at "pear" and "kiwi". They have the same length, and in both results "pear" comes first, as it did in the original. A sort that keeps items with equal keys in their original order is called **stable**. Python's sort is stable. Merge sort is stable provided the merge takes from the left pile on a tie, which is what the `<=` in `merge` does. Stability is what lets you sort by one thing and then another: sort by name, then sort by marks, and those with equal marks remain in order of name.
+
+        Tuples are compared item by item, the first deciding and the second breaking ties. So a key that returns a tuple sorts by several things at once.
+
+        ```python
+        scores = {"cat": 0.9, "dog": 0.7, "ant": 0.9}
+        ranked = sorted(scores, key=lambda name: (-scores[name], name))
+        print(ranked)                             # ['ant', 'cat', 'dog']
+        ```
+
+        The minus sign puts the largest score first, and the name settles the tie. This is how a search ranks its results: compute the cosine similarity of [[m4.angle-and-cosine-similarity]] between the query and each document, and sort by it, largest first.
+  formal:
+    - text: |
+        **Sorting.** Rearranging a list so that each item is no larger than the next. An **inversion** is a pair of positions $i < j$ with the item at $i$ larger than the item at $j$. A list is sorted exactly when it has no inversions.
+
+        **Insertion sort.** For $i = 1, \dots, n-1$, swap item $i$ leftwards while the item before it is larger. Swaps equal inversions. Comparisons are $n - 1$ at best, $n(n-1)/2$ at worst, about $n^2/4$ on average. In place.
+
+        **Merge.** Two sorted lists of lengths $a$ and $b$ are combined into one sorted list with at most $a + b - 1$ comparisons.
+
+        **Merge sort.** Sort each half recursively and merge. At most $n \log_2 n$ comparisons, in every case. Needs $O(n)$ extra space.
+
+        **Lower bound.** Any method that sorts by comparing pairs needs at least $\log_2(n!)$ comparisons in the worst case, which grows like $n \log_2 n$.
+
+        **Stable.** A sort is stable if items with equal keys keep their original order. Insertion sort, merge sort and Python's `sorted` and `sort` are stable.
+  drill:
+    - text: Seconds each. Insertion sort here means the version above, which stops a pass at the first item that is not larger.
+    - question:
+        id: drill-sorted-best
+        type: numeric
+        system: s1
+        prompt: |
+          Insertion sort is given a list of 10 items that is already in order. How many comparisons does it make?
+        answer: "9"
+        explanation: Each of the nine passes asks one question and stops.
+        hints:
+          - How many passes are there?
+          - How many questions does a pass ask when the item is already in place?
+    - question:
+        id: drill-reverse-worst
+        type: numeric
+        system: s1
+        prompt: |
+          Insertion sort is given 10 items in reverse order. How many comparisons does it make?
+        answer: "45"
+        explanation: $1 + 2 + \dots + 9 = \frac{10 \times 9}{2}$.
+        hints:
+          - Item number $i$ passes all $i$ items before it.
+          - Add the whole numbers from 1 to one less than the length.
+    - question:
+        id: drill-inversions
+        type: numeric
+        system: s1
+        prompt: |
+          How many inversions has the list `[3, 1, 2]`?
+        answer: "2"
+        explanation: The pairs (3, 1) and (3, 2). The pair (1, 2) is in order.
+        hints:
+          - Look at each of the three pairs.
+          - Which pairs have the larger number first?
+    - question:
+        id: drill-swaps
+        type: numeric
+        system: s1
+        prompt: |
+          A list has 6 inversions. How many swaps does insertion sort make on it?
+        answer: "6"
+        explanation: Each swap of neighbours removes exactly one inversion.
+        hints:
+          - What does one swap do to the number of inversions?
+          - The sort ends when none are left.
+    - question:
+        id: drill-merge-most
+        type: numeric
+        system: s1
+        prompt: |
+          Two sorted lists of 4 items each are merged. What is the largest number of comparisons that can be needed?
+        answer: "7"
+        explanation: Each comparison places one item, and the last of the eight is placed without one.
+        hints:
+          - How many items are placed in all?
+          - The final item has nothing left to be compared with.
+    - question:
+        id: drill-merge-fewest
+        type: numeric
+        system: s1
+        prompt: |
+          Two sorted lists of 4 items each are merged. What is the smallest number of comparisons that can be needed?
+        answer: "4"
+        explanation: If every item of one list is smaller than every item of the other, that list is used up after four comparisons and the rest is added whole.
+        hints:
+          - When does the loop stop?
+          - Suppose one list lies wholly below the other.
+    - question:
+        id: drill-rounds
+        type: numeric
+        system: s1
+        prompt: |
+          Merge sort is run on 64 items. How many rounds of merging are there?
+        answer: "6"
+        explanation: $64 = 2^6$, and each round doubles the length of the sorted runs.
+        hints:
+          - The runs go from length 1 to 2 to 4 and so on.
+          - How many doublings reach 64?
+    - question:
+        id: drill-nlogn
+        type: numeric
+        system: s1
+        prompt: |
+          Find $n \log_2 n$ for $n = 16$.
+        answer: "64"
+        explanation: $\log_2 16 = 4$ and $16 \times 4$ is the bound.
+        hints:
+          - First find the logarithm of 16 to base 2.
+          - Multiply it by 16.
+    - question:
+        id: drill-orders
+        type: numeric
+        system: s1
+        prompt: |
+          In how many different orders can 4 different cards lie?
+        answer: "24"
+        explanation: $4! = 4 \times 3 \times 2 \times 1$.
+        hints:
+          - Four choices for the first place, three for the second.
+          - Multiply the choices together.
+    - question:
+        id: drill-sort-returns
+        type: choice
+        system: s1
+        prompt: |
+          After `a = [3, 1, 2]` and `b = a.sort()`, what are `a` and `b`?
+        options:
+          - "`a` is `[3, 1, 2]` and `b` is `[1, 2, 3]`"
+          - "`a` is `[1, 2, 3]` and `b` is `None`"
+          - "Both are `[1, 2, 3]`"
+          - "`a` is `[1, 2, 3]` and `b` is `[3, 1, 2]`"
+        answer: 1
+        explanation: The method sorts the list in place and returns nothing. It is `sorted(a)` that returns a new list and leaves `a` alone.
+        hints:
+          - Does the method make a new list or change the old one?
+          - What does a function return when it has no result to give?
+    - question:
+        id: drill-stable
+        type: choice
+        system: s1
+        prompt: |
+          A sort is stable when
+        options:
+          - "it takes the same time on every list"
+          - "items with equal keys keep the order they had before"
+          - "it needs no extra space"
+          - "it never swaps two items"
+        answer: 1
+        explanation: Stability is about ties. Whatever was first among equals stays first.
+        hints:
+          - It concerns items that the sort cannot tell apart.
+          - Think of "pear" and "kiwi" sorted by length.
+    - question:
+        id: predict-key-len
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          words = ["plum", "fig", "apple", "kiwi", "pea"]
+          print(sorted(words, key=len))
+        output: "['fig', 'pea', 'plum', 'kiwi', 'apple']"
+        explanation: The words are sorted by length. Those of equal length keep their original order, since the sort is stable, so "fig" stays before "pea" and "plum" before "kiwi".
+        hints:
+          - Write down the length of each word.
+          - Among words of equal length, which came first in the original?
+    - question:
+        id: predict-tuples
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          pairs = [(2, "b"), (1, "z"), (2, "a"), (1, "c")]
+          pairs.sort()
+          print(pairs[0], pairs[3])
+        output: "(1, 'c') (2, 'b')"
+        explanation: Tuples are compared by their first items, and by their second only on a tie. The order is (1, 'c'), (1, 'z'), (2, 'a'), (2, 'b').
+        hints:
+          - The first item of each tuple decides, unless two are equal.
+          - Among the tuples that start with 1, which letter comes first?
+  work:
+    - text: Slower now. Before writing a loop, say what is true of the list each time the loop comes round.
+    - question:
+        id: write-merge
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `merge(left, right)`. Both arguments are lists already in order, smallest first. Return one new list holding every item of both, in order. Walk along the two lists as in the lesson, without calling `sorted` or `sort`, so that the work is one comparison for each item placed.
+        starter: |
+          def merge(left, right):
+              # Replace the next line with your own.
+              return left + right
+
+          print(merge([1, 4, 9], [2, 3, 10, 11]))
+        solution: |
+          def merge(left, right):
+              result = []
+              i = 0
+              j = 0
+              while i < len(left) and j < len(right):
+                  if left[i] <= right[j]:
+                      result.append(left[i])
+                      i += 1
+                  else:
+                      result.append(right[j])
+                      j += 1
+              return result + left[i:] + right[j:]
+
+          print(merge([1, 4, 9], [2, 3, 10, 11]))
+        tests: |
+          assert merge([1, 4, 9], [2, 3, 10, 11]) == [1, 2, 3, 4, 9, 10, 11], "merge([1, 4, 9], [2, 3, 10, 11]) should be [1, 2, 3, 4, 9, 10, 11]. You returned " + repr(merge([1, 4, 9], [2, 3, 10, 11]))
+          assert merge([], [1, 2]) == [1, 2], "Merging an empty list with [1, 2] should give [1, 2]. You returned " + repr(merge([], [1, 2]))
+          assert merge([5], []) == [5], "Merging [5] with an empty list should give [5]. You returned " + repr(merge([5], []))
+          assert merge([], []) == [], "Merging two empty lists should give an empty list. You returned " + repr(merge([], []))
+          assert merge([2, 2, 7], [2, 3, 7]) == [2, 2, 2, 3, 7, 7], "Equal items must all be kept. merge([2, 2, 7], [2, 3, 7]) should be [2, 2, 2, 3, 7, 7]. You returned " + repr(merge([2, 2, 7], [2, 3, 7]))
+          assert merge([8, 9], [1, 2, 3]) == [1, 2, 3, 8, 9], "When one list lies wholly above the other, the lower comes first. You returned " + repr(merge([8, 9], [1, 2, 3]))
+          assert merge([1, 3, 5, 7], [2, 4, 6]) == [1, 2, 3, 4, 5, 6, 7], "merge([1, 3, 5, 7], [2, 4, 6]) should be [1, 2, 3, 4, 5, 6, 7]. You returned " + repr(merge([1, 3, 5, 7], [2, 4, 6]))
+          _a = [1, 5]
+          _b = [2, 6]
+          merge(_a, _b)
+          assert _a == [1, 5] and _b == [2, 6], "The two lists given should be left unchanged"
+          assert output.strip() == "[1, 2, 3, 4, 9, 10, 11]", "The program should print [1, 2, 3, 4, 9, 10, 11]"
+        wrong:
+          - |
+            def merge(left, right):
+                result = []
+                i = 0
+                j = 0
+                while i < len(left) and j < len(right):
+                    if left[i] <= right[j]:
+                        result.append(left[i])
+                        i += 1
+                    else:
+                        result.append(right[j])
+                        j += 1
+                return result
+
+            print([1, 2, 3, 4, 9, 10, 11])
+          - |
+            def merge(left, right):
+                result = []
+                for k in range(max(len(left), len(right))):
+                    if k < len(left):
+                        result.append(left[k])
+                    if k < len(right):
+                        result.append(right[k])
+                return result
+
+            print([1, 2, 3, 4, 9, 10, 11])
+          - |
+            def merge(left, right):
+                return sorted(set(left + right))
+
+            print(merge([1, 4, 9], [2, 3, 10, 11]))
+          - |
+            def merge(left, right):
+                result = []
+                while len(left) > 0 and len(right) > 0:
+                    if left[0] <= right[0]:
+                        result.append(left.pop(0))
+                    else:
+                        result.append(right.pop(0))
+                return result + left + right
+
+            print(merge([1, 4, 9], [2, 3, 10, 11]))
+        explanation: |
+          Two fingers, `i` and `j`, mark the smallest item not yet taken from each list. Whichever is smaller is the smallest of everything that remains, so it is safe to place it and never look at it again. The loop ends when one list is used up, and what remains of the other is added whole, since it is in order and nothing smaller is left. Forgetting that last step loses the tail. Taking items alternately ignores their sizes. Removing items from the front of the lists with `pop(0)` gives the right answer and two faults: it empties the lists you were given, and each removal from the front of an array shifts everything after it, as you found in the first lesson of this cluster, which turns a merge of $n$ items into $O(n^2)$ work.
+        hints:
+          - Keep an index into each list, both starting at 0.
+          - While both indexes are inside their lists, append the smaller of the two items they point at and advance that index.
+          - When the loop ends, add what remains of each list with the slices left[i:] and right[j:].
+    - question:
+        id: write-rank
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A search has computed the cosine similarity between a query and each document, and holds the results in a dictionary from the document's name to its similarity. Write `rank(scores)` to return the list of names with the most similar first. Documents with equal similarity go in alphabetical order.
+        starter: |
+          def rank(scores):
+              # Replace the next line with your own.
+              return list(scores)
+
+          scores = {"tides": 0.31, "moons": 0.87, "orbits": 0.87, "crabs": 0.05}
+          print(rank(scores))
+        solution: |
+          def rank(scores):
+              return sorted(scores, key=lambda name: (-scores[name], name))
+
+          scores = {"tides": 0.31, "moons": 0.87, "orbits": 0.87, "crabs": 0.05}
+          print(rank(scores))
+        tests: |
+          assert rank({"tides": 0.31, "moons": 0.87, "orbits": 0.87, "crabs": 0.05}) == ["moons", "orbits", "tides", "crabs"], "The most similar should come first. You returned " + repr(rank({"tides": 0.31, "moons": 0.87, "orbits": 0.87, "crabs": 0.05}))
+          assert rank({"b": 0.5, "a": 0.5, "c": 0.5}) == ["a", "b", "c"], "Equal similarities should come out in alphabetical order. You returned " + repr(rank({"b": 0.5, "a": 0.5, "c": 0.5}))
+          assert rank({"z": 0.2, "y": 0.9, "x": 0.2, "w": 0.9}) == ["w", "y", "x", "z"], "With scores z 0.2, y 0.9, x 0.2, w 0.9 the ranking is w, y, x, z. You returned " + repr(rank({"z": 0.2, "y": 0.9, "x": 0.2, "w": 0.9}))
+          assert rank({"only": -0.4}) == ["only"], "One document ranks first. You returned " + repr(rank({"only": -0.4}))
+          assert rank({}) == [], "No documents give an empty list. You returned " + repr(rank({}))
+          assert rank({"up": 0.1, "down": -0.8, "flat": 0.0}) == ["up", "flat", "down"], "A negative similarity ranks below zero. You returned " + repr(rank({"up": 0.1, "down": -0.8, "flat": 0.0}))
+          _s = {"q": 0.3, "p": 0.6}
+          rank(_s)
+          assert _s == {"q": 0.3, "p": 0.6}, "The dictionary given should be left unchanged"
+          assert output.strip() == "['moons', 'orbits', 'tides', 'crabs']", "The program should print ['moons', 'orbits', 'tides', 'crabs']"
+        wrong:
+          - |
+            def rank(scores):
+                return sorted(scores, key=lambda name: scores[name])
+
+            print(['moons', 'orbits', 'tides', 'crabs'])
+          - |
+            def rank(scores):
+                return sorted(scores)
+
+            print(['moons', 'orbits', 'tides', 'crabs'])
+          - |
+            def rank(scores):
+                return sorted(scores, key=lambda name: scores[name], reverse=True)
+
+            scores = {"tides": 0.31, "moons": 0.87, "orbits": 0.87, "crabs": 0.05}
+            print(rank(scores))
+          - |
+            def rank(scores):
+                return sorted(scores, key=lambda name: (scores[name], name), reverse=True)
+
+            print(['moons', 'orbits', 'tides', 'crabs'])
+        explanation: |
+          Sorting a dictionary sorts its keys, and the key function says what to sort them by. The tuple `(-scores[name], name)` is compared first by the negated score, so the largest score is the smallest tuple and comes first, and then by the name when two scores are equal. Sorting by the score alone with `reverse=True` looks right and fails on ties: a stable sort leaves equal items in the order the dictionary happened to hold them, which is the order of insertion, not of the alphabet. Reversing a tuple key reverses the names as well as the scores. A second way that works is two stable sorts, the less important one first: `sorted(sorted(scores), key=lambda name: -scores[name])`.
+        hints:
+          - sorted applied to a dictionary gives a sorted list of its keys, and takes a key function.
+          - To put the largest first while keeping names ascending, sort by the negated score.
+          - Let the key return a tuple, the negated score first and the name second.
+    - question:
+        id: fix-insertion
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `insertion_sort(items)` should sort the list it is given in place. For the row of the puzzle it should print `1 2 3 4 5 7 8 9`. It prints `5 1 2 3 4 7 8 9`. Fix it.
+        starter: |
+          def insertion_sort(items):
+              for i in range(1, len(items)):
+                  j = i
+                  while j > 1 and items[j - 1] > items[j]:
+                      items[j - 1], items[j] = items[j], items[j - 1]
+                      j -= 1
+
+          row = [5, 2, 8, 1, 9, 3, 7, 4]
+          insertion_sort(row)
+          print(" ".join([str(x) for x in row]))
+        solution: |
+          def insertion_sort(items):
+              for i in range(1, len(items)):
+                  j = i
+                  while j > 0 and items[j - 1] > items[j]:
+                      items[j - 1], items[j] = items[j], items[j - 1]
+                      j -= 1
+
+          row = [5, 2, 8, 1, 9, 3, 7, 4]
+          insertion_sort(row)
+          print(" ".join([str(x) for x in row]))
+        tests: |
+          _r = [5, 2, 8, 1, 9, 3, 7, 4]
+          insertion_sort(_r)
+          assert _r == [1, 2, 3, 4, 5, 7, 8, 9], "The row of the puzzle should become [1, 2, 3, 4, 5, 7, 8, 9]. It became " + repr(_r)
+          _r = [2, 1]
+          insertion_sort(_r)
+          assert _r == [1, 2], "[2, 1] should become [1, 2]. It became " + repr(_r)
+          _r = [3, 3, 1, 2, 1]
+          insertion_sort(_r)
+          assert _r == [1, 1, 2, 3, 3], "[3, 3, 1, 2, 1] should become [1, 1, 2, 3, 3]. It became " + repr(_r)
+          _r = [9, 8, 7, 6]
+          insertion_sort(_r)
+          assert _r == [6, 7, 8, 9], "A reversed list should be sorted. [9, 8, 7, 6] became " + repr(_r)
+          _r = []
+          insertion_sort(_r)
+          assert _r == [], "An empty list should stay empty"
+          _r = [4]
+          insertion_sort(_r)
+          assert _r == [4], "A list of one item should be unchanged"
+          _r = [1, 2, 3]
+          insertion_sort(_r)
+          assert _r == [1, 2, 3], "A sorted list should be unchanged. [1, 2, 3] became " + repr(_r)
+          assert output.strip() == "1 2 3 4 5 7 8 9", "The program should print 1 2 3 4 5 7 8 9"
+        wrong:
+          - |
+            def insertion_sort(items):
+                for i in range(1, len(items)):
+                    j = i
+                    while j > 0 and items[j - 1] < items[j]:
+                        items[j - 1], items[j] = items[j], items[j - 1]
+                        j -= 1
+
+            print("1 2 3 4 5 7 8 9")
+          - |
+            def insertion_sort(items):
+                items = sorted(items)
+
+            print("1 2 3 4 5 7 8 9")
+          - |
+            def insertion_sort(items):
+                for i in range(2, len(items)):
+                    j = i
+                    while j > 0 and items[j - 1] > items[j]:
+                        items[j - 1], items[j] = items[j], items[j - 1]
+                        j -= 1
+
+            print("1 2 3 4 5 7 8 9")
+        explanation: |
+          The condition `j > 1` stops every item one place short of the front, so nothing is ever compared with the item at position 0. Everything after the first item is sorted perfectly, and the 5 that began at the front stays there. The invariant shows the fault: after a pass, the first `i + 1` items should be in order, and with `j > 1` only the items from position 1 onwards are. An item may need to travel all the way to position 0, and the last comparison it can make is with `j` equal to 1, between positions 0 and 1. So the loop must run while `j > 0`. Writing `items = sorted(items)` inside the function is no repair, because it makes the name `items` refer to a new list and leaves the caller's list as it was.
+        hints:
+          - The output is sorted apart from one item. Which one, and where is it?
+          - What is the smallest value of j for which the loop still compares two items?
+          - With j equal to 1 the comparison is between positions 0 and 1, and that one is needed.
+    - question:
+        id: work-why-nlogn
+        type: choice
+        system: s2
+        prompt: |
+          Insertion sort averages about $n^2/4$ comparisons, and merge sort never more than $n \log_2 n$. Which statement best explains the gap?
+        options:
+          - "Merge sort is recursive, and recursion is faster than loops."
+          - "A swap of neighbours removes one inversion, and a random list has about $n^2/4$ of them, so a method that only swaps neighbours cannot escape $n^2$. A merge moves an item past many others with one comparison, and each of the $\\log_2 n$ rounds costs fewer than $n$."
+          - "Merge sort uses more memory, and memory is faster than comparisons."
+          - "Insertion sort makes mistakes that it must later correct."
+        answer: 1
+        explanation: |
+          The count of inversions is the real obstacle. A random list has about $n^2/4$ pairs in the wrong order, and each swap of neighbours repairs exactly one. No ordering of the swaps helps. In a merge, when an item of the right pile is taken ahead of the left pile's top item, it jumps ahead of everything remaining in the left pile at once: one comparison removes many inversions. That is possible only because the piles are already sorted, so that one answer carries information about many pairs. The recursion is a way of arranging for the piles to be sorted, and the second copy of the data is the price.
+        hints:
+          - How many inversions does one swap of neighbours remove?
+          - In a merge, how many items of the left pile does an item from the right pile get ahead of in one step?
+          - How many rounds of merging are there?
+    - question:
+        id: work-nearly-sorted
+        type: choice
+        system: s2
+        prompt: |
+          A log holds a million records that arrived almost in order of time: no record is more than 3 places from where it belongs. Which is true of sorting it?
+        options:
+          - "Insertion sort needs about a quarter of a trillion comparisons, as for any million items."
+          - "Insertion sort moves each record at most 3 places, so it makes at most about 3 million swaps and 4 million comparisons, fewer than merge sort's twenty million."
+          - "No method can use fewer than about twenty million comparisons, by the lower bound."
+          - "The log cannot be sorted without first shuffling it."
+        answer: 1
+        explanation: |
+          The cost of insertion sort is the number of inversions plus about one comparison per pass, and a list in which nothing is far from home has few inversions: at most about $3n$ here. So it finishes in $O(n)$. The lower bound of $\log_2(n!)$ is not contradicted. It counts the questions needed to tell apart all $n!$ orders, and here you have been told that most of those orders are impossible. With fewer possibilities to distinguish, fewer questions are needed. This is why Timsort looks for order that is already present before it does anything else. Real data is seldom random.
+        hints:
+          - How many swaps can one record need if it is at most 3 places from home?
+          - Multiply by the number of records, and compare with twenty million.
+          - The lower bound assumes every order is possible. Is that so here?
+    - question:
+        id: work-lower-bound
+        type: choice
+        system: s2
+        prompt: |
+          Someone claims a new method that sorts any 5 items using at most 6 comparisons. Without seeing it, what can you say?
+        options:
+          - "It may well be right, since 6 is more than 5."
+          - "It is impossible. Five items have $5! = 120$ orders, and 6 comparisons give at most $2^6 = 64$ different sequences of answers, so two different orders would get identical treatment and one of them would come out wrong."
+          - "It is impossible, because merge sort needs 8 and merge sort is the best there is."
+          - "It is possible only if the items are numbers."
+        answer: 1
+        explanation: |
+          A method that works by comparing can react only to the answers it receives. If two different starting orders produce the same six answers, the method performs the same rearrangement on both, and one rearrangement cannot sort two different orders. So it needs at least as many possible sequences of answers as there are orders: $2^k \ge 120$, which forces $k \ge 7$. Seven is in fact achievable for five items. The argument does not mention any particular method, which is its strength: it rules out every method at once. It would not rule out a method that does something other than compare, such as counting how many items have each value, which is how small whole numbers can be sorted in $O(n)$.
+        hints:
+          - How many orders can 5 items be in?
+          - How many different sequences of answers can 6 yes-or-no questions have?
+          - What happens if two orders give the same answers?
+  connections:
+    - text: |
+        The puzzle asked what it costs to sort eight face-down cards, and a million. Sliding each card left into place costs one comparison for each place moved, which is one for each pair out of order: 18 for the eight cards and about $n^2/4$ in general. Merging two sorted piles places a card with every comparison, and halving until the piles are single cards gives $\log_2 n$ rounds of fewer than $n$ comparisons each: 17 for the eight cards and twenty million for a million. And no method of comparing can do better than $\log_2(n!)$, because $k$ answers can tell apart only $2^k$ orders.
+
+        Much of this was assembled from what you had. The count of insertion sort is the sum $1 + 2 + \dots + (n-1)$. The correctness of merge sort is the leap of faith of [[e1.recursion]]. The logarithm is the number of halvings, as it was for the height of a heap in [[e3.trees-and-heaps]], and the heap gave a second $n \log n$ sort for nothing. Even the ranking of documents by similarity was a sort with a key.
+
+        Merge sort is the first example of a plan you will use again and again: split a problem into halves, solve each, and combine. That plan has a name, and a method for counting its cost, in [[e3.divide-and-conquer]].
+
+        First, collect what sorting buys. A sorted list is a list in which you know something about every item without looking: everything to the left of a position is smaller, everything to the right larger. One look at the middle therefore rules out half the list. Finding one name among a million then takes twenty looks, where an unsorted list takes up to a million. That is the next lesson, [[e3.binary-search]].
