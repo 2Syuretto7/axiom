@@ -1,0 +1,798 @@
+concept: e3.binary-search
+minutes: 80
+claim: You can find an item in a sorted list by halving, state the invariant that makes the code correct at its edges, count the looks as $\log_2 n$, find where an item belongs when it is absent, and apply the same halving to any question whose answer changes from no to yes exactly once.
+recalls: [e3.sorting]
+uses: [e3.hash-tables, e3.arrays-and-linked-lists, e1.complexity-and-big-o, e1.modules-and-imports, e0.lists-and-tuples, e0.loops, e0.functions, e0.booleans-and-conditionals, m1.logarithms]
+leads: [e3.divide-and-conquer, e3.dynamic-programming]
+starter: |
+  # Scratch space. I am thinking of a number from 1 to 1000000.
+  # After each guess you are told only whether the secret is higher, lower, or found.
+  # This strategy guesses 1, 2, 3 and so on. Change `secret` and watch the count.
+  secret = 618034
+
+  def answer(guess):
+      if guess < secret:
+          return "higher"
+      if guess > secret:
+          return "lower"
+      return "found"
+
+  guess = 1
+  guesses = 1
+  while answer(guess) != "found":
+      guess += 1
+      guesses += 1
+  print("found", guess, "after", guesses, "guesses")
+parts:
+  recall:
+    - text: |
+        [[e3.sorting]] ended by saying what a sorted list gives you: knowledge about every item without looking at it. Today you spend that knowledge. Three quick pulls first.
+    - question:
+        id: recall-merge-bound
+        type: choice
+        system: s1
+        concepts: [e3.sorting]
+        prompt: |
+          Merge sort on $n$ items needs at most about how many comparisons?
+        options: ["$n$", "$n \\log_2 n$", "$n^2 / 4$", "$2^n$"]
+        answer: 1
+        explanation: There are $\log_2 n$ rounds of merging, and each costs fewer than $n$ comparisons.
+        hints:
+          - How many rounds of merging are there?
+          - What does one round cost?
+    - question:
+        id: recall-sorted-left
+        type: choice
+        system: s1
+        concepts: [e3.sorting]
+        prompt: |
+          A list is sorted, smallest first, and the item at position 40 is 17. What do you know about the item at position 12?
+        options: ["Nothing", "It is at most 17", "It is at least 17", "It is exactly 17"]
+        answer: 1
+        explanation: In a sorted list everything to the left of a position is no larger than the item there.
+        hints:
+          - Position 12 is to the left of position 40.
+          - Which way does a sorted list grow?
+    - question:
+        id: recall-log-thousand
+        type: numeric
+        system: s1
+        concepts: [m1.logarithms]
+        prompt: |
+          $2^{10} = 1024$. To the nearest whole number, what is $\log_2$ of a million?
+        answer: "20"
+        explanation: A million is a thousand thousands, about $2^{10} \times 2^{10}$, and the exponents add.
+        hints:
+          - A million is a thousand times a thousand.
+          - A thousand is about the tenth power of 2. What happens to exponents when powers are multiplied?
+  puzzle:
+    - text: |
+        I am thinking of a whole number from 1 to a million. You guess, and I tell you one of three things: found, higher, or lower.
+
+        **How many guesses do you need to be certain of finding it?**
+
+        Run the starter. It guesses 1, then 2, then 3, and finds 618034 after 618034 guesses. In the worst case it needs a million. It uses my answers only to learn whether it has finished. Each "higher" could have told it much more.
+
+        You already know a better plan, since you have played this game: guess the middle. Whatever I answer, half of the numbers are ruled out at once. Twenty guesses are enough for a million numbers, and thirty for a billion.
+
+        This is the game being played whenever a program looks something up in a sorted list, and the plan is called **binary search**. Here is the surprising part. The plan can be explained to a child, and yet for sixteen years after it was first published, no correct program for it appeared in print. Even in careful hands it tends to come out with a fault at the edges: an item at the very end that cannot be found, or a search that goes round for ever when two candidates remain.
+
+        **How do you write the halving so that you know it is right, at the edges as well as in the middle?**
+  intuition:
+    - text: |
+        Take a sorted list and something to look for, the **target**. Look at the middle item.
+
+        If it is the target, you are done. If it is smaller than the target, then so is everything to its left, since the list is sorted, and the target can only be to the right. If it is larger, the target can only be to the left. One look, and half of the list never needs looking at.
+
+        The thing to hold in mind is the **stretch of positions where the target could still be**. It starts as the whole list. Each look cuts it roughly in half. When it is empty, the target is not in the list.
+
+        Step through a search for 23 among fifteen sorted numbers. Then move the slider to search for others, and press the button to search for 50, which is not there.
+    - figure: binary-search
+      props: { target: 5 }
+    - text: |
+        Fifteen positions become seven, then three, then one. No item needs more than four looks, and 50 is shown to be absent after four looks, with eleven of the fifteen items never examined.
+
+        Notice also where the search for 50 ends: with the possible stretch squeezed to nothing between 42 and 56. That is exactly the place where 50 would go if it were added. A search that fails still tells you something, and that will turn out to be the more useful half of the idea.
+  derivation:
+    - text: |
+        **Looking without order.** In a list in no particular order, an item can only be found by looking at each in turn. That is **linear search**. It takes up to $n$ looks, and a look that fails rules out one position.
+
+        **The code.** Now assume the list is sorted. Keep two positions, `low` and `high`, marking the ends of the stretch where the target could still be, both ends included.
+
+        ```python
+        def find(items, target):
+            low = 0
+            high = len(items) - 1
+            while low <= high:
+                middle = (low + high) // 2
+                if items[middle] == target:
+                    return middle
+                if items[middle] < target:
+                    low = middle + 1
+                else:
+                    high = middle - 1
+            return None
+        ```
+
+        Every line here is decided by one sentence, the **invariant** of the loop:
+
+        > If the target is in the list at all, its position is from `low` to `high` inclusive.
+
+        Check each line against it.
+
+        - **The start.** `low = 0` and `high = len(items) - 1` make the stretch the whole list, so the sentence is true.
+        - **Moving `low`.** If `items[middle] < target`, then every item at or before `middle` is too small. The target can only be from `middle + 1` onwards. Setting `low = middle + 1` keeps the sentence true.
+        - **Moving `high`.** If `items[middle] > target`, everything at or after `middle` is too large, and `high = middle - 1` keeps it true.
+        - **The condition.** The stretch from `low` to `high` holds `high - low + 1` positions. It is empty exactly when `low > high`. So the loop runs while `low <= high`, and when it stops, the sentence says the target is nowhere.
+
+        **Does it stop?** Each trip round the loop either returns or removes `middle` and one whole side from the stretch. So the stretch gets shorter by at least one position every time, and cannot do so for ever.
+
+        The two classic faults are both breaches of this reasoning. Write `while low < high` and the loop stops while one candidate remains unexamined: the last item of the list can then never be found. Write `low = middle` in place of `low = middle + 1` and, when `high` is `low + 1`, the middle is `low` itself, nothing changes, and the loop never ends. Neither fault shows in a casual test. Both are plain once you ask whether the invariant is kept and whether the stretch shrinks.
+
+        **Counting the looks.** If the stretch holds $m$ positions, then after one look that fails it holds at most $m/2$, rounded down, since the middle is removed and the larger side is kept at worst. So the sizes go at most
+
+        $$n, \ \left\lfloor \frac{n}{2} \right\rfloor, \ \left\lfloor \frac{n}{4} \right\rfloor, \ \dots$$
+
+        and the number of looks is at most the number of times $n$ can be halved before reaching zero, which is $\lfloor \log_2 n \rfloor + 1$. For 15 items that is $3 + 1 = 4$. For a million it is 20. Binary search is $O(\log n)$.
+
+        Set that beside linear search. Doubling the list adds a million looks to one and a single look to the other.
+    - question:
+        id: derive-missing
+        type: order
+        system: s2
+        prompt: The figure's list holds 2, 5, 8, 12, 16, 23, 38, 42, 56, 61, 72, 80, 91, 95, 99 at positions 0 to 14. `find` looks for 50. Put the stretches of possible positions in the order they occur.
+        steps:
+          - "positions 0 to 14"
+          - "positions 8 to 14"
+          - "positions 8 to 10"
+          - "position 8 only"
+          - "no positions"
+        explanation: |
+          The middle of 0 to 14 is position 7, holding 42, which is too small, so `low` becomes 8. The middle of 8 to 14 is position 11, holding 80, too large, so `high` becomes 10. The middle of 8 to 10 is position 9, holding 61, too large, so `high` becomes 8. Position 8 holds 56, too large, so `high` becomes 7, which is below `low`, and the stretch is empty. Four looks, and `low` has stopped at 8, the position where 50 would be inserted.
+        hints:
+          - The middle of positions low to high is (low + high) // 2.
+          - The first middle is position 7, which holds 42.
+          - When the middle item is too large, high becomes one less than the middle.
+    - text: |
+        **Where would it go?** `find` answers "is it there, and where?". A better question is "**how many items are smaller than the target?**". The answer is a position: the first position holding an item that is not smaller, which is where the target is if present and where it would be inserted if absent.
+
+        Imagine asking of every position in turn, "is this item at least the target?". Because the list is sorted, the answers read no, no, no, yes, yes, yes: once the answer is yes it stays yes. The search is for the **boundary**, the first yes.
+
+        ```python
+        def first_at_least(items, target):
+            low = 0
+            high = len(items)
+            while low < high:
+                middle = (low + high) // 2
+                if items[middle] < target:
+                    low = middle + 1
+                else:
+                    high = middle
+            return low
+        ```
+
+        The invariant has changed, and so the edges have changed with it:
+
+        > Every position before `low` is a no. Every position from `high` onwards is a yes.
+
+        At the start `low = 0` and `high = len(items)`, so both halves of the sentence speak of no positions at all and are true. Note that `high` starts one past the end, because the answer may be "all of them are smaller". The positions not yet known are those from `low` up to but not including `high`, and there are `high - low` of them, so the loop runs while `low < high`. A no at `middle` makes everything up to `middle` a no: `low = middle + 1`. A yes at `middle` makes `middle` a yes, and it may be the first: `high = middle`, not `middle - 1`. Since `middle` is always less than `high`, the stretch shrinks every time. When `low` meets `high`, the boundary is found.
+
+        There is no early return and no special case, and the function answers several questions at once.
+
+        - **Is the target present?** Only if the position returned is inside the list and holds the target.
+        - **How many items are below $b$ and at least $a$?** `first_at_least(items, b) - first_at_least(items, a)`. A count over a range, in two searches.
+        - **Where does a new item go to keep the list sorted?** At the position returned.
+
+        Python has this function in the module `bisect`, under the name `bisect.bisect_left`. Its twin `bisect.bisect_right` finds the first item strictly greater than the target, which differs only when the target is present.
+
+        ```python
+        import bisect
+
+        marks = [35, 48, 48, 61, 77, 90]
+        print(bisect.bisect_left(marks, 48))    # 1
+        print(bisect.bisect_right(marks, 48))   # 3
+        print(bisect.bisect_left(marks, 50))    # 3
+        ```
+    - question:
+        id: derive-range-count
+        type: numeric
+        system: s2
+        prompt: |
+          `marks = [35, 48, 48, 61, 77, 90]`. Using `first_at_least(marks, 80) - first_at_least(marks, 48)`, how many marks are at least 48 and below 80?
+        answer: "4"
+        explanation: |
+          `first_at_least(marks, 80)` is 5, since five marks are below 80. `first_at_least(marks, 48)` is 1, since one mark is below 48. The difference counts the marks that are below 80 and not below 48: the two 48s, 61 and 77.
+        hints:
+          - first_at_least gives the number of items smaller than the target.
+          - How many marks are below 80? How many are below 48?
+          - Subtract the second count from the first.
+    - text: |
+        **Searching without a list.** Look again at `first_at_least`. It never used the list except to ask a yes-or-no question about a position. All it needed was that the answers go no, no, no, yes, yes, yes.
+
+        So binary search does not need a list at all. It needs a question about whole numbers whose answer **changes exactly once**. Then the boundary among a million candidates is found by asking the question twenty times.
+
+        Here is a case you will meet when training a model. A batch of examples is processed together, and the larger the batch, the more memory it takes. You want the largest batch that fits. Running out of memory takes a minute to discover, so trying every size is hopeless. But "does a batch of size $b$ fail to fit?" is no for small $b$ and yes for large, and changes once. Halving finds the boundary among sizes up to 4096 in thirteen trials.
+
+        The guessing game of the puzzle was this too. Nobody stored the numbers from 1 to a million. The question "is the secret at most my guess?" changes once, at the secret.
+
+        The same halving works on real numbers, where it is called **bisection**. To find $\sqrt{2}$, ask "is $x^2 \ge 2$?", which changes once on the positive numbers. Start with the stretch from 1 to 2 and halve it:
+
+        $$[1, 2] \to [1, 1.5] \to [1.25, 1.5] \to [1.375, 1.5] \to [1.375, 1.4375] \to \dots$$
+
+        Each step halves the width, so each step buys one more binary digit of the answer. Ten steps narrow the stretch a thousandfold, and about fifty exhaust the precision of a float.
+  formal:
+    - text: |
+        **Linear search.** Examine each item in turn. Up to $n$ looks, and needs no order.
+
+        **Binary search.** On a sorted list, keep `low` and `high` such that the target, if present, lies at a position from `low` to `high` inclusive. Compare the target with the item at `middle = (low + high) // 2`, and return, or set `low = middle + 1`, or set `high = middle - 1`. Stop when `low > high`. At most $\lfloor \log_2 n \rfloor + 1$ looks.
+
+        **Boundary search.** Given a question on positions $0, \dots, n-1$ whose answers are a run of no followed by a run of yes, keep `low` and `high` such that every position before `low` is a no and every position from `high` on is a yes, starting from $0$ and $n$. While `low < high`, a no at `middle` gives `low = middle + 1` and a yes gives `high = middle`. The result is the position of the first yes, or $n$ if there is none. At most $\lceil \log_2 (n + 1) \rceil$ questions.
+
+        **`bisect_left(items, x)`** is the first position holding an item $\ge x$, which equals the number of items $< x$. **`bisect_right(items, x)`** is the first position holding an item $> x$.
+
+        **Bisection.** On real numbers, halving a stretch of width $w$ a total of $k$ times leaves width $w / 2^k$.
+  drill:
+    - text: Seconds each. `find` and `first_at_least` are the functions above, and positions are counted from 0.
+    - question:
+        id: drill-middle
+        type: numeric
+        system: s1
+        prompt: |
+          `low` is 0 and `high` is 14. What is `middle`?
+        answer: "7"
+        explanation: $(0 + 14) // 2$.
+        hints:
+          - Add the two ends.
+          - Halve the sum, rounding down.
+    - question:
+        id: drill-middle-odd
+        type: numeric
+        system: s1
+        prompt: |
+          `low` is 8 and `high` is 11. What is `middle`?
+        answer: "9"
+        explanation: $(8 + 11) // 2$ is $19 // 2$, and the division rounds down.
+        hints:
+          - Add the two ends.
+          - The double slash rounds down.
+    - question:
+        id: drill-new-low
+        type: numeric
+        system: s1
+        prompt: |
+          In `find`, `low` is 0, `high` is 14 and the middle item is smaller than the target. What does `low` become?
+        answer: "8"
+        explanation: The middle is position 7, and it and everything before it are ruled out.
+        hints:
+          - First find the middle.
+          - The middle itself has been examined and is not the target.
+    - question:
+        id: drill-looks-fifteen
+        type: numeric
+        system: s1
+        prompt: |
+          What is the largest number of looks `find` can need on a sorted list of 15 items?
+        answer: "4"
+        explanation: The stretch shrinks from 15 to 7 to 3 to 1, and each of those sizes costs one look.
+        hints:
+          - After one look, at most how many positions remain?
+          - Keep halving, rounding down, until nothing remains.
+    - question:
+        id: drill-looks-thousand
+        type: numeric
+        system: s1
+        prompt: |
+          What is the largest number of looks `find` can need on a sorted list of 1000 items?
+        answer: "10"
+        explanation: 1000 halves to 500, 250, 125, 62, 31, 15, 7, 3, 1, and each size costs one look. That is $\lfloor \log_2 1000 \rfloor + 1$.
+        hints:
+          - Halve repeatedly, rounding down, and count the sizes including the first.
+          - Which power of 2 is just below a thousand?
+    - question:
+        id: drill-looks-double
+        type: numeric
+        system: s1
+        prompt: |
+          A sorted list needs at most 20 looks. A list twice as long needs at most how many?
+        answer: "21"
+        explanation: One look halves the doubled list back to the original size.
+        hints:
+          - What does the first look do to the doubled list?
+          - After that look, the problem is the old one.
+    - question:
+        id: drill-fal-present
+        type: numeric
+        system: s1
+        prompt: |
+          What is `first_at_least([2, 5, 8, 12], 8)`?
+        answer: "2"
+        explanation: Two items, 2 and 5, are smaller than 8, so the first item at least 8 is at position 2.
+        hints:
+          - Count the items smaller than 8.
+          - That count is the position of the first item that is not smaller.
+    - question:
+        id: drill-fal-absent
+        type: numeric
+        system: s1
+        prompt: |
+          What is `first_at_least([2, 5, 8, 12], 9)`?
+        answer: "3"
+        explanation: Three items are smaller than 9. Position 3 holds 12, the first item that is at least 9.
+        hints:
+          - Count the items smaller than 9.
+          - 9 itself need not be in the list.
+    - question:
+        id: drill-fal-beyond
+        type: numeric
+        system: s1
+        prompt: |
+          What is `first_at_least([2, 5, 8, 12], 99)`?
+        answer: "4"
+        explanation: All four items are smaller, so the answer is one past the last position, the length of the list.
+        hints:
+          - How many items are smaller than 99?
+          - The answer need not be a position inside the list.
+    - question:
+        id: drill-fal-below
+        type: numeric
+        system: s1
+        prompt: |
+          What is `first_at_least([2, 5, 8, 12], 1)`?
+        answer: "0"
+        explanation: No item is smaller than 1, so the first item at least 1 is at the very front.
+        hints:
+          - How many items are smaller than 1?
+          - Is the item at the front already at least 1?
+    - question:
+        id: drill-precondition
+        type: choice
+        system: s1
+        prompt: |
+          `find` is run on a list that is **not** sorted. What happens?
+        options:
+          - "It raises an error"
+          - "It still finds every item, more slowly"
+          - "It may report that an item is absent when it is present"
+          - "It runs for ever"
+        answer: 2
+        explanation: Each look rules out a side on the strength of the order. Without the order the target may be in the side thrown away. The loop still shrinks the stretch and stops, and gives no warning.
+        hints:
+          - What fact lets one look rule out half of the list?
+          - Does the code ever check that fact?
+    - question:
+        id: drill-bisection
+        type: numeric
+        system: s1
+        prompt: |
+          Bisection starts with a stretch of width 1. How many halvings bring the width below $\frac{1}{1000}$?
+        answer: "10"
+        explanation: Nine halvings give $\frac{1}{512}$, which is still too wide, and one more gives $\frac{1}{1024}$.
+        hints:
+          - After $k$ halvings the width is 1 over the $k$th power of 2.
+          - Which power of 2 first exceeds a thousand?
+    - question:
+        id: predict-bisect
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          import bisect
+
+          times = [3, 7, 7, 7, 12, 20]
+          print(bisect.bisect_left(times, 7), bisect.bisect_right(times, 7), bisect.bisect_left(times, 13))
+        output: "1 4 5"
+        explanation: One item is smaller than 7, so the first 7 is at position 1. Four items are at most 7, so the first item greater than 7 is at position 4. Five items are smaller than 13.
+        hints:
+          - bisect_left counts the items smaller than the target.
+          - bisect_right counts the items smaller than or equal to it.
+    - question:
+        id: predict-looks
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          items = list(range(0, 200, 2))
+          low = 0
+          high = len(items) - 1
+          looks = 0
+          while low <= high:
+              middle = (low + high) // 2
+              looks += 1
+              if items[middle] == 37:
+                  break
+              if items[middle] < 37:
+                  low = middle + 1
+              else:
+                  high = middle - 1
+          print(looks, low, high)
+        output: "7 19 18"
+        explanation: |
+          The list holds the hundred even numbers from 0 to 198, so the item at position $p$ is $2p$, and 37 is absent. The middles are positions 49, 24, 11, 17, 20, 18 and 19: seven looks, which is $\lfloor \log_2 100 \rfloor + 1$. The loop ends with `low` at 19 and `high` at 18. Position 18 holds 36 and position 19 holds 38, so `low` marks where 37 would go.
+        hints:
+          - The item at position p is 2 times p, and 37 is odd.
+          - "Follow low and high: the first middle is position 49, which holds 98."
+          - When the loop ends, low is one more than high, and 37 would lie between the items at those two positions.
+  work:
+    - text: Slower now. For each loop, write down its invariant in a sentence before writing any code, and let the sentence decide each edge.
+    - question:
+        id: write-first-at-least
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `first_at_least(items, target)`. `items` is sorted, smallest first, and may hold repeats. Return the position of the first item that is at least `target`, or the length of the list if every item is smaller. Do it by halving, so that a list of 100000 items needs about 17 looks. Do not use the `bisect` module.
+        starter: |
+          def first_at_least(items, target):
+              # Replace the next line with your own.
+              return 0
+
+          marks = [35, 48, 48, 61, 77, 90]
+          print(first_at_least(marks, 48), first_at_least(marks, 50), first_at_least(marks, 95))
+        solution: |
+          def first_at_least(items, target):
+              low = 0
+              high = len(items)
+              while low < high:
+                  middle = (low + high) // 2
+                  if items[middle] < target:
+                      low = middle + 1
+                  else:
+                      high = middle
+              return low
+
+          marks = [35, 48, 48, 61, 77, 90]
+          print(first_at_least(marks, 48), first_at_least(marks, 50), first_at_least(marks, 95))
+        tests: |
+          _m = [35, 48, 48, 61, 77, 90]
+          assert first_at_least(_m, 48) == 1, "In [35, 48, 48, 61, 77, 90] the first item at least 48 is at position 1. You returned " + repr(first_at_least(_m, 48))
+          assert first_at_least(_m, 50) == 3, "In [35, 48, 48, 61, 77, 90] the first item at least 50 is at position 3. You returned " + repr(first_at_least(_m, 50))
+          assert first_at_least(_m, 95) == 6, "Every item is below 95, so the answer is the length, 6. You returned " + repr(first_at_least(_m, 95))
+          assert first_at_least(_m, 10) == 0, "Every item is at least 10, so the answer is 0. You returned " + repr(first_at_least(_m, 10))
+          assert first_at_least(_m, 90) == 5, "The last item is 90, at position 5. You returned " + repr(first_at_least(_m, 90))
+          assert first_at_least([], 3) == 0, "For an empty list the answer is 0. You returned " + repr(first_at_least([], 3))
+          assert first_at_least([4], 4) == 0, "first_at_least([4], 4) should be 0. You returned " + repr(first_at_least([4], 4))
+          assert first_at_least([4], 5) == 1, "first_at_least([4], 5) should be 1. You returned " + repr(first_at_least([4], 5))
+          assert first_at_least([1, 2, 2, 2, 2, 2, 3], 2) == 1, "With repeats, the first of them is wanted. first_at_least([1, 2, 2, 2, 2, 2, 3], 2) should be 1. You returned " + repr(first_at_least([1, 2, 2, 2, 2, 2, 3], 2))
+          for _t in range(-1, 42):
+              _want = len([x for x in range(0, 40, 3) if x < _t])
+              assert first_at_least(list(range(0, 40, 3)), _t) == _want, "Among 0, 3, 6, up to 39, the first item at least " + str(_t) + " is at position " + str(_want) + ". You returned " + repr(first_at_least(list(range(0, 40, 3)), _t))
+          class _Counting(list):
+              looks = 0
+              def __getitem__(self, i):
+                  _Counting.looks += 1
+                  return list.__getitem__(self, i)
+              def __iter__(self):
+                  _Counting.looks += 1000000
+                  return list.__iter__(self)
+          _big = _Counting(range(100000))
+          assert first_at_least(_big, 70000) == 70000, "Among the numbers 0 to 99999, the first at least 70000 is at position 70000"
+          assert _Counting.looks <= 40, "A list of 100000 items should need about 17 looks. Yours looked at items " + str(_Counting.looks) + " times, so it is not halving"
+          assert output.strip() == "1 3 6", "The program should print 1 3 6"
+        wrong:
+          - |
+            def first_at_least(items, target):
+                position = 0
+                while position < len(items) and items[position] < target:
+                    position += 1
+                return position
+
+            marks = [35, 48, 48, 61, 77, 90]
+            print(first_at_least(marks, 48), first_at_least(marks, 50), first_at_least(marks, 95))
+          - |
+            def first_at_least(items, target):
+                low = 0
+                high = len(items) - 1
+                while low < high:
+                    middle = (low + high) // 2
+                    if items[middle] < target:
+                        low = middle + 1
+                    else:
+                        high = middle
+                return low
+
+            print("1 3 6")
+          - |
+            def first_at_least(items, target):
+                low = 0
+                high = len(items)
+                while low < high:
+                    middle = (low + high) // 2
+                    if items[middle] <= target:
+                        low = middle + 1
+                    else:
+                        high = middle
+                return low
+
+            print("1 3 6")
+          - |
+            def first_at_least(items, target):
+                low = 0
+                high = len(items)
+                while low < high:
+                    middle = (low + high) // 2
+                    if items[middle] == target:
+                        return middle
+                    if items[middle] < target:
+                        low = middle + 1
+                    else:
+                        high = middle
+                return low
+
+            print("1 3 6")
+        explanation: |
+          The invariant is that every position before `low` holds an item smaller than the target and every position from `high` on holds an item that is at least the target. It dictates each edge. `high` must start at `len(items)`, one past the end, because the answer can be the length itself: start it at the last position and a target larger than everything can never get the right answer. A middle item that is at least the target might be the first such, so `high = middle` keeps it in play. Returning early when the middle equals the target finds **a** matching item, and among repeats it need not be the first. Comparing with `<=` moves the boundary to the first item greater than the target, which is `bisect_right`. A scan from the front gets every answer right and misses the point, at 70000 looks where 17 will do.
+        hints:
+          - Let low start at 0 and high at len(items), and loop while low is less than high.
+          - If the middle item is smaller than the target, the answer is after it, so low becomes middle + 1.
+          - Otherwise the middle may itself be the answer, so high becomes middle, and at the end you return low.
+    - question:
+        id: write-largest-fitting
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          You want the largest batch of examples that fits in memory. You are given a function `fits(b)` that returns `True` if a batch of size `b` fits and `False` if not. Every size up to some unknown threshold fits, and no larger size does. Write `largest_fitting(fits, limit)` to return the largest size from 1 to `limit` that fits, or 0 if not even a batch of 1 fits. Each call of `fits` is slow, so call it only about $\log_2$ of `limit` times.
+        starter: |
+          def largest_fitting(fits, limit):
+              # Replace the next line with your own.
+              return 0
+
+          def fits(b):
+              # 900 megabytes are always in use, and each example takes 37 more. There are 16000.
+              return 900 + 37 * b <= 16000
+
+          print(largest_fitting(fits, 4096))
+        solution: |
+          def largest_fitting(fits, limit):
+              low = 1
+              high = limit + 1
+              while low < high:
+                  middle = (low + high) // 2
+                  if fits(middle):
+                      low = middle + 1
+                  else:
+                      high = middle
+              return low - 1
+
+          def fits(b):
+              # 900 megabytes are always in use, and each example takes 37 more. There are 16000.
+              return 900 + 37 * b <= 16000
+
+          print(largest_fitting(fits, 4096))
+        tests: |
+          assert largest_fitting(lambda b: 900 + 37 * b <= 16000, 4096) == 408, "With 900 + 37 b megabytes needed and 16000 available, the largest batch is 408. You returned " + repr(largest_fitting(lambda b: 900 + 37 * b <= 16000, 4096))
+          assert largest_fitting(lambda b: b <= 5, 10) == 5, "If sizes up to 5 fit and the limit is 10, the answer is 5. You returned " + repr(largest_fitting(lambda b: b <= 5, 10))
+          assert largest_fitting(lambda b: True, 64) == 64, "If every size fits, the answer is the limit, 64. You returned " + repr(largest_fitting(lambda b: True, 64))
+          assert largest_fitting(lambda b: False, 64) == 0, "If nothing fits, the answer is 0. You returned " + repr(largest_fitting(lambda b: False, 64))
+          assert largest_fitting(lambda b: b <= 1, 64) == 1, "If only a batch of 1 fits, the answer is 1. You returned " + repr(largest_fitting(lambda b: b <= 1, 64))
+          assert largest_fitting(lambda b: b <= 1, 1) == 1, "With a limit of 1 and a batch of 1 fitting, the answer is 1. You returned " + repr(largest_fitting(lambda b: b <= 1, 1))
+          for _t in range(0, 21):
+              assert largest_fitting(lambda b: b <= _t, 20) == _t, "If sizes up to " + str(_t) + " fit and the limit is 20, the answer is " + str(_t) + ". You returned " + repr(largest_fitting(lambda b: b <= _t, 20))
+          _calls = [0]
+          def _slow(b):
+              _calls[0] += 1
+              assert 1 <= b <= 100000, "fits was called with " + repr(b) + ", which is outside 1 to the limit"
+              return b <= 70000
+          assert largest_fitting(_slow, 100000) == 70000, "If sizes up to 70000 fit and the limit is 100000, the answer is 70000"
+          assert _calls[0] <= 40, "With a limit of 100000, about 17 calls of fits are enough. Yours made " + str(_calls[0])
+          assert output.strip() == "408", "The program should print 408"
+        wrong:
+          - |
+            def largest_fitting(fits, limit):
+                b = 0
+                while b < limit and fits(b + 1):
+                    b += 1
+                return b
+
+            def fits(b):
+                return 900 + 37 * b <= 16000
+
+            print(largest_fitting(fits, 4096))
+          - |
+            def largest_fitting(fits, limit):
+                low = 1
+                high = limit + 1
+                while low < high:
+                    middle = (low + high) // 2
+                    if fits(middle):
+                        low = middle + 1
+                    else:
+                        high = middle
+                return low
+
+            print(408)
+          - |
+            def largest_fitting(fits, limit):
+                low = 1
+                high = limit
+                while low < high:
+                    middle = (low + high) // 2
+                    if fits(middle):
+                        low = middle + 1
+                    else:
+                        high = middle
+                return low - 1
+
+            print(408)
+          - |
+            def largest_fitting(fits, limit):
+                low = 0
+                high = limit + 1
+                while low < high:
+                    middle = (low + high) // 2
+                    if fits(middle):
+                        low = middle + 1
+                    else:
+                        high = middle
+                return low - 1
+
+            print(408)
+        explanation: |
+          Ask of each size "does it fail to fit?". The answers run no, no, no, yes, yes, and the largest size that fits is just before the first yes. So this is the boundary search again, with the call `fits(middle)` standing where `items[middle] < target` stood. The invariant: every size below `low` fits, and every size from `high` upwards does not. `low` starts at 1, since no size below 1 is in question. `high` starts at `limit + 1`, one past the last candidate, to allow for everything fitting. The boundary is `low` when the loop ends, and the answer is one less. Returning `low` itself is off by one. Starting `high` at `limit` gives `limit - 1` when everything fits. Starting `low` at 0 asks about a batch of no examples, a question nobody posed. Trying each size in turn is correct and makes 70000 slow calls where 17 are enough.
+        hints:
+          - Search for the first size that does not fit, using the same loop as first_at_least with the call fits(middle) as the test.
+          - Start low at 1 and high at limit + 1, so that the first size that does not fit can be one past the limit.
+          - When the loop ends, low is the first size that does not fit, and the answer is one less.
+    - question:
+        id: fix-find
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `find(items, target)` should return the position of `target` in a sorted list, or `None` if it is absent. For the list of the figure it should print `5 14 None`. It prints `5 None None`, failing to find 99, the last item. Fix it.
+        starter: |
+          def find(items, target):
+              low = 0
+              high = len(items) - 1
+              while low < high:
+                  middle = (low + high) // 2
+                  if items[middle] == target:
+                      return middle
+                  if items[middle] < target:
+                      low = middle + 1
+                  else:
+                      high = middle - 1
+              return None
+
+          items = [2, 5, 8, 12, 16, 23, 38, 42, 56, 61, 72, 80, 91, 95, 99]
+          print(find(items, 23), find(items, 99), find(items, 50))
+        solution: |
+          def find(items, target):
+              low = 0
+              high = len(items) - 1
+              while low <= high:
+                  middle = (low + high) // 2
+                  if items[middle] == target:
+                      return middle
+                  if items[middle] < target:
+                      low = middle + 1
+                  else:
+                      high = middle - 1
+              return None
+
+          items = [2, 5, 8, 12, 16, 23, 38, 42, 56, 61, 72, 80, 91, 95, 99]
+          print(find(items, 23), find(items, 99), find(items, 50))
+        tests: |
+          _s = [2, 5, 8, 12, 16, 23, 38, 42, 56, 61, 72, 80, 91, 95, 99]
+          for _p in range(15):
+              assert find(_s, _s[_p]) == _p, "In the figure's list, " + str(_s[_p]) + " is at position " + str(_p) + ". You returned " + repr(find(_s, _s[_p]))
+          for _t in [0, 3, 50, 94, 100]:
+              assert find(_s, _t) is None, str(_t) + " is not in the figure's list, so the answer is None. You returned " + repr(find(_s, _t))
+          assert find([], 4) is None, "Nothing is in an empty list. You returned " + repr(find([], 4))
+          assert find([4], 4) == 0, "find([4], 4) should be 0. You returned " + repr(find([4], 4))
+          assert find([4], 9) is None, "find([4], 9) should be None. You returned " + repr(find([4], 9))
+          assert find([3, 6], 6) == 1, "find([3, 6], 6) should be 1. You returned " + repr(find([3, 6], 6))
+          assert find([3, 6], 3) == 0, "find([3, 6], 3) should be 0. You returned " + repr(find([3, 6], 3))
+          assert output.strip() == "5 14 None", "The program should print 5 14 None"
+        wrong:
+          - |
+            def find(items, target):
+                low = 0
+                high = len(items)
+                while low <= high:
+                    middle = (low + high) // 2
+                    if items[middle] == target:
+                        return middle
+                    if items[middle] < target:
+                        low = middle + 1
+                    else:
+                        high = middle - 1
+                return None
+
+            print("5 14 None")
+          - |
+            def find(items, target):
+                low = 0
+                high = len(items) - 1
+                while low < high:
+                    middle = (low + high) // 2
+                    if items[middle] == target:
+                        return middle
+                    if items[middle] < target:
+                        low = middle + 1
+                    else:
+                        high = middle - 1
+                return low
+
+            print("5 14 None")
+          - |
+            def find(items, target):
+                low = 0
+                high = len(items) - 1
+                while low < high:
+                    middle = (low + high) // 2
+                    if items[middle] == target:
+                        return middle
+                    if items[middle] < target:
+                        low = middle + 1
+                    else:
+                        high = middle - 1
+                if items[low] == target:
+                    return low
+                return None
+
+            print("5 14 None")
+        explanation: |
+          With `low` and `high` both included in the stretch, the stretch holds `high - low + 1` positions, and when `low` equals `high` it holds one. The condition `low < high` stops the loop at that moment, with one candidate never examined. Searching for 99, the stretch narrows to position 14 alone and the loop gives up without looking at it. The invariant says the target, if present, lies from `low` to `high` inclusive, so the loop may stop only when that range is empty, which is `low > high`. Hence `while low <= high`. Raising `high` to `len(items)` instead makes the code look at a position that does not exist when the target is larger than everything. Returning `low` after the loop reports a position for items that are absent. Checking `items[low]` after the loop repairs the common case and breaks on an empty list.
+        hints:
+          - Follow low and high by hand in the search for 99. What are they when the loop stops?
+          - How many positions are in the stretch when low equals high?
+          - The loop may stop only when the stretch from low to high is empty.
+    - question:
+        id: work-infinite
+        type: choice
+        system: s2
+        prompt: |
+          In `find`, someone writes `low = middle` in place of `low = middle + 1`. The search for 99 in the figure's list never ends. With `low` at 13 and `high` at 14, what happens?
+        options:
+          - "`middle` is 14, and `low` jumps past `high`."
+          - "`middle` is $(13 + 14) // 2 = 13$, the item there is smaller than 99, and `low` is set to 13, which it already was. Nothing has changed, so the next trip is identical, for ever."
+          - "`middle` is 13.5, which is not a position."
+          - "`high` is reduced below `low` and the loop ends."
+        answer: 1
+        explanation: |
+          The division rounds down, so when two positions remain the middle is the lower one. If the code then sets `low = middle`, the stretch does not shrink. A loop is certain to end only if something gets strictly smaller on every trip, and here that something is the length of the stretch. `low = middle + 1` always removes at least the middle. In the boundary search, `high = middle` is safe for the mirror-image reason: `middle` is always strictly less than `high`, so `high` strictly falls. Whenever you write a loop like this, ask two questions: is the invariant kept, and what shrinks?
+        hints:
+          - Compute (13 + 14) // 2.
+          - What is low after it is set to that value?
+          - What must happen on every trip round a loop for it to be sure of ending?
+    - question:
+        id: work-sample
+        type: numeric
+        system: s2
+        prompt: |
+          A language model gives four possible next words the probabilities 0.1, 0.3, 0.05 and 0.55. To pick one at random, the running totals are formed, `[0.1, 0.4, 0.45, 1.0]`, a random number `r` is drawn between 0 and 1, and the word chosen is at the first position whose running total is at least `r`. With `r = 0.42`, which position is chosen?
+        answer: "2"
+        explanation: |
+          `first_at_least([0.1, 0.4, 0.45, 1.0], 0.42)` is 2, since two running totals are below 0.42. Why this picks fairly: position 2 is chosen exactly when `r` falls between 0.4 and 0.45, a stretch of width 0.05, which is that word's probability. Running totals of positive numbers are always sorted, so the lookup is a binary search, and choosing among fifty thousand words takes sixteen looks. You will write exactly this when you sample text from a model of your own.
+        hints:
+          - Which running totals are smaller than 0.42?
+          - The answer is the position of the first one that is not smaller.
+          - Positions are counted from 0.
+    - question:
+        id: work-sort-or-not
+        type: choice
+        system: s2
+        prompt: |
+          You have a million records in no order. Which is the best advice about looking things up in them?
+        options:
+          - "Always sort first, since binary search is faster than linear search."
+          - "For one lookup, search linearly: a million looks is less than the twenty million comparisons of sorting. For many lookups, sort once and each costs 20. For exact matches only, a hash table costs $O(1)$ each, though it cannot answer questions about ranges or nearest values, which a sorted list can."
+          - "Never sort, since sorting costs more than searching."
+          - "Use binary search on the unsorted records. It is right most of the time."
+        answer: 1
+        explanation: |
+          Sorting is an investment of about $n \log_2 n$ comparisons, repaid a little with each search. With $k$ lookups the choice is between $k \cdot n$ looks unsorted and $n \log_2 n + k \log_2 n$ sorted, and the sorted side wins once $k$ exceeds about $\log_2 n$, which is 20 here. A hash table from the third lesson of this cluster does better still for the question "is exactly this key present?". What it cannot do is use order. "How many records fall between these two times?" and "which record is nearest to this value?" need the items laid out in order, and there the sorted list and the boundary search have no rival.
+        hints:
+          - What does sorting a million items cost, in comparisons?
+          - What do one linear search and one binary search cost?
+          - What kind of question can a sorted list answer that a hash table cannot?
+  connections:
+    - text: |
+        The puzzle asked how many guesses find a number from 1 to a million, and how to write the halving so that it is right at the edges. Twenty guesses, because each rules out half of what remains and a million can be halved only twenty times. And the edges are settled by an invariant: a sentence saying what is known about the positions outside `low` and `high`, which is true at the start, is kept true by every assignment, and gives the answer when the loop stops. The condition of the loop, the `+ 1` and the starting values are consequences of the sentence, not matters of taste.
+
+        The order that made this possible was bought in [[e3.sorting]], where a look at the middle of a sorted list was promised to rule out half of it. The logarithm is the same one that counted the rounds of merge sort. And the boundary search went beyond lists: any question whose answer changes once can be halved, whether the candidates are positions, batch sizes or real numbers.
+
+        Set binary search beside merge sort. Both split the problem in half. Merge sort must then solve **both** halves and pay $n$ to combine them. Binary search solves **one** half and throws the other away. One costs $n \log_2 n$ and the other $\log_2 n$, and the difference is in how many halves are kept and what the combining costs.
+
+        That observation is the beginning of a method. A problem is split into smaller copies of itself, some number of the copies are solved, and the results are combined. How many copies, how much smaller, and how costly the combining: those three numbers decide the running time, and there is a way to read it off. That is the next lesson, [[e3.divide-and-conquer]].
