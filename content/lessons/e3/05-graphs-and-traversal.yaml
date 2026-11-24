@@ -1,0 +1,707 @@
+concept: e3.graphs-and-traversal
+minutes: 90
+claim: You can describe a network as a graph of nodes and edges, store it as an adjacency list, explore it breadth first with a queue and depth first with a stack without going round in circles, explain why breadth-first search finds the fewest hops, and use a search to find distances, routes and connected pieces.
+recalls: [e3.trees-and-heaps]
+uses: [e3.hash-tables, e3.stacks-and-queues, e3.arrays-and-linked-lists, e1.recursion, e1.complexity-and-big-o, e1.comprehensions-and-iterators, e0.dictionaries-and-sets, e0.lists-and-tuples, e0.loops, e0.functions, m3.induction-and-strong-induction, m2.sets]
+leads: [e3.topological-sort, e3.shortest-paths-and-beam-search, e3.dynamic-programming, e3.sorting]
+starter: |
+  # Scratch space. Seven computers and the links between them.
+  # A message starts at A and is always passed to the first neighbour listed. Where does it go?
+  links = {
+      "A": ["B", "C"],
+      "B": ["A", "D", "E"],
+      "C": ["A", "F"],
+      "D": ["B"],
+      "E": ["B", "F"],
+      "F": ["C", "E", "G"],
+      "G": ["F"],
+  }
+
+  node = "A"
+  for step in range(10):
+      print(node, end=" ")
+      node = links[node][0]
+  print()
+parts:
+  recall:
+    - text: |
+        [[e3.trees-and-heaps]] ended by dropping the rule that every node has exactly one parent. Without it there can be several ways between two nodes, and ways that lead back to where they began. Today you learn to explore such a structure. Three quick pulls first.
+    - question:
+        id: recall-tree-paths
+        type: choice
+        system: s1
+        concepts: [e3.trees-and-heaps]
+        prompt: |
+          In a tree, how many different paths lead from the root to a given node?
+        options: ["Exactly one", "At most two", "One for each level", "It depends on the tree"]
+        answer: 0
+        explanation: Every node has exactly one parent, so the way up, and therefore the way down, is forced.
+        hints:
+          - How many parents does a node have?
+          - Walk up from the node to the root.
+    - question:
+        id: recall-queue-order
+        type: choice
+        system: s1
+        concepts: [e3.stacks-and-queues]
+        prompt: |
+          Places still to visit are kept in a container, and the next place visited is always the one that has waited longest. Which container is it?
+        options: ["A stack", "A queue", "A heap", "A hash table"]
+        answer: 1
+        explanation: First in, first out.
+        hints:
+          - Which structure returns the oldest item?
+          - A line at a counter.
+    - question:
+        id: recall-set-cost
+        type: choice
+        system: s1
+        concepts: [e3.hash-tables]
+        prompt: |
+          What does it cost to ask whether a node is in a set of $n$ nodes already seen?
+        options: ["$O(1)$", "$O(\\log n)$", "$O(n)$", "$O(n^2)$"]
+        answer: 0
+        explanation: A set is a hash table, which computes where to look.
+        hints:
+          - How does a set find an item?
+          - It does not search.
+  puzzle:
+    - text: |
+        Seven computers are joined by links, and a message can pass along a link in either direction: A–B, A–C, B–D, B–E, C–F, E–F and F–G. A message must travel from A to G. Two questions.
+
+        **Can it get there at all? And what is the smallest number of links it must cross?**
+
+        With a drawing in front of you, your eye answers both in a moment. A program has no drawing. It has a table saying, for each computer, which others it is linked to. Run the starter, which holds that table and tries the simplest plan: from each computer, pass the message to the first neighbour listed. The message goes A, B, A, B, A, B, and never arrives. It is not that there is no way. The plan has no memory, so it cannot tell that it has been here before.
+
+        A more careful wanderer would notice a loop in this network: A to B to E to F to C and back to A. Any method that explores without remembering can circle it for ever.
+
+        And even a method that does arrive may arrive by a poor route. A–B–E–F–G crosses four links. A–C–F–G crosses three.
+
+        **How do you explore a network so that every reachable place is visited, none is visited twice, and the route found to each is the shortest there is?**
+  intuition:
+    - text: |
+        Two kinds of memory are needed.
+
+        First, a record of **where you have been**, so that you never set out from the same place twice. This must be quick to consult, since you will consult it at every link. A set does it in one step.
+
+        Second, a list of **places discovered and not yet explored**. When you stand at A you learn of B and C. You can go to only one of them now. The other must be written down for later, along with everything you learn of along the way.
+
+        The whole method is then a loop: take a place from the list of pending places, look at its neighbours, and add to the list any that you have not seen. Stop when the list is empty.
+
+        One decision is left open, and it changes everything. **Which pending place do you take next?**
+
+        Take the one that has waited **longest**, and you explore in rings: first everything one link from the start, then everything two links away, then three. Like a ripple spreading on water. This is **breadth-first search**, and the list is a queue.
+
+        Take the one discovered **most recently**, and you plunge: from A to a neighbour, to a neighbour of that, as far as the links go, backing up only at a dead end. Like someone exploring a maze with a hand on the wall. This is **depth-first search**, and the list is a stack.
+
+        Step through both on the network of the puzzle.
+    - figure: graph-walk
+    - text: |
+        Breadth first visits A, then B and C, then D, E and F, then G, nearest first, and G is reached in the third ring. Depth first visits A, B, D, backs up, then E, F, C, and G last, having gone the long way round through E. Both visit all seven and neither visits any twice.
+  derivation:
+    - text: |
+        **Graphs.** A **graph** is a set of **nodes**, also called vertices, and a set of **edges**, each joining two nodes. The network of the puzzle is a graph with 7 nodes and 7 edges. Its edges can be crossed in either direction, which makes it **undirected**. In a **directed** graph each edge has a direction, like a one-way street or the "must come before" between two lessons of this course.
+
+        Two nodes joined by an edge are **neighbours**. The number of a node's neighbours is its **degree**. A **path** is a sequence of nodes each joined to the next by an edge, and its length is the number of edges crossed. A path that returns to its start without repeating an edge is a **cycle**. A graph is **connected** if there is a path between every two nodes.
+
+        A tree is the special case with no cycles: a connected graph in which there is exactly one path between any two nodes. Everything in this lesson works on trees too. The new difficulty is the cycle.
+
+        Add up the degrees of all the nodes of an undirected graph and each edge is counted twice, once from each end:
+
+        $$\sum_{v} \deg(v) = 2\,\lvert E \rvert.$$
+
+        **Storing a graph.** The usual form is the **adjacency list**: for each node, the list of its neighbours. A dictionary from node to list does it, and you have built both parts.
+
+        ```python
+        links = {
+            "A": ["B", "C"],
+            "B": ["A", "D", "E"],
+            "C": ["A", "F"],
+            "D": ["B"],
+            "E": ["B", "F"],
+            "F": ["C", "E", "G"],
+            "G": ["F"],
+        }
+        ```
+
+        Each undirected edge appears twice, once in each direction. The memory used is in proportion to the number of nodes plus the number of edges, and the neighbours of a node are at hand in one lookup.
+
+        The other form is the **adjacency matrix**: a grid with a row and a column for each node, holding 1 where two nodes are joined and 0 elsewhere. It answers "are these two joined?" in one step, and takes room for $\lvert V \rvert^2$ entries, however few the edges are. A network of a million pages with ten links each would need a million million entries, nearly all of them 0, against about ten million items in adjacency lists. Graphs with few edges for their size are called **sparse**, and most real graphs are.
+
+        **Breadth-first search.**
+
+        ```python
+        from collections import deque
+
+        def bfs(links, start):
+            seen = {start}
+            queue = deque([start])
+            order = []
+            while len(queue) > 0:
+                node = queue.popleft()
+                order.append(node)
+                for other in links[node]:
+                    if other not in seen:
+                        seen.add(other)
+                        queue.append(other)
+            return order
+        ```
+
+        `seen` holds every node that has ever been put in the queue. A node is marked as seen **at the moment it is discovered**, when it joins the queue, and not later when it leaves. That is what guarantees each node enters the queue once. If marking waited until a node left the queue, a node could be discovered by two neighbours in the meantime and be queued twice.
+
+        *It ends, and it visits every reachable node once.* Each node enters the queue at most once, so the loop runs at most $\lvert V \rvert$ times. A node reachable from the start is joined to it by a path, and each node on that path is discovered when the one before it is processed.
+
+        *The cost.* Each node is dequeued once, and when it is, its list of neighbours is read once. So the total work is the number of nodes plus the total length of all the lists, which is twice the number of edges: $O(\lvert V \rvert + \lvert E \rvert)$. The search looks at each node and each edge a fixed number of times, and no method that must examine the whole graph can do better.
+
+        **Why breadth first finds the fewest links.** Call the fewest edges on any path from the start to a node its **distance**. The claim is that breadth-first search takes nodes from the queue in order of distance: every node at distance $d$ before any node at distance $d + 1$.
+
+        Argue by induction on $d$. The start, at distance 0, is first. Suppose the nodes at distance $d$ all leave the queue before any node further away. As each is processed, its unseen neighbours join the **back** of the queue. Those neighbours are exactly the nodes at distance $d + 1$: each such node has a neighbour at distance $d$, and could not have been discovered earlier, since anything processed earlier was at distance $d$ or less. So all the nodes at distance $d + 1$ are queued, in a block, behind those at distance $d$, and ahead of anything at distance $d + 2$, which can only be discovered from them.
+
+        So when a node is discovered from a node at distance $d$, its own distance is $d + 1$, and this can be recorded on the spot:
+
+        ```python
+        def distances(links, start):
+            dist = {start: 0}
+            queue = deque([start])
+            while len(queue) > 0:
+                node = queue.popleft()
+                for other in links[node]:
+                    if other not in dist:
+                        dist[other] = dist[node] + 1
+                        queue.append(other)
+            return dist
+        ```
+
+        The dictionary of distances doubles as the record of nodes seen. For the puzzle it gives G the distance 3. Record also, for each node, the node it was discovered from, and following those records back from G spells out a shortest route: G from F, F from C, C from A.
+    - question:
+        id: derivation-mark
+        type: choice
+        system: s2
+        prompt: |
+          In breadth-first search a node is added to `seen` when it is put **into** the queue. What happens if it is instead added only when it is **taken out**?
+        options:
+          - "Nothing changes."
+          - "A node can be discovered by several neighbours before it is taken out, and is then put in the queue once for each. It is processed more than once, and the visiting order contains repeats."
+          - "The search never ends on any graph."
+          - "Some reachable nodes are never visited."
+        answer: 1
+        explanation: |
+          In the puzzle's network, F is a neighbour of both C and E. When C is processed, F joins the queue. With late marking F is not yet in `seen` when E is processed shortly after, so F joins the queue a second time, and each copy will later queue G. The search still ends, because a node can be queued at most once for each of its neighbours, but it does repeated work and reports nodes twice. Marking at discovery makes "in the queue or already processed" a single fact that is recorded the moment it becomes true.
+        hints:
+          - Which node of the puzzle's network has two neighbours that are processed before it?
+          - Is that node in seen when its second neighbour looks at it?
+          - How many times does it join the queue?
+    - text: |
+        **Depth-first search.** Replace the queue by a stack and the newest discovery is explored first. The most natural way to write it uses the stack you get for nothing, the call stack:
+
+        ```python
+        def dfs(links, node, seen, order):
+            seen.add(node)
+            order.append(node)
+            for other in links[node]:
+                if other not in seen:
+                    dfs(links, other, seen, order)
+        ```
+
+        Calling `dfs(links, "A", set(), order)` fills `order`. Each call explores everything reachable from one node before returning, and the waiting calls are the path back to the start. The cost is the same as before, $O(\lvert V \rvert + \lvert E \rvert)$, for the same reason. On a very long path the recursion can become too deep for Python, and then an explicit stack is used instead.
+
+        Depth-first search does **not** find shortest paths. In the puzzle it reaches G by way of B, E and F, four links. What it does give is a full exploration using memory only for the current path, and an order of visiting that is the key to several later methods.
+
+        | | Breadth first | Depth first |
+        | --- | --- | --- |
+        | pending nodes kept in | a queue | a stack |
+        | explores | nearest first, in rings | one route to its end, then back |
+        | finds fewest-link paths | yes | no |
+        | memory | the whole of a ring | one path |
+        | cost | $O(\lvert V \rvert + \lvert E \rvert)$ | $O(\lvert V \rvert + \lvert E \rvert)$ |
+
+        **Connected pieces.** A search from one node visits exactly the nodes reachable from it, its **connected component**. To find all the pieces of a graph, go through the nodes in turn, and whenever you meet one not yet seen, start a search there and count one more component. Each node and edge is still handled once, so the whole thing is $O(\lvert V \rvert + \lvert E \rvert)$.
+
+        **Where graphs are found.** Almost anything made of things and relations between pairs of them is a graph.
+
+        - The lessons of this course are nodes, and "must be learnt before" is a directed edge.
+        - A neural network's computation is a directed graph: each operation is a node, and an edge carries one operation's result to the next. Training walks this graph backwards.
+        - The positions of a puzzle are nodes, and a legal move is an edge. Breadth-first search from the starting position then finds the solution with the fewest moves, with no knowledge of the puzzle at all.
+
+        In the last example the graph is never stored. Its neighbours are computed when needed, and the search explores a graph too large to write down.
+    - question:
+        id: order-bfs
+        type: order
+        system: s2
+        prompt: Breadth-first search runs on the puzzle's network from A, with neighbours taken in alphabetical order. Put the contents of the queue in the order they occur, starting just after A has been processed.
+        steps:
+          - "B, C"
+          - "C, D, E"
+          - "D, E, F"
+          - "E, F"
+          - "F"
+          - "G"
+        explanation: Processing A queues its neighbours B and C. Processing B adds D and E behind C. Processing C adds F. D has no unseen neighbour, and neither has E, since F is already marked. Processing F adds G. New discoveries always join the back, so the queue holds one ring of nodes followed by the beginning of the next.
+        hints:
+          - Each step removes the front of the queue and adds its unseen neighbours at the back.
+          - F is discovered from C, before E is processed.
+          - A node already marked is not added again.
+  formal:
+    - text: |
+        **Graph.** A set $V$ of nodes and a set $E$ of edges, each joining two nodes. Undirected if edges have no direction, directed if they do. The degree of a node is its number of neighbours, and $\sum_v \deg(v) = 2\lvert E \rvert$ in an undirected graph.
+
+        **Path, cycle, distance.** A path is a sequence of nodes each joined to the next, and its length is its number of edges. A cycle is a path returning to its start. The distance between two nodes is the least length of a path between them.
+
+        **Adjacency list.** For each node, the list of its neighbours. Space $O(\lvert V \rvert + \lvert E \rvert)$. **Adjacency matrix.** A $\lvert V \rvert \times \lvert V \rvert$ grid of 0s and 1s. Space $O(\lvert V \rvert^2)$.
+
+        **Breadth-first search.** Keep a set of seen nodes and a queue. Repeatedly dequeue a node and enqueue each unseen neighbour, marking it seen at once. It visits each node reachable from the start exactly once, in order of distance, in $O(\lvert V \rvert + \lvert E \rvert)$ time.
+
+        **Depth-first search.** The same with a stack, or by recursion. It visits each reachable node exactly once in $O(\lvert V \rvert + \lvert E \rvert)$ time, and does not in general find shortest paths.
+
+        **Connected component.** The set of nodes reachable from a given node of an undirected graph.
+  drill:
+    - text: Seconds each. Every question is about the puzzle's network, with edges A–B, A–C, B–D, B–E, C–F, E–F and F–G.
+    - question:
+        id: drill-degree
+        type: numeric
+        system: s1
+        prompt: |
+          What is the degree of F?
+        answer: "3"
+        explanation: F is joined to C, E and G.
+        hints:
+          - Count the edges that have F at one end.
+          - C–F, E–F and F–G.
+    - question:
+        id: drill-degree-sum
+        type: numeric
+        system: s1
+        prompt: |
+          The network has 7 edges. What do the degrees of all its nodes add up to?
+        answer: "14"
+        explanation: Each edge is counted at both of its ends.
+        hints:
+          - Each edge contributes to two degrees.
+          - Twice the number of edges.
+    - question:
+        id: drill-distance
+        type: numeric
+        system: s1
+        prompt: |
+          What is the distance from A to G, the fewest edges on any path between them?
+        answer: "3"
+        explanation: A–C–F–G.
+        hints:
+          - G is joined only to F.
+          - What is the shortest way from A to F?
+    - question:
+        id: drill-distance-two
+        type: numeric
+        system: s1
+        prompt: |
+          What is the distance from A to E?
+        answer: "2"
+        explanation: A–B–E.
+        hints:
+          - E is not a neighbour of A.
+          - Is it a neighbour of a neighbour?
+    - question:
+        id: drill-ring
+        type: choice
+        system: s1
+        prompt: |
+          Which nodes are at distance exactly 2 from A?
+        options: ["B and C", "D, E and F", "D and E only", "G"]
+        answer: 1
+        explanation: D and E are neighbours of B, and F is a neighbour of C.
+        hints:
+          - Start from the neighbours of A, which are B and C.
+          - List their neighbours other than A.
+    - question:
+        id: drill-cycle
+        type: choice
+        system: s1
+        prompt: |
+          Which of these is a cycle in the network?
+        options: ["A, B, D", "A, B, E, F, C, A", "A, C, F, G", "B, D, B"]
+        answer: 1
+        explanation: Each consecutive pair is joined by an edge, no edge is used twice, and the path returns to A.
+        hints:
+          - A cycle ends where it began.
+          - Check that every step follows an edge.
+    - question:
+        id: drill-container
+        type: choice
+        system: s1
+        prompt: |
+          Which container of pending nodes gives breadth-first search?
+        options: ["A stack", "A queue", "A set", "A heap"]
+        answer: 1
+        explanation: The node that has waited longest is explored next.
+        hints:
+          - Breadth first explores the oldest discovery next.
+          - First in, first out.
+    - question:
+        id: drill-tree-edges
+        type: numeric
+        system: s1
+        prompt: |
+          A tree is a connected graph with no cycles. How many edges has a tree with 7 nodes?
+        answer: "6"
+        explanation: Every node but the root is joined to its parent by one edge.
+        hints:
+          - Each node except one has exactly one parent.
+          - One edge for each of those nodes.
+    - question:
+        id: drill-matrix
+        type: numeric
+        system: s1
+        prompt: |
+          How many entries has the adjacency matrix of a graph with 7 nodes?
+        answer: "49"
+        explanation: A row and a column for each node.
+        hints:
+          - The grid has as many rows as nodes and as many columns.
+          - Multiply the two.
+    - question:
+        id: drill-cost
+        type: choice
+        system: s1
+        prompt: |
+          What does a breadth-first search of a graph with $\lvert V \rvert$ nodes and $\lvert E \rvert$ edges cost, with adjacency lists?
+        options: ["$O(\\lvert V \\rvert)$", "$O(\\lvert V \\rvert + \\lvert E \\rvert)$", "$O(\\lvert V \\rvert \\cdot \\lvert E \\rvert)$", "$O(\\lvert V \\rvert^2)$"]
+        answer: 1
+        explanation: Each node is dequeued once and each list of neighbours is read once.
+        hints:
+          - How many times is each node processed?
+          - How many times is each edge looked at?
+    - question:
+        id: drill-components
+        type: numeric
+        system: s1
+        prompt: |
+          The edge C–F and the edge E–F are both removed from the network. Into how many connected pieces does it fall?
+        answer: "2"
+        explanation: A, B, C, D and E remain joined, and F and G are joined to each other only.
+        hints:
+          - Which nodes can still reach A?
+          - What is left over, and are those nodes joined to each other?
+    - question:
+        id: predict-degree
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          links = {
+              "A": ["B", "C"],
+              "B": ["A", "D", "E"],
+              "C": ["A", "F"],
+              "D": ["B"],
+              "E": ["B", "F"],
+              "F": ["C", "E", "G"],
+              "G": ["F"],
+          }
+          print(len(links["B"]), sum([len(links[node]) for node in links]) // 2)
+        output: "3 7"
+        explanation: B has three neighbours. The lists hold 14 names in all, and each edge appears in two lists, so there are 7 edges.
+        hints:
+          - The first number is the length of the list for B.
+          - Each edge is listed once from each end.
+    - question:
+        id: predict-bfs
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          from collections import deque
+
+          links = {"A": ["B", "C"], "B": ["A", "D"], "C": ["A", "D"], "D": ["B", "C", "E"], "E": ["D"]}
+          dist = {"A": 0}
+          queue = deque(["A"])
+          while len(queue) > 0:
+              node = queue.popleft()
+              for other in links[node]:
+                  if other not in dist:
+                      dist[other] = dist[node] + 1
+                      queue.append(other)
+          print(dist["D"], dist["E"])
+        output: "2 3"
+        explanation: B and C are one link from A. D is discovered from B, at distance 2, and is not changed when C looks at it later. E is discovered from D, at distance 3.
+        hints:
+          - D is a neighbour of B, which is a neighbour of A.
+          - E can be reached only through D.
+  work:
+    - text: Slower now. For each search, say what is in the set of seen nodes and what is in the queue or stack.
+    - question:
+        id: write-distances
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `distances(links, start)`. `links` is an adjacency list, a dictionary from each node to the list of its neighbours. Return a dictionary giving, for every node reachable from `start`, the fewest edges on a path to it from `start`. The start itself has distance 0. Nodes that cannot be reached do not appear.
+        starter: |
+          from collections import deque
+
+          def distances(links, start):
+              # Replace the next line with your own.
+              return {start: 0}
+
+          links = {
+              "A": ["B", "C"],
+              "B": ["A", "D", "E"],
+              "C": ["A", "F"],
+              "D": ["B"],
+              "E": ["B", "F"],
+              "F": ["C", "E", "G"],
+              "G": ["F"],
+          }
+          print(distances(links, "A")["G"])
+        solution: |
+          from collections import deque
+
+          def distances(links, start):
+              dist = {start: 0}
+              queue = deque([start])
+              while len(queue) > 0:
+                  node = queue.popleft()
+                  for other in links[node]:
+                      if other not in dist:
+                          dist[other] = dist[node] + 1
+                          queue.append(other)
+              return dist
+
+          links = {
+              "A": ["B", "C"],
+              "B": ["A", "D", "E"],
+              "C": ["A", "F"],
+              "D": ["B"],
+              "E": ["B", "F"],
+              "F": ["C", "E", "G"],
+              "G": ["F"],
+          }
+          print(distances(links, "A")["G"])
+        tests: |
+          _net = {"A": ["B", "C"], "B": ["A", "D", "E"], "C": ["A", "F"], "D": ["B"], "E": ["B", "F"], "F": ["C", "E", "G"], "G": ["F"]}
+          assert distances(_net, "A") == {"A": 0, "B": 1, "C": 1, "D": 2, "E": 2, "F": 2, "G": 3}, "From A the distances should be A 0, B 1, C 1, D 2, E 2, F 2, G 3. You returned " + repr(distances(_net, "A"))
+          assert distances(_net, "G") == {"G": 0, "F": 1, "C": 2, "E": 2, "A": 3, "B": 3, "D": 4}, "From G the distances should be G 0, F 1, C 2, E 2, A 3, B 3, D 4. You returned " + repr(distances(_net, "G"))
+          _split = {"A": ["B"], "B": ["A"], "C": ["D"], "D": ["C"], "E": []}
+          assert distances(_split, "A") == {"A": 0, "B": 1}, "C, D and E cannot be reached from A and should not appear. You returned " + repr(distances(_split, "A"))
+          assert distances(_split, "E") == {"E": 0}, "A node with no neighbours reaches only itself. You returned " + repr(distances(_split, "E"))
+          _ring = {0: [1, 5], 1: [0, 2], 2: [1, 3], 3: [2, 4], 4: [3, 5], 5: [4, 0]}
+          assert distances(_ring, 0) == {0: 0, 1: 1, 5: 1, 2: 2, 4: 2, 3: 3}, "Round a ring of six, the far side is 3 away, whichever way round. You returned " + repr(distances(_ring, 0))
+          _lasso = {"S": ["X", "T"], "X": ["S", "Y"], "Y": ["X", "Z"], "Z": ["Y", "T"], "T": ["S", "Z"]}
+          assert distances(_lasso, "S")["Z"] == 2, "Z is reached in 2 by way of T, though the route by X and Y takes 3. You returned " + repr(distances(_lasso, "S")["Z"])
+          _one_way = {"A": ["B"], "B": ["C"], "C": []}
+          assert distances(_one_way, "B") == {"B": 0, "C": 1}, "With directed edges only what lies ahead can be reached. You returned " + repr(distances(_one_way, "B"))
+          assert output.strip() == "3", "The program should print 3"
+        wrong:
+          - "from collections import deque\n\ndef distances(links, start):\n    dist = {start: 0}\n    stack = [start]\n    while len(stack) > 0:\n        node = stack.pop()\n        for other in links[node]:\n            if other not in dist:\n                dist[other] = dist[node] + 1\n                stack.append(other)\n    return dist\n\nprint(3)\n"
+          - "from collections import deque\n\ndef distances(links, start):\n    dist = {start: 0}\n    queue = deque([start])\n    while len(queue) > 0:\n        node = queue.popleft()\n        for other in links[node]:\n            if other not in dist:\n                dist[other] = 1\n                queue.append(other)\n    return dist\n\nprint(3)\n"
+          - "from collections import deque\n\ndef distances(links, start):\n    dist = {start: 0}\n    for other in links[start]:\n        dist[other] = 1\n    return dist\n\nprint(3)\n"
+          - "from collections import deque\n\ndef distances(links, start):\n    dist = {}\n    count = 0\n    for node in links:\n        dist[node] = count\n        count += 1\n    return dist\n\nprint(3)\n"
+          - "from collections import deque\n\ndef distances(links, start):\n    dist = {start: 0}\n    queue = deque([start])\n    while len(queue) > 0:\n        node = queue.popleft()\n        for other in links[node]:\n            if other not in dist:\n                dist[other] = dist[node] + 1\n                queue.append(other)\n    for node in links:\n        if node not in dist:\n            dist[node] = 0\n    return dist\n\nprint(3)\n"
+        explanation: |
+          This is breadth-first search with the dictionary of distances serving also as the record of nodes seen. A node is given its distance at the moment it is discovered, one more than the node it was discovered from, and never again. Because nodes leave the queue in order of distance, the first discovery of a node is by a shortest route. Swap the queue for a stack and the same code still labels every reachable node, but with the length of whichever path the plunge happened to take: in the lasso-shaped test it reaches Z by way of X and Y and reports 3 where the answer is 2. Nodes that cannot be reached are left out, since no number of edges leads to them.
+        hints:
+          - "Start with dist = {start: 0} and a queue holding the start."
+          - Take a node from the front, and look at each neighbour not yet in dist.
+          - Give that neighbour the distance dist[node] + 1 and add it to the back of the queue.
+    - question:
+        id: fix-bfs
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `visit_order(links, start)` should return the nodes reachable from `start` in breadth-first order, each exactly once. For the puzzle's network it should print `A B C D E F G`. It prints `A B C D E F F G G`. Fix it.
+        starter: |
+          from collections import deque
+
+          def visit_order(links, start):
+              seen = set()
+              queue = deque([start])
+              order = []
+              while len(queue) > 0:
+                  node = queue.popleft()
+                  seen.add(node)
+                  order.append(node)
+                  for other in links[node]:
+                      if other not in seen:
+                          queue.append(other)
+              return order
+
+          links = {
+              "A": ["B", "C"],
+              "B": ["A", "D", "E"],
+              "C": ["A", "F"],
+              "D": ["B"],
+              "E": ["B", "F"],
+              "F": ["C", "E", "G"],
+              "G": ["F"],
+          }
+          print(" ".join(visit_order(links, "A")))
+        solution: |
+          from collections import deque
+
+          def visit_order(links, start):
+              seen = {start}
+              queue = deque([start])
+              order = []
+              while len(queue) > 0:
+                  node = queue.popleft()
+                  order.append(node)
+                  for other in links[node]:
+                      if other not in seen:
+                          seen.add(other)
+                          queue.append(other)
+              return order
+
+          links = {
+              "A": ["B", "C"],
+              "B": ["A", "D", "E"],
+              "C": ["A", "F"],
+              "D": ["B"],
+              "E": ["B", "F"],
+              "F": ["C", "E", "G"],
+              "G": ["F"],
+          }
+          print(" ".join(visit_order(links, "A")))
+        tests: |
+          _net = {"A": ["B", "C"], "B": ["A", "D", "E"], "C": ["A", "F"], "D": ["B"], "E": ["B", "F"], "F": ["C", "E", "G"], "G": ["F"]}
+          assert visit_order(_net, "A") == ["A", "B", "C", "D", "E", "F", "G"], "From A the order should be A B C D E F G. You returned " + repr(visit_order(_net, "A"))
+          assert visit_order(_net, "F") == ["F", "C", "E", "G", "A", "B", "D"], "From F the order should be F C E G A B D. You returned " + repr(visit_order(_net, "F"))
+          _square = {1: [2, 3], 2: [1, 4], 3: [1, 4], 4: [2, 3]}
+          assert visit_order(_square, 1) == [1, 2, 3, 4], "Round a square from 1 the order should be 1 2 3 4, with 4 once only. You returned " + repr(visit_order(_square, 1))
+          _full = {1: [2, 3, 4], 2: [1, 3, 4], 3: [1, 2, 4], 4: [1, 2, 3]}
+          assert visit_order(_full, 1) == [1, 2, 3, 4], "When every node is joined to every other, each should still appear once. You returned " + repr(visit_order(_full, 1))
+          _split = {"A": ["B"], "B": ["A"], "C": []}
+          assert visit_order(_split, "A") == ["A", "B"], "C cannot be reached from A. You returned " + repr(visit_order(_split, "A"))
+          assert visit_order(_split, "C") == ["C"], "A node with no neighbours gives an order of one. You returned " + repr(visit_order(_split, "C"))
+          assert output.strip() == "A B C D E F G", "The program should print A B C D E F G"
+        wrong:
+          - "from collections import deque\n\ndef visit_order(links, start):\n    seen = set()\n    queue = deque([start])\n    order = []\n    while len(queue) > 0:\n        node = queue.popleft()\n        seen.add(node)\n        order.append(node)\n        for other in links[node]:\n            if other not in seen:\n                queue.append(other)\n    return order\n\nprint('A B C D E F G')\n"
+          - "from collections import deque\n\ndef visit_order(links, start):\n    seen = {start}\n    stack = [start]\n    order = []\n    while len(stack) > 0:\n        node = stack.pop()\n        order.append(node)\n        for other in links[node]:\n            if other not in seen:\n                seen.add(other)\n                stack.append(other)\n    return order\n\nprint('A B C D E F G')\n"
+          - "from collections import deque\n\ndef visit_order(links, start):\n    return sorted(links)\n\nprint('A B C D E F G')\n"
+          - "from collections import deque\n\ndef visit_order(links, start):\n    order = [start]\n    for other in links[start]:\n        order.append(other)\n    return order\n\nprint('A B C D E F G')\n"
+          - "from collections import deque\n\ndef visit_order(links, start):\n    seen = set()\n    queue = deque([start])\n    order = []\n    while len(queue) > 0:\n        node = queue.popleft()\n        if node in seen:\n            break\n        seen.add(node)\n        order.append(node)\n        for other in links[node]:\n            if other not in seen:\n                queue.append(other)\n    return order\n\nprint('A B C D E F G')\n"
+        explanation: |
+          The starter marked a node as seen only when it was taken out of the queue. F is a neighbour of both C and E. C put F in the queue, and when E was processed F was still waiting there, unmarked, so E put it in again. Each copy of F then queued G. The repair is to mark a node at the moment it is discovered, as it joins the queue, which means the start must be marked before the loop begins. Then "has been queued" is recorded as soon as it is true, and no node can be queued twice. Skipping repeats as they come out would also give the right order, but the queue would still fill with duplicates, one for each edge in the worst case.
+        hints:
+          - Trace the queue by hand. When is F added, and by which nodes?
+          - Was F in seen when its second neighbour looked at it?
+          - Add a node to seen when it is appended to the queue, and start with seen holding the start.
+    - question:
+        id: write-components
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `components(links)` for an undirected graph given as an adjacency list in which every node appears as a key. Return the number of connected pieces.
+        starter: |
+          def components(links):
+              # Replace the next line with your own.
+              return 1
+
+          links = {"A": ["B"], "B": ["A"], "C": ["D"], "D": ["C", "E"], "E": ["D"], "F": []}
+          print(components(links))
+        solution: |
+          def components(links):
+              seen = set()
+              count = 0
+              for start in links:
+                  if start not in seen:
+                      count += 1
+                      seen.add(start)
+                      stack = [start]
+                      while len(stack) > 0:
+                          node = stack.pop()
+                          for other in links[node]:
+                              if other not in seen:
+                                  seen.add(other)
+                                  stack.append(other)
+              return count
+
+          links = {"A": ["B"], "B": ["A"], "C": ["D"], "D": ["C", "E"], "E": ["D"], "F": []}
+          print(components(links))
+        tests: |
+          assert components({"A": ["B"], "B": ["A"], "C": ["D"], "D": ["C", "E"], "E": ["D"], "F": []}) == 3, "The pieces are A and B, then C, D and E, then F alone: 3. You returned " + repr(components({"A": ["B"], "B": ["A"], "C": ["D"], "D": ["C", "E"], "E": ["D"], "F": []}))
+          _net = {"A": ["B", "C"], "B": ["A", "D", "E"], "C": ["A", "F"], "D": ["B"], "E": ["B", "F"], "F": ["C", "E", "G"], "G": ["F"]}
+          assert components(_net) == 1, "The puzzle's network is connected, so it has 1 piece. You returned " + repr(components(_net))
+          assert components({}) == 0, "A graph with no nodes has 0 pieces. You returned " + repr(components({}))
+          assert components({1: [], 2: [], 3: [], 4: []}) == 4, "Four nodes and no edges make 4 pieces. You returned " + repr(components({1: [], 2: [], 3: [], 4: []}))
+          _cut = {"A": ["B", "C"], "B": ["A", "D", "E"], "C": ["A"], "D": ["B"], "E": ["B"], "F": ["G"], "G": ["F"]}
+          assert components(_cut) == 2, "With C-F and E-F removed the network has 2 pieces. You returned " + repr(components(_cut))
+          _late = {"Z": ["Y"], "Y": ["Z", "X"], "X": ["Y"], "W": ["V"], "V": ["W"]}
+          assert components(_late) == 2, "Z, Y and X are one piece and W and V another. You returned " + repr(components(_late))
+          _chain = {i: [j for j in [i - 1, i + 1] if 0 <= j < 2000] for i in range(2000)}
+          assert components(_chain) == 1, "A chain of 2000 nodes is one piece, and should not exhaust the recursion limit. You returned " + repr(components(_chain))
+          assert output.strip() == "3", "The program should print 3"
+        wrong:
+          - "def components(links):\n    return len(links)\n\nprint(3)\n"
+          - "def components(links):\n    return len([node for node in links if len(links[node]) == 0]) + 1\n\nprint(3)\n"
+          - "def components(links):\n    seen = set()\n    count = 0\n    for start in links:\n        if start not in seen:\n            count += 1\n            seen.add(start)\n            for other in links[start]:\n                seen.add(other)\n    return count\n\nprint(3)\n"
+          - "def components(links):\n    seen = set()\n    count = 0\n    for start in links:\n        count += 1\n        seen.add(start)\n        stack = [start]\n        while len(stack) > 0:\n            node = stack.pop()\n            for other in links[node]:\n                if other not in seen:\n                    seen.add(other)\n                    stack.append(other)\n    return count\n\nprint(3)\n"
+          - "def components(links):\n    edges = sum([len(links[node]) for node in links]) // 2\n    return len(links) - edges\n\nprint(3)\n"
+        explanation: |
+          One search finds exactly one connected piece: everything reachable from where it starts. So go through the nodes, and each time you meet one that no earlier search has reached, count a new piece and search from it, marking all it reaches. The set of seen nodes is shared by all the searches, which is what keeps the whole computation at $O(\lvert V \rvert + \lvert E \rvert)$: every node is marked once and every list of neighbours read once. Marking only a node's immediate neighbours is not a search, and counts a chain of three as two pieces. Subtracting edges from nodes happens to work for graphs with no cycles and fails once there is one. A stack is used here, though a queue would serve equally, since only reachability matters and not the order.
+        hints:
+          - Keep one set of seen nodes for the whole function.
+          - Loop over every node. If it has not been seen, add 1 to the count and search from it.
+          - The search marks every node it reaches, so those nodes will not start a new count.
+    - question:
+        id: work-why-shortest
+        type: choice
+        system: s2
+        prompt: |
+          Depth-first search from A reaches G in the puzzle's network by the path A, B, E, F, G, of length 4. Breadth-first search gives G the distance 3. Why can breadth-first search be trusted to give the least?
+        options:
+          - "Because it tries every path and keeps the best."
+          - "Because nodes leave the queue in order of distance. All nodes one edge away are processed before any two edges away, and so on, so a node is first discovered from a node as near the start as any of its neighbours."
+          - "Because it visits the neighbours in alphabetical order."
+          - "It cannot. The answer 3 is a coincidence."
+        answer: 1
+        explanation: |
+          Breadth-first search does not compare paths at all. It never needs to, because of the order in which it works: the queue holds the nodes of one ring followed by those of the next, and new discoveries join at the back. So when a node is discovered, the discoverer is at the smallest distance of any of its neighbours, and one more than that is the node's own distance. Depth-first search has no such order. It follows whichever edge comes first as far as it leads, and may reach a nearby node at the end of a long detour. The order of neighbours changes which shortest path is found when there are several, never its length.
+        hints:
+          - In what order do nodes leave the queue?
+          - When a node is first discovered, how far from the start is the node that found it?
+          - Does depth-first search process nearer nodes before farther ones?
+    - question:
+        id: work-sparse
+        type: choice
+        system: s2
+        prompt: |
+          A graph has a million nodes, and each node has about 10 neighbours. How do the two ways of storing it compare?
+        options:
+          - "They take about the same room."
+          - "The adjacency matrix has $10^6 \\times 10^6 = 10^{12}$ entries, nearly all 0. The adjacency lists hold about $10^7$ items in all. The lists are smaller by a factor of about a hundred thousand."
+          - "The matrix is smaller, since it stores only 0s and 1s."
+          - "Neither can store a graph that large."
+        answer: 1
+        explanation: |
+          The matrix has room for every possible pair of nodes whether or not they are joined. The lists hold only the edges that exist: a million lists of about 10 names. The matrix also makes a search slow, because finding the neighbours of a node means reading a whole row of a million entries to find the ten that are 1, so that breadth-first search costs $O(\lvert V \rvert^2)$ where the lists allow $O(\lvert V \rvert + \lvert E \rvert)$. The matrix is the right choice when most pairs **are** joined, or when the question asked most often is whether two given nodes are neighbours. You will meet it again when matrices arrive, where multiplying it by itself counts paths.
+        hints:
+          - How many entries does a matrix with a million rows and a million columns have?
+          - How many items do a million lists of ten hold?
+          - Divide one by the other.
+    - question:
+        id: work-states
+        type: choice
+        system: s2
+        prompt: |
+          A sliding-tile puzzle has about 180000 reachable positions, and from each position between 2 and 4 moves are possible. You want the solution with the fewest moves. What is the graph, and which search finds it?
+        options:
+          - "The tiles are nodes and their neighbours on the board are edges. Use depth-first search."
+          - "Each position of the whole puzzle is a node, and a legal move is an edge between two positions. Breadth-first search from the starting position reaches the solved position by a path with the fewest edges, which is the fewest moves."
+          - "There is no graph, since nothing is stored."
+          - "The moves are nodes. Use a hash table."
+        answer: 1
+        explanation: |
+          The graph of a puzzle is its space of positions. A node is one complete arrangement, and an edge joins two arrangements that differ by one move. A sequence of moves is then a path, and the fewest moves is the distance. Breadth-first search finds it without any insight into the puzzle. The graph need never be built: the neighbours of a position are computed by trying each legal move, and a set of positions already seen keeps the search from going round. Positions can be stored in that set as tuples, since a set needs keys that cannot change. With 180000 nodes and a few edges each, the search is a fraction of a second's work.
+        hints:
+          - What changes when a move is made?
+          - What would a path in the graph correspond to?
+          - Which search finds paths with the fewest edges?
+  connections:
+    - text: |
+        The puzzle asked whether a message can pass from A to G, and by how few links. A wanderer with no memory circled between A and B for ever. A search needs two kinds of memory: a set of nodes seen, so that nothing is explored twice, and a container of nodes discovered and still to be explored. Take from that container the oldest and the search spreads in rings, reaching every node by a shortest route. Take the newest and it plunges down one route to its end. With a queue, G is found at distance 3 by way of C and F.
+
+        Everything here was assembled from earlier lessons. The graph is a dictionary of lists. The set of seen nodes is a hash table, which is what makes each check $O(1)$ and the whole search $O(\lvert V \rvert + \lvert E \rvert)$. The queue and the stack decide the order, as was promised when you first met them. And the tree of [[e3.trees-and-heaps]] is a graph with no cycles, where no set of seen nodes is needed because there is only one way to anywhere.
+
+        Three directions open from here. In this lesson every edge counted as one step. When edges have lengths, the nearest node is no longer the one with fewest edges, and the queue must give way to a priority queue: that is [[e3.shortest-paths-and-beam-search]]. When edges have directions and mean "must come before", the question becomes in what order to do things, in [[e3.topological-sort]]. And when the nodes are the sub-problems of a larger problem, searching the graph while remembering answers is [[e3.dynamic-programming]].
+
+        Before those, a problem you have been leaning on without examining it. Twice in this cluster a sorted list made something easy: taking the most urgent job from its end, and the prospect of searching by halving. Python's `sorted` has been there since your first lessons, with a cost you were told was $O(n \log n)$. How is a list put in order at all, why do the obvious methods take $O(n^2)$, and where does the logarithm come from? That is the next lesson, [[e3.sorting]].
