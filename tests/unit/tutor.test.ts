@@ -9,7 +9,8 @@ import { loadLessons } from "@/lib/lessons/load";
 import { costMicroUsd, monthlyBudgetUsd, tutorEffort, tutorModel } from "@/lib/tutor/config";
 import { systemPrompt, workspaceNote } from "@/lib/tutor/prompt";
 import { renderReply } from "@/lib/tutor/render";
-import { clearTutorHistory, saveTutorMessage, spentThisMonthUsd, tutorHistory } from "@/lib/tutor/service";
+import { recordAttempt } from "@/lib/learning/service";
+import { clearTutorHistory, questionEffort, saveTutorMessage, spentThisMonthUsd, tutorHistory } from "@/lib/tutor/service";
 import { migrate } from "../../scripts/migrate";
 
 const root = path.join(import.meta.dirname, "..", "fixtures");
@@ -56,6 +57,11 @@ describe("what the tutor is told", () => {
     expect(note).toMatch(/attempt at question \d+ \(not solved yet\)/);
     expect(note).toContain("print(1 + 2)");
     expect(note).toContain("Output of the last run:");
+    const stuck = workspaceNote(lesson, {
+      effort: new Map([["write-sum", { tries: 4, wrong: 4, ms: 420_000 }]]),
+      hints: new Map([["write-sum", 1]]),
+    });
+    expect(stuck).toMatch(/Question \d+: not solved; 4 attempts, 4 wrong; 7 min spent; 1 of \d+ hints seen\./);
     expect(workspaceNote(null, {})).toBe("");
     expect(workspaceNote(null, { code: "x".repeat(7000) })).toContain("(cut short here)");
   });
@@ -133,6 +139,19 @@ describe("the tutor's conversation", () => {
       ["assistant", "One for each sheep."],
     ]);
     expect(await tutorHistory(db, userId, "m0.counting", 1)).toHaveLength(1);
+  });
+
+  it("reports attempts, wrong attempts and time spent on each question", async () => {
+    const attempt = (questionId: string, correct: boolean, ms: number) =>
+      recordAttempt(db, userId, { conceptId: "m0.counting", questionId, system: "s2", correct, answer: "x", ms }, ["pebbles", "other"]);
+    await attempt("pebbles", false, 30_000);
+    await attempt("pebbles", false, 45_000);
+    await attempt("pebbles", true, 15_000);
+    await attempt("other", false, 5_000);
+    const effort = await questionEffort(db, userId, "m0.counting");
+    expect(effort.get("pebbles")).toEqual({ tries: 3, wrong: 2, ms: 90_000 });
+    expect(effort.get("other")).toEqual({ tries: 1, wrong: 1, ms: 5_000 });
+    expect((await questionEffort(db, userId, "m0.adding")).size).toBe(0);
   });
 
   it("counts the month's spend, and clearing a conversation does not erase it", async () => {

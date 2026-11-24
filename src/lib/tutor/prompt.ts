@@ -23,7 +23,9 @@ Staying close to what the learner knows:
 
 Questions in the lesson:
 - The lesson's questions are given to you with their answers so that you can check the learner's reasoning. For a question the learner has not solved yet, never state the answer, never write the solution code and never confirm a guess that came without reasoning. Ask for their reasoning, find the first step that goes wrong, and give the smallest nudge that lets them take the next step themselves.
-- Once a question is solved you may discuss its answer freely.
+- Match your help to how stuck the learner is, using the attempts, time and hints reported with each message. If they have barely tried, hold back: ask one clarifying question at most and let them work. If they are truly stuck (several wrong attempts, a long time on the question, or a plain request for help), give the smallest hint that unblocks the next step, and only go further up the question's hint ladder if that was not enough. Never reach the answer itself.
+- Use the same report to judge whether a message is about a question at all. If it is about something else, explain fully.
+- Once a question is solved you may discuss its answer freely, including other approaches and where the idea leads.
 - When the learner shares code, read what it actually does, line by line. Point to the line that matters and explain why it behaves that way. Use only Python the learner has met in finished lessons or this one.
 
 Form:
@@ -116,7 +118,18 @@ export function systemPrompt({ graph, completed, lesson, next }: TutorPosition):
   return sections.join("\n\n");
 }
 
-export type WorkspaceState = { questionId?: string | null; code?: string; output?: string; solved?: string[] };
+export type WorkspaceState = {
+  questionId?: string | null;
+  code?: string;
+  output?: string;
+  solved?: string[];
+  /** Attempts, wrong attempts and time spent, by question id. */
+  effort?: Map<string, { tries: number; wrong: number; ms: number }>;
+  /** Hints revealed so far, by question id. */
+  hints?: Map<string, number>;
+};
+
+const duration = (ms: number) => (ms < 60_000 ? `${Math.max(1, Math.round(ms / 1000))} s` : `${Math.round(ms / 60_000)} min`);
 
 const cut = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}\n(cut short here)` : text);
 
@@ -129,6 +142,15 @@ export function workspaceNote(lesson: Lesson | null, state: WorkspaceState): str
     const number = (id: string) => questions.findIndex((q) => q.id === id) + 1;
     const done = questions.filter((q) => solved.has(q.id)).map((q) => number(q.id));
     lines.push(done.length ? `Questions solved so far: ${done.join(", ")} of ${questions.length}.` : `No questions solved yet, of ${questions.length}.`);
+    for (const q of questions) {
+      const effort = state.effort?.get(q.id);
+      const hints = state.hints?.get(q.id) ?? 0;
+      if (!effort && !hints) continue;
+      const parts = [solved.has(q.id) ? "solved" : "not solved"];
+      if (effort) parts.push(`${effort.tries} ${effort.tries === 1 ? "attempt" : "attempts"}, ${effort.wrong} wrong`, `${duration(effort.ms)} spent`);
+      if (hints) parts.push(`${hints} of ${q.hints.length} hints seen`);
+      lines.push(`Question ${number(q.id)}: ${parts.join("; ")}.`);
+    }
     const open = state.questionId ? number(state.questionId) : 0;
     if (open > 0) lines.push(`The editor holds the learner's attempt at question ${open}${solved.has(state.questionId!) ? " (solved)" : " (not solved yet)"}.`);
   }

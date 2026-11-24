@@ -3,7 +3,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema";
 
 type Db = NodePgDatabase<typeof schema>;
-const { tutorMessages } = schema;
+const { tutorMessages, attempts } = schema;
 
 export type TutorMessage = { id: number; role: "user" | "assistant"; content: string };
 
@@ -47,3 +47,20 @@ export async function spentThisMonthUsd(db: Db, userId: string): Promise<number>
   return Number(row.total) / 1_000_000;
 }
 
+
+export type QuestionEffort = { tries: number; wrong: number; ms: number };
+
+/** How hard each question of a lesson has been for the learner so far: attempts, wrong attempts and time spent. */
+export async function questionEffort(db: Db, userId: string, conceptId: string): Promise<Map<string, QuestionEffort>> {
+  const rows = await db
+    .select({
+      id: attempts.questionId,
+      tries: sql<string>`count(*)`,
+      wrong: sql<string>`count(*) filter (where not ${attempts.correct})`,
+      ms: sql<string>`coalesce(sum(${attempts.ms}), 0)`,
+    })
+    .from(attempts)
+    .where(and(eq(attempts.userId, userId), eq(attempts.conceptId, conceptId)))
+    .groupBy(attempts.questionId);
+  return new Map(rows.map((row) => [row.id, { tries: Number(row.tries), wrong: Number(row.wrong), ms: Number(row.ms) }]));
+}

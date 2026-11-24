@@ -3,12 +3,12 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { nextAfter } from "@/lib/learning/next";
-import { completedConcepts, solvedQuestions } from "@/lib/learning/service";
+import { completedConcepts, hintLevels, solvedQuestions } from "@/lib/learning/service";
 import { content } from "@/lib/lessons/content";
 import { costMicroUsd, MAX_MESSAGE_CHARS, monthlyBudgetUsd, tutorConnected } from "@/lib/tutor/config";
 import { systemPrompt, workspaceNote } from "@/lib/tutor/prompt";
 import { failureNote, streamReply } from "@/lib/tutor/reply";
-import { saveTutorMessage, spentThisMonthUsd, tutorHistory } from "@/lib/tutor/service";
+import { questionEffort, saveTutorMessage, spentThisMonthUsd, tutorHistory } from "@/lib/tutor/service";
 
 export const maxDuration = 120;
 
@@ -44,10 +44,12 @@ export async function POST(request: Request) {
   const lesson = lessons.get(conceptId) ?? null;
   if (!lesson && conceptId !== "scratch") return refuse(404, "That lesson does not exist.");
 
-  const [completed, solved, history] = await Promise.all([
+  const [completed, solved, history, effort, hints] = await Promise.all([
     completedConcepts(db, user.id),
     lesson ? solvedQuestions(db, user.id, lesson.concept) : new Set<string>(),
     tutorHistory(db, user.id, conceptId),
+    lesson ? questionEffort(db, user.id, lesson.concept) : undefined,
+    lesson ? hintLevels(db, user.id, lesson.concept) : undefined,
   ]);
   const system = systemPrompt({
     graph,
@@ -55,7 +57,7 @@ export async function POST(request: Request) {
     lesson,
     next: lesson ? nextAfter(graph, new Set(lessons.keys()), completed, lesson.concept) : null,
   });
-  const note = workspaceNote(lesson, { questionId, code, output, solved: [...solved] });
+  const note = workspaceNote(lesson, { questionId, code, output, solved: [...solved], effort, hints });
   await saveTutorMessage(db, user.id, conceptId, "user", message);
 
   const encoder = new TextEncoder();
