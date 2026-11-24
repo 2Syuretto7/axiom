@@ -9,6 +9,15 @@ import { nextAfter, nextConcept } from "@/lib/learning/next";
 import { completedConcepts, hintLevels, snapshotsFor, solvedQuestions } from "@/lib/learning/service";
 import { content } from "@/lib/lessons/content";
 import { questionsOf } from "@/lib/lessons/load";
+import { monthlyBudgetUsd, tutorConnected } from "@/lib/tutor/config";
+import { spentThisMonthUsd, tutorHistory } from "@/lib/tutor/service";
+import type { Db } from "@/lib/db";
+
+/** The tutor's conversation on this lesson so far, and how much of the month's budget is left. */
+async function tutorSetup(db: Db, userId: string, conceptId: string) {
+  const [messages, spentUsd] = await Promise.all([tutorHistory(db, userId, conceptId), spentThisMonthUsd(db, userId)]);
+  return { messages, spentUsd, budgetUsd: monthlyBudgetUsd(), connected: tutorConnected() };
+}
 
 export const metadata: Metadata = { title: "Learn" };
 
@@ -35,9 +44,9 @@ async function Lesson() {
   const next = nextConcept(graph, written, completed);
 
   if (!next) {
-    const snapshots = await snapshotsFor(db, user.id, "axiom-code:scratch");
+    const [snapshots, tutor] = await Promise.all([snapshotsFor(db, user.id, "axiom-code:scratch"), tutorSetup(db, user.id, "scratch")]);
     return (
-      <Workspace id="scratch" breadcrumb={["Scratch"]} starterCode={SCRATCH} snapshots={snapshots}>
+      <Workspace id="scratch" breadcrumb={["Scratch"]} starterCode={SCRATCH} snapshots={snapshots} tutor={tutor}>
         <article className="prose-lesson">
           <p className="label">{lessons.size > 0 ? "Up to date" : "Warm-up"}</p>
           <h1>{lessons.size > 0 ? "You have finished every lesson written so far." : "Your workspace is ready."}</h1>
@@ -57,10 +66,11 @@ async function Lesson() {
 
   const lesson = lessons.get(next.id)!;
   const concept = graph.concepts.get(next.id)!;
-  const [solved, hints, snapshots] = await Promise.all([
+  const [solved, hints, snapshots, tutor] = await Promise.all([
     solvedQuestions(db, user.id, concept.id),
     hintLevels(db, user.id, concept.id),
     snapshotsFor(db, user.id, `axiom-code:${concept.id}`),
+    tutorSetup(db, user.id, concept.id),
   ]);
   const ids = questionsOf(lesson).map((q) => q.id);
   return (
@@ -71,6 +81,7 @@ async function Lesson() {
       starterCode={lesson.starter ?? "# Scratch space. Try things here.\n"}
       snapshots={snapshots}
       lesson={{ total: ids.length, solved: ids.filter((id) => solved.has(id)), complete: false }}
+      tutor={tutor}
     >
       <LessonView
         lesson={lesson}

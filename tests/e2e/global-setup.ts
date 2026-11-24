@@ -8,6 +8,6 @@ export default async function globalSetup() {
   await migrate(url, () => {});
   const client = new Client({ connectionString: url });
   await client.connect();
-  await client.query("truncate users, sessions, login_attempts, attempts, hint_views, lesson_progress, code_snapshots restart identity cascade");
+  await client.query("truncate users, sessions, login_attempts, attempts, hint_views, lesson_progress, code_snapshots, tutor_messages restart identity cascade");
   await client.end();
 }

@@ -6,6 +6,7 @@ import { blockHtml, displayOrder, findQuestion, inlineHtml } from "@/lib/lessons
 import { grade } from "@/lib/lessons/grade";
 import { questionsOf } from "@/lib/lessons/load";
 import { recordAttempt, revealNextHint, saveSnapshot } from "./service";
+import { clearTutorHistory } from "../tutor/service";
 
 export type AnswerResult = { correct: boolean; note?: string; explanationHtml?: string; lessonComplete: boolean };
 
@@ -78,4 +79,10 @@ export async function nextHint(conceptId: string, questionId: string): Promise<s
 export async function saveCode(key: string, code: string): Promise<void> {
   const user = await learner();
   await saveSnapshot(getDb(), user.id, clean(key, 300), clean(code, 50_000));
+}
+
+/** Starts the tutor's conversation on a lesson afresh. */
+export async function clearTutor(conceptId: string): Promise<void> {
+  const user = await learner();
+  await clearTutorHistory(getDb(), user.id, clean(conceptId, 200));
 }
