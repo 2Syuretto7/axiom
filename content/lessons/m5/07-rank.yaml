@@ -1,0 +1,870 @@
+concept: m5.rank
+minutes: 95
+claim: You can define the rank of a matrix as its largest number of independent columns, compute it by counting pivots and explain why that count does not depend on how elimination is carried out, show that the rows give the same number, recognise matrices of rank one as outer products, bound the rank of a product, and say what low rank means for storage, for redundant features and for a narrow layer.
+recalls: [m5.elimination-and-linear-systems]
+uses: [m5.identity-and-inverse, m5.transpose, m5.matrix-multiplication-as-composition, m5.matrix-vector-product, m5.matrices-as-linear-maps, m4.linear-independence, m4.linear-combinations-and-span, m4.dot-product, m4.norms-and-distance, e1.complexity-and-big-o, e1.comprehensions-and-iterators, e0.functions, e0.loops, e0.lists-and-tuples]
+leads: [m5.column-space-and-null-space, m5.basis-and-dimension, m5.determinant]
+starter: |
+  # Scratch space. A table of 12 ratings, and 7 numbers that claim to hold all of it.
+  R = [[2, 4, 6, 2], [1, 2, 3, 1], [3, 6, 9, 3]]
+
+  keen = [2, 1, 3]         # one number for each person
+  appeal = [1, 2, 3, 1]    # one number for each film
+
+  rebuilt = [[k * a for a in appeal] for k in keen]
+  print(rebuilt)
+  print(rebuilt == R)
+parts:
+  recall:
+    - text: |
+        [[m5.elimination-and-linear-systems]] solved systems by clearing below pivots, and its proofs turned on a count: how many pivots, against how many rows and columns. Today that count gets its name. Three quick pulls first.
+    - question:
+        id: recall-pivots
+        type: numeric
+        system: s1
+        concepts: [m5.elimination-and-linear-systems]
+        prompt: |
+          Elimination ends with rows $(1, 2, 1, 4)$, $(0, 0, 3, 6)$ and $(0, 0, 0, 0)$. How many pivots are there?
+        answer: "2"
+        explanation: The pivots are the first non-zero entries of the non-zero rows, the 1 in column 1 and the 3 in column 3.
+        hints:
+          - A pivot is the first non-zero entry of a row.
+          - A row of zeros has none.
+    - question:
+        id: recall-dependent
+        type: choice
+        system: s1
+        concepts: [m4.linear-independence]
+        prompt: |
+          The vectors $(1, 2, 3)$, $(2, 4, 6)$ and $(0, 0, 1)$ are
+        options: ["independent", "dependent, because the second is twice the first", "dependent, because there are three of them", "independent, because the third is not a multiple of the others"]
+        answer: 1
+        explanation: 2 times the first minus the second is the zero vector, a combination with coefficients not all zero.
+        hints:
+          - Compare the first two vectors.
+          - One dependency among some of the vectors makes the whole list dependent.
+    - question:
+        id: recall-outer
+        type: choice
+        system: s1
+        concepts: [m5.transpose]
+        prompt: |
+          $\mathbf{u}$ has 3 components and $\mathbf{v}$ has 4. The outer product $\mathbf{u}\mathbf{v}^{\mathsf{T}}$ is
+        options: ["a single number", "a 3 by 4 matrix with entries u_i v_j", "a 4 by 3 matrix", "not defined"]
+        answer: 1
+        explanation: A column of 3 times a row of 4 gives a 3 by 4 table, each entry one component of u times one of v.
+        hints:
+          - It is a 3 by 1 matrix times a 1 by 4 matrix.
+          - Each entry is a product of one component from each vector.
+  puzzle:
+    - text: |
+        Three people rate four films. Twelve numbers, in a table.
+
+        | | Film 1 | Film 2 | Film 3 | Film 4 |
+        | --- | --- | --- | --- | --- |
+        | Person 1 | 2 | 4 | 6 | 2 |
+        | Person 2 | 1 | 2 | 3 | 1 |
+        | Person 3 | 3 | 6 | 9 | 3 |
+
+        Someone claims the table does not really hold twelve numbers. Give each person one number, how keen they are on films in general: 2, 1 and 3. Give each film one number, its appeal: 1, 2, 3 and 1. Then every rating is the person's number times the film's number. Seven numbers, and the whole table can be rebuilt. Run the starter and see.
+
+        Now change a single entry. Suppose person 2 gives film 3 a 5 where the table has a 3. Try to find seven numbers that rebuild the new table. You will not manage. No choice of three numbers for the people and four for the films will do it.
+
+        So some tables of twelve numbers are secretly seven, and some are not. For a table of a million users and a hundred thousand films the difference is between storing a hundred thousand million numbers and storing about a million.
+
+        **How much does a table really hold? Is there a number that measures it, and can it be computed? And does it matter whether you look at the table by its rows or by its columns?**
+  intuition:
+    - text: |
+        Look at the rows of the table. The second is $(1, 2, 3, 1)$. The first is twice that, and the third is three times it. Every row points along one direction in $\mathbb{R}^4$. As far as directions go, the table has **one** row, repeated at different strengths.
+
+        Look at the columns. The first is $(2, 1, 3)$. The second is twice that, the third three times, and the fourth is the same again. Every column points along one direction in $\mathbb{R}^3$. One column, repeated.
+
+        One independent row, and one independent column. That agreement is the first hint of something that will be proved: the two counts are **always** equal, for every matrix.
+
+        Think of the table as a map, taking four numbers to three. Its outputs are combinations of its columns, and all the columns lie along one line. So whatever goes in, what comes out lies on that line. The figure shows a smaller matrix of the same kind, taking the plane to the plane. Move the input about and watch the output.
+    - figure: null-space
+      props: { t: 1, s: 0 }
+    - text: |
+        The output never leaves the line through $(2, 1)$. Two numbers go in, and though two numbers come out, only one number's worth of information survives: how far along the line. Now press "Turn the columns apart". The second column leaves the line, the outputs fill the plane, and nothing is lost.
+
+        **The number of independent directions among the columns is how many dimensions the outputs fill.** For the first matrix it is 1, and for the second it is 2. That number is the rank. A table with rank 1 is a single pattern scaled, and can be stored as one column and one row. The altered table of the puzzle has two independent rows, so it holds more, and seven numbers cannot capture it.
+  derivation:
+    - text: |
+        **The definition.** The **rank** of a matrix $A$ is the largest number of its columns that form a linearly independent list. Equivalently, it is the number of columns you need to keep so that every other column is a combination of the kept ones, with none of the kept ones redundant.
+
+        For the table of ratings, any single non-zero column is an independent list, and any two columns are dependent. The rank is 1. For the identity matrix $I_n$, all $n$ columns are independent, and the rank is $n$. The zero matrix has rank 0.
+
+        **Computing it: count the pivots.** Here is a $3 \times 4$ matrix, and what elimination does to it.
+
+        $$A = \begin{pmatrix} 1 & 2 & 1 & 4 \\ 2 & 4 & 5 & 14 \\ 3 & 6 & 6 & 18 \end{pmatrix} \;\longrightarrow\; \begin{pmatrix} 1 & 2 & 1 & 4 \\ 0 & 0 & 3 & 6 \\ 0 & 0 & 0 & 0 \end{pmatrix} = U.$$
+
+        Row 2 minus twice row 1, row 3 minus three times row 1, then row 3 minus row 2. There are two pivots, in columns 1 and 3. The claim is that the rank of $A$ is 2, the number of pivots. Two things must be shown.
+
+        *Row operations do not change which columns are dependent.* A dependency among the columns of $A$ is a vector $\mathbf{c} \ne \mathbf{0}$ with $A\mathbf{c} = \mathbf{0}$. Elimination replaces $A$ by $EA$, with $E$ invertible. If $A\mathbf{c} = \mathbf{0}$ then $EA\mathbf{c} = \mathbf{0}$, and if $EA\mathbf{c} = \mathbf{0}$ then, multiplying by $E^{-1}$, $A\mathbf{c} = \mathbf{0}$. So $A$ and $U$ have **exactly the same dependencies** among their columns, coefficient for coefficient. A set of columns of $A$ is independent exactly when the same set of columns of $U$ is.
+
+        *In $U$, the count is plain.* The pivot columns, $(1, 0, 0)$ and $(1, 3, 0)$, are independent: in a combination equal to zero, the second row forces the coefficient of the second to vanish, and then the first row forces the other. Each remaining column is a combination of the pivot columns to its left. Column 2 is $2$ times column 1. Column 4 is $(4, 6, 0) = 2\,(1, 0, 0) + 2\,(1, 3, 0)$. So no third column can join the pivot columns without creating a dependency.
+
+        Put together: the largest independent set of columns has as many members as there are pivots, in $U$ and therefore in $A$. And the very same recipes hold in $A$. Column 2 of $A$ is twice column 1, and column 4 is 2 times column 1 plus 2 times column 3: $(2 + 2,\; 4 + 10,\; 6 + 12) = (4, 14, 18)$.
+
+        $$\text{rank}(A) = \text{number of pivots}.$$
+
+        This also answers a worry. Elimination involves choices: which rows to exchange, in what order. The **rank** was defined without any reference to elimination, so however you eliminate, you must find the same number of pivots.
+
+        **Rows give the same number.** Now count independent **rows**. Row operations replace rows by combinations of rows, and can be reversed, so the rows of $U$ are combinations of the rows of $A$ and the rows of $A$ are combinations of the rows of $U$. The two sets of rows have the same span, and the same number of independent members. In $U$, the non-zero rows are independent, by the same staircase argument read sideways: the first row is the only one with an entry in the first pivot column, so its coefficient must be zero, and so on down. And there is one non-zero row for each pivot. So
+
+        $$\text{number of independent rows} = \text{number of pivots} = \text{number of independent columns}.$$
+
+        In symbols, $\text{rank}(A^{\mathsf{T}}) = \text{rank}(A)$. This is not obvious and it is worth a moment's surprise. The matrix $A$ above has four columns, which are vectors in $\mathbb{R}^3$, and three rows, which are vectors in $\mathbb{R}^4$. Different vectors in different spaces. Yet exactly two of the columns are independent and exactly two of the rows are: row 3 is row 1 plus row 2.
+
+        **Bounds.** Each pivot has a row to itself and a column to itself. So for an $m \times n$ matrix,
+
+        $$\text{rank}(A) \le \min(m, n).$$
+
+        A matrix whose rank is as large as its shape allows is said to have **full rank**. For a square $n \times n$ matrix, full rank means $n$ pivots, which the last lesson showed to be the same as being invertible. **A square matrix is invertible exactly when its rank equals its size.**
+    - question:
+        id: derivation-same
+        type: choice
+        system: s2
+        prompt: |
+          Elimination turns $A$ into $U$, and in $U$ the fourth column equals 2 times the first plus 2 times the third. What can be said about the columns of $A$?
+        options:
+          - "Nothing. Row operations change the columns."
+          - "The fourth column of $A$ equals 2 times its first plus 2 times its third. Row operations change the columns but keep every dependency among them, with the same coefficients."
+          - "The fourth column of $A$ equals the fourth column of $U$."
+          - "The fourth row of $A$ is a combination of the first and third rows."
+        answer: 1
+        explanation: |
+          The statement about $U$ says $U\mathbf{c} = \mathbf{0}$ for $\mathbf{c} = (2, 0, 2, -1)$. Since $U = EA$ with $E$ invertible, $U\mathbf{c} = \mathbf{0}$ exactly when $A\mathbf{c} = \mathbf{0}$. So the same coefficients give a dependency among the columns of $A$. The columns themselves are different vectors after elimination: the span of the columns is generally **not** preserved by row operations. What is preserved is the set of relations among the columns. For the rows it is the other way about: their span is kept, and the particular rows are not.
+        hints:
+          - Write the dependency as U times a vector of coefficients.
+          - How are U and A related?
+          - Can an invertible matrix send a non-zero vector to zero?
+    - text: |
+        **Rank one.** Take non-zero vectors $\mathbf{u}$ with $m$ components and $\mathbf{v}$ with $n$. Their outer product $\mathbf{u}\mathbf{v}^{\mathsf{T}}$ is the $m \times n$ matrix with entries $u_iv_j$. Its column $j$ is $v_j\mathbf{u}$, a multiple of $\mathbf{u}$. Every column lies along one direction, so the rank is 1.
+
+        Conversely, if a matrix has rank 1, pick a non-zero column and call it $\mathbf{u}$. Every column is a multiple of it, say column $j$ is $v_j\mathbf{u}$. Then the matrix is $\mathbf{u}\mathbf{v}^{\mathsf{T}}$. So
+
+        $$\text{rank}(A) = 1 \iff A = \mathbf{u}\mathbf{v}^{\mathsf{T}} \text{ for some non-zero } \mathbf{u}, \mathbf{v}.$$
+
+        The table of ratings is $(2, 1, 3)$ times the row $(1, 2, 3, 1)$. It takes $m + n$ numbers to store where the full table has $mn$. The ordinary multiplication table is the most familiar matrix of rank 1: the column $1, 2, \dots, 9$ times the row $1, 2, \dots, 9$.
+
+        **Rank $r$: a sum of $r$ patterns.** The same idea works for any rank. Let $C$ hold the $r$ pivot columns of $A$. Every column of $A$ is a combination of them, so write the coefficients for column $j$ as column $j$ of an $r \times n$ matrix $R$. Then
+
+        $$A = CR, \qquad C \text{ of shape } m \times r, \quad R \text{ of shape } r \times n.$$
+
+        For the matrix above, $C$ has columns $(1, 2, 3)$ and $(1, 5, 6)$, and $R$ has rows $(1, 2, 0, 2)$ and $(0, 0, 1, 2)$. Reading the product as columns of $C$ against rows of $R$, it says that $A$ is the sum of $r$ outer products, each a matrix of rank 1.
+
+        Two consequences. For **storage**: $r(m + n)$ numbers in place of $mn$. For **meaning**: the map $\mathbf{x} \mapsto A\mathbf{x}$ factors as $\mathbf{x} \mapsto R\mathbf{x} \mapsto C(R\mathbf{x})$. The input, however many numbers it has, is first squeezed to $r$ numbers, and the output is built from those $r$ alone. **A matrix of rank $r$ is a map that passes through a bottleneck of width $r$.**
+
+        **The rank of a product.** For any matrices that can be multiplied,
+
+        $$\text{rank}(AB) \le \text{rank}(A) \qquad \text{and} \qquad \text{rank}(AB) \le \text{rank}(B).$$
+
+        For the first: each column of $AB$ is $A$ applied to a column of $B$, hence a combination of the columns of $A$. So the columns of $AB$ lie in the span of the columns of $A$, and no more of them can be independent than of the columns of $A$. For the second, transpose: $\text{rank}(AB) = \text{rank}(B^{\mathsf{T}}A^{\mathsf{T}}) \le \text{rank}(B^{\mathsf{T}}) = \text{rank}(B)$. **Multiplying can lose rank and can never create it.** Information destroyed by one map is not restored by the next.
+
+        This has a direct reading for networks. Put a layer of 10 neurons between two layers of 1000. With nothing nonlinear between, the composition is $W_2W_1$, a $1000 \times 1000$ matrix that looks as if it had a million free entries. Its rank is at most 10.
+
+        **A promise kept.** For square matrices, $BA = I$ implies $AB = I$. *Proof.* Suppose $BA = I$. If $A\mathbf{c} = \mathbf{0}$ then $\mathbf{c} = BA\mathbf{c} = B\mathbf{0} = \mathbf{0}$, so the columns of $A$ are independent. $A$ is square with full rank, so it is invertible. Then $B = B(AA^{-1}) = (BA)A^{-1} = A^{-1}$, and so $AB = AA^{-1} = I$. $\blacksquare$ The squareness was used where full rank gave invertibility. For a tall matrix the columns can be independent with rows to spare, and the argument stops there.
+
+        **Rank and data.** Let $X$ be a design matrix with one column for each feature. Its rank is the number of features that carry information not already carried by the others. For the flats with rooms, bathrooms and their total, the rank is 2, though there are 3 columns. **Rank below the number of columns is redundancy among the features**, and it is what left the weights undetermined.
+
+        The table of dot products has the same rank: $\text{rank}(X^{\mathsf{T}}X) = \text{rank}(X)$. The reason is a pretty use of the transpose. If $X\mathbf{c} = \mathbf{0}$ then certainly $X^{\mathsf{T}}X\mathbf{c} = \mathbf{0}$. And if $X^{\mathsf{T}}X\mathbf{c} = \mathbf{0}$, then $\mathbf{c}^{\mathsf{T}}X^{\mathsf{T}}X\mathbf{c} = 0$, which is $\lVert X\mathbf{c} \rVert^2 = 0$, so $X\mathbf{c} = \mathbf{0}$. The two matrices have the same dependencies among their columns, and the same number of columns, so the same rank. Hence the square system $X^{\mathsf{T}}X\,\mathbf{w} = X^{\mathsf{T}}\mathbf{y}$ for the best weights has exactly one solution precisely when the features are independent.
+
+        **A caution about real numbers.** Measured data is never exactly redundant. Add a little noise to the table of ratings and its rank, by the definition, jumps from 1 to 3, though it is still almost entirely one pattern. The exact rank is a brittle number. What practice needs is a way to say "this matrix is very nearly of rank 1", and to find the nearest matrix of low rank. That needs tools from later clusters. The idea you have now, a table as a sum of a few patterns, is what those tools make precise, and it is the basis of compression, of recommendation systems, and of the cheap ways of adjusting a large trained model by adding a low-rank matrix to each of its weight matrices.
+    - question:
+        id: order-inverse
+        type: order
+        system: s2
+        prompt: Put the steps in order to prove that for square matrices $A$ and $B$, if $BA = I$ then $AB = I$.
+        steps:
+          - 'Suppose $A\mathbf{c} = \mathbf{0}$. Multiplying by $B$ gives $\mathbf{c} = BA\mathbf{c} = \mathbf{0}$.'
+          - 'So only the zero vector is sent to zero, which means the columns of $A$ are independent.'
+          - 'A square matrix with independent columns has full rank and is therefore invertible.'
+          - 'Multiply $BA = I$ on the right by $A^{-1}$: $B = A^{-1}$.'
+          - 'Hence $AB = AA^{-1} = I$.'
+        explanation: The proof first uses $BA = I$ to show that $A$ loses nothing, then uses squareness to turn "loses nothing" into "invertible", and only then may it speak of $A^{-1}$ and identify $B$ with it. The inverse cannot be used before it is known to exist, which is why the step about rank must come before the multiplication by $A^{-1}$.
+        hints:
+          - Begin by showing what BA = I says about vectors that A sends to zero.
+          - The inverse of A may be used only after A is known to be invertible.
+          - The conclusion AB = I comes last.
+  formal:
+    - text: |
+        **Rank.** The rank of $A$ is the largest number of linearly independent columns of $A$.
+
+        **Pivots.** The rank equals the number of pivots found by elimination, however it is carried out. Row operations preserve every linear relation among the columns, and preserve the span of the rows.
+
+        **Rows.** $\text{rank}(A^{\mathsf{T}}) = \text{rank}(A)$: the largest number of independent rows equals the largest number of independent columns.
+
+        **Bounds.** For $A$ of shape $m \times n$, $\text{rank}(A) \le \min(m, n)$. A square matrix of size $n$ is invertible exactly when its rank is $n$.
+
+        **Rank one.** $\text{rank}(A) = 1$ exactly when $A = \mathbf{u}\mathbf{v}^{\mathsf{T}}$ with $\mathbf{u}, \mathbf{v}$ non-zero.
+
+        **Factorisation.** A matrix of rank $r$ can be written $A = CR$ with $C$ of shape $m \times r$ and $R$ of shape $r \times n$, a sum of $r$ matrices of rank 1.
+
+        **Products.** $\text{rank}(AB) \le \min(\text{rank}(A), \text{rank}(B))$.
+
+        **Table of dot products.** $\text{rank}(A^{\mathsf{T}}A) = \text{rank}(A)$.
+  drill:
+    - text: Seconds each. Count the directions that are really different.
+    - question:
+        id: drill-multiple
+        type: numeric
+        system: s1
+        prompt: |
+          What is the rank of the matrix with rows $(1, 2)$ and $(2, 4)$?
+        answer: "1"
+        explanation: The second row is twice the first, and the second column is twice the first. One independent direction.
+        hints:
+          - Compare the two rows.
+          - Is the matrix zero?
+    - question:
+        id: drill-identity
+        type: numeric
+        system: s1
+        prompt: |
+          What is the rank of the $3 \times 3$ identity matrix?
+        answer: "3"
+        explanation: Its columns are the three unit vectors, which are independent.
+        hints:
+          - What are its columns?
+          - Are they independent?
+    - question:
+        id: drill-zero
+        type: numeric
+        system: s1
+        prompt: |
+          What is the rank of the $2 \times 2$ matrix of zeros?
+        answer: "0"
+        explanation: It has no non-zero column, so not even one column forms an independent list.
+        hints:
+          - Is a list containing only the zero vector independent?
+          - How many pivots would elimination find?
+    - question:
+        id: drill-wide
+        type: numeric
+        system: s1
+        prompt: |
+          What is the rank of the matrix with rows $(1, 0, 0)$ and $(0, 1, 0)$?
+        answer: "2"
+        explanation: It is already in reduced form, with pivots in columns 1 and 2.
+        hints:
+          - Count the pivots.
+          - The third column is zero and adds nothing.
+    - question:
+        id: drill-max
+        type: numeric
+        system: s1
+        prompt: |
+          What is the largest possible rank of a matrix with 3 rows and 5 columns?
+        answer: "3"
+        explanation: The rank is at most the smaller of the number of rows and the number of columns.
+        hints:
+          - Each pivot needs a row of its own.
+          - Take the smaller of 3 and 5.
+    - question:
+        id: drill-outer
+        type: numeric
+        system: s1
+        prompt: |
+          $\mathbf{u} = (2, 1, 3)$ and $\mathbf{v} = (1, 2, 3, 1)$. What is the rank of $\mathbf{u}\mathbf{v}^{\mathsf{T}}$?
+        answer: "1"
+        explanation: Every column of an outer product is a multiple of u.
+        hints:
+          - What is each column of the outer product?
+          - How many independent directions do multiples of one vector have?
+    - question:
+        id: drill-invertible
+        type: choice
+        system: s1
+        prompt: |
+          A $4 \times 4$ matrix has rank 3. Is it invertible?
+        options: ["Yes", "No, a square matrix is invertible only when its rank equals its size", "Only if it is symmetric", "It cannot be told"]
+        answer: 1
+        explanation: Rank 3 means one column has no pivot, so some non-zero vector is sent to zero.
+        hints:
+          - How many pivots does an invertible 4 by 4 matrix have?
+          - Compare the rank with the size.
+    - question:
+        id: drill-storage
+        type: numeric
+        system: s1
+        prompt: |
+          A table with 100 rows and 200 columns has rank 1 and is stored as one column and one row. How many numbers is that?
+        answer: "300"
+        explanation: A column of 100 numbers and a row of 200. The full table would need 20000.
+        hints:
+          - How many numbers are in the column?
+          - How many are in the row?
+    - question:
+        id: drill-sum-row
+        type: numeric
+        system: s1
+        prompt: |
+          What is the rank of the matrix with rows $(1, 2, 3)$, $(4, 5, 6)$ and $(5, 7, 9)$?
+        answer: "2"
+        explanation: The third row is the sum of the first two, and the first two are not multiples of each other.
+        hints:
+          - Add the first two rows.
+          - Are the first two rows multiples of each other?
+    - question:
+        id: drill-transpose
+        type: choice
+        system: s1
+        prompt: |
+          How does the rank of $A^{\mathsf{T}}$ compare with the rank of $A$?
+        options: ["It is always equal", "It is always smaller", "It is equal only for square matrices", "It is the number of rows minus the rank of A"]
+        answer: 0
+        explanation: The number of independent rows equals the number of independent columns.
+        hints:
+          - The columns of the transpose are the rows of A.
+          - What did the count of pivots show about rows and columns?
+    - question:
+        id: drill-product
+        type: choice
+        system: s1
+        prompt: |
+          $A$ has rank 5 and $B$ has rank 2. The rank of $AB$ is
+        options: ["exactly 10", "exactly 7", "at most 2", "at least 5"]
+        answer: 2
+        explanation: A product has rank at most the smaller of the ranks of its factors.
+        hints:
+          - Can multiplying create rank?
+          - Take the smaller of the two ranks.
+    - question:
+        id: drill-full
+        type: numeric
+        system: s1
+        prompt: |
+          What is the rank of the matrix with rows $(1, 1)$ and $(1, -1)$?
+        answer: "2"
+        explanation: ad − bc = −1 − 1 = −2, which is not zero, so the columns are independent.
+        hints:
+          - Compute ad − bc.
+          - A non-zero value means the columns are independent.
+    - question:
+        id: drill-rows
+        type: numeric
+        system: s1
+        prompt: |
+          A matrix with 5 rows and 3 columns has rank 3. How many of its rows can be chosen to form an independent list, at most?
+        answer: "3"
+        explanation: The largest number of independent rows equals the rank. Two of the five rows are combinations of the others.
+        hints:
+          - The row count and the column count agree.
+          - Both equal the rank.
+    - question:
+        id: predict-outer
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          u = [2, 1, 3]
+          v = [1, 2, 3, 1]
+          T = [[a * b for b in v] for a in u]
+
+          print(T[0])
+          print(T[2])
+          print(len(T), len(T[0]))
+        output: |
+          [2, 4, 6, 2]
+          [3, 6, 9, 3]
+          3 4
+        explanation: Each row of the table is v scaled by one component of u. The first row is 2 times v and the third is 3 times v. Seven numbers have produced a table of twelve.
+        hints:
+          - The outer comprehension makes one row for each component of u.
+          - Each row is v multiplied by that component.
+    - question:
+        id: predict-pivots
+        type: predict
+        system: s1
+        prompt: A matrix already reduced by elimination. What does this show?
+        code: |
+          U = [[1, 2, 1, 4], [0, 0, 3, 6], [0, 0, 0, 0]]
+          pivots = []
+
+          for row in U:
+              for j in range(len(row)):
+                  if row[j] != 0:
+                      pivots.append(j)
+                      break
+
+          print(pivots, len(pivots))
+        output: "[0, 2] 2"
+        explanation: For each row the inner loop finds the position of its first non-zero entry and stops. The first row gives position 0, the second position 2, and the row of zeros gives nothing. Two pivots, so the rank is 2.
+        hints:
+          - break leaves the inner loop at the first non-zero entry of a row.
+          - A row of zeros never reaches the append.
+  work:
+    - text: Slower now. The rank is a count, and counts are best found by elimination, not by eye.
+    - question:
+        id: write-rank
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `rank(A)` for a matrix stored as a non-empty list of rows. Return its rank, found by elimination: count the pivots.
+
+          Go through the columns from the left, keeping track of the row where the next pivot will go. In each column, look from that row down for the entry of largest size. If it is larger in size than `1e-9`, exchange it into place, clear the entries below it, and move the pivot row down by one. Otherwise the column has no pivot: go on to the next column **without** moving down. Do not change `A`.
+        starter: |
+          def rank(A):
+              # Replace the next line with your own.
+              return 0
+
+          print(rank([[1, 2, 1, 4], [2, 4, 5, 14], [3, 6, 6, 18]]))
+        solution: |
+          def rank(A):
+              rows = [list(row) for row in A]
+              m = len(rows)
+              n = len(rows[0])
+              r = 0
+              for k in range(n):
+                  if r < m:
+                      best = r
+                      for i in range(r + 1, m):
+                          if abs(rows[i][k]) > abs(rows[best][k]):
+                              best = i
+                      if abs(rows[best][k]) > 1e-9:
+                          rows[r], rows[best] = rows[best], rows[r]
+                          for i in range(r + 1, m):
+                              mult = rows[i][k] / rows[r][k]
+                              rows[i] = [a - mult * p for a, p in zip(rows[i], rows[r])]
+                          r += 1
+              return r
+
+          print(rank([[1, 2, 1, 4], [2, 4, 5, 14], [3, 6, 6, 18]]))
+        tests: |
+          assert rank([[1, 2, 1, 4], [2, 4, 5, 14], [3, 6, 6, 18]]) == 2, "This 3 by 4 matrix has pivots in columns 1 and 3, so its rank is 2"
+          assert rank([[2, 4, 6, 2], [1, 2, 3, 1], [3, 6, 9, 3]]) == 1, "The table of ratings has rank 1"
+          assert rank([[2, 4, 6, 2], [1, 2, 5, 1], [3, 6, 9, 3]]) == 2, "With one rating changed, the table has rank 2"
+          assert rank([[1, 0, 0], [0, 1, 0], [0, 0, 1]]) == 3, "The identity matrix of size 3 has rank 3"
+          assert rank([[0, 0], [0, 0]]) == 0, "The zero matrix has rank 0"
+          assert rank([[0, 1], [1, 0]]) == 2, "The first pivot position holds 0, and after an exchange there are two pivots"
+          assert rank([[0, 0], [0, 1]]) == 1, "The first column has no pivot. The second has one"
+          assert rank([[1, 2, 1], [2, 4, 3]]) == 2, "The second column has no pivot, and the third still does. Do not move down a row for a column without a pivot"
+          assert rank([[3, 1, 4], [2, 1, 3], [4, 2, 6], [1, 1, 2]]) == 2, "The flats with rooms, bathrooms and their total: 3 columns, rank 2"
+          assert rank([[3, 1], [2, 1], [4, 2], [1, 1]]) == 2, "The flats with rooms and bathrooms only: rank 2"
+          assert rank([[1, 2, 3], [4, 5, 6], [7, 8, 9]]) == 2, "The rows [1, 2, 3], [4, 5, 6], [7, 8, 9] have rank 2"
+          assert rank([[5]]) == 1, "A single non-zero entry has rank 1"
+          assert rank([[1, 2, 3, 4, 5]]) == 1, "A single non-zero row has rank 1"
+          _A = [[1, 2], [3, 4]]
+          rank(_A)
+          assert _A == [[1, 2], [3, 4]], "The function must not change the matrix it was given"
+          assert output.strip() == "2", "The program should print 2"
+        wrong:
+          - |
+            def rank(A):
+                rows = [list(row) for row in A]
+                m = len(rows)
+                n = len(rows[0])
+                r = 0
+                for k in range(min(m, n)):
+                    best = k
+                    for i in range(k + 1, m):
+                        if abs(rows[i][k]) > abs(rows[best][k]):
+                            best = i
+                    if abs(rows[best][k]) > 1e-9:
+                        rows[k], rows[best] = rows[best], rows[k]
+                        for i in range(k + 1, m):
+                            mult = rows[i][k] / rows[k][k]
+                            rows[i] = [a - mult * p for a, p in zip(rows[i], rows[k])]
+                        r += 1
+                return r
+
+            print(2)
+          - |
+            def rank(A):
+                return len([row for row in A if any([abs(v) > 1e-9 for v in row])])
+
+            print(2)
+          - |
+            def rank(A):
+                return min(len(A), len(A[0]))
+
+            print(2)
+          - |
+            def rank(A):
+                rows = [list(row) for row in A]
+                m = len(rows)
+                n = len(rows[0])
+                r = 0
+                for k in range(n):
+                    if r < m:
+                        if abs(rows[r][k]) > 1e-9:
+                            for i in range(r + 1, m):
+                                mult = rows[i][k] / rows[r][k]
+                                rows[i] = [a - mult * p for a, p in zip(rows[i], rows[r])]
+                            r += 1
+                return r
+
+            print(2)
+          - |
+            def rank(A):
+                m = len(A)
+                n = len(A[0])
+                r = 0
+                for k in range(n):
+                    if r < m:
+                        best = r
+                        for i in range(r + 1, m):
+                            if abs(A[i][k]) > abs(A[best][k]):
+                                best = i
+                        if abs(A[best][k]) > 1e-9:
+                            A[r], A[best] = A[best], A[r]
+                            for i in range(r + 1, m):
+                                mult = A[i][k] / A[r][k]
+                                A[i] = [a - mult * p for a, p in zip(A[i], A[r])]
+                            r += 1
+                return r
+
+            print(2)
+        explanation: |
+          This is the elimination of the last lesson with one change, and the change is the whole point. There, the pivot for column `k` was sought in row `k`, because a square system with one solution has its pivots on the diagonal. Here a column may have no pivot at all, and then the next pivot must be sought in the **same row**, one column further on. So the row counter `r` and the column counter `k` move separately, and `r` advances only when a pivot is found. The final value of `r` is the number of pivots. Counting the non-zero rows of the original matrix, or taking the smaller of its two sizes, gives only an upper bound. The tolerance stands in for "is zero", since after a few subtractions with floats an entry that should be exactly 0 seldom is.
+        hints:
+          - Copy the rows first, so that the caller's matrix is untouched.
+          - Keep two counters, the pivot row r and the column k. Search column k from row r down.
+          - If a pivot is found, exchange it up, clear below it and add 1 to r. If not, do nothing and let k move on.
+    - question:
+        id: write-rank-one
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `is_rank_one(A)` for a matrix of whole numbers stored as a non-empty list of rows. Return `True` exactly when the rank of `A` is 1.
+
+          Do it without elimination. A matrix has rank 1 exactly when it is not the zero matrix and **every two** of its columns are dependent. Two vectors $\mathbf{p}$ and $\mathbf{q}$ are dependent exactly when $(\mathbf{p} \cdot \mathbf{q})^2 = (\mathbf{p} \cdot \mathbf{p})(\mathbf{q} \cdot \mathbf{q})$, the equality case of the Cauchy-Schwarz inequality.
+        starter: |
+          def is_rank_one(A):
+              # Replace the next line with your own.
+              return True
+
+          print(is_rank_one([[2, 4, 6, 2], [1, 2, 3, 1], [3, 6, 9, 3]]), is_rank_one([[2, 4, 6, 2], [1, 2, 5, 1], [3, 6, 9, 3]]))
+        solution: |
+          def is_rank_one(A):
+              n = len(A[0])
+              columns = [[row[j] for row in A] for j in range(n)]
+              if all([all([v == 0 for v in column]) for column in columns]):
+                  return False
+              for i in range(n):
+                  for j in range(i + 1, n):
+                      pq = sum([a * b for a, b in zip(columns[i], columns[j])])
+                      pp = sum([a * a for a in columns[i]])
+                      qq = sum([b * b for b in columns[j]])
+                      if pq * pq != pp * qq:
+                          return False
+              return True
+
+          print(is_rank_one([[2, 4, 6, 2], [1, 2, 3, 1], [3, 6, 9, 3]]), is_rank_one([[2, 4, 6, 2], [1, 2, 5, 1], [3, 6, 9, 3]]))
+        tests: |
+          assert is_rank_one([[2, 4, 6, 2], [1, 2, 3, 1], [3, 6, 9, 3]]) is True, "The table of ratings has rank 1"
+          assert is_rank_one([[2, 4, 6, 2], [1, 2, 5, 1], [3, 6, 9, 3]]) is False, "With one rating changed, the third column is no longer a multiple of the first"
+          assert is_rank_one([[1, 2], [2, 4]]) is True, "Rows [1, 2] and [2, 4]: every column is a multiple of [1, 2]"
+          assert is_rank_one([[1, 0], [0, 1]]) is False, "The identity matrix has rank 2"
+          assert is_rank_one([[0, 0], [0, 0]]) is False, "The zero matrix has rank 0, not 1"
+          assert is_rank_one([[0, 0, 0], [0, 5, 0]]) is True, "A single non-zero entry gives rank 1, with zero columns on either side of it"
+          assert is_rank_one([[1, 0, 0], [0, 0, 1]]) is False, "The first and third columns are independent, though each is dependent with the zero column between them"
+          assert is_rank_one([[3]]) is True, "A single non-zero number has rank 1"
+          assert is_rank_one([[1, 2, 3]]) is True, "A single non-zero row has rank 1"
+          assert is_rank_one([[1], [2], [3]]) is True, "A single non-zero column has rank 1"
+          assert is_rank_one([[1, -1], [-1, 1], [2, -2]]) is True, "The second column is minus the first"
+          assert is_rank_one([[1, 2, 3], [2, 4, 7]]) is False, "The third column breaks the pattern of the first two"
+          assert output.strip() == "True False", "The program should print True False"
+        wrong:
+          - |
+            def is_rank_one(A):
+                n = len(A[0])
+                columns = [[row[j] for row in A] for j in range(n)]
+                for i in range(n):
+                    for j in range(i + 1, n):
+                        pq = sum([a * b for a, b in zip(columns[i], columns[j])])
+                        pp = sum([a * a for a in columns[i]])
+                        qq = sum([b * b for b in columns[j]])
+                        if pq * pq != pp * qq:
+                            return False
+                return True
+
+            print(True, False)
+          - |
+            def is_rank_one(A):
+                n = len(A[0])
+                columns = [[row[j] for row in A] for j in range(n)]
+                if all([all([v == 0 for v in column]) for column in columns]):
+                    return False
+                for i in range(n - 1):
+                    pq = sum([a * b for a, b in zip(columns[i], columns[i + 1])])
+                    pp = sum([a * a for a in columns[i]])
+                    qq = sum([b * b for b in columns[i + 1]])
+                    if pq * pq != pp * qq:
+                        return False
+                return True
+
+            print(True, False)
+          - |
+            def is_rank_one(A):
+                if len(A) < 2 or len(A[0]) < 2:
+                    return any([v != 0 for row in A for v in row])
+                if all([v == 0 for row in A for v in row]):
+                    return False
+                return A[0][0] * A[1][1] == A[0][1] * A[1][0]
+
+            print(True, False)
+          - |
+            def is_rank_one(A):
+                n = len(A[0])
+                columns = [[row[j] for row in A] for j in range(n)]
+                if any([all([v == 0 for v in column]) for column in columns]):
+                    return False
+                for i in range(n):
+                    for j in range(i + 1, n):
+                        pq = sum([a * b for a, b in zip(columns[i], columns[j])])
+                        pp = sum([a * a for a in columns[i]])
+                        qq = sum([b * b for b in columns[j]])
+                        if pq * pq != pp * qq:
+                            return False
+                return True
+
+            print(True, False)
+          - |
+            def is_rank_one(A):
+                n = len(A[0])
+                columns = [[row[j] for row in A] for j in range(n)]
+                if all([all([v == 0 for v in column]) for column in columns]):
+                    return False
+                for i in range(n):
+                    for j in range(i + 1, n):
+                        pq = sum([a * b for a, b in zip(columns[i], columns[j])])
+                        if pq == 0:
+                            return False
+                return True
+
+            print(True, False)
+        explanation: |
+          Rank 1 means there is a non-zero column and every other column is a multiple of it. If every two columns are dependent, then each column is dependent with that non-zero one, and so is a multiple of it. So checking all pairs is enough, and the test for a pair is the one you wrote when independence was first defined: three dot products and a comparison, exact for whole numbers. Checking only neighbouring columns is not enough, because a zero column is dependent with everything and can sit between two independent ones. The zero matrix passes every pair test and has rank 0, so it is excluded at the start. This direct test works for rank 1 only. For higher ranks the question "are these three columns independent?" cannot be settled pair by pair, and elimination is needed.
+        hints:
+          - Collect the columns. If every entry of every column is zero, return False.
+          - For each pair of columns compute p · q, p · p and q · q.
+          - If (p · q) squared differs from (p · p)(q · q) for any pair, return False.
+    - question:
+        id: fix-redundant
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `redundant(X)` should return `True` exactly when a design matrix `X`, with one row for each example and one column for each feature, has redundant features: some feature is a combination of the others. The flats with rooms and bathrooms have no redundancy, so the program should print `False`. It prints `True`. `rank` is correct. Fix `redundant`.
+        starter: |
+          def rank(A):
+              rows = [list(row) for row in A]
+              m = len(rows)
+              n = len(rows[0])
+              r = 0
+              for k in range(n):
+                  if r < m:
+                      best = r
+                      for i in range(r + 1, m):
+                          if abs(rows[i][k]) > abs(rows[best][k]):
+                              best = i
+                      if abs(rows[best][k]) > 1e-9:
+                          rows[r], rows[best] = rows[best], rows[r]
+                          for i in range(r + 1, m):
+                              mult = rows[i][k] / rows[r][k]
+                              rows[i] = [a - mult * p for a, p in zip(rows[i], rows[r])]
+                          r += 1
+              return r
+
+          def redundant(X):
+              return rank(X) < len(X)
+
+          print(redundant([[3, 1], [2, 1], [4, 2], [1, 1]]))
+        solution: |
+          def rank(A):
+              rows = [list(row) for row in A]
+              m = len(rows)
+              n = len(rows[0])
+              r = 0
+              for k in range(n):
+                  if r < m:
+                      best = r
+                      for i in range(r + 1, m):
+                          if abs(rows[i][k]) > abs(rows[best][k]):
+                              best = i
+                      if abs(rows[best][k]) > 1e-9:
+                          rows[r], rows[best] = rows[best], rows[r]
+                          for i in range(r + 1, m):
+                              mult = rows[i][k] / rows[r][k]
+                              rows[i] = [a - mult * p for a, p in zip(rows[i], rows[r])]
+                          r += 1
+              return r
+
+          def redundant(X):
+              return rank(X) < len(X[0])
+
+          print(redundant([[3, 1], [2, 1], [4, 2], [1, 1]]))
+        tests: |
+          assert redundant([[3, 1], [2, 1], [4, 2], [1, 1]]) is False, "Rooms and bathrooms are independent features: 2 columns, rank 2"
+          assert redundant([[3, 1, 4], [2, 1, 3], [4, 2, 6], [1, 1, 2]]) is True, "With the total added there are 3 columns and rank 2"
+          assert redundant([[1, 0], [0, 1]]) is False, "Two independent features on two examples"
+          assert redundant([[1, 2], [2, 4], [3, 6]]) is True, "The second feature is twice the first"
+          assert redundant([[1, 2, 3], [4, 5, 6]]) is True, "Three features on two examples are always redundant: the rank is at most 2"
+          assert redundant([[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]]) is False, "Three independent features on four examples"
+          assert redundant([[1, 1], [1, 1], [1, 1]]) is True, "Two identical features"
+          assert redundant([[2], [3], [4]]) is False, "A single non-zero feature is not redundant"
+          assert output.strip() == "False", "The program should print False"
+        wrong:
+          - |
+            def rank(A):
+                rows = [list(row) for row in A]
+                m = len(rows)
+                n = len(rows[0])
+                r = 0
+                for k in range(n):
+                    if r < m:
+                        best = r
+                        for i in range(r + 1, m):
+                            if abs(rows[i][k]) > abs(rows[best][k]):
+                                best = i
+                        if abs(rows[best][k]) > 1e-9:
+                            rows[r], rows[best] = rows[best], rows[r]
+                            for i in range(r + 1, m):
+                                mult = rows[i][k] / rows[r][k]
+                                rows[i] = [a - mult * p for a, p in zip(rows[i], rows[r])]
+                            r += 1
+                return r
+
+            def redundant(X):
+                return rank(X) < len(X)
+
+            print(False)
+          - |
+            def redundant(X):
+                return len(X[0]) > len(X)
+
+            print(False)
+          - |
+            def rank(A):
+                rows = [list(row) for row in A]
+                m = len(rows)
+                n = len(rows[0])
+                r = 0
+                for k in range(n):
+                    if r < m:
+                        best = r
+                        for i in range(r + 1, m):
+                            if abs(rows[i][k]) > abs(rows[best][k]):
+                                best = i
+                        if abs(rows[best][k]) > 1e-9:
+                            rows[r], rows[best] = rows[best], rows[r]
+                            for i in range(r + 1, m):
+                                mult = rows[i][k] / rows[r][k]
+                                rows[i] = [a - mult * p for a, p in zip(rows[i], rows[r])]
+                            r += 1
+                return r
+
+            def redundant(X):
+                return rank(X) < min(len(X), len(X[0]))
+
+            print(False)
+          - |
+            def rank(A):
+                rows = [list(row) for row in A]
+                m = len(rows)
+                n = len(rows[0])
+                r = 0
+                for k in range(n):
+                    if r < m:
+                        best = r
+                        for i in range(r + 1, m):
+                            if abs(rows[i][k]) > abs(rows[best][k]):
+                                best = i
+                        if abs(rows[best][k]) > 1e-9:
+                            rows[r], rows[best] = rows[best], rows[r]
+                            for i in range(r + 1, m):
+                                mult = rows[i][k] / rows[r][k]
+                                rows[i] = [a - mult * p for a, p in zip(rows[i], rows[r])]
+                            r += 1
+                return r
+
+            def redundant(X):
+                return rank(X) != len(X[0]) or len(X) != len(X[0])
+
+            print(False)
+        explanation: |
+          The starter compared the rank with `len(X)`, the number of **rows**, which is the number of examples. Redundancy is a property of the features, the columns: the columns are independent exactly when the rank equals their number, `len(X[0])`. With four flats and two independent features the rank is 2, below the number of rows, and the starter called that redundant. Having more examples than features is the ordinary, healthy state of a data set, and the spare rows are not a fault. Comparing with the smaller of the two sizes fails the other way: three features on two examples reach the largest rank possible, 2, and are redundant all the same, since three columns cannot be independent with rank 2.
+        hints:
+          - "What does len(X) count, examples or features?"
+          - The columns are independent when the rank equals the number of what?
+          - Compare the rank with len(X[0]).
+    - question:
+        id: work-bottleneck
+        type: numeric
+        system: s2
+        prompt: |
+          A model multiplies its input by $W_1$, of shape $10 \times 1000$, and the result by $W_2$, of shape $1000 \times 10$, with nothing between them. The product $W_2W_1$ is a $1000 \times 1000$ matrix. What is the largest rank it can have?
+        answer: "10"
+        explanation: |
+          The rank of a product is at most the rank of each factor, and each factor has rank at most the smaller of its two sizes, which is 10. Seen as a map: $W_1$ squeezes a thousand numbers into ten, and whatever $W_2$ does afterwards, its output is determined by those ten. The thousand output components are all combinations of just 10 columns. So although $W_2W_1$ has a million entries, it could be stored as the two factors, with $10000 + 10000$ numbers.
+        hints:
+          - What is the largest possible rank of the first matrix, given its two sizes?
+          - Can multiplying by another matrix raise the rank?
+          - The rank is limited by the narrowest point the numbers pass through.
+    - question:
+        id: work-rows-columns
+        type: choice
+        system: s2
+        prompt: |
+          A table of ratings has 3 rows, one for each person, and 4 columns, one for each film. Exactly two of its rows are independent. How many of its columns are independent, at most?
+        options:
+          - "Four, since the columns are different vectors from the rows."
+          - "Three, since the columns have three components."
+          - "Two. The largest number of independent columns always equals the largest number of independent rows."
+          - "It cannot be known without the entries."
+        answer: 2
+        explanation: |
+          The number of independent rows is the number of pivots, and so is the number of independent columns. Both are the rank, which here is 2. In terms of the ratings: if every person's row is a mixture of two basic taste profiles, then every film's column is a mixture of two basic appeal profiles. The table can be written as a $3 \times 2$ matrix times a $2 \times 4$ matrix, and that one factorisation shows both facts together: each row is a combination of the two rows of the second factor, and each column a combination of the two columns of the first.
+        hints:
+          - What number equals the count of independent rows?
+          - What number equals the count of independent columns?
+          - Both are counts of pivots.
+    - question:
+        id: work-adapter
+        type: choice
+        system: s2
+        prompt: |
+          A trained model has a weight matrix $W$ of shape $1000 \times 1000$. To adjust it cheaply, $W$ is frozen and a correction $BA$ is added, with $B$ of shape $1000 \times 8$ and $A$ of shape $8 \times 1000$, and only $A$ and $B$ are trained. Which statement is right?
+        options:
+          - "The correction has a million free numbers, like $W$."
+          - "The correction is a $1000 \\times 1000$ matrix of rank at most 8, described by 16000 numbers. It can change the layer's output only within the span of the 8 columns of $B$."
+          - "The correction has rank 1000."
+          - "The correction cannot be added to $W$, since the shapes differ."
+        answer: 1
+        explanation: |
+          $BA$ has shape $1000 \times 1000$, the same as $W$, so the two can be added. Its rank is at most 8, the width of the bottleneck. $B$ has 8000 entries and $A$ has 8000, against a million in $W$. Every output of the correction is $B$ applied to a vector of 8 numbers, a combination of the 8 columns of $B$. The bet behind the method is that the change a model needs for a new task is close to low rank, even though the weights themselves are not. It is the idea of the puzzle, a large table that secretly holds few numbers, used on purpose.
+        hints:
+          - What is the shape of B times A?
+          - How many entries have B and A together?
+          - What bounds the rank of a product?
+    - question:
+        id: work-gram
+        type: choice
+        system: s2
+        prompt: |
+          Suppose $X^{\mathsf{T}}X\mathbf{c} = \mathbf{0}$. Which argument shows that $X\mathbf{c} = \mathbf{0}$?
+        options:
+          - "Multiply both sides by the inverse of $X^{\\mathsf{T}}$."
+          - "Multiply on the left by $\\mathbf{c}^{\\mathsf{T}}$: then $\\mathbf{c}^{\\mathsf{T}}X^{\\mathsf{T}}X\\mathbf{c} = 0$, which is $(X\\mathbf{c}) \\cdot (X\\mathbf{c}) = \\lVert X\\mathbf{c} \\rVert^2 = 0$, and only the zero vector has length zero."
+          - "$X^{\\mathsf{T}}X$ is symmetric, so $\\mathbf{c}$ must be zero."
+          - "It does not follow."
+        answer: 1
+        explanation: |
+          $X^{\mathsf{T}}$ is usually not square and has no inverse, so the first argument is not available. The second works for any $X$. $\mathbf{c}^{\mathsf{T}}X^{\mathsf{T}}$ is the transpose of $X\mathbf{c}$, so $\mathbf{c}^{\mathsf{T}}X^{\mathsf{T}}X\mathbf{c}$ is the dot product of $X\mathbf{c}$ with itself, its squared length. A squared length of zero forces the vector to be zero. Together with the obvious converse, this shows that $X$ and $X^{\mathsf{T}}X$ send exactly the same vectors to zero, so they have the same rank. The practical meaning: the system for the best-fitting weights is singular exactly when the features are redundant, and for no other reason.
+        hints:
+          - The transpose of X has no inverse in general.
+          - What is the transpose of Xc?
+          - A row times a column is a dot product, and a vector dotted with itself is its squared length.
+  connections:
+    - text: |
+        A table of twelve ratings could be rebuilt from seven numbers, because every row was a multiple of one row and every column a multiple of one column. Change one entry and it could not. What separates the two tables is the rank: the largest number of independent columns, which elimination finds by counting pivots, however it is carried out, because row operations keep every relation among the columns.
+
+        The rows give the same count. That is the fact of this lesson that is hardest to see coming: a matrix with four columns in $\mathbb{R}^3$ and three rows in $\mathbb{R}^4$ has as many independent rows as independent columns. With it, [[m5.elimination-and-linear-systems]] is summed up in one number. A square matrix is invertible exactly when its rank is its size. A product cannot have greater rank than its factors, which is why a narrow layer limits everything after it. And a matrix of rank $r$ is a sum of $r$ outer products, the $\mathbf{u}\mathbf{v}^{\mathsf{T}}$ of [[m5.transpose]], a map through a bottleneck of width $r$.
+
+        The rank is only a number. It says **how many** dimensions the outputs fill, and not **which**. The table of ratings sent everything onto one line in $\mathbb{R}^3$: which line? And if four numbers go in and only one number's worth comes out, three dimensions' worth of input has been lost: which inputs, exactly, are sent to zero? Those two sets, the outputs a matrix can reach and the inputs it destroys, are spaces in their own right, with shapes you can describe, and between them they answer every question about whether $A\mathbf{x} = \mathbf{b}$ can be solved and in how many ways. The words "dimension" and "space" have been used loosely so far, and [[m5.basis-and-dimension]] will make them exact. The single number that tells whether a square matrix has full rank is [[m5.determinant]].
+
+        The two spaces come first. They are the next lesson, [[m5.column-space-and-null-space]].
