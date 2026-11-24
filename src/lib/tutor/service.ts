@@ -38,15 +38,6 @@ export async function clearTutorHistory(db: Db, userId: string, conceptId: strin
     .where(and(eq(tutorMessages.userId, userId), eq(tutorMessages.conceptId, conceptId), isNull(tutorMessages.clearedAt)));
 }
 
-/** US dollars spent on the tutor since the start of the calendar month (UTC). */
-export async function spentThisMonthUsd(db: Db, userId: string): Promise<number> {
-  const [row] = await db
-    .select({ total: sql<string>`coalesce(sum(${tutorMessages.costMicroUsd}), 0)` })
-    .from(tutorMessages)
-    .where(and(eq(tutorMessages.userId, userId), sql`${tutorMessages.createdAt} >= date_trunc('month', now())`));
-  return Number(row.total) / 1_000_000;
-}
-
 
 export type QuestionEffort = { tries: number; wrong: number; ms: number };
 

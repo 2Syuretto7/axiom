@@ -5,10 +5,10 @@ import { getDb } from "@/lib/db";
 import { nextAfter } from "@/lib/learning/next";
 import { completedConcepts, hintLevels, solvedQuestions } from "@/lib/learning/service";
 import { content } from "@/lib/lessons/content";
-import { costMicroUsd, MAX_MESSAGE_CHARS, monthlyBudgetUsd, tutorConnected } from "@/lib/tutor/config";
+import { costMicroUsd, MAX_MESSAGE_CHARS, tutorConnected } from "@/lib/tutor/config";
 import { systemPrompt, workspaceNote } from "@/lib/tutor/prompt";
 import { failureNote, streamReply } from "@/lib/tutor/reply";
-import { questionEffort, saveTutorMessage, spentThisMonthUsd, tutorHistory } from "@/lib/tutor/service";
+import { questionEffort, saveTutorMessage, tutorHistory } from "@/lib/tutor/service";
 
 export const maxDuration = 120;
 
@@ -24,7 +24,7 @@ const refuse = (status: number, error: string) => Response.json({ error }, { sta
 
 /**
  * One question to the tutor. The reply streams back as lines of JSON:
- * {"delta": "..."} as text arrives, then {"done": true, "spentUsd": n} or {"error": "..."}.
+ * {"delta": "..."} as text arrives, then {"done": true} or {"error": "..."}.
  */
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -34,11 +34,6 @@ export async function POST(request: Request) {
   if (!tutorConnected()) return refuse(503, "The tutor is not connected yet. It needs ANTHROPIC_API_KEY in this deployment.");
 
   const db = getDb();
-  const budget = monthlyBudgetUsd();
-  if ((await spentThisMonthUsd(db, user.id)) >= budget) {
-    return refuse(429, `The tutor has used this month's budget of USD ${budget}. It starts again on the first of next month.`);
-  }
-
   const { graph, lessons } = content();
   const { conceptId, message, questionId, code, output } = parsed.data;
   const lesson = lessons.get(conceptId) ?? null;
@@ -93,7 +88,7 @@ export async function POST(request: Request) {
         send({ delta: tail });
       }
       await saveTutorMessage(db, user.id, conceptId, "assistant", text, cost);
-      send({ done: true, spentUsd: await spentThisMonthUsd(db, user.id) });
+      send({ done: true });
     } catch (error) {
       console.error("tutor", error instanceof Error ? error.name : "error");
       send({ error: failureNote(error) });
