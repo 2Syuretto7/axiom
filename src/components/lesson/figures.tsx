@@ -3298,6 +3298,575 @@ function AdjacencyMatrix(props: Props) {
   );
 }
 
+type TileKind = "hot" | "fill" | "ghost" | "cell";
+
+/** A grid of small boxes with a value in each. kind says how each box is drawn. */
+function Tiles({
+  rows,
+  cols,
+  x,
+  y,
+  w = 34,
+  h = 32,
+  value,
+  kind,
+}: {
+  rows: number;
+  cols: number;
+  x: number;
+  y: number;
+  w?: number;
+  h?: number;
+  value: (r: number, c: number) => string | number;
+  kind?: (r: number, c: number) => TileKind;
+}) {
+  const tiles: ReactNode[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const k = kind?.(r, c) ?? "fill";
+      tiles.push(
+        <g key={`${r}-${c}`}>
+          <rect x={x + c * w} y={y + r * h} width={w - 4} height={h - 4} className={k === "hot" ? "fig-accent" : k === "ghost" ? "fig-ghost" : k === "cell" ? "fig-cell" : "fig-fill"} />
+          <text x={x + c * w + (w - 4) / 2} y={y + r * h + (h - 4) / 2 + 6} textAnchor="middle" className="fig-mono" style={k === "hot" ? { fill: "var(--bg)" } : k === "ghost" ? { fill: "var(--text-faint)" } : undefined}>
+            {value(r, c)}
+          </text>
+        </g>,
+      );
+    }
+  }
+  return <>{tiles}</>;
+}
+
+const tuple = (shape: number[]) => `(${shape.join(", ")}${shape.length === 1 ? "," : ""})`;
+const SHAPES: number[][] = [[12], [2, 6], [3, 4], [4, 3], [6, 2], [2, 3, 2]];
+
+/** Twelve numbers in one block of memory, read with one shape after another. */
+function ArrayShape(props: Props) {
+  const [which, setWhich] = useState(clamp(SHAPES.findIndex((shape) => shape.join("x") === props.shape), 0, SHAPES.length - 1));
+  const [item, setItem] = useState(clamp(Math.round(num(props.item, 6)), 0, 11));
+  const shape = SHAPES[which];
+  const index: number[] = [];
+  let rest = item;
+  for (let axis = 0; axis < shape.length; axis++) {
+    const step = shape.slice(axis + 1).reduce((a, b) => a * b, 1);
+    index.push(Math.floor(rest / step));
+    rest %= step;
+  }
+  const sum = index.map((value, axis) => (axis === shape.length - 1 ? `${value}` : `${value} × ${shape.slice(axis + 1).reduce((a, b) => a * b, 1)}`)).join(" + ");
+  const [rows, cols] = shape.length === 1 ? [1, shape[0]] : shape.length === 2 ? shape : [shape[1], shape[2]];
+  const slabs = shape.length === 3 ? shape[0] : 1;
+  return (
+    <Frame
+      title="One block of numbers, many shapes"
+      summary={`Twelve numbers in one block of memory, read with shape ${tuple(shape)}: ${plural(shape.length, "axis", "axes")}, of length${shape.length === 1 ? "" : "s"} ${shape.join(" and ")}. The number at place ${item} in the block is at index [${index.join(", ")}]${shape.length === 1 ? "" : `, because ${sum} = ${item}`}. The shape is only a way of reading the block. Changing it moves no number.`}
+      controls={
+        <>
+          <Stepper label="place in the block" value={item} onChange={setItem} min={0} max={11} />
+          <button type="button" className="btn btn-secondary btn-small" onClick={() => setWhich((which + 1) % SHAPES.length)}>
+            Next shape
+          </button>
+        </>
+      }
+    >
+      <svg viewBox={`0 0 440 ${112 + rows * 32}`} role="img" aria-label={`A block of 12 numbers read with shape ${tuple(shape)}, with place ${item} marked`}>
+        <text x="16" y="16" className="fig-small">
+          the block in memory
+        </text>
+        <Tiles rows={1} cols={12} x={16} y={24} value={(_, c) => c} kind={(_, c) => (c === item ? "hot" : "fill")} />
+        <text x="16" y="88" className="fig-small">
+          read with shape {tuple(shape)}
+        </text>
+        {Array.from({ length: slabs }, (_, s) => (
+          <Tiles
+            key={s}
+            rows={rows}
+            cols={cols}
+            x={16 + s * (cols * 34 + 28)}
+            y={96}
+            value={(r, c) => s * rows * cols + r * cols + c}
+            kind={(r, c) => (s * rows * cols + r * cols + c === item ? "hot" : "fill")}
+          />
+        ))}
+      </svg>
+    </Frame>
+  );
+}
+
+/** A slice of a table: which rows and which columns it keeps. */
+function ArraySlice(props: Props) {
+  const [start, setStart] = useState(clamp(Math.round(num(props.start, 1)), 0, 4));
+  const [stop, setStop] = useState(clamp(Math.round(num(props.stop, 3)), 0, 4));
+  const [step, setStep] = useState(clamp(Math.round(num(props.step, 2)), 1, 3));
+  const rows = Array.from({ length: Math.max(0, stop - start) }, (_, i) => start + i);
+  const cols = [0, 1, 2, 3, 4, 5].filter((c) => c % step === 0);
+  const code = `a[${start}:${stop}, ::${step}]`;
+  return (
+    <Frame
+      title="Slicing a table"
+      summary={`${code} on a table of 4 rows and 6 columns. ${
+        rows.length === 0 ? `No row is at or after ${start} and before ${stop}, so no rows are taken` : `Rows from ${start} up to but not including ${stop}: ${rows.join(", ")}`
+      }. Every ${step === 1 ? "column" : step === 2 ? "2nd column" : "3rd column"}: ${cols.join(", ")}. The result has shape (${rows.length}, ${cols.length})${
+        rows.length === 0 ? "" : `, with first row ${cols.map((c) => rows[0] * 10 + c).join(", ")}`
+      }. It is a view of the same memory, not a copy.`}
+      controls={
+        <>
+          <Stepper label="row start" value={start} onChange={setStart} min={0} max={4} />
+          <Stepper label="row stop" value={stop} onChange={setStop} min={0} max={4} />
+          <Stepper label="column step" value={step} onChange={setStep} min={1} max={3} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 170" role="img" aria-label={`A 4 by 6 table with the slice ${code} marked`}>
+        {[0, 1, 2, 3, 4, 5].map((c) => (
+          <text key={c} x={72 + c * 52 + 24} y={16} textAnchor="middle" className="fig-small">
+            {c}
+          </text>
+        ))}
+        {[0, 1, 2, 3].map((r) => (
+          <text key={r} x={56} y={24 + r * 36 + 22} textAnchor="middle" className="fig-small">
+            {r}
+          </text>
+        ))}
+        <Tiles rows={4} cols={6} x={72} y={24} w={52} h={36} value={(r, c) => r * 10 + c} kind={(r, c) => (rows.includes(r) && cols.includes(c) ? "hot" : "fill")} />
+      </svg>
+    </Frame>
+  );
+}
+
+const TABLE34 = [
+  [1, 2, 3, 4],
+  [5, 6, 7, 8],
+  [9, 10, 11, 12],
+];
+const BROADCASTS: { left: number[][]; right: number[][]; shapes: [number[], number[]]; why: string }[] = [
+  {
+    left: TABLE34,
+    right: [[10, 20, 30, 40]],
+    shapes: [[3, 4], [4]],
+    why: "Lined up from the right: 4 with 4, then 3 with nothing, and a missing axis counts as length 1. An axis of length 1 is stretched to match, so the one row is used again for each of the 3 rows.",
+  },
+  {
+    left: TABLE34,
+    right: [[10], [20], [30]],
+    shapes: [[3, 4], [3, 1]],
+    why: "Lined up from the right: 4 with 1, then 3 with 3. The axis of length 1 is stretched to match, so the one column is used again for each of the 4 columns.",
+  },
+  {
+    left: [[10], [20], [30]],
+    right: [[1, 2, 3, 4]],
+    shapes: [[3, 1], [4]],
+    why: "Lined up from the right: 1 with 4, then 3 with nothing, which counts as 1. Both arrays are stretched, the column across and the row down, and every pairing of one entry from each appears once.",
+  },
+  {
+    left: TABLE34,
+    right: [[5]],
+    shapes: [[3, 4], []],
+    why: "A single number has no axes at all, so every axis is missing and counts as length 1. It is stretched over the whole table.",
+  },
+  {
+    left: TABLE34,
+    right: [[10, 20, 30]],
+    shapes: [[3, 4], [3]],
+    why: "Lined up from the right: 4 with 3. The lengths differ and neither is 1, so the shapes do not fit and NumPy raises an error. A list of 3 numbers meant as a column must be given the shape (3, 1).",
+  },
+];
+
+/** Two arrays of different shapes added, with the smaller one stretched. */
+function Broadcast(props: Props) {
+  const [which, setWhich] = useState(clamp(Math.round(num(props.pair, 0)), 0, BROADCASTS.length - 1));
+  const { left, right, shapes, why } = BROADCASTS[which];
+  const fits = which !== 4;
+  const pick = (grid: number[][], r: number, c: number) => grid[grid.length === 1 ? 0 : r][grid[0].length === 1 ? 0 : c];
+  const own = (grid: number[][], r: number, c: number) => r < grid.length && c < grid[0].length;
+  const result = [0, 1, 2].map((r) => [0, 1, 2, 3].map((c) => pick(left, r, c) + (fits ? pick(right, r, c) : 0)));
+  const side = (grid: number[][], x: number) => (
+    <Tiles rows={fits ? 3 : grid.length} cols={fits ? 4 : grid[0].length} x={x} y={28} w={32} h={32} value={(r, c) => pick(grid, r, c)} kind={(r, c) => (own(grid, r, c) ? "fill" : "ghost")} />
+  );
+  return (
+    <Frame
+      title="Stretching the smaller array"
+      summary={`Adding arrays of shapes ${tuple(shapes[0])} and ${shapes[1].length === 0 ? "()" : tuple(shapes[1])}. ${why}${
+        fits ? ` The result has shape (3, 4), with first row ${result[0].join(", ")} and last row ${result[2].join(", ")}. Nothing is copied to do the stretching: the faint boxes are the same numbers read again.` : ""
+      }`}
+      controls={
+        <button type="button" className="btn btn-secondary btn-small" onClick={() => setWhich((which + 1) % BROADCASTS.length)}>
+          Next pair of shapes
+        </button>
+      }
+    >
+      <svg viewBox="0 0 440 136" role="img" aria-label={`Arrays of shapes ${tuple(shapes[0])} and ${shapes[1].length === 0 ? "()" : tuple(shapes[1])} ${fits ? "added, with the stretched copies drawn faintly" : "that cannot be added"}`}>
+        <text x="4" y="16" className="fig-small">
+          {tuple(shapes[0])}
+        </text>
+        <text x="156" y="16" className="fig-small">
+          {shapes[1].length === 0 ? "()" : tuple(shapes[1])}
+        </text>
+        <text x="308" y="16" className="fig-small">
+          {fits ? "(3, 4)" : "error"}
+        </text>
+        {side(left, 4)}
+        <text x="140" y="82" textAnchor="middle" className="fig-mono">
+          +
+        </text>
+        {side(right, 156)}
+        <text x="292" y="82" textAnchor="middle" className="fig-mono">
+          =
+        </text>
+        {fits ? <Tiles rows={3} cols={4} x={308} y={28} w={32} h={32} value={(r, c) => result[r][c]} kind={() => "cell"} /> : null}
+      </svg>
+    </Frame>
+  );
+}
+
+const span = (nanoseconds: number) => {
+  const [value, unit] =
+    nanoseconds < 1000 ? [dp(nanoseconds, 0), "nanosecond"] : nanoseconds < 1e6 ? [dp(nanoseconds / 1000, 1), "microsecond"] : nanoseconds < 1e9 ? [dp(nanoseconds / 1e6, 1), "millisecond"] : [dp(nanoseconds / 1e9, 1), "second"];
+  return `${value} ${unit}${value === "1" ? "" : "s"}`;
+};
+
+/** The cost of a Python loop over n numbers beside the cost of one array operation. */
+function LoopVsArray(props: Props) {
+  const [power, setPower] = useState(clamp(Math.round(num(props.power, 6)), 0, 8));
+  const n = 10 ** power;
+  const loop = 60 * n;
+  const array = 2000 + n;
+  const ratio = loop / array;
+  const bar = (time: number) => 20 + (Math.log10(time) / 10) * 380;
+  return (
+    <Frame
+      title="A loop in Python and a loop in the array"
+      summary={`Adding two lists of ${group(n)} ${n === 1 ? "number" : "numbers"}. A Python loop does about 60 nanoseconds of bookkeeping for each item: ${span(loop)} in all. One array operation pays about 2 microseconds once to get started, then about 1 nanosecond for each item: ${span(array)}. ${
+        ratio >= 1.5 ? `The array is about ${dp(ratio, 0)} times faster.` : ratio > 1 / 1.5 ? "The two cost about the same." : `The loop is about ${dp(1 / ratio, 0)} times faster, because for so few numbers the fixed cost is nearly all of it.`
+      } These are typical figures, not measurements of your machine.`}
+      controls={<Stepper label="power of ten" value={power} onChange={setPower} min={0} max={8} />}
+    >
+      <svg viewBox="0 0 440 130" role="img" aria-label={`Bars for the time of a Python loop and of one array operation on ${group(n)} numbers, on a scale where each step is ten times longer`}>
+        <text x="20" y="22" className="fig-small">
+          Python loop: {span(loop)}
+        </text>
+        <rect x="20" y="30" width={bar(loop) - 20} height="20" className="fig-fill" />
+        <text x="20" y="78" className="fig-small">
+          one array operation: {span(array)}
+        </text>
+        <rect x="20" y="86" width={bar(array) - 20} height="20" className="fig-accent" />
+        <text x="20" y="124" className="fig-small">
+          each tenth of the width is ten times longer
+        </text>
+      </svg>
+    </Frame>
+  );
+}
+
+const AXES = ["0", "1", "none"];
+
+/** Adding up a table along one axis, which makes that axis disappear. */
+function AxisReduce(props: Props) {
+  const [which, setWhich] = useState(clamp(AXES.indexOf(String(props.axis ?? 0)), 0, 2));
+  const [keep, setKeep] = useState(props.keepdims === true);
+  const down = [0, 1, 2, 3].map((c) => TABLE34[0][c] + TABLE34[1][c] + TABLE34[2][c]);
+  const across = TABLE34.map((row) => row.reduce((a, b) => a + b, 0));
+  const all = across.reduce((a, b) => a + b, 0);
+  const call = `a.sum(${which === 2 ? "" : `axis=${which}`}${keep ? `${which === 2 ? "" : ", "}keepdims=True` : ""})`;
+  const shape = which === 0 ? (keep ? "(1, 4)" : "(4,)") : which === 1 ? (keep ? "(3, 1)" : "(3,)") : keep ? "(1, 1)" : "()";
+  const said =
+    which === 0
+      ? `adds along axis 0, down the rows, so axis 0 is the one that goes. The result is ${down.join(", ")}, one total for each column`
+      : which === 1
+        ? `adds along axis 1, across the columns, so axis 1 is the one that goes. The result is ${across.join(", ")}, one total for each row`
+        : `adds along every axis, so both go. The result is the single number ${all}`;
+  return (
+    <Frame
+      title="Adding along an axis"
+      summary={`${call} on a table of shape (3, 4) ${said}. Its shape is ${shape}${keep ? ", because keepdims leaves the used-up axis in place with length 1, ready to be stretched against the table" : ""}.`}
+      controls={
+        <>
+          <button type="button" className="btn btn-secondary btn-small" onClick={() => setWhich((which + 1) % 3)}>
+            Next axis
+          </button>
+          <Toggle label="keepdims" value={keep} onChange={setKeep} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 180" role="img" aria-label={`A 3 by 4 table and its totals from ${call}`}>
+        <Tiles rows={3} cols={4} x={60} y={16} w={52} h={36} value={(r, c) => TABLE34[r][c]} />
+        {which === 0 ? <Tiles rows={1} cols={4} x={60} y={136} w={52} h={36} value={(_, c) => down[c]} kind={() => "hot"} /> : null}
+        {which === 1 ? <Tiles rows={3} cols={1} x={292} y={16} w={52} h={36} value={(r) => across[r]} kind={() => "hot"} /> : null}
+        {which === 2 ? <Tiles rows={1} cols={1} x={292} y={136} w={52} h={36} value={() => all} kind={() => "hot"} /> : null}
+        <text x="60" y="130" className="fig-small">
+          {which === 0 ? "axis 0 runs down ↓" : which === 1 ? "axis 1 runs across →" : "both axes"}
+        </text>
+      </svg>
+    </Frame>
+  );
+}
+
+const VIEWS: { code: string; shape: number[]; strides: number[]; offset: number; said: string }[] = [
+  { code: "a", shape: [3, 4], strides: [4, 1], offset: 0, said: "The array as it was made, by a = np.arange(12).reshape(3, 4)." },
+  { code: "a.T", shape: [4, 3], strides: [1, 4], offset: 0, said: "The transpose only exchanges the two strides." },
+  { code: "a[:, ::2]", shape: [3, 2], strides: [4, 2], offset: 0, said: "Taking every 2nd column doubles the stride along axis 1." },
+  { code: "a[::-1]", shape: [3, 4], strides: [-4, 1], offset: 8, said: "Reversing the rows starts at the last row and gives axis 0 a negative stride." },
+  { code: "a[1]", shape: [4], strides: [1], offset: 4, said: "One row is a start place and a single stride." },
+];
+
+/** A view of an array as a start place and one stride for each axis, over an unchanged block of memory. */
+function Strides(props: Props) {
+  const [which, setWhich] = useState(clamp(Math.round(num(props.view, 0)), 0, VIEWS.length - 1));
+  const [wanted, setItem] = useState(clamp(Math.round(num(props.item, 0)), 0, 11));
+  const { code, shape, strides, offset, said } = VIEWS[which];
+  const size = shape.reduce((a, b) => a * b, 1);
+  const item = Math.min(wanted, size - 1);
+  const [rows, cols] = shape.length === 1 ? [1, shape[0]] : shape;
+  const [r, c] = [Math.floor(item / cols), item % cols];
+  const index = shape.length === 1 ? [c] : [r, c];
+  const place = (i: number, j: number) => offset + (shape.length === 1 ? j * strides[0] : i * strides[0] + j * strides[1]);
+  const at = place(r, c);
+  return (
+    <Frame
+      title="A view is a start and a stride"
+      summary={`${code} has shape ${tuple(shape)}, starts at place ${offset} of the block, and has strides ${tuple(strides).replace(/-/g, "−")} counted in items: ${strides
+        .map((s, axis) => `one step along axis ${axis} moves ${s < 0 ? `back ${-s}` : s} ${Math.abs(s) === 1 ? "place" : "places"}`)
+        .join(", ")}. ${said} Its item at [${index.join(", ")}] is at place ${offset} + ${index.map((v, axis) => `${v} × ${strides[axis] < 0 ? `(−${-strides[axis]})` : strides[axis]}`).join(" + ")} = ${at}, which holds ${at}. With numbers of 8 bytes each, NumPy reports the strides as ${tuple(strides.map((s) => s * 8)).replace(/-/g, "−")} bytes. No number was moved to make this view.`}
+      controls={
+        <>
+          <Stepper label="item of the view" value={item} onChange={setItem} min={0} max={size - 1} />
+          <button type="button" className="btn btn-secondary btn-small" onClick={() => setWhich((which + 1) % VIEWS.length)}>
+            Next view
+          </button>
+        </>
+      }
+    >
+      <svg viewBox={`0 0 440 ${112 + rows * 32}`} role="img" aria-label={`The block of 12 numbers and the view ${code}, with the item at [${index.join(", ")}] marked in both`}>
+        <text x="16" y="16" className="fig-small">
+          the block in memory, places 0 to 11
+        </text>
+        <Tiles rows={1} cols={12} x={16} y={24} value={(_, j) => j} kind={(_, j) => (j === at ? "hot" : "fill")} />
+        <text x="16" y="88" className="fig-small">
+          {code}
+        </text>
+        <Tiles rows={rows} cols={cols} x={16} y={96} value={(i, j) => place(i, j)} kind={(i, j) => (i === r && j === c ? "hot" : "fill")} />
+      </svg>
+    </Frame>
+  );
+}
+
+type Nested = number | Nested[];
+const LENGTHS: Record<string, number> = { i: 2, j: 3, k: 2 };
+const EINSUMS: { code: string; inputs: Nested[]; names: string[]; said: string }[] = [
+  { code: "ij,j->i", inputs: [[[1, 2, 3], [4, 5, 6]], [1, 0, 2]], names: ["A", "x"], said: "Entry [i] is the sum over j of A[i, j] × x[j]: the matrix-vector product." },
+  { code: "ij,jk->ik", inputs: [[[1, 2, 3], [4, 5, 6]], [[1, 0], [0, 1], [2, 1]]], names: ["A", "B"], said: "Entry [i, k] is the sum over j of A[i, j] × B[j, k]: the matrix product." },
+  { code: "ij->ji", inputs: [[[1, 2, 3], [4, 5, 6]]], names: ["A"], said: "Entry [j, i] is A[i, j]: the transpose. Nothing is added up." },
+  { code: "ij->i", inputs: [[[1, 2, 3], [4, 5, 6]]], names: ["A"], said: "Entry [i] is the sum over j of A[i, j]: the total of each row, the same as A.sum(axis=1)." },
+  { code: "j,j->", inputs: [[1, 0, 2], [3, 1, 1]], names: ["x", "y"], said: "The sum over j of x[j] × y[j]: the dot product." },
+  { code: "i,j->ij", inputs: [[1, 2], [1, 0, 2]], names: ["u", "x"], said: "Entry [i, j] is u[i] × x[j]: the outer product. Nothing is added up." },
+];
+
+function einsum(code: string, inputs: Nested[]): Nested {
+  const [left, out] = code.split("->");
+  const terms = left.split(",");
+  const letters = [...new Set(left.replace(/,/g, ""))];
+  const read = (value: Nested, path: number[]): number => path.reduce<Nested>((inner, i) => (inner as Nested[])[i], value) as number;
+  const build = (depth: number, fixed: Record<string, number>): Nested => {
+    if (depth < out.length) return Array.from({ length: LENGTHS[out[depth]] }, (_, i) => build(depth + 1, { ...fixed, [out[depth]]: i }));
+    const free = letters.filter((letter) => !out.includes(letter));
+    const total = (at: number, values: Record<string, number>): number =>
+      at === free.length
+        ? terms.reduce((product, term, t) => product * read(inputs[t], [...term].map((letter) => values[letter])), 1)
+        : Array.from({ length: LENGTHS[free[at]] }, (_, i) => total(at + 1, { ...values, [free[at]]: i })).reduce((a, b) => a + b, 0);
+    return total(0, fixed);
+  };
+  return build(0, {});
+}
+
+const written = (value: Nested): string => (Array.isArray(value) ? `[${value.map(written).join(Array.isArray(value[0]) ? ", " : " ")}]` : String(value));
+
+/** A grid for a number, a list or a table. */
+function Shown({ value, x, y }: { value: Nested; x: number; y: number }) {
+  const table: number[][] = !Array.isArray(value) ? [[value]] : Array.isArray(value[0]) ? (value as number[][]) : [value as number[]];
+  return <Tiles rows={table.length} cols={table[0].length} x={x} y={y} w={32} h={32} value={(r, c) => table[r][c]} />;
+}
+
+/** An einsum string read letter by letter: which letters are kept and which are summed away. */
+function Einsum(props: Props) {
+  const [which, setWhich] = useState(clamp(EINSUMS.findIndex((entry) => entry.code === props.code), 0, EINSUMS.length - 1));
+  const { code, inputs, names, said } = EINSUMS[which];
+  const [left, out] = code.split("->");
+  const letters = [...new Set(left.replace(/,/g, ""))];
+  const summed = letters.filter((letter) => !out.includes(letter));
+  const result = einsum(code, inputs);
+  const shape = [...out].map((letter) => LENGTHS[letter]);
+  const widths = inputs.map((value) => (Array.isArray(value) ? (Array.isArray(value[0]) ? (value[0] as number[]).length : value.length) : 1) * 32 + 20);
+  const starts = widths.map((_, t) => 8 + widths.slice(0, t).reduce((a, b) => a + b, 0));
+  const end = 8 + widths.reduce((a, b) => a + b, 0) + 24;
+  return (
+    <Frame
+      title="Naming the axes"
+      summary={`np.einsum("${code}", ${names.join(", ")}), with i of length 2, j of length 3 and k of length 2. ${
+        summed.length === 0 ? "Every letter of the inputs appears in the output, so nothing is summed" : `The letter ${summed.join(" and ")} appears in the inputs and not in the output, so it is summed over`
+      }. ${out.length === 0 ? "No letter is kept, so the result is a single number" : `The ${out.length === 1 ? "letter" : "letters"} ${[...out].join(" and ")} ${out.length === 1 ? "is" : "are"} kept, so the result has shape ${tuple(shape)}`}. ${said} The result is ${written(result)}.`}
+      controls={
+        <button type="button" className="btn btn-secondary btn-small" onClick={() => setWhich((which + 1) % EINSUMS.length)}>
+          Next expression
+        </button>
+      }
+    >
+      <svg viewBox="0 0 440 136" role="img" aria-label={`The inputs and the result of the einsum expression ${code}`}>
+        {inputs.map((value, t) => (
+          <g key={t}>
+            <text x={starts[t]} y="16" className="fig-small">
+              {names[t]}, axes {left.split(",")[t]}
+            </text>
+            <Shown value={value} x={starts[t]} y={28} />
+          </g>
+        ))}
+        <text x={end - 22} y="50" textAnchor="middle" className="fig-mono">
+          →
+        </text>
+        <text x={end} y="16" className="fig-small">
+          result{out.length ? `, axes ${out}` : ""}
+        </text>
+        <Shown value={result} x={end} y={28} />
+      </svg>
+    </Frame>
+  );
+}
+
+/** A small generator of pseudo-random numbers: a fixed rule, started from a seed. */
+function draws(seed: number, count: number, normal: boolean): number[] {
+  let state = (seed + 1) * 0x9e3779b9;
+  const next = () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  return Array.from({ length: count }, () => (normal ? Math.sqrt(-2 * Math.log(1 - next())) * Math.cos(2 * Math.PI * next()) : next()));
+}
+
+/** Draws from a seeded generator, gathered into a histogram. */
+function RandomSamples(props: Props) {
+  const [seed, setSeed] = useState(clamp(Math.round(num(props.seed, 0)), 0, 9));
+  const [power, setPower] = useState(clamp(Math.round(num(props.power, 2)), 1, 4));
+  const [normal, setNormal] = useState(props.normal === true);
+  const count = 10 ** power;
+  const values = draws(seed, count, normal);
+  const [low, high] = normal ? [-3, 3] : [0, 1];
+  const bins = Array.from({ length: 12 }, () => 0);
+  for (const value of values) if (value >= low && value < high) bins[Math.floor(((value - low) / (high - low)) * 12)]++;
+  const tallest = Math.max(...bins);
+  const mean = values.reduce((a, b) => a + b, 0) / count;
+  return (
+    <Frame
+      title="Random numbers from a seed"
+      summary={`Seed ${seed}, ${group(count)} draws from ${normal ? "the standard normal distribution" : "the uniform distribution between 0 and 1"}. The first three are ${values.slice(0, 3).map((v) => dp(v, 3)).join(", ")}. The mean of all of them is ${dp(mean, 3)}, and the more draws there are, the nearer it comes to ${normal ? "0" : "0.5"}. The same seed gives these same numbers every time, because the generator is a fixed rule and the seed only says where it starts.`}
+      controls={
+        <>
+          <Stepper label="seed" value={seed} onChange={setSeed} min={0} max={9} />
+          <Stepper label="power of ten" value={power} onChange={setPower} min={1} max={4} />
+          <Toggle label="normal" value={normal} onChange={setNormal} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 180" role="img" aria-label={`A histogram of ${group(count)} draws from ${normal ? "the standard normal distribution" : "the uniform distribution"} with seed ${seed}`}>
+        {bins.map((bin, i) => (
+          <rect key={i} x={28 + i * 32} y={150 - (bin / tallest) * 130} width="28" height={(bin / tallest) * 130} className="fig-accent" />
+        ))}
+        <line x1="24" y1="150" x2="416" y2="150" className="fig-axis" />
+        <text x="28" y="168" className="fig-small">
+          {low}
+        </text>
+        <text x="412" y="168" textAnchor="end" className="fig-small">
+          {high}
+        </text>
+      </svg>
+    </Frame>
+  );
+}
+
+const SHIFTS = [0, 100, 700, 1000, -1000];
+const sci = (value: number) => (value === Infinity ? "inf" : value === 0 ? "0" : Math.abs(value) >= 1e5 || Math.abs(value) < 1e-3 ? value.toExponential(2).replace("e+", "e").replace("-", "−") : dp(value, 3));
+
+/** The logarithm of a sum of exponentials, computed directly and after subtracting the largest input. */
+function LogSumExp(props: Props) {
+  const [which, setWhich] = useState(clamp(SHIFTS.indexOf(num(props.shift, 0)), 0, SHIFTS.length - 1));
+  const shift = SHIFTS[which];
+  const xs = [shift, shift + 1, shift + 2];
+  const direct = xs.map(Math.exp);
+  const naive = Math.log(direct.reduce((a, b) => a + b, 0));
+  const top = Math.max(...xs);
+  const moved = xs.map((x) => Math.exp(x - top));
+  const stable = top + Math.log(moved.reduce((a, b) => a + b, 0));
+  const show = (value: number) => (value === Infinity ? "inf" : value === -Infinity ? "−inf" : dp(value, 4));
+  return (
+    <Frame
+      title="Subtract the largest first"
+      summary={`The inputs are ${xs.map((x) => dp(x)).join(", ")}. Directly: their exponentials are ${direct.map(sci).join(", ")}, and the logarithm of the sum comes out as ${show(naive)}${
+        naive === Infinity ? ", because the exponentials are too large for a float and overflow to infinity" : naive === -Infinity ? ", because the exponentials are too small for a float and round to zero" : ""
+      }. After subtracting the largest input, ${dp(top)}: the exponentials are ${moved.map(sci).join(", ")}, none larger than 1, and the answer is ${dp(top)} + ${dp(Math.log(moved.reduce((a, b) => a + b, 0)), 4)} = ${show(stable)}. ${Number.isFinite(naive) ? "Here the two agree." : "The true answer was an ordinary number all along, and only the route through the exponentials failed."}`}
+      controls={
+        <button type="button" className="btn btn-secondary btn-small" onClick={() => setWhich((which + 1) % SHIFTS.length)}>
+          Next inputs
+        </button>
+      }
+    >
+      <svg viewBox="0 0 440 150" role="img" aria-label={`The exponentials of ${xs.join(", ")} computed directly and after subtracting the largest`}>
+        <text x="16" y="18" className="fig-small">
+          exp(x), directly
+        </text>
+        <Tiles rows={1} cols={3} x={16} y={26} w={136} h={40} value={(_, c) => sci(direct[c])} kind={(_, c) => (Number.isFinite(direct[c]) && direct[c] > 0 ? "fill" : "ghost")} />
+        <text x="16" y="90" className="fig-small">
+          exp(x − largest)
+        </text>
+        <Tiles rows={1} cols={3} x={16} y={98} w={136} h={40} value={(_, c) => sci(moved[c])} kind={() => "hot"} />
+      </svg>
+    </Frame>
+  );
+}
+
+/** How far apart neighbouring floating-point numbers are near a given size. */
+function FloatGaps(props: Props) {
+  const [power, setPower] = useState(clamp(Math.round(num(props.power, 8)), 0, 16));
+  const [single, setSingle] = useState(props.single === true);
+  const x = 10 ** power;
+  const exponent = Math.floor(Math.log2(x));
+  const gap = 2 ** (exponent - (single ? 23 : 52));
+  const kind = single ? "float32" : "float64";
+  const tell = (value: number) => (value >= 1 ? group(value) : value.toExponential(1).replace("e-", " × 10^−").replace("e+", " × 10^"));
+  return (
+    <Frame
+      title="The gaps between floats"
+      summary={`Near ${group(x)}, neighbouring ${kind} values are ${tell(gap)} apart. A ${kind} keeps ${single ? 24 : 53} binary digits, about ${single ? 7 : 16} decimal digits, however large or small the number is, so the gap grows with the number. ${
+        gap > 2
+          ? `Adding 1 to ${group(x)} changes nothing: the exact sum falls between two neighbours, nearer the one it started from, and is rounded back to it.`
+          : gap === 2
+            ? `Adding 1 to ${group(x)} lands exactly half-way between two neighbours, and the rule for ties rounds it back to where it started.`
+            : gap === 1
+              ? `Adding 1 to ${group(x)} is exact, since it lands on the next neighbour, but nothing between whole numbers can be stored here.`
+              : `Adding 1 to ${group(x)} is ${gap < 1e-6 ? "accurate to many digits" : "accurate to only a few digits after the point"}: the error is at most half a gap.`
+      }`}
+      controls={
+        <>
+          <Stepper label="power of ten" value={power} onChange={setPower} min={0} max={16} />
+          <Toggle label="float32" value={single} onChange={setSingle} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 110" role="img" aria-label={`A number line near ${group(x)} with marks for neighbouring ${kind} values, ${tell(gap)} apart`}>
+        <line x1="20" y1="56" x2="420" y2="56" className="fig-axis" />
+        {[-3, -2, -1, 0, 1, 2, 3].map((k) => (
+          <line key={k} x1={220 + k * 60} y1={k === 0 ? 38 : 46} x2={220 + k * 60} y2={k === 0 ? 74 : 66} className={k === 0 ? "fig-accent-line" : "fig-line"} />
+        ))}
+        <text x="220" y="28" textAnchor="middle" className="fig-small">
+          {group(x)}
+        </text>
+        <line x1="220" y1="88" x2="280" y2="88" className="fig-line" />
+        <text x="250" y="104" textAnchor="middle" className="fig-small">
+          gap {tell(gap)}
+        </text>
+      </svg>
+    </Frame>
+  );
+}
+
 const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "place-value": PlaceValue,
   "number-line": NumberLine,
@@ -3360,6 +3929,16 @@ const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "basis-grid": BasisGrid,
   determinant: Determinant,
   "adjacency-matrix": AdjacencyMatrix,
+  "array-shape": ArrayShape,
+  "array-slice": ArraySlice,
+  broadcast: Broadcast,
+  "loop-vs-array": LoopVsArray,
+  "axis-reduce": AxisReduce,
+  strides: Strides,
+  einsum: Einsum,
+  "random-samples": RandomSamples,
+  "log-sum-exp": LogSumExp,
+  "float-gaps": FloatGaps,
 };
 
 export function Figure({ name, props }: { name: string; props?: Props }) {
