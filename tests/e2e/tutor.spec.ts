@@ -35,6 +35,14 @@ test("the tutor answers beside the lesson, knows the lesson and the editor, and 
   }
 
   const box = tutor.getByRole("textbox", { name: "Ask the tutor" });
+  // The box and the Ask button line up: same top edge, same bottom edge, empty or with several lines typed.
+  const askButton = tutor.getByRole("button", { name: "Ask", exact: true });
+  for (const draft of ["", "one\ntwo\nthree\nfour"]) {
+    await box.fill(draft);
+    const [input, button] = [(await box.boundingBox())!, (await askButton.boundingBox())!];
+    expect(Math.abs(input.y - button.y)).toBeLessThan(0.5);
+    expect(Math.abs(input.height - button.height)).toBeLessThan(0.5);
+  }
   await box.fill("Why do the pebbles work?");
   await tutor.getByRole("button", { name: "Ask", exact: true }).click();
 
