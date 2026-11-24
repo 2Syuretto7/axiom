@@ -1,0 +1,795 @@
+concept: m5.matrix-multiplication-as-composition
+minutes: 100
+claim: You can define the product of two matrices as the matrix of one map applied after another, derive from that the rule of rows times columns and the rule for shapes, explain why the order matters and why brackets do not, show that layers with nothing between them collapse into one, count walks in a graph with powers of its table, and say what a product costs.
+recalls: [m5.matrix-vector-product]
+uses: [m5.matrices-as-linear-maps, m4.dot-product, m4.lines-planes-and-hyperplanes, m2.composition-and-inverses, m2.functions-as-machines, m2.trigonometric-functions-on-the-unit-circle, m2.summation-and-product-notation, m10.chain-rule, m3.induction-and-strong-induction, e3.graphs-and-traversal, e3.divide-and-conquer, e1.complexity-and-big-o, e1.exceptions, e1.comprehensions-and-iterators, e0.functions, e0.loops, e0.lists-and-tuples]
+leads: [m5.transpose, m5.identity-and-inverse, m5.change-of-basis, m5.determinant]
+starter: |
+  # Scratch space. Two layers with nothing between them, against one single layer.
+  def mv(A, x):
+      return [sum([a * b for a, b in zip(row, x)]) for row in A]
+
+  B = [[1, 1], [0, 1]]     # the first layer, a shear
+  A = [[0, -1], [1, 0]]    # the second layer, a quarter turn
+  C = [[0, -1], [1, 1]]    # one layer on its own
+
+  for x in [[1, 0], [0, 1], [2, 0.5], [-3, 7]]:
+      print(mv(A, mv(B, x)), mv(C, x))
+parts:
+  recall:
+    - text: |
+        [[m5.matrix-vector-product]] read $A\mathbf{x}$ in two ways, as a combination of the columns of $A$ and as one dot product for each row, and ended on the question of what happens when a vector passes through two matrices in turn. Three quick pulls first.
+    - question:
+        id: recall-product
+        type: choice
+        system: s1
+        concepts: [m5.matrix-vector-product]
+        prompt: |
+          $A$ has rows $(0, -1)$ and $(1, 0)$. What is $A\,(1, 1)$?
+        options: ['$(1, 1)$', '$(-1, 1)$', '$(1, -1)$', '$(0, 0)$']
+        answer: 1
+        explanation: The rows give 0 − 1 = −1 and 1 + 0 = 1. The quarter turn sends (1, 1) to (−1, 1).
+        hints:
+          - Dot each row with (1, 1).
+          - The first row gives the first component.
+    - question:
+        id: recall-unit
+        type: choice
+        system: s1
+        concepts: [m5.matrices-as-linear-maps]
+        prompt: |
+          For any matrix $M$, the product $M\mathbf{e}_j$ with the $j$-th unit vector is
+        options: ["row j of M", "column j of M", "the sum of the entries of M", "the zero vector"]
+        answer: 1
+        explanation: The columns of a matrix are the images of the unit vectors. That is how the matrix was built.
+        hints:
+          - What do the columns of a matrix record?
+          - A unit vector takes one column once and the rest not at all.
+    - question:
+        id: recall-compose
+        type: numeric
+        system: s1
+        concepts: [m2.composition-and-inverses]
+        prompt: |
+          With $f(x) = x + 1$ and $g(x) = 2x$, what is $(f \circ g)(3)$?
+        answer: "7"
+        explanation: The composition f ∘ g applies g first. g(3) = 6, and then f(6) = 7.
+        hints:
+          - In f ∘ g the function written on the right acts first.
+          - Double 3, then add 1.
+  puzzle:
+    - text: |
+        Someone builds a model with two layers. The first multiplies its input by a matrix $B$. The second multiplies the result by a matrix $A$. Nothing is placed between them: no bias, no rectifier. The input $\mathbf{x}$ becomes $B\mathbf{x}$ and then $A(B\mathbf{x})$.
+
+        A rival builds a model with one layer, a single matrix $C$.
+
+        Run the starter. It feeds four inputs to both models and prints the outputs side by side. On every one, they agree exactly. Try a fifth input of your own. They will agree on that too.
+
+        So the two-layer model, with eight weights, does nothing that the one-layer model, with four, cannot do. Whatever $A$ and $B$ had been, the rival could have found a single $C$ to match them.
+
+        **How did the rival find $C$ from $A$ and $B$? Why must such a $C$ always exist? And if stacking layers in this way gains nothing, what do real networks do differently?**
+  intuition:
+    - text: |
+        Call the two-layer machine $h$, so that $h(\mathbf{x}) = A(B\mathbf{x})$. Each layer respects adding and scaling. Then so does one after the other: a sum goes into the first layer and comes out as a sum, goes into the second and comes out as a sum again. So $h$ is a linear map.
+
+        And a linear map is a matrix. You know how to find the matrix of any linear machine: **feed it the unit vectors and write down what comes out, as columns.**
+
+        Do it. The first layer is the shear, which sends $(1, 0)$ to $(1, 0)$ and $(0, 1)$ to $(1, 1)$. The second is the quarter turn, with rows $(0, -1)$ and $(1, 0)$.
+
+        - $(1, 0)$ goes to $(1, 0)$, and the turn takes that to $(0, 1)$.
+        - $(0, 1)$ goes to $(1, 1)$, and the turn takes that to $(-1, 1)$.
+
+        So the matrix of the whole machine has columns $(0, 1)$ and $(-1, 1)$. Written as rows, that is $(0, -1)$ and $(1, 1)$: the rival's $C$. There was no cleverness in finding it. Two test runs.
+
+        The figure shows the two layers acting on a flag. Step through: nothing, then the shear, then the turn as well. Then press "Swap the order", and step through again.
+    - figure: compose-maps
+    - text: |
+        Shear first and then turn, and the flag's corner travels from $(2, 0.5)$ to $(2.5, 0.5)$ to $(-0.5, 2.5)$. Turn first and then shear, and it goes to $(-0.5, 2)$ and then to $(1.5, 2)$. A different place. The flag ends up leaning the other way.
+
+        You could have guessed this from life. Putting on socks and then shoes is not the same as shoes and then socks. Doing two things in turn depends on which comes first, and there is no reason for matrices to be an exception.
+
+        **The single matrix that does the work of two, one after the other, is called their product.** Everything about how to multiply matrices, including the rule that looks so arbitrary when it is only stated, follows from asking for that and nothing else.
+  derivation:
+    - text: |
+        **Composition of linear maps is linear.** Let $g$ be a linear map from $\mathbb{R}^p$ to $\mathbb{R}^n$ and $f$ a linear map from $\mathbb{R}^n$ to $\mathbb{R}^m$. The outputs of $g$ are the right size to be inputs of $f$, so the composition $f \circ g$, "first $g$, then $f$", makes sense and goes from $\mathbb{R}^p$ to $\mathbb{R}^m$. It is additive:
+
+        $$f(g(\mathbf{u} + \mathbf{v})) = f(g(\mathbf{u}) + g(\mathbf{v})) = f(g(\mathbf{u})) + f(g(\mathbf{v})),$$
+
+        using the additivity of $g$ and then of $f$. Scaling goes the same way: $f(g(c\,\mathbf{v})) = f(c\,g(\mathbf{v})) = c\,f(g(\mathbf{v}))$. So $f \circ g$ is a linear map, and it has a matrix.
+
+        **The definition.** Let $A$ be the matrix of $f$, of shape $m \times n$, and $B$ the matrix of $g$, of shape $n \times p$. The **product** $AB$ is the matrix of $f \circ g$. That is, $AB$ is the one matrix for which
+
+        $$(AB)\,\mathbf{x} = A(B\mathbf{x}) \qquad \text{for every } \mathbf{x}.$$
+
+        Read a product from right to left, as you read a composition: in $AB\mathbf{x}$ the matrix next to the vector acts first.
+
+        **Its columns.** Column $j$ of any matrix is what it does to $\mathbf{e}_j$. So column $j$ of $AB$ is $A(B\mathbf{e}_j)$. But $B\mathbf{e}_j$ is column $j$ of $B$, call it $\mathbf{b}_j$. Therefore
+
+        $$\text{column } j \text{ of } AB \;=\; A\,\mathbf{b}_j.$$
+
+        **To multiply $A$ by $B$, apply $A$ to each column of $B$.** That is the product, completely, and it is the form to remember. It also shows the shapes. $B$ has $p$ columns, so $AB$ has $p$ columns. Each $A\mathbf{b}_j$ has $m$ components, so $AB$ has $m$ rows. And $A\mathbf{b}_j$ is defined only if the columns of $B$ have as many components as $A$ has columns.
+
+        $$\underbrace{A}_{m \times n}\ \underbrace{B}_{n \times p}\ =\ \underbrace{AB}_{m \times p}$$
+
+        **The two inner numbers must agree, and they disappear. The two outer numbers are the shape of the result.**
+
+        **Its entries.** The entry of $AB$ in row $i$ and column $j$ is the $i$-th component of $A\mathbf{b}_j$. By the row rule of the last lesson, that is row $i$ of $A$ dotted with $\mathbf{b}_j$:
+
+        $$(AB)_{ij} = (\text{row } i \text{ of } A) \cdot (\text{column } j \text{ of } B) = \sum_{k=1}^{n} a_{ik}\,b_{kj}.$$
+
+        This is the rule usually given as the definition: rows of the first against columns of the second. Stated cold, it seems to come from nowhere. You have now seen where it comes from. It is what you are forced to write down if the product is to mean one map after another.
+
+        For the shear $B$ and the quarter turn $A$:
+
+        $$AB = \begin{pmatrix} 0 & -1 \\ 1 & 0 \end{pmatrix}\begin{pmatrix} 1 & 1 \\ 0 & 1 \end{pmatrix} = \begin{pmatrix} 0 \cdot 1 + (-1) \cdot 0 & 0 \cdot 1 + (-1) \cdot 1 \\ 1 \cdot 1 + 0 \cdot 0 & 1 \cdot 1 + 0 \cdot 1 \end{pmatrix} = \begin{pmatrix} 0 & -1 \\ 1 & 1 \end{pmatrix}.$$
+
+        The matrix-vector product is the special case in which $B$ has a single column.
+
+        **Order matters.** Multiply the same two matrices the other way round:
+
+        $$BA = \begin{pmatrix} 1 & 1 \\ 0 & 1 \end{pmatrix}\begin{pmatrix} 0 & -1 \\ 1 & 0 \end{pmatrix} = \begin{pmatrix} 1 & -1 \\ 1 & 0 \end{pmatrix}.$$
+
+        $AB \ne BA$. Matrix multiplication is **not commutative**. This is the first operation called multiplication you have met for which that fails, and it is not a defect. It is the truth about doing things in turn. Often the question does not even arise: if $A$ is $2 \times 3$ and $B$ is $3 \times 4$, then $AB$ is a $2 \times 4$ matrix and $BA$ is not defined at all. Some particular pairs do commute, two turns for instance, or any matrix with the do-nothing matrix. You may never assume it.
+
+        **Brackets do not matter.** For three matrices of fitting shapes,
+
+        $$(AB)C = A(BC).$$
+
+        No calculation with indices is needed. Both sides are the matrix of the same map: first $C$, then $B$, then $A$. Composition of functions does not care how you group it, because $f(g(h(\mathbf{x})))$ has only one meaning. So a product $ABC$ may be written without brackets, and computed in whichever grouping is cheaper, as long as the **order** of the factors is kept.
+
+        **Sums.** Two matrices of the same shape are added entry by entry, and a matrix is multiplied by a number entry by entry. These correspond to adding the outputs of two maps and scaling the output of one. Products spread over sums in the way you would hope, $A(B + C) = AB + AC$ and $(A + B)C = AC + BC$, since each column of the left side is $A$ applied to a sum of columns. With order respected, the algebra of matrices is the algebra of numbers minus one law.
+    - question:
+        id: derivation-column
+        type: choice
+        system: s2
+        prompt: |
+          $A$ is $3 \times 2$ and $B$ is $2 \times 4$. What is the third column of $AB$?
+        options:
+          - "$B$ applied to the third column of $A$."
+          - "$A$ applied to the third column of $B$, a vector with 3 components."
+          - "The third row of $A$ dotted with $B$."
+          - "It does not exist, because $A$ has only 2 columns."
+        answer: 1
+        explanation: |
+          Column $j$ of $AB$ is $(AB)\mathbf{e}_j = A(B\mathbf{e}_j) = A\mathbf{b}_j$. The third column of $B$ is a vector with 2 components, which is what $A$, with its 2 columns, accepts, and $A$ returns a vector with 3 components. $AB$ has shape $3 \times 4$, so it has a third column although $A$ has none. The product inherits its number of columns from the factor on the right, the one that acts first and receives the input.
+        hints:
+          - Column j of any matrix is the matrix applied to the unit vector e_j.
+          - What does B do to e_3, and what happens to the result?
+          - The shape of AB is 3 by 4.
+    - text: |
+        **Layers collapse.** Return to the puzzle with its full generality. A layer computes $\mathbf{x} \mapsto W\mathbf{x} + \mathbf{b}$. Feed the output of one into another:
+
+        $$W_2(W_1\mathbf{x} + \mathbf{b}_1) + \mathbf{b}_2 = (W_2 W_1)\,\mathbf{x} + (W_2\mathbf{b}_1 + \mathbf{b}_2).$$
+
+        The right side has the form $W\mathbf{x} + \mathbf{b}$ with $W = W_2 W_1$ and $\mathbf{b} = W_2\mathbf{b}_1 + \mathbf{b}_2$. **Two affine layers are one affine layer.** By the same argument so are three, or a hundred. A network built only of such layers, however deep, can compute nothing that a single layer cannot, and a single layer separates its inputs with hyperplanes and nothing more intricate.
+
+        What real networks do differently is put a function that is **not** linear between the layers. Then the algebra above is blocked: $W_2\,\operatorname{relu}(W_1\mathbf{x} + \mathbf{b}_1)$ cannot be multiplied out, because the rectifier does not respect adding. And the gain is real. You saw with hyperplanes that no single neuron computes "exclusive or", the function of two inputs from $\{0, 1\}$ that is 1 exactly when they differ, since no line separates its two classes. Two layers with a rectifier between them do it easily:
+
+        $$h_1 = \operatorname{relu}(x_1 + x_2), \qquad h_2 = \operatorname{relu}(x_1 + x_2 - 1), \qquad y = h_1 - 2h_2.$$
+
+        For $(0, 0)$: $h_1 = 0$, $h_2 = 0$, $y = 0$. For $(1, 0)$ and $(0, 1)$: $h_1 = 1$, $h_2 = 0$, $y = 1$. For $(1, 1)$: $h_1 = 2$, $h_2 = 1$, $y = 0$. The matrices do the mixing and the rectifier does the bending. Neither alone is enough.
+
+        **Powers, and walks in a graph.** A square matrix can be multiplied by itself: $A^2 = AA$, $A^3 = AAA$, and so on, the map applied repeatedly. Here is a use that has nothing to do with geometry.
+
+        Take a directed graph and number its nodes. Its **adjacency matrix** $G$ has $g_{ij} = 1$ if there is an arrow from node $i$ to node $j$, and 0 otherwise. You stored graphs before as a dictionary of neighbours. This is the same information as a table. Now look at one entry of $G^2$:
+
+        $$(G^2)_{ij} = \sum_k g_{ik}\,g_{kj}.$$
+
+        The term $g_{ik}\,g_{kj}$ is 1 exactly when there is an arrow from $i$ to $k$ **and** an arrow from $k$ to $j$, and 0 otherwise. So the sum counts the nodes $k$ through which you can go from $i$ to $j$. **$(G^2)_{ij}$ is the number of walks of exactly two steps from $i$ to $j$.**
+
+        The same reasoning, repeated, gives: **$(G^n)_{ij}$ is the number of walks of exactly $n$ steps from $i$ to $j$.** For if $G^{n-1}$ counts walks of $n - 1$ steps, then $(G^{n-1}G)_{ij} = \sum_k (G^{n-1})_{ik}\,g_{kj}$ adds up, over every possible last stop $k$ before $j$, the number of ways to reach $k$ in $n - 1$ steps. That is an induction on $n$.
+    - figure: adjacency-matrix
+      props: { steps: 2, from: 1 }
+    - text: |
+        In the figure the row for A in the table of two steps reads $0, 0, 1, 2$. There is one walk of two steps from A to C, through B, and there are two from A to D, one through B and one through C. Move to three steps: the row becomes $2, 0, 0, 1$, and the two walks from A back to A are the two ways round the loop through D.
+
+        Multiplying tables of numbers, with a rule derived from composing maps of the plane, counts routes through a network. The rule knows nothing of either. It adds up products over an intermediate index, and that pattern, "through every possible middle", is what composition, walks, and much else have in common.
+
+        **A product of turns.** One more consequence, for free. Turning by $\beta$ and then by $\alpha$ is turning by $\alpha + \beta$, so $R_\alpha R_\beta = R_{\alpha + \beta}$. Multiply the two matrices from the first lesson and look at the first column of each side:
+
+        $$\cos(\alpha + \beta) = \cos\alpha\cos\beta - \sin\alpha\sin\beta, \qquad \sin(\alpha + \beta) = \sin\alpha\cos\beta + \cos\alpha\sin\beta.$$
+
+        The addition formulas of trigonometry are one matrix product.
+
+        **Cost.** The product of an $m \times n$ and an $n \times p$ matrix has $mp$ entries, each a dot product of $n$ terms: $mnp$ multiplications. For two $n \times n$ matrices that is $n^3$. Doubling the size multiplies the work by eight. When you met divide and conquer, Strassen's method was mentioned as a way to beat $n^3$ by trading one of eight half-size products for some additions. In practice the plain rule, done with great care for memory, is what runs.
+
+        Because brackets may be moved, cost is something you choose. To apply two $n \times n$ layers to one vector, compute $A(B\mathbf{x})$: two matrix-vector products, $2n^2$ multiplications. Computing $(AB)\mathbf{x}$ costs $n^3 + n^2$ for the same answer. Form the product $AB$ only if you will reuse it on many inputs.
+
+        **An echo.** For functions of one number, the linear maps are $x \mapsto ax$, matrices of shape $1 \times 1$, and composing $x \mapsto bx$ with $x \mapsto ax$ gives $x \mapsto (ab)x$: the numbers multiply. The chain rule said that the rate of a composition is the product of the rates. That was this lesson in one dimension. When functions take and give several numbers, the rates become matrices, and the chain rule becomes a matrix product, with the order mattering exactly as it does here.
+    - question:
+        id: order-linear
+        type: order
+        system: s2
+        prompt: Put the steps in order to prove that column $j$ of the product $AB$ is $A$ applied to column $j$ of $B$.
+        steps:
+          - 'By definition, $AB$ is the matrix with $(AB)\mathbf{x} = A(B\mathbf{x})$ for every $\mathbf{x}$.'
+          - 'Column $j$ of any matrix $M$ is $M\mathbf{e}_j$, so column $j$ of $AB$ is $(AB)\mathbf{e}_j$.'
+          - 'Put $\mathbf{x} = \mathbf{e}_j$ in the definition: $(AB)\mathbf{e}_j = A(B\mathbf{e}_j)$.'
+          - '$B\mathbf{e}_j$ is column $j$ of $B$, written $\mathbf{b}_j$.'
+          - 'So column $j$ of $AB$ is $A\mathbf{b}_j$.'
+        explanation: The argument uses one fact twice, that a matrix applied to a unit vector gives the matching column, once for the product and once for $B$. Between the two uses stands the definition of the product as a composition. The familiar entry rule follows by taking one component of $A\mathbf{b}_j$.
+        hints:
+          - Start from what the product is defined to do.
+          - The fact about unit vectors is needed for AB before the definition can be applied to it.
+          - Naming B e_j as a column of B comes just before the conclusion.
+  formal:
+    - text: |
+        **Product.** For $A$ of shape $m \times n$ and $B$ of shape $n \times p$, the product $AB$ is the $m \times p$ matrix with $(AB)\mathbf{x} = A(B\mathbf{x})$ for all $\mathbf{x}$. It is defined only when the number of columns of $A$ equals the number of rows of $B$.
+
+        **Columns and entries.** Column $j$ of $AB$ is $A\mathbf{b}_j$. Entry $(AB)_{ij} = \sum_k a_{ik}\,b_{kj}$, row $i$ of $A$ dotted with column $j$ of $B$.
+
+        **Laws.** $(AB)C = A(BC)$. $A(B + C) = AB + AC$. $(A + B)C = AC + BC$. $(cA)B = c\,(AB) = A(cB)$. In general $AB \ne BA$.
+
+        **Affine layers.** $W_2(W_1\mathbf{x} + \mathbf{b}_1) + \mathbf{b}_2 = (W_2W_1)\mathbf{x} + (W_2\mathbf{b}_1 + \mathbf{b}_2)$.
+
+        **Powers.** $A^n$ is $A$ multiplied by itself $n$ times. If $G$ is the adjacency matrix of a directed graph, $(G^n)_{ij}$ is the number of walks of exactly $n$ steps from node $i$ to node $j$.
+
+        **Cost.** $mnp$ multiplications, so $n^3$ for square matrices of size $n$.
+  drill:
+    - text: Seconds each. Inner sizes must match. Row of the first against column of the second.
+    - question:
+        id: drill-entry-11
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has rows $(1, 2)$ and $(3, 4)$. $B$ has rows $(0, 1)$ and $(1, 0)$. What is the entry of $AB$ in row 1, column 1?
+        answer: "2"
+        explanation: Row 1 of A is (1, 2). Column 1 of B is (0, 1). Their dot product is 0 + 2.
+        hints:
+          - Take the first row of A.
+          - Take the first column of B, read downwards.
+    - question:
+        id: drill-entry-21
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has rows $(1, 2)$ and $(3, 4)$. $B$ has rows $(0, 1)$ and $(1, 0)$. What is the entry of $AB$ in row 2, column 1?
+        answer: "4"
+        explanation: Row 2 of A is (3, 4). Column 1 of B is (0, 1). Their dot product is 0 + 4.
+        hints:
+          - Take the second row of A.
+          - Take the first column of B.
+    - question:
+        id: drill-shape-cols
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ is $2 \times 3$ and $B$ is $3 \times 4$. How many columns has $AB$?
+        answer: "4"
+        explanation: The product takes its number of columns from B, the factor that receives the input.
+        hints:
+          - The inner sizes, 3 and 3, disappear.
+          - The outer sizes give the shape.
+    - question:
+        id: drill-shape-rows
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ is $2 \times 3$ and $B$ is $3 \times 4$. How many rows has $AB$?
+        answer: "2"
+        explanation: The product takes its number of rows from A, the factor that gives the output.
+        hints:
+          - The inner sizes disappear.
+          - The first outer size is the number of rows.
+    - question:
+        id: drill-undefined
+        type: choice
+        system: s1
+        prompt: |
+          $A$ is $2 \times 3$ and $B$ is $2 \times 3$. The product $AB$ is
+        options: ["a 2 by 3 matrix", "a 2 by 2 matrix", "not defined", "a 3 by 3 matrix"]
+        answer: 2
+        explanation: A has 3 columns and B has 2 rows. The outputs of B have 2 components and A accepts vectors of 3.
+        hints:
+          - Compare the columns of A with the rows of B.
+          - They must be equal.
+    - question:
+        id: drill-order
+        type: choice
+        system: s1
+        prompt: |
+          In the product $AB\mathbf{x}$, which matrix acts on $\mathbf{x}$ first?
+        options: ["A", "B", "Both at once", "It does not matter"]
+        answer: 1
+        explanation: Products are read from right to left, like compositions. The matrix next to the vector acts first.
+        hints:
+          - ABx means A(Bx).
+          - What is computed inside the bracket?
+    - question:
+        id: drill-commute
+        type: choice
+        system: s1
+        prompt: |
+          For two square matrices of the same size, is $AB = BA$?
+        options: ["Always", "Never", "Sometimes, and it must not be assumed", "Only when both contain zeros"]
+        answer: 2
+        explanation: The shear and the quarter turn give different products in the two orders. A matrix and the do-nothing matrix commute. Both things happen.
+        hints:
+          - Recall the shear and the quarter turn.
+          - Recall a matrix multiplied by the do-nothing matrix.
+    - question:
+        id: drill-brackets
+        type: choice
+        system: s1
+        prompt: |
+          For matrices of fitting shapes, is $(AB)C = A(BC)$?
+        options: ["Always", "Never", "Only for square matrices", "Only when they commute"]
+        answer: 0
+        explanation: Both are the matrix of first C, then B, then A. Grouping does not change a composition.
+        hints:
+          - What map does each side stand for?
+          - Does f(g(h(x))) depend on grouping?
+    - question:
+        id: drill-identity
+        type: choice
+        system: s1
+        prompt: |
+          $I$ has rows $(1, 0)$ and $(0, 1)$, and $A$ is any $2 \times 2$ matrix. What is $AI$?
+        options: ["I", "A", "The zero matrix", "A with its columns exchanged"]
+        answer: 1
+        explanation: Doing nothing and then applying A is applying A. Column by column, A applied to the unit vectors gives the columns of A.
+        hints:
+          - What map does I stand for?
+          - What is A applied to each column of I?
+    - question:
+        id: drill-diagonal
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has rows $(2, 0)$ and $(0, 3)$. $B$ has rows $(4, 0)$ and $(0, 5)$. What is the entry of $AB$ in row 2, column 2?
+        answer: "15"
+        explanation: Row 2 of A is (0, 3) and column 2 of B is (0, 5). Diagonal matrices multiply entry by entry along the diagonal.
+        hints:
+          - Dot the second row of A with the second column of B.
+          - Only one product is not zero.
+    - question:
+        id: drill-cost
+        type: numeric
+        system: s1
+        prompt: |
+          How many multiplications does the rule of rows against columns use for the product of two $2 \times 2$ matrices?
+        answer: "8"
+        explanation: There are 4 entries, each a dot product of 2 terms.
+        hints:
+          - How many entries has the product?
+          - How many multiplications does each entry need?
+    - question:
+        id: drill-walks
+        type: numeric
+        system: s1
+        prompt: |
+          A graph has arrows A→B, A→C, B→D and C→D, and no others. Its adjacency matrix is $G$. What is the entry of $G^2$ in the row of A and the column of D?
+        answer: "2"
+        explanation: The entry counts walks of exactly two steps from A to D. There are two, one through B and one through C.
+        hints:
+          - The square of the table counts walks of two steps.
+          - List the ways from A to D with one stop between.
+    - question:
+        id: drill-collapse
+        type: choice
+        system: s1
+        prompt: |
+          A model computes $W_2(W_1\mathbf{x})$, with nothing between the layers. It is the same as the single layer with matrix
+        options: ['$W_1 W_2$', '$W_2 W_1$', '$W_1 + W_2$', '$W_2$ alone']
+        answer: 1
+        explanation: The product is written in the order of the composition, with the matrix that acts first on the right.
+        hints:
+          - Which matrix is next to x?
+          - Remove the brackets without changing the order.
+    - question:
+        id: predict-orders
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          def matmul(A, B):
+              return [[sum([A[i][k] * B[k][j] for k in range(len(B))]) for j in range(len(B[0]))] for i in range(len(A))]
+
+          turn = [[0, -1], [1, 0]]
+          shear = [[1, 1], [0, 1]]
+
+          print(matmul(turn, shear))
+          print(matmul(shear, turn))
+        output: |
+          [[0, -1], [1, 1]]
+          [[1, -1], [1, 0]]
+        explanation: The first product is the turn applied to each column of the shear, (1, 0) and (1, 1), giving columns (0, 1) and (−1, 1). The second is the shear applied to each column of the turn, (0, 1) and (−1, 0), giving columns (1, 1) and (−1, 0). The two orders differ.
+        hints:
+          - Apply the left matrix to each column of the right one.
+          - The results are columns. The printout shows rows.
+    - question:
+        id: predict-powers
+        type: predict
+        system: s1
+        prompt: The quarter turn, applied again and again. What does this show?
+        code: |
+          def matmul(A, B):
+              return [[sum([A[i][k] * B[k][j] for k in range(len(B))]) for j in range(len(B[0]))] for i in range(len(A))]
+
+          turn = [[0, -1], [1, 0]]
+          P = turn
+
+          for n in range(3):
+              P = matmul(P, turn)
+              print(P)
+        output: |
+          [[-1, 0], [0, -1]]
+          [[0, 1], [-1, 0]]
+          [[1, 0], [0, 1]]
+        explanation: Two quarter turns are a half turn, which reverses every vector. Three are a quarter turn the other way. Four bring everything back, and the fourth power is the do-nothing matrix.
+        hints:
+          - P starts as one quarter turn, and each pass adds another.
+          - Think of where (1, 0) and (0, 1) are after a half turn.
+  work:
+    - text: Slower now. Write the shapes down before any product, and keep the factors in order.
+    - question:
+        id: write-matmul
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `matmul(A, B)` for matrices stored as non-empty lists of rows. Return the product $AB$ as a list of rows. If the number of columns of `A` is not the number of rows of `B`, raise a `ValueError`.
+        starter: |
+          def matmul(A, B):
+              # Replace the next line with your own.
+              return A
+
+          print(matmul([[0, -1], [1, 0]], [[1, 1], [0, 1]]))
+        solution: |
+          def matmul(A, B):
+              if len(A[0]) != len(B):
+                  raise ValueError("shapes do not fit")
+              product = []
+              for i in range(len(A)):
+                  row = []
+                  for j in range(len(B[0])):
+                      row.append(sum([A[i][k] * B[k][j] for k in range(len(B))]))
+                  product.append(row)
+              return product
+
+          print(matmul([[0, -1], [1, 0]], [[1, 1], [0, 1]]))
+        tests: |
+          assert matmul([[0, -1], [1, 0]], [[1, 1], [0, 1]]) == [[0, -1], [1, 1]], "The quarter turn times the shear has rows [0, -1] and [1, 1]"
+          assert matmul([[1, 1], [0, 1]], [[0, -1], [1, 0]]) == [[1, -1], [1, 0]], "The shear times the quarter turn has rows [1, -1] and [1, 0]"
+          assert matmul([[1, 2], [3, 4]], [[1, 0], [0, 1]]) == [[1, 2], [3, 4]], "A matrix times the do-nothing matrix is itself"
+          assert matmul([[1, 2, 3], [4, 5, 6]], [[1, 0], [0, 1], [1, 1]]) == [[4, 5], [10, 11]], "A 2 by 3 matrix times a 3 by 2 matrix is 2 by 2, with rows [4, 5] and [10, 11]"
+          assert matmul([[1, 0], [0, 1], [1, 1]], [[1, 2, 3], [4, 5, 6]]) == [[1, 2, 3], [4, 5, 6], [5, 7, 9]], "A 3 by 2 matrix times a 2 by 3 matrix is 3 by 3"
+          assert matmul([[2, -1], [1, 1]], [[3], [2]]) == [[4], [5]], "A matrix times a single column is the matrix-vector product, as a column"
+          assert matmul([[1, 2, 3]], [[4], [5], [6]]) == [[32]], "A row times a column is a 1 by 1 matrix holding their dot product"
+          assert matmul([[4], [5], [6]], [[1, 2, 3]]) == [[4, 8, 12], [5, 10, 15], [6, 12, 18]], "A column times a row is a full 3 by 3 table"
+          _raised = False
+          try:
+              matmul([[1, 2, 3], [4, 5, 6]], [[1, 2, 3], [4, 5, 6]])
+          except ValueError:
+              _raised = True
+          assert _raised, "Two 2 by 3 matrices cannot be multiplied. Raise ValueError"
+          assert output.strip() == "[[0, -1], [1, 1]]", "The program should print [[0, -1], [1, 1]]"
+        wrong:
+          - |
+            def matmul(A, B):
+                if len(A[0]) != len(B):
+                    raise ValueError("shapes do not fit")
+                return [[A[i][j] * B[i][j] for j in range(len(B[0]))] for i in range(len(A))]
+
+            print([[0, -1], [1, 1]])
+          - |
+            def matmul(A, B):
+                if len(A[0]) != len(B):
+                    raise ValueError("shapes do not fit")
+                return [[sum([B[i][k] * A[k][j] for k in range(len(A))]) for j in range(len(A[0]))] for i in range(len(B))]
+
+            print([[0, -1], [1, 1]])
+          - |
+            def matmul(A, B):
+                if len(A[0]) != len(B):
+                    raise ValueError("shapes do not fit")
+                return [[sum([A[i][k] * B[k][j] for k in range(len(B))]) for j in range(len(A[0]))] for i in range(len(A))]
+
+            print([[0, -1], [1, 1]])
+          - |
+            def matmul(A, B):
+                if len(A) != len(B):
+                    raise ValueError("shapes do not fit")
+                return [[sum([A[i][k] * B[k][j] for k in range(len(B))]) for j in range(len(B[0]))] for i in range(len(A))]
+
+            print([[0, -1], [1, 1]])
+          - |
+            def matmul(A, B):
+                if len(A[0]) != len(B):
+                    raise ValueError("shapes do not fit")
+                return [[sum([A[i][k] * B[j][k] for k in range(len(B))]) for j in range(len(B[0]))] for i in range(len(A))]
+
+            print([[0, -1], [1, 1]])
+        explanation: |
+          Three loops, one inside another. The outer two walk over the places of the answer: row `i` from `A` and column `j` from `B`. The innermost walks the shared middle index `k`, across row `i` of `A` and down column `j` of `B`, and adds the products. The bounds say which matrix supplies what: the answer has `len(A)` rows and `len(B[0])` columns, and `k` runs over `len(B)`, which the check has made equal to `len(A[0])`. Multiplying matching entries is a different and much less useful operation, and it does not stand for composing maps. Three nested loops over sizes $m$, $p$ and $n$ are the cost $mnp$ made visible. Tests with matrices that are not square are what catch the commonest slips, since for square ones every bound is the same number.
+        hints:
+          - Check that len(A[0]) equals len(B) first.
+          - The entry in row i, column j is the sum over k of A[i][k] * B[k][j].
+          - The answer has len(A) rows and len(B[0]) columns.
+    - question:
+        id: write-walks
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `walks(G, start, end, n)`. `G` is the adjacency matrix of a directed graph, with `G[i][j]` equal to 1 if there is an arrow from node `i` to node `j` and 0 otherwise. Return the number of walks of **exactly** `n` steps from node `start` to node `end`, by raising `G` to the power `n`. A walk may visit a node more than once. For `n = 0` there is one walk from a node to itself and none to any other.
+
+          `matmul` is given.
+        starter: |
+          def matmul(A, B):
+              return [[sum([A[i][k] * B[k][j] for k in range(len(B))]) for j in range(len(B[0]))] for i in range(len(A))]
+
+          def walks(G, start, end, n):
+              # Replace the next line with your own.
+              return 0
+
+          # Nodes 0, 1, 2, 3 stand for A, B, C, D in the figure.
+          G = [[0, 1, 1, 0], [0, 0, 1, 1], [0, 0, 0, 1], [1, 0, 0, 0]]
+          print(walks(G, 0, 3, 2), walks(G, 0, 0, 3))
+        solution: |
+          def matmul(A, B):
+              return [[sum([A[i][k] * B[k][j] for k in range(len(B))]) for j in range(len(B[0]))] for i in range(len(A))]
+
+          def walks(G, start, end, n):
+              size = len(G)
+              power = [[1 if i == j else 0 for j in range(size)] for i in range(size)]
+              for step in range(n):
+                  power = matmul(power, G)
+              return power[start][end]
+
+          # Nodes 0, 1, 2, 3 stand for A, B, C, D in the figure.
+          G = [[0, 1, 1, 0], [0, 0, 1, 1], [0, 0, 0, 1], [1, 0, 0, 0]]
+          print(walks(G, 0, 3, 2), walks(G, 0, 0, 3))
+        tests: |
+          _G = [[0, 1, 1, 0], [0, 0, 1, 1], [0, 0, 0, 1], [1, 0, 0, 0]]
+          assert walks(_G, 0, 3, 2) == 2, "There are two walks of two steps from A to D: through B and through C"
+          assert walks(_G, 0, 0, 3) == 2, "There are two walks of three steps from A back to A"
+          assert walks(_G, 0, 1, 1) == 1, "One step from A to B: the arrow itself"
+          assert walks(_G, 1, 0, 1) == 0, "There is no arrow from B to A"
+          assert walks(_G, 0, 2, 2) == 1, "One walk of two steps from A to C, through B"
+          assert walks(_G, 0, 3, 3) == 1, "One walk of three steps from A to D: A, B, C, D"
+          assert walks(_G, 0, 0, 0) == 1, "With no steps, there is one walk from a node to itself"
+          assert walks(_G, 0, 1, 0) == 0, "With no steps, there is no walk to a different node"
+          assert walks(_G, 3, 3, 4) == 1, "One walk of four steps from D to D: D, A, B, C, D"
+          assert walks(_G, 0, 0, 4) == 1, "One walk of four steps from A to A: A, B, C, D, A"
+          assert walks([[1, 1], [1, 0]], 0, 0, 5) == 8, "In the graph with a loop at node 0 and arrows both ways between 0 and 1, there are 8 walks of five steps from 0 to 0"
+          assert walks([[0, 1], [0, 0]], 0, 1, 2) == 0, "With one arrow and no way on, there is no walk of two steps"
+          assert output.strip() == "2 2", "The program should print 2 2"
+        wrong:
+          - |
+            def matmul(A, B):
+                return [[sum([A[i][k] * B[k][j] for k in range(len(B))]) for j in range(len(B[0]))] for i in range(len(A))]
+
+            def walks(G, start, end, n):
+                power = G
+                for step in range(n):
+                    power = matmul(power, G)
+                return power[start][end]
+
+            print(2, 2)
+          - |
+            def matmul(A, B):
+                return [[sum([A[i][k] * B[k][j] for k in range(len(B))]) for j in range(len(B[0]))] for i in range(len(A))]
+
+            def walks(G, start, end, n):
+                return G[start][end] ** n
+
+            print(2, 2)
+          - |
+            def matmul(A, B):
+                return [[sum([A[i][k] * B[k][j] for k in range(len(B))]) for j in range(len(B[0]))] for i in range(len(A))]
+
+            def walks(G, start, end, n):
+                size = len(G)
+                power = [[1 if i == j else 0 for j in range(size)] for i in range(size)]
+                for step in range(n):
+                    power = matmul(power, G)
+                return power[end][start]
+
+            print(2, 2)
+          - |
+            def matmul(A, B):
+                return [[sum([A[i][k] * B[k][j] for k in range(len(B))]) for j in range(len(B[0]))] for i in range(len(A))]
+
+            def walks(G, start, end, n):
+                size = len(G)
+                total = [[1 if i == j else 0 for j in range(size)] for i in range(size)]
+                power = total
+                for step in range(n):
+                    power = matmul(power, G)
+                    total = [[total[i][j] + power[i][j] for j in range(size)] for i in range(size)]
+                return total[start][end]
+
+            print(2, 2)
+          - |
+            def matmul(A, B):
+                return [[sum([A[i][k] * B[k][j] for k in range(len(B))]) for j in range(len(B[0]))] for i in range(len(A))]
+
+            def walks(G, start, end, n):
+                size = len(G)
+                power = [[1 if i == j else 0 for j in range(size)] for i in range(size)]
+                for step in range(n):
+                    power = matmul(power, G)
+                return 1 if power[start][end] > 0 else 0
+
+            print(2, 2)
+        explanation: |
+          The power starts as the do-nothing matrix, which is the right table for walks of no steps: one from each node to itself. Each multiplication by `G` extends every walk by one step, through every possible last stop, so after `n` multiplications the entry in row `start`, column `end` is the count wanted. Starting from `G` and multiplying `n` more times gives walks of `n + 1` steps. The row is where the walk begins and the column where it ends, and exchanging them counts walks in the reverse direction. This costs `n` matrix products for a whole table of answers at once, every start and every end. You have computed the same counts before by filling a table one step at a time: this is dynamic programming, with the matrix product doing the filling.
+        hints:
+          - What table counts the walks of 0 steps? Begin with that.
+          - Multiply by G once for each step.
+          - Read the entry in the row of the start and the column of the end.
+    - question:
+        id: fix-collapse
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `collapse(W1, b1, W2, b2)` should turn two affine layers, the first with matrix `W1` and bias `b1` and the second with `W2` and `b2`, into the single layer that computes the same function, and return its matrix and bias as a list `[W, b]`. For the layers below the bias should be `[0, 3]`. The program prints `[1, 2]`. Fix it.
+        starter: |
+          def matmul(A, B):
+              return [[sum([A[i][k] * B[k][j] for k in range(len(B))]) for j in range(len(B[0]))] for i in range(len(A))]
+
+          def collapse(W1, b1, W2, b2):
+              W = matmul(W2, W1)
+              b = [p + q for p, q in zip(b1, b2)]
+              return [W, b]
+
+          print(collapse([[1, 1], [0, 1]], [1, 0], [[0, -1], [1, 0]], [0, 2])[1])
+        solution: |
+          def matmul(A, B):
+              return [[sum([A[i][k] * B[k][j] for k in range(len(B))]) for j in range(len(B[0]))] for i in range(len(A))]
+
+          def collapse(W1, b1, W2, b2):
+              W = matmul(W2, W1)
+              moved = [sum([a * v for a, v in zip(row, b1)]) for row in W2]
+              b = [p + q for p, q in zip(moved, b2)]
+              return [W, b]
+
+          print(collapse([[1, 1], [0, 1]], [1, 0], [[0, -1], [1, 0]], [0, 2])[1])
+        tests: |
+          def _mv(A, x):
+              return [sum([a * b for a, b in zip(row, x)]) for row in A]
+          def _two(W1, b1, W2, b2, x):
+              h = [p + q for p, q in zip(_mv(W1, x), b1)]
+              return [p + q for p, q in zip(_mv(W2, h), b2)]
+          def _one(layer, x):
+              return [p + q for p, q in zip(_mv(layer[0], x), layer[1])]
+          _a = [[[1, 1], [0, 1]], [1, 0], [[0, -1], [1, 0]], [0, 2]]
+          _got = collapse(_a[0], _a[1], _a[2], _a[3])
+          assert _got[0] == [[0, -1], [1, 1]], "The matrix is W2 times W1, with rows [0, -1] and [1, 1]"
+          assert _got[1] == [0, 3], "The bias is W2 applied to b1, plus b2: [0, 1] plus [0, 2]"
+          for _x in [[0, 0], [1, 0], [0, 1], [2, 0.5], [-3, 7]]:
+              assert _one(_got, _x) == _two(_a[0], _a[1], _a[2], _a[3], _x), "The single layer and the two layers disagree on the input " + repr(_x)
+          _b = [[[1, 2], [3, 4], [5, 6]], [1, 1, 1], [[1, 0, -1], [2, 1, 0]], [10, 20]]
+          _got = collapse(_b[0], _b[1], _b[2], _b[3])
+          assert _got[0] == [[-4, -4], [5, 8]], "For a first layer from 2 numbers to 3 and a second from 3 to 2, the matrix has rows [-4, -4] and [5, 8]"
+          assert _got[1] == [10, 23], "For those layers the bias is [0, 3] plus [10, 20]"
+          for _x in [[0, 0], [1, 1], [-2, 5]]:
+              assert _one(_got, _x) == _two(_b[0], _b[1], _b[2], _b[3], _x), "The single layer and the two layers disagree on the input " + repr(_x)
+          assert collapse([[2]], [0], [[3]], [4]) == [[[6]], [4]], "With a zero first bias, the bias of the pair is the second bias"
+          assert output.strip() == "[0, 3]", "The program should print [0, 3]"
+        wrong:
+          - |
+            def matmul(A, B):
+                return [[sum([A[i][k] * B[k][j] for k in range(len(B))]) for j in range(len(B[0]))] for i in range(len(A))]
+
+            def collapse(W1, b1, W2, b2):
+                W = matmul(W2, W1)
+                b = [p + q for p, q in zip(b1, b2)]
+                return [W, b]
+
+            print([0, 3])
+          - |
+            def matmul(A, B):
+                return [[sum([A[i][k] * B[k][j] for k in range(len(B))]) for j in range(len(B[0]))] for i in range(len(A))]
+
+            def collapse(W1, b1, W2, b2):
+                W = matmul(W2, W1)
+                return [W, b2]
+
+            print([0, 3])
+          - |
+            def matmul(A, B):
+                return [[sum([A[i][k] * B[k][j] for k in range(len(B))]) for j in range(len(B[0]))] for i in range(len(A))]
+
+            def collapse(W1, b1, W2, b2):
+                W = matmul(W2, W1)
+                moved = [sum([a * v for a, v in zip(row, b2)]) for row in W2]
+                b = [p + q for p, q in zip(moved, b1)]
+                return [W, b]
+
+            print([0, 3])
+          - |
+            def matmul(A, B):
+                return [[sum([A[i][k] * B[k][j] for k in range(len(B))]) for j in range(len(B[0]))] for i in range(len(A))]
+
+            def collapse(W1, b1, W2, b2):
+                W = matmul(W2, W1)
+                moved = [sum([a * v for a, v in zip(row, b1)]) for row in W]
+                b = [p + q for p, q in zip(moved, b2)]
+                return [W, b]
+
+            print([0, 3])
+        explanation: |
+          The starter added the two biases as they stood. But the first bias is added **before** the second matrix acts, so it passes through that matrix like everything else: $W_2(W_1\mathbf{x} + \mathbf{b}_1) + \mathbf{b}_2 = W_2W_1\mathbf{x} + W_2\mathbf{b}_1 + \mathbf{b}_2$. Only the second bias arrives untouched. The fixed function is a constructive proof of the claim in the puzzle: given any two affine layers, it hands you the one layer that replaces them. Apply it repeatedly and a stack of any depth becomes a single matrix and a single bias. It also shows what a rectifier between the layers prevents. The step of multiplying out the bracket is exactly the step that is no longer allowed.
+        hints:
+          - Expand W2 (W1 x + b1) + b2 by hand.
+          - Which bias is multiplied by a matrix on the way through?
+          - Apply W2 to b1 before adding b2.
+    - question:
+        id: work-xor
+        type: choice
+        system: s2
+        prompt: |
+          A network computes $h_1 = \operatorname{relu}(x_1 + x_2)$, $h_2 = \operatorname{relu}(x_1 + x_2 - 1)$ and $y = h_1 - 2h_2$. Remove the two rectifiers, so that $h_1 = x_1 + x_2$ and $h_2 = x_1 + x_2 - 1$. What does it compute then?
+        options:
+          - "Still exclusive or."
+          - "$y = 2 - x_1 - x_2$, a single affine function, which gives 2, 1, 1, 0 on the four inputs and cannot be exclusive or."
+          - "The constant 0."
+          - "Nothing, since the layers no longer fit."
+        answer: 1
+        explanation: |
+          Without the rectifiers, $y = (x_1 + x_2) - 2(x_1 + x_2 - 1) = 2 - x_1 - x_2$. The two layers have collapsed into one neuron with weights $(-1, -1)$ and bias 2, and its values on $(0, 0)$, $(1, 0)$, $(0, 1)$, $(1, 1)$ are 2, 1, 1, 0. With the rectifiers, $h_2$ stays at 0 until both inputs are on and then cancels $h_1$, giving 0, 1, 1, 0. The only difference between the two networks is one function, applied to two numbers, that happens not to respect adding. That is the whole source of what depth can do.
+        hints:
+          - Substitute the two expressions into y and collect terms.
+          - Evaluate the result on the four inputs.
+          - Compare with 0, 1, 1, 0.
+    - question:
+        id: work-entry
+        type: numeric
+        system: s2
+        prompt: |
+          $A$ has rows $(1, 2, 0)$ and $(0, 1, 3)$. $B$ has rows $(1, 1)$, $(2, 0)$ and $(0, 4)$. What is the entry of $AB$ in row 2, column 2?
+        answer: "12"
+        explanation: |
+          $A$ is $2 \times 3$ and $B$ is $3 \times 2$, so $AB$ is $2 \times 2$. Row 2 of $A$ is $(0, 1, 3)$. Column 2 of $B$, read down its rows, is $(1, 0, 4)$. Their dot product is $0 \times 1 + 1 \times 0 + 3 \times 4$. The whole product has rows $(5, 1)$ and $(2, 12)$. The other order, $BA$, is also defined here and is a $3 \times 3$ matrix: not merely different entries but a different shape.
+        hints:
+          - Take the second row of A.
+          - Take the second column of B, one entry from each of its rows.
+          - Form their dot product.
+    - question:
+        id: work-cost
+        type: choice
+        system: s2
+        prompt: |
+          $A$ and $B$ are $1000 \times 1000$ and $\mathbf{x}$ has 1000 components. You need $AB\mathbf{x}$ for this one $\mathbf{x}$. Which plan is cheaper, and by about how much?
+        options:
+          - "Form $AB$ first and then multiply by $\\mathbf{x}$. About a thousand times cheaper."
+          - "Compute $B\\mathbf{x}$ and then apply $A$. About two million multiplications against about a thousand million, some five hundred times cheaper."
+          - "They cost the same, since the answers are equal."
+          - "Compute $B\\mathbf{x}$ and then apply $A$. Twice as cheap."
+        answer: 1
+        explanation: |
+          A matrix-vector product with a $1000 \times 1000$ matrix costs $10^6$ multiplications, so $A(B\mathbf{x})$ costs $2 \times 10^6$. Forming $AB$ costs $1000^3 = 10^9$, and applying it costs another $10^6$. Associativity guarantees the two plans give the same vector. It says nothing about their cost. The rule of thumb is to keep a vector at the right-hand end and multiply into it, so that every intermediate result is a vector and never a matrix. Forming $AB$ pays only if it will be applied to more than about a thousand different inputs.
+        hints:
+          - What does one matrix-vector product of this size cost?
+          - What does one matrix-matrix product of this size cost?
+          - Compare two of the first with one of the second.
+    - question:
+        id: work-no-commute
+        type: choice
+        system: s2
+        prompt: |
+          $S$ is the stretch with rows $(2, 0)$ and $(0, 1)$, and $T$ is the quarter turn with rows $(0, -1)$ and $(1, 0)$. Where does $(1, 0)$ go under $TS$, and where under $ST$?
+        options:
+          - "To $(0, 2)$ under both."
+          - "To $(0, 2)$ under $TS$ and to $(0, 1)$ under $ST$."
+          - "To $(0, 1)$ under $TS$ and to $(0, 2)$ under $ST$."
+          - "To $(2, 0)$ under both."
+        answer: 1
+        explanation: |
+          $TS$ stretches first: $(1, 0)$ becomes $(2, 0)$, and the turn takes that to $(0, 2)$. $ST$ turns first: $(1, 0)$ becomes $(0, 1)$, which now points upwards, where the sideways stretch has no effect, so it stays $(0, 1)$. The stretch acts along a fixed direction of the page. Whether a vector lies along that direction when the stretch arrives depends on whether the turn has already happened. That is the geometry of $TS \ne ST$, and the same thing in arithmetic is that the first columns of the two products differ.
+        hints:
+          - In TS, the matrix on the right, S, acts first.
+          - Follow (1, 0) through each matrix in turn.
+          - A sideways stretch does nothing to a vector pointing straight up.
+  connections:
+    - text: |
+        A model with two layers and nothing between them was matched, on every input, by a model with one. The reason is that one linear map after another is a linear map, and so has a matrix, found as any matrix is found: by sending the unit vectors through. That matrix is the product. Its columns are the first factor applied to the columns of the second, its entries are rows against columns, and its shape is what is left when the matching inner sizes are removed. None of it was decreed. It followed from wanting $(AB)\mathbf{x} = A(B\mathbf{x})$.
+
+        From the meaning came the laws. Order matters, because doing two things in turn depends on which is first. Brackets do not, because a chain of maps has one meaning however it is grouped. And layers collapse: [[m5.matrix-vector-product]] gave a layer as $W\mathbf{x} + \mathbf{b}$, and two of those are one of those, which is why networks place a function that is not linear between every pair. You also saw the same sum over a middle index count walks in a graph, and produce the addition formulas for sine and cosine.
+
+        The product raises new questions about single matrices. The entry rule sets rows of one factor against columns of the other, so what happens to a product when rows and columns change places? That is [[m5.transpose]]. The shear followed by the opposite shear gave back the do-nothing matrix, so when can a matrix be undone by another? That is [[m5.identity-and-inverse]]. Areas multiply when maps are chained, which [[m5.determinant]] will make exact. And the description of a map in a new set of coordinates turns out to be a product of three matrices, in [[m5.change-of-basis]].
+
+        Take the first of these. In the design matrix, each row was a flat and each column a feature, and in the last lesson one person worked across and the other down. Exchange the roles of rows and columns and you get a new matrix, the same numbers turned about the diagonal. It looks like a mere rearrangement of storage. But it answers a real question: when a matrix moves from one side of a dot product to the other, what does it become? The answer underlies every formula for fitting a model to data, and the way errors are sent backwards through a network. That is the next lesson, [[m5.transpose]].
