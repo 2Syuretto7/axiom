@@ -499,6 +499,344 @@ function Parabola(props: Props) {
   );
 }
 
+const listOf = (items: number[]) => (items.length === 0 ? "nothing" : items.map(fmt).join(", "));
+
+/** Two sets of whole numbers drawn as overlapping regions, with their union, intersection and differences. */
+function Venn(props: Props) {
+  const top = 12;
+  const [a, setA] = useState(clamp(Math.round(num(props.a, 2)), 2, 6));
+  const [b, setB] = useState(clamp(Math.round(num(props.b, 3)), 2, 6));
+  const universe = Array.from({ length: top }, (_, i) => i + 1);
+  const onlyA = universe.filter((n) => n % a === 0 && n % b !== 0);
+  const both = universe.filter((n) => n % a === 0 && n % b === 0);
+  const onlyB = universe.filter((n) => n % a !== 0 && n % b === 0);
+  const neither = universe.filter((n) => n % a !== 0 && n % b !== 0);
+  const column = (items: number[], x: number) =>
+    items.map((n, i) => (
+      <text key={n} x={x} y={150 - (items.length - 1) * 11 + i * 22} textAnchor="middle" className="fig-mono">
+        {n}
+      </text>
+    ));
+  return (
+    <Frame
+      title="Two sets"
+      summary={`Among the numbers 1 to ${top}, A is the multiples of ${a} and B is the multiples of ${b}. In both (A ∩ B): ${listOf(both)}. In at least one (A ∪ B): ${listOf(universe.filter((n) => n % a === 0 || n % b === 0))}. In A but not B (A ∖ B): ${listOf(onlyA)}. In neither: ${listOf(neither)}.`}
+      controls={
+        <>
+          <Stepper label="A: multiples of" value={a} onChange={setA} min={2} max={6} />
+          <Stepper label="B: multiples of" value={b} onChange={setB} min={2} max={6} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 290" role="img" aria-label={`Two overlapping regions for the multiples of ${a} and of ${b} among 1 to ${top}`}>
+        <rect x="10" y="10" width="420" height="270" className="fig-ghost" />
+        <circle cx="165" cy="145" r="115" className="fig-ghost" />
+        <circle cx="275" cy="145" r="115" className="fig-ghost" />
+        <text x="80" y="40" className="fig-small">
+          A
+        </text>
+        <text x="352" y="40" className="fig-small">
+          B
+        </text>
+        {column(onlyA, 105)}
+        {column(both, 220)}
+        {column(onlyB, 335)}
+        <text x="20" y="272" className="fig-small">
+          outside both: {listOf(neither)}
+        </text>
+      </svg>
+    </Frame>
+  );
+}
+
+const MAP_RULES: { name: string; f: (x: number, m: number) => number }[] = [
+  { name: "x mod m", f: (x, m) => x % m },
+  { name: "(x + 1) mod m", f: (x, m) => (x + 1) % m },
+  { name: "2x mod m", f: (x, m) => (2 * x) % m },
+  { name: "(x // 2) mod m", f: (x, m) => Math.floor(x / 2) % m },
+  { name: "x² mod m", f: (x, m) => (x * x) % m },
+];
+
+/** A function drawn as arrows from each input to its one output, with the two questions asked of any map. */
+function ArrowMap(props: Props) {
+  const [n, setN] = useState(clamp(Math.round(num(props.inputs, 4)), 2, 6));
+  const [m, setM] = useState(clamp(Math.round(num(props.outputs, 4)), 2, 6));
+  const [rule, setRule] = useState(clamp(Math.round(num(props.rule, 1)), 1, MAP_RULES.length));
+  const { name, f } = MAP_RULES[rule - 1];
+  const inputs = Array.from({ length: n }, (_, i) => i);
+  const outputs = Array.from({ length: m }, (_, i) => i);
+  const image = inputs.map((x) => f(x, m));
+  const missed = outputs.filter((y) => !image.includes(y));
+  const clash = inputs.find((x) => image.indexOf(image[x]) !== x);
+  const injective = clash === undefined;
+  const surjective = missed.length === 0;
+  const yIn = (i: number) => 40 + i * 40;
+  const kind = injective && surjective ? "a bijection" : injective ? "injective only" : surjective ? "surjective only" : "neither";
+  const plain = props.plain === true;
+  const head = `f(x) = ${name} with m = ${m}, from {${inputs.join(", ")}} to {${outputs.join(", ")}}. Every input has exactly one arrow.`;
+  const range = `The outputs that are reached, the range, are {${outputs.filter((y) => image.includes(y)).join(", ")}}.`;
+  return (
+    <Frame
+      title="Arrow diagram"
+      summary={
+        plain
+          ? `${head} ${range}`
+          : `${head} Injective: ${injective ? "yes, no output is hit twice" : `no, inputs ${image.indexOf(image[clash!])} and ${clash} share the output ${image[clash!]}`}. Surjective: ${
+              surjective ? "yes, every output is hit" : `no, nothing reaches ${listOf(missed)}`
+            }. This map is ${kind}.`
+      }
+      controls={
+        <>
+          <Stepper label="rule" value={rule} onChange={setRule} min={1} max={MAP_RULES.length} />
+          <Stepper label="inputs" value={n} onChange={setN} min={2} max={6} />
+          <Stepper label="outputs (m)" value={m} onChange={setM} min={2} max={6} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`Arrows from ${n} inputs to ${m} outputs for the rule ${name}`}>
+        <text x="110" y="16" textAnchor="middle" className="fig-small">
+          inputs
+        </text>
+        <text x="330" y="16" textAnchor="middle" className="fig-small">
+          outputs
+        </text>
+        {inputs.map((x) => (
+          <g key={`in-${x}`}>
+            <line x1="128" y1={yIn(x) - 5} x2="312" y2={yIn(image[x]) - 5} className={!plain && (x === clash || (clash !== undefined && x === image.indexOf(image[clash]))) ? "fig-accent-line" : "fig-line"} />
+            <text x="110" y={yIn(x)} textAnchor="middle" className="fig-mono">
+              {x}
+            </text>
+          </g>
+        ))}
+        {outputs.map((y) => (
+          <g key={`out-${y}`}>
+            <circle cx="318" cy={yIn(y) - 5} r="4" className={image.includes(y) ? "fig-accent" : "fig-ghost"} />
+            <text x="340" y={yIn(y)} textAnchor="middle" className="fig-mono">
+              {y}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </Frame>
+  );
+}
+
+/** A line and its inverse: the same line with the roles of x and y exchanged, its mirror image in y = x. */
+function InverseLine(props: Props) {
+  const [m, setM] = useState(clamp(num(props.slope, 2), -4, 4));
+  const [b, setB] = useState(clamp(num(props.intercept, -2), -6, 6));
+  const [x, setX] = useState(clamp(Math.round(num(props.x, 3)), -REACH, REACH));
+  const y = m * x + b;
+  const detail =
+    m === 0
+      ? `With slope 0 every input gives ${fmt(b)}, so the output does not tell you the input and there is no inverse.`
+      : `Its inverse is ${lineName(1 / m, -b / m).replace("y =", "g(x) =")}. f sends ${fmt(x)} to ${fmt(y)}, and g sends ${fmt(y)} back to ${fmt(x)}: the point (${fmt(x)}, ${fmt(y)}) on f is mirrored to (${fmt(y)}, ${fmt(x)}) on g.`;
+  return (
+    <Frame
+      title="A function and its inverse"
+      summary={`${lineName(m, b).replace("y =", "f(x) =")}. ${detail}`}
+      controls={
+        <>
+          <Slider label="slope" value={m} onChange={setM} min={-4} max={4} step={0.5} />
+          <Slider label="intercept" value={b} onChange={setB} min={-6} max={6} />
+          <Stepper label="x" value={x} onChange={setX} min={-REACH} max={REACH} />
+        </>
+      }
+    >
+      <PlaneGrid label={`The line ${lineName(m, b)}, the mirror line y = x, and the inverse`}>
+        <line x1={px(-REACH)} y1={py(-REACH)} x2={px(REACH)} y2={py(REACH)} className="fig-guide" />
+        {m === 0 ? null : drawLine(1 / m, -b / m, "fig-line")}
+        {drawLine(m, b, "fig-accent-line")}
+        <circle cx={px(x)} cy={py(y)} r="5" className="fig-accent" />
+        {m === 0 ? null : <circle cx={px(y)} cy={py(x)} r="5" className="fig-fill" />}
+      </PlaneGrid>
+    </Frame>
+  );
+}
+
+const SPLITS = [1, 2, 4, 12, 52, 365, 8760];
+const SPLIT_NAMES = ["once, at the end of the year", "every half-year", "every quarter", "every month", "every week", "every day", "every hour"];
+
+/** One rupee at 100% a year, with the interest paid in more and more instalments: the staircase closes in on e. */
+function Growth(props: Props) {
+  const [k, setK] = useState(clamp(Math.round(num(props.start, 1)), 1, SPLITS.length));
+  const n = SPLITS[k - 1];
+  const final = (1 + 1 / n) ** n;
+  const gx = (t: number) => 40 + t * 380;
+  const gy = (v: number) => 250 - (v - 1) * 125;
+  const shown = Math.min(n, 365);
+  let stairs = `${gx(0)},${gy(1)}`;
+  for (let i = 1; i <= shown; i++) {
+    const before = (1 + 1 / n) ** Math.round(((i - 1) * n) / shown);
+    const after = (1 + 1 / n) ** Math.round((i * n) / shown);
+    stairs += ` ${gx(i / shown).toFixed(1)},${gy(before).toFixed(1)} ${gx(i / shown).toFixed(1)},${gy(after).toFixed(1)}`;
+  }
+  const curve = Array.from({ length: 101 }, (_, i) => `${gx(i / 100).toFixed(1)},${gy(Math.exp(i / 100)).toFixed(1)}`).join(" ");
+  return (
+    <Frame
+      title="Compound growth"
+      summary={`₹1 at 100% a year, interest added ${SPLIT_NAMES[k - 1]}: ${n} step${n === 1 ? "" : "s"}, each multiplying by (1 + 1/${group(n)}). After one year: ₹${final.toFixed(5)}. The limit of ever finer steps is e ≈ 2.71828.`}
+      controls={<Stepper label="how often" value={k} onChange={setK} min={1} max={SPLITS.length} />}
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`Balance over one year with interest added in ${n} steps, against the smooth curve of continuous growth`}>
+        <line x1={gx(0)} x2={gx(1)} y1={gy(1)} y2={gy(1)} className="fig-axis" />
+        <line x1={gx(0)} x2={gx(0)} y1={gy(1)} y2={gy(2.85)} className="fig-axis" />
+        {[1, 2, Math.E].map((v) => (
+          <g key={v}>
+            <line x1={gx(0)} x2={gx(1)} y1={gy(v)} y2={gy(v)} className="fig-guide" />
+            <text x={gx(0) - 6} y={gy(v) + 4} textAnchor="end" className="fig-small">
+              {v === Math.E ? "e" : v}
+            </text>
+          </g>
+        ))}
+        <text x={gx(1)} y={gy(1) + 16} textAnchor="end" className="fig-small">
+          one year
+        </text>
+        <polyline points={curve} fill="none" className="fig-line" />
+        <polyline points={stairs} fill="none" className="fig-accent-line" />
+      </svg>
+    </Frame>
+  );
+}
+
+const EXACT: Record<number, string> = { 0: "0", 30: "1/2", 45: "√2/2", 60: "√3/2", 90: "1" };
+/** The exact value of the sine of a multiple of 15 degrees where it has a short form, with its decimal. */
+const trig = (degrees: number, value: number) => {
+  const d = ((degrees % 360) + 360) % 360;
+  const reference = d <= 90 ? d : d <= 180 ? 180 - d : d <= 270 ? d - 180 : 360 - d;
+  const exact = EXACT[reference];
+  const decimal = String(Math.round(value * 1000) / 1000 || 0).replace("-", "−");
+  if (exact === undefined || exact === "0" || exact === "1") return decimal;
+  return `${value < 0 ? "−" : ""}${exact} ≈ ${decimal}`;
+};
+
+/** A point travelling round the circle of radius 1: its two coordinates are the cosine and sine of the angle. */
+function UnitCircle(props: Props) {
+  const [turns, setTurns] = useState(clamp(Math.round(num(props.degrees, 30) / 15), -24, 48));
+  const degrees = turns * 15;
+  const radians = (degrees * Math.PI) / 180;
+  const c = Math.cos(radians);
+  const s = Math.sin(radians);
+  const cx = (x: number) => 170 + x * 120;
+  const cy = (y: number) => 150 - y * 120;
+  const piFraction = (() => {
+    const g = (p: number, q: number): number => (q === 0 ? Math.abs(p) : g(q, p % q));
+    const d = g(turns, 12) || 1;
+    const top = turns / d;
+    const bottom = 12 / d;
+    if (top === 0) return "0";
+    const head = Math.abs(top) === 1 ? "π" : `${Math.abs(top)}π`;
+    return `${top < 0 ? "−" : ""}${head}${bottom === 1 ? "" : `/${bottom}`}`;
+  })();
+  const cosine = trig(90 - degrees, c);
+  const sine = trig(degrees, s);
+  return (
+    <Frame
+      title="Unit circle"
+      summary={`Angle ${fmt(degrees)}° = ${piFraction} radians. The point on the circle is (cos, sin) = (${cosine}, ${sine}). Check: cos² + sin² = ${fmt(Math.round((c * c + s * s) * 1000) / 1000)}.`}
+      controls={<Slider label="angle" value={turns} onChange={setTurns} min={-24} max={48} />}
+    >
+      <svg viewBox="0 0 340 300" role="img" aria-label={`The unit circle with a point at an angle of ${degrees} degrees`}>
+        <line x1={cx(-1.3)} x2={cx(1.3)} y1={cy(0)} y2={cy(0)} className="fig-axis" />
+        <line x1={cx(0)} x2={cx(0)} y1={cy(-1.2)} y2={cy(1.2)} className="fig-axis" />
+        <circle cx={cx(0)} cy={cy(0)} r="120" className="fig-ghost" />
+        <text x={cx(1) + 4} y={cy(0) + 13} className="fig-small">
+          1
+        </text>
+        <text x={cx(0) + 5} y={cy(1) - 4} className="fig-small">
+          1
+        </text>
+        <line x1={cx(0)} y1={cy(0)} x2={cx(c)} y2={cy(s)} className="fig-line" />
+        <line x1={cx(0)} y1={cy(0)} x2={cx(c)} y2={cy(0)} className="fig-accent-line" />
+        <line x1={cx(c)} y1={cy(0)} x2={cx(c)} y2={cy(s)} className="fig-accent-line" />
+        <text x={cx(c / 2)} y={cy(0) + (s >= 0 ? 14 : -6)} textAnchor="middle" className="fig-small">
+          cos
+        </text>
+        <text x={cx(c) + (c >= 0 ? 6 : -6)} y={cy(s / 2) + 4} textAnchor={c >= 0 ? "start" : "end"} className="fig-small">
+          sin
+        </text>
+        <circle cx={cx(c)} cy={cy(s)} r="6" className="fig-accent" />
+      </svg>
+    </Frame>
+  );
+}
+
+/** 1 + 2 + … + n as a staircase of squares, and two staircases fitted together into an n by (n + 1) rectangle. */
+function TriangleSum(props: Props) {
+  const [n, setN] = useState(clamp(Math.round(num(props.n, 4)), 1, 10));
+  const size = Math.min(26, 250 / (n + 1));
+  const total = (n * (n + 1)) / 2;
+  const cells: ReactNode[] = [];
+  for (let row = 1; row <= n; row++) {
+    for (let col = 1; col <= n + 1; col++) {
+      cells.push(<rect key={`${row}-${col}`} x={20 + (col - 1) * size} y={15 + (row - 1) * size} width={size - 2} height={size - 2} className={col <= row ? "fig-accent" : "fig-fill"} />);
+    }
+  }
+  return (
+    <Frame
+      title="Sum of the first n whole numbers"
+      summary={`1 + 2 + … + ${n} is the blue staircase: ${total} squares. A second copy, turned over, completes a rectangle ${n} by ${n + 1} with ${n * (n + 1)} squares, so the staircase is half of it: ${n} × ${n + 1} ÷ 2 = ${total}.`}
+      controls={<Stepper label="n" value={n} onChange={setN} min={1} max={10} />}
+    >
+      <svg viewBox="0 0 340 280" role="img" aria-label={`A staircase of ${total} squares and its copy, forming a rectangle ${n} by ${n + 1}`}>
+        {cells}
+      </svg>
+    </Frame>
+  );
+}
+
+/** The running totals of a + ar + ar² + …: they settle when the ratio is small, and do not when it is not. */
+function PartialSums(props: Props) {
+  const [ratio, setRatio] = useState(clamp(num(props.ratio, 0.5), -1.2, 1.2));
+  const [count, setCount] = useState(clamp(Math.round(num(props.terms, 6)), 1, 16));
+  const sums: number[] = [];
+  let term = 1;
+  let running = 0;
+  for (let i = 0; i < count; i++) {
+    running += term;
+    sums.push(running);
+    term *= ratio;
+  }
+  const converges = Math.abs(ratio) < 1;
+  const limit = converges ? 1 / (1 - ratio) : null;
+  const reach = Math.max(2.2, ...sums.map(Math.abs), limit ?? 0) * 1.1;
+  const low = Math.min(0, ...sums) < 0 ? -reach : 0;
+  const sy = (v: number) => 250 - ((v - low) / (reach - low)) * 230;
+  const width = 380 / 16;
+  return (
+    <Frame
+      title="Partial sums of a geometric series"
+      summary={`1 + r + r² + … with r = ${fmt(ratio)}. The sum of the first ${count} term${count === 1 ? "" : "s"} is ${fmt(Math.round(sums[count - 1] * 10000) / 10000)}. ${
+        limit === null ? "The ratio is not smaller than 1 in size, so the totals never settle: the series diverges." : `The totals close in on 1 ÷ (1 − r) = ${fmt(Math.round(limit * 10000) / 10000)}: the series converges.`
+      }`}
+      controls={
+        <>
+          <Slider label="ratio r" value={ratio} onChange={setRatio} min={-1.2} max={1.2} step={0.1} />
+          <Stepper label="terms" value={count} onChange={setCount} min={1} max={16} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`Bars for the first ${count} partial sums of the geometric series with ratio ${ratio}`}>
+        <line x1="40" x2="430" y1={sy(0)} y2={sy(0)} className="fig-axis" />
+        {limit === null ? null : (
+          <>
+            <line x1="40" x2="430" y1={sy(limit)} y2={sy(limit)} className="fig-guide" />
+            <text x="36" y={sy(limit) + 4} textAnchor="end" className="fig-small">
+              {fmt(Math.round(limit * 100) / 100)}
+            </text>
+          </>
+        )}
+        <text x="36" y={sy(0) + 4} textAnchor="end" className="fig-small">
+          0
+        </text>
+        {sums.map((v, i) => (
+          <rect key={i} x={44 + i * width} y={Math.min(sy(v), sy(0))} width={width - 4} height={Math.max(1, Math.abs(sy(v) - sy(0)))} className={i === count - 1 ? "fig-accent" : "fig-fill"} />
+        ))}
+      </svg>
+    </Frame>
+  );
+}
+
 const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "place-value": PlaceValue,
   "number-line": NumberLine,
@@ -510,6 +848,13 @@ const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "plane-line": PlaneLine,
   "plane-lines": PlaneLines,
   parabola: Parabola,
+  venn: Venn,
+  "arrow-map": ArrowMap,
+  "inverse-line": InverseLine,
+  growth: Growth,
+  "unit-circle": UnitCircle,
+  "triangle-sum": TriangleSum,
+  "partial-sums": PartialSums,
 };
 
 export function Figure({ name, props }: { name: string; props?: Props }) {

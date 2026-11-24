@@ -1,0 +1,598 @@
+concept: m2.injective-surjective-and-bijective-maps
+minutes: 100
+claim: You can decide and prove whether a function is injective, surjective or bijective, explain why exactly the bijections have inverses, compare the sizes of sets by pairing their members, and use the pigeonhole principle to show that collisions must happen.
+recalls: [m2.composition-and-inverses]
+uses: [m2.sets, m2.functions-as-machines, m0.whole-numbers-and-place-value, m0.powers-and-roots, m1.variables-and-expressions, m1.linear-equations, m1.inequalities-and-absolute-value, m1.straight-lines-and-slope, m1.quadratics, m1.exponent-laws, m1.logarithms, e0.expressions, e0.strings, e0.booleans-and-conditionals, e0.loops, e0.functions, e0.lists-and-tuples, e0.dictionaries-and-sets, e0.reading-errors-and-debugging]
+leads: [m2.the-exponential-and-e]
+starter: |
+  # Scratch space. Does this function ever send two inputs to one output?
+  def f(x):
+      return x * x % 7
+
+  for x in range(7):
+      print(x, "->", f(x))
+parts:
+  recall:
+    - text: |
+        [[m2.composition-and-inverses]] ended with a diagnosis. A function fails to have an inverse for one of two reasons: it sends two inputs to the same output, so the output cannot say where it came from, or it leaves some member of the codomain unreached, so the inverse has nothing to send back. Today each of those gets a name and a method of proof. Three quick pulls first.
+    - question:
+        id: recall-compose
+        type: numeric
+        system: s1
+        concepts: [m2.composition-and-inverses]
+        prompt: |
+          $f(x) = x - 1$ and $g(x) = x^2$. What is $(g \circ f)(4)$?
+        answer: "9"
+        explanation: f acts first and gives 3, and then g squares it.
+        hints:
+          - The function on the right acts first.
+          - Subtract, then square.
+    - question:
+        id: recall-inverse
+        type: choice
+        system: s1
+        concepts: [m2.composition-and-inverses]
+        prompt: |
+          What is the inverse of $f(x) = 5x - 2$?
+        options: ["$f^{-1}(x) = \\dfrac{x}{5} + 2$", "$f^{-1}(x) = \\dfrac{x + 2}{5}$", "$f^{-1}(x) = \\dfrac{1}{5x - 2}$", "$f^{-1}(x) = 2 - 5x$"]
+        answer: 1
+        explanation: Undo the subtraction first, by adding 2, and then the multiplication, by dividing by 5.
+        hints:
+          - Solve y = 5x - 2 for x.
+          - Socks and shoes. Undo the last step first.
+    - question:
+        id: recall-no-inverse
+        type: choice
+        system: s1
+        concepts: [m2.composition-and-inverses]
+        prompt: |
+          Why has $f : \mathbb{R} \to \mathbb{R}$, $f(x) = x^2$, no inverse?
+        options: ["Because it is not a function", "Because 3 and −3 share an output, and negative numbers are never an output", "Because its graph is not a straight line", "Because squaring cannot be computed exactly"]
+        answer: 1
+        explanation: Both obstacles are present. Two inputs are merged, and part of the codomain is missed.
+        hints:
+          - What does an inverse need to know about each output?
+          - Which input gives 9? Which gives -4?
+  puzzle:
+    - text: |
+        A lecture hall is filling up. You are asked whether there are **exactly as many people as seats**. You are forbidden to count either.
+
+        There is a way, and a child would find it. Ask everyone to sit down, one person to a seat. If nobody is left standing and no seat is left empty, the two numbers are equal, whatever they are. If people are left standing, there are more people. If seats are left empty, there are more seats.
+
+        You have compared the sizes of two sets **without knowing the size of either**. All you did was build a function, from people to seats, and look at two things: whether any seat got two people, and whether any seat got none.
+
+        Now use the same test on a harder case. Are there more natural numbers $0, 1, 2, 3, \dots$ or more **even** natural numbers $0, 2, 4, 6, \dots$? Surely more natural numbers: the evens are only half of them. But seat them. Send each natural number $n$ to the even number $2n$:
+
+        $$0 \mapsto 0, \quad 1 \mapsto 2, \quad 2 \mapsto 4, \quad 3 \mapsto 6, \quad \dots$$
+
+        No two numbers go to the same seat. No even number is left empty, since $2k$ is the seat of $k$. Nobody standing, nothing empty. By the very test you trusted in the lecture hall, there are **exactly as many** even numbers as natural numbers.
+
+        And one more. A website stores, for each of its 10 million users, a 4-digit code computed from the password. Without knowing anything about how the code is computed, can you be certain that two users have the same code?
+
+        **What exactly are the two properties of a seating that the test examines, and what do they let you conclude?**
+  intuition:
+    - text: |
+        Go back to the arrows. A function sends exactly one arrow out of each input. That is a rule about the **left-hand** column, and it is what makes it a function. Today's two properties are about the **right-hand** column: how many arrows arrive at each output.
+
+        - If **no output receives two arrows**, the function never merges inputs. Different inputs stay different. Such a function is called **injective**. In the lecture hall, no seat has two people on it.
+        - If **every output receives at least one arrow**, the function misses nothing. Such a function is called **surjective**. In the lecture hall, no seat is empty.
+        - If both hold, **every output receives exactly one arrow**. Inputs and outputs are perfectly paired off. Such a function is called **bijective**, or a **bijection**.
+
+        The older names are *one-to-one* for injective and *onto* for surjective. The names used here are French in origin. Think of injective as *injecting* the first set into the second without anything colliding, and of surjective as covering the second set, *sur* being the French for "on".
+
+        The four possible combinations all occur. In the figure, change the rule and the two sizes until you have seen each of the four. Notice in particular what the sizes of the two sets allow. With more inputs than outputs, can you ever avoid a collision? With fewer inputs than outputs, can you ever cover everything?
+    - figure: arrow-map
+      props: { rule: 3, inputs: 6, outputs: 6 }
+    - text: |
+        You will have found that you cannot. Six arrows cannot land on five dots without two of them sharing one, and four arrows cannot cover five dots. That observation, obvious as it looks, is one of the most useful arguments in computer science, and it settles the question about the 10 million users.
+  derivation:
+    - text: |
+        **Injective.** A function $f : A \to B$ is **injective** if different inputs always have different outputs: for all $a_1, a_2 \in A$,
+
+        $$a_1 \ne a_2 \quad\text{implies}\quad f(a_1) \ne f(a_2).$$
+
+        It is nearly always easier to use the same statement turned round: if two inputs **do** have the same output, they were the same input all along.
+
+        $$f(a_1) = f(a_2) \quad\text{implies}\quad a_1 = a_2.$$
+
+        The two say exactly the same thing. The second is the working form, because it starts from an equation, and equations are what algebra can handle.
+
+        **Proving injectivity.** Suppose $f(a_1) = f(a_2)$ and deduce $a_1 = a_2$. For $f : \mathbb{R} \to \mathbb{R}$, $f(x) = 3x - 4$:
+
+        $$3a_1 - 4 = 3a_2 - 4 \quad\Longrightarrow\quad 3a_1 = 3a_2 \quad\Longrightarrow\quad a_1 = a_2.$$
+
+        Each step is reversible algebra, and the conclusion is forced. So $f$ is injective.
+
+        **Disproving injectivity.** One collision is enough. $g : \mathbb{R} \to \mathbb{R}$, $g(x) = x^2$, is not injective because $g(3) = g(-3)$ although $3 \ne -3$. To prove that something **always** holds takes an argument. To prove that it does **not** always hold takes one example. This asymmetry runs through all of mathematics.
+
+        **The horizontal line test.** For a function from real numbers to real numbers, a horizontal line at height $y$ meets the graph once for every input that is sent to $y$. So the function is injective exactly when no horizontal line meets its graph more than once. A sloping straight line passes. A parabola fails. A function that is **strictly increasing**, meaning that a larger input always gives a larger output, is always injective: two different inputs have one larger than the other, so their outputs differ.
+
+        **Surjective.** A function $f : A \to B$ is **surjective** if every member of the codomain is the output of at least one input: for every $y \in B$ there is an $x \in A$ with
+
+        $$f(x) = y.$$
+
+        In other words, the range is the whole codomain, $f(A) = B$.
+
+        **Proving surjectivity.** Take an arbitrary $y$ in the codomain and **produce** an $x$ in the domain that is sent to it. Producing it usually means solving $f(x) = y$ for $x$. For $f(x) = 3x - 4$ on $\mathbb{R}$: given any real $y$, the number $x = \dfrac{y + 4}{3}$ is real, and $f(x) = y$. So $f$ is surjective. Two things must be checked: that the $x$ you found works, and that it really lies in the domain.
+
+        **Disproving surjectivity.** Name one member of the codomain that is never reached. $g(x) = x^2$ from $\mathbb{R}$ to $\mathbb{R}$ is not surjective, because no real number is sent to $-1$.
+
+        **It depends on the sets.** Whether a function is injective or surjective is not a property of its formula. It is a property of the formula **together with** its domain and codomain. Here is the squaring formula on four choices of sets:
+
+        | Function | Injective | Surjective |
+        | --- | --- | --- |
+        | $\mathbb{R} \to \mathbb{R}$, $x \mapsto x^2$ | no: $3$ and $-3$ collide | no: $-1$ is missed |
+        | $\mathbb{R} \to [0, \infty)$, $x \mapsto x^2$ | no | yes: $y$ is hit by $\sqrt{y}$ |
+        | $[0, \infty) \to \mathbb{R}$, $x \mapsto x^2$ | yes | no |
+        | $[0, \infty) \to [0, \infty)$, $x \mapsto x^2$ | yes | yes |
+
+        Shrinking the domain removes collisions and so helps injectivity. Shrinking the codomain removes missed targets and so helps surjectivity. Any function at all becomes surjective if its codomain is cut down to its range. This is what "repair by restriction" was doing in the last lesson.
+    - question:
+        id: classify-cube-shift
+        type: choice
+        system: s2
+        prompt: |
+          Consider $f : \mathbb{Z} \to \mathbb{Z}$, $f(n) = 2n + 1$. Which is true?
+        options: ["Injective and surjective", "Injective but not surjective", "Surjective but not injective", "Neither"]
+        answer: 1
+        explanation: |
+          Injective: $2a + 1 = 2b + 1$ forces $a = b$. Not surjective: solving $2n + 1 = 4$ gives $n = \frac{3}{2}$, which is not an integer, so 4 is never reached. Only odd numbers are outputs. The same formula on $\mathbb{R}$ would be a bijection. The sets matter.
+        hints:
+          - For injectivity, set f(a) equal to f(b) and see what follows.
+          - For surjectivity, try to solve f(n) = 4. Is the solution in the domain?
+          - The domain is the integers, not the real numbers.
+    - text: |
+        **Bijections and inverses.** A function that is both injective and surjective is **bijective**. Every member of the codomain is the output of exactly one input.
+
+        Now the theorem that ties this lesson to the last one.
+
+        > **A function has an inverse if and only if it is a bijection.**
+
+        The argument is short and worth following, because it is the first proof in this course of an "if and only if", which is two claims, each needing its own argument.
+
+        *If $f : A \to B$ is a bijection, it has an inverse.* Define $g : B \to A$ by letting $g(y)$ be "the input that $f$ sends to $y$". Is that a legitimate function? It must give each $y$ exactly one output. Surjectivity says there is at least one such input. Injectivity says there is at most one. So $g$ is well defined, and by construction $f(g(y)) = y$ and $g(f(x)) = x$.
+
+        *If $f$ has an inverse $g$, it is a bijection.* Injective: if $f(a_1) = f(a_2)$, apply $g$ to both sides to get $a_1 = a_2$. Surjective: given $y$, the input $x = g(y)$ satisfies $f(x) = f(g(y)) = y$.
+
+        Read the first half again. The two properties are exactly the two promises that a function must keep, "each input has an output" and "only one", demanded of the **reversed** arrows. A bijection is a function whose reversal is also a function.
+
+        **Composition respects all three.** If $f : A \to B$ and $g : B \to C$ are both injective, so is $g \circ f$: no collisions at the first stage, and none at the second. If both are surjective, so is $g \circ f$. So a composition of bijections is a bijection, with inverse $f^{-1} \circ g^{-1}$, as you saw.
+
+        **Counting without counting.** For finite sets the lecture-hall test becomes three facts. Let $A$ and $B$ be finite.
+
+        - If there is an **injection** from $A$ to $B$, then $|A| \le |B|$. The outputs are $|A|$ different members of $B$.
+        - If there is a **surjection** from $A$ to $B$, then $|A| \ge |B|$. Every member of $B$ needs its own input.
+        - If there is a **bijection** from $A$ to $B$, then $|A| = |B|$.
+
+        The third is what counting **is**. When you count the members of a set, "one, two, three", you are building a bijection between the set and $\{1, 2, 3\}$. It is also the cleanest way to count something hard: find a bijection with something easy. You did this in the lesson on sets, when the subsets of an $n$-member set were paired with the strings of $n$ bits.
+
+        **The pigeonhole principle.** Turn the first fact round. If $|A| > |B|$, then **no** function from $A$ to $B$ is injective. Every function from a larger finite set to a smaller one has a collision.
+
+        > If more than $n$ pigeons are put into $n$ pigeonholes, some pigeonhole contains at least two pigeons.
+
+        Nothing is said about which pigeonhole, or how the pigeons were placed. That is its strength: it gives certainty with no information about the function at all. The website of the puzzle maps 10 million users to at most 10,000 four-digit codes. Two users share a code. In fact some code is shared by at least 1,000 users, because if every code had fewer, there would be fewer than 10 million users in total.
+
+        A **hash function** takes inputs of any length, such as a whole file, and returns an output of a fixed length, such as 256 bits. There are infinitely many files and only $2^{256}$ outputs. By the pigeonhole principle a hash function cannot be injective, however cleverly it is designed. Collisions exist. The whole craft is in making them astronomically hard to find. Python's dictionaries and sets are built on a hash function, and their speed depends on collisions being rare.
+
+        The other direction matters just as much. An **encoding**, such as the scheme that turns text into the numbers a model reads, must be injective, or two different texts would become the same numbers and could not be told apart again. A compression scheme that is injective is called **lossless**. One that is not, such as the compression of photographs and music, is **lossy**: it merges inputs that look or sound alike, and what it merges is gone.
+
+        **Finite sets of the same size.** Suppose $|A| = |B|$, both finite, and $f : A \to B$ is injective. The $|A|$ outputs are all different, so there are $|B|$ of them, so nothing is missed: $f$ is surjective too. Likewise a surjection between finite sets of equal size must be injective. For such sets, **either property gives you the other for free**. Six arrows to six dots with no collision cover every dot.
+
+        **Infinite sets are different.** That free gift is exactly what fails for infinite sets. On $\mathbb{N}$, the function $n \mapsto 2n$ is injective but misses every odd number. And yet, as a function from $\mathbb{N}$ to the even numbers, it is a bijection, so $\mathbb{N}$ has "the same size" as a part of itself. An infinite set can be paired off with a proper subset of itself. This is not a paradox. It is what being infinite means, and for infinite sets "has the same size as" is **defined** as "there is a bijection". Whether all infinite sets are then the same size is a question with a startling answer, which you will meet in the cluster on proof.
+
+        **Fibres.** One more piece of notation makes all of this compact. For $f : A \to B$ and a subset $T \subseteq B$, the **preimage** of $T$ is the set of all inputs that land in $T$:
+
+        $$f^{-1}(T) = \{x \in A : f(x) \in T\}.$$
+
+        Despite the notation, this needs no inverse function. It is defined for every $f$, and it is a **set**. For $f(x) = x^2$ on $\mathbb{R}$, $f^{-1}(\{9\}) = \{-3, 3\}$ and $f^{-1}(\{-1\}) = \emptyset$. Then $f$ is injective when every one-point preimage has at most one member, surjective when every one-point preimage has at least one, and bijective when each has exactly one. In Python, a preimage is a filter: the inputs that pass the test "is my output in $T$?".
+    - question:
+        id: fix-is-injective
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          A function with a finite domain is given as a dictionary. `is_injective(table)` should return `True` exactly when no two keys share a value. It returns `True` for `{"a": 1, "b": 1}`, which is wrong. Work out what the comparison in the code is really checking, and fix it.
+        starter: |
+          def is_injective(table):
+              return len(set(table.keys())) == len(table)
+
+          print(is_injective({"a": 1, "b": 2}))
+          print(is_injective({"a": 1, "b": 1}))
+        solution: |
+          def is_injective(table):
+              return len(set(table.values())) == len(table)
+
+          print(is_injective({"a": 1, "b": 2}))
+          print(is_injective({"a": 1, "b": 1}))
+        tests: |
+          assert is_injective({"a": 1, "b": 2}) is True, "Different inputs, different outputs"
+          assert is_injective({"a": 1, "b": 1}) is False, "The inputs a and b share the output 1"
+          assert is_injective({}) is True, "The empty function has no collision"
+          assert is_injective({1: "x", 2: "y", 3: "x"}) is False, "The first and last inputs collide"
+          assert is_injective({1: 1, 2: 4, 3: 9, -1: 16}) is True, "Four inputs, four different outputs"
+          assert is_injective({1: 1, -1: 1}) is False, "Squaring sends 1 and -1 to the same output"
+        wrong:
+          - "def is_injective(table):\n    return len(set(table.values())) == len(set(table.keys())) + 1\n"
+          - "def is_injective(table):\n    return len(table.values()) == len(table)\n"
+          - "def is_injective(table):\n    return len(set(table.values())) < len(table)\n"
+        explanation: The keys of a dictionary are always distinct, so the starter compared a number with itself and was always True. Injectivity is about the outputs. If the set of values is as large as the number of keys, no value was repeated. It is the first counting fact, used backwards.
+        hints:
+          - Can a dictionary have the same key twice?
+          - So what does the starter's comparison always give?
+          - Injectivity asks whether any output is repeated. Which part of the dictionary holds the outputs?
+  formal:
+    - text: |
+        Let $f : A \to B$.
+
+        | Property | Definition | Arrows arriving at each $y \in B$ |
+        | --- | --- | --- |
+        | **Injective** | for all $a_1, a_2 \in A$: $f(a_1) = f(a_2)$ implies $a_1 = a_2$ | at most one |
+        | **Surjective** | for every $y \in B$ there is $x \in A$ with $f(x) = y$ | at least one |
+        | **Bijective** | injective and surjective | exactly one |
+
+        The **preimage** of $T \subseteq B$ is $f^{-1}(T) = \{x \in A : f(x) \in T\}$.
+
+        **Theorem.** $f$ is invertible if and only if $f$ is bijective.
+
+        **Composition.** If $f : A \to B$ and $g : B \to C$ are both injective, both surjective or both bijective, then so is $g \circ f$.
+
+        **Real functions.** If $f : D \to \mathbb{R}$ with $D \subseteq \mathbb{R}$ is strictly increasing, or strictly decreasing, then $f$ is injective. $f$ is injective if and only if no horizontal line meets its graph in more than one point.
+
+        **Finite sets.** For finite sets $A$ and $B$:
+
+        | If there is | then |
+        | --- | --- |
+        | an injection $A \to B$ | $\lvert A \rvert \le \lvert B \rvert$ |
+        | a surjection $A \to B$ | $\lvert A \rvert \ge \lvert B \rvert$ |
+        | a bijection $A \to B$ | $\lvert A \rvert = \lvert B \rvert$ |
+
+        **Pigeonhole principle.** If $\lvert A \rvert > \lvert B \rvert$, no function $A \to B$ is injective. More strongly, if $\lvert A \rvert > k \lvert B \rvert$, some member of $B$ is the output of more than $k$ inputs.
+
+        **Equal finite sizes.** If $\lvert A \rvert = \lvert B \rvert$ is finite, then $f$ is injective if and only if it is surjective.
+
+        Two sets, finite or not, are said to have the **same cardinality** when there is a bijection between them. The function $n \mapsto 2n$ is a bijection from $\mathbb{N}$ to the set of even natural numbers.
+  drill:
+    - text: Seconds each. Injective is about collisions. Surjective is about coverage.
+    - question:
+        id: drill-injective-def
+        type: choice
+        system: s1
+        prompt: |
+          Which statement says that $f$ is injective?
+        options: ["Every input has exactly one output", "Every output comes from at least one input", "No two different inputs have the same output", "The domain and codomain are equal"]
+        answer: 2
+        explanation: The first is the definition of a function, and the second is surjectivity.
+        hints:
+          - Injective is the one about collisions.
+          - The first option is true of every function.
+    - question:
+        id: drill-surjective-def
+        type: choice
+        system: s1
+        prompt: |
+          $f : A \to B$ is surjective exactly when which of these holds?
+        options: ["$f(A) = B$", "$f(A) \\subseteq B$", "$A = B$", "$\\lvert A \\rvert \\le \\lvert B \\rvert$"]
+        answer: 0
+        explanation: Surjective means the range is the whole codomain. The second option is true of every function.
+        hints:
+          - Surjective means nothing in the codomain is missed.
+          - The range is always a subset of the codomain.
+    - question:
+        id: drill-abs
+        type: choice
+        system: s1
+        prompt: |
+          $f : \mathbb{R} \to \mathbb{R}$, $f(x) = |x|$. Which is true?
+        options: ["Injective only", "Surjective only", "Bijective", "Neither injective nor surjective"]
+        answer: 3
+        explanation: 2 and -2 collide, and no input gives a negative output.
+        hints:
+          - Find two inputs with the same absolute value.
+          - Can an absolute value be negative?
+    - question:
+        id: drill-cube
+        type: choice
+        system: s1
+        prompt: |
+          $f : \mathbb{R} \to \mathbb{R}$, $f(x) = x^3$. Which is true?
+        options: ["Injective only", "Surjective only", "Bijective", "Neither injective nor surjective"]
+        answer: 2
+        explanation: Cubing is strictly increasing, so there are no collisions, and every real number has a cube root, so nothing is missed. Its inverse is the cube root.
+        hints:
+          - Unlike squaring, cubing keeps the sign.
+          - Does every real number have a real cube root?
+    - question:
+        id: drill-exp
+        type: choice
+        system: s1
+        prompt: |
+          $f : \mathbb{R} \to \mathbb{R}$, $f(x) = 2^x$. Which is true?
+        options: ["Injective only", "Surjective only", "Bijective", "Neither injective nor surjective"]
+        answer: 0
+        explanation: |
+          It is strictly increasing, so injective. But $2^x$ is always positive, so 0 and the negative numbers are missed. With the codomain $(0, \infty)$ it would be a bijection, with the inverse $\log_2$.
+        hints:
+          - Can a power of 2 be negative or zero?
+          - A larger exponent gives a larger power.
+    - question:
+        id: drill-pigeonhole
+        type: numeric
+        system: s1
+        prompt: |
+          What is the smallest number of people that guarantees two of them were born in the same month?
+        answer: "13"
+        explanation: Twelve people could have twelve different months. One more must share.
+        hints:
+          - The months are the pigeonholes.
+          - How many people can have different months from one another?
+    - question:
+        id: drill-size-injection
+        type: choice
+        system: s1
+        prompt: |
+          There is an injective function from a finite set $A$ to a set $B$ with 9 members. What can you say about $|A|$?
+        options: ["$\\lvert A \\rvert = 9$", "$\\lvert A \\rvert \\ge 9$", "$\\lvert A \\rvert \\le 9$", "Nothing"]
+        answer: 2
+        explanation: The outputs are as many different members of B as A has members, and B has only 9.
+        hints:
+          - The outputs are all different.
+          - How many different members has B to offer?
+    - question:
+        id: drill-preimage
+        type: choice
+        system: s1
+        prompt: |
+          For $f : \mathbb{R} \to \mathbb{R}$, $f(x) = x^2$, what is the preimage $f^{-1}(\{4\})$?
+        options: ["$\\{2\\}$", "$\\{-2, 2\\}$", "$\\{16\\}$", "$\\emptyset$"]
+        answer: 1
+        explanation: The preimage is the set of all inputs whose square is 4. It has two members, which shows again that squaring is not injective.
+        hints:
+          - Which inputs does f send to 4?
+          - A preimage is a set and may have several members.
+    - question:
+        id: predict-collisions
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          outputs = set()
+          for x in range(6):
+              outputs.add(x * x % 6)
+          print(sorted(outputs), len(outputs) == 6)
+        output: "[0, 1, 3, 4] False"
+        explanation: The six inputs give the outputs 0, 1, 4, 3, 4, 1. Only four different values occur, so the function is neither injective nor surjective on a six-member set.
+        hints:
+          - Work out x squared modulo 6 for each x from 0 to 5.
+          - A set keeps one copy of each.
+    - question:
+        id: predict-len-not-injective
+        type: predict
+        system: s1
+        prompt: What does this show?
+        code: |
+          words = ["cat", "dog", "bird"]
+          lengths = {}
+          for w in words:
+              lengths[w] = len(w)
+          print(len(set(lengths.values())), len(lengths))
+        output: "2 3"
+        explanation: Three words but only two different lengths. len is not injective on this set, since cat and dog collide.
+        hints:
+          - How many keys does the dictionary have?
+          - How many different values?
+  work:
+    - text: Slower now. To prove injectivity start from an equation. To prove surjectivity start from an arbitrary target.
+    - question:
+        id: work-prove-injective
+        type: order
+        system: s2
+        prompt: |
+          Put these steps in order to make a proof that $f : \mathbb{R} \setminus \{1\} \to \mathbb{R}$, $f(x) = \dfrac{x}{x - 1}$, is injective.
+        steps:
+          - "Suppose $f(a) = f(b)$ for some $a$ and $b$ in the domain."
+          - "Then $\\dfrac{a}{a - 1} = \\dfrac{b}{b - 1}$."
+          - "Multiply both sides by $(a - 1)(b - 1)$, which is not zero: $a(b - 1) = b(a - 1)$."
+          - "Expand: $ab - a = ab - b$."
+          - "Subtract $ab$ from both sides and change signs: $a = b$."
+          - "So equal outputs force equal inputs, and $f$ is injective."
+        explanation: The proof starts by supposing two outputs are equal, and ends with the inputs being equal. Multiplying up is allowed because neither a nor b is 1, which is exactly why 1 was removed from the domain.
+        hints:
+          - The first line of an injectivity proof is always the same supposition.
+          - Clear the fractions before expanding.
+          - The last line states what has been shown.
+    - question:
+        id: work-range-fraction
+        type: choice
+        system: s2
+        prompt: |
+          The same function, $f : \mathbb{R} \setminus \{1\} \to \mathbb{R}$, $f(x) = \dfrac{x}{x - 1}$, is not surjective. Which real number is never an output?
+        options: ["$0$", "$1$", "$-1$", "$2$"]
+        answer: 1
+        explanation: |
+          Solve $\dfrac{x}{x - 1} = y$: $x = y(x - 1)$, so $x(1 - y) = -y$ and $x = \dfrac{y}{y - 1}$. This works for every $y$ except $y = 1$, where the equation becomes $x = x - 1$, which has no solution. So the range is $\mathbb{R} \setminus \{1\}$, and with that codomain $f$ is a bijection. In fact $f$ is its own inverse.
+        hints:
+          - Set the formula equal to y and solve for x.
+          - For which y does your solution break down?
+          - Check that value directly. Can x equal x - 1?
+    - question:
+        id: write-classify
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A function is given as a dictionary `table`, together with its codomain as a set. Write `classify(table, codomain)` that returns one of the four strings `"bijective"`, `"injective"`, `"surjective"` and `"neither"`. Return `"injective"` only when it is injective and not surjective, and likewise for `"surjective"`. You may assume every value of the dictionary lies in the codomain.
+        starter: |
+          def classify(table, codomain):
+              # Replace the next line with your own.
+              return "neither"
+
+          print(classify({1: "a", 2: "b"}, {"a", "b"}))
+          print(classify({1: "a", 2: "a"}, {"a", "b"}))
+        solution: |
+          def classify(table, codomain):
+              outputs = set(table.values())
+              injective = len(outputs) == len(table)
+              surjective = outputs == codomain
+              if injective and surjective:
+                  return "bijective"
+              if injective:
+                  return "injective"
+              if surjective:
+                  return "surjective"
+              return "neither"
+
+          print(classify({1: "a", 2: "b"}, {"a", "b"}))
+          print(classify({1: "a", 2: "a"}, {"a", "b"}))
+        tests: |
+          assert classify({1: "a", 2: "b"}, {"a", "b"}) == "bijective", "Two inputs paired off with two outputs"
+          assert classify({1: "a", 2: "a"}, {"a", "b"}) == "neither", "1 and 2 collide, and b is missed"
+          assert classify({1: "a", 2: "b"}, {"a", "b", "c"}) == "injective", "No collision, but c is missed"
+          assert classify({1: "a", 2: "b", 3: "a"}, {"a", "b"}) == "surjective", "Everything is hit, but 1 and 3 collide"
+          assert classify({}, set()) == "bijective", "The empty function to the empty set is a bijection"
+          assert classify({}, {"a"}) == "injective", "The empty function to a non-empty set misses a"
+          _sq = {}
+          for _x in range(-2, 3):
+              _sq[_x] = _x * _x
+          assert classify(_sq, {0, 1, 4}) == "surjective", "Squaring on -2..2 with the codomain {0, 1, 4}"
+        wrong:
+          - "def classify(table, codomain):\n    outputs = set(table.values())\n    injective = len(outputs) == len(table)\n    surjective = len(table) >= len(codomain)\n    if injective and surjective:\n        return \"bijective\"\n    if injective:\n        return \"injective\"\n    if surjective:\n        return \"surjective\"\n    return \"neither\"\n"
+          - "def classify(table, codomain):\n    outputs = set(table.values())\n    injective = len(outputs) == len(table)\n    surjective = outputs == codomain\n    if injective:\n        return \"injective\"\n    if surjective:\n        return \"surjective\"\n    if injective and surjective:\n        return \"bijective\"\n    return \"neither\"\n"
+          - "def classify(table, codomain):\n    outputs = set(table.values())\n    injective = len(table) <= len(codomain)\n    surjective = outputs == codomain\n    if injective and surjective:\n        return \"bijective\"\n    if injective:\n        return \"injective\"\n    if surjective:\n        return \"surjective\"\n    return \"neither\"\n"
+        explanation: The set of values is the range. The function is injective when the range has as many members as there are inputs, and surjective when the range equals the codomain. Comparing sizes alone is not enough. Having at least as many inputs as targets is necessary for surjectivity, but the inputs might still all go to one place.
+        hints:
+          - Build the range as a set of the values.
+          - Injective means no value repeats. Compare two sizes.
+          - Surjective means the range is the whole codomain. Test the case with both properties first.
+    - question:
+        id: write-find-collision
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `collision(f, inputs)` that takes a function and a list of distinct inputs, and returns a tuple `(a, b)` of the **first two** inputs in list order that `f` sends to the same output, with `a` the earlier one. If there is no collision, return `None`. Go through the list once, remembering which input produced each output so far.
+        starter: |
+          def collision(f, inputs):
+              # Replace the next line with your own.
+              return None
+
+          print(collision(lambda x: x % 10, [12, 7, 45, 22, 17]))
+        solution: |
+          def collision(f, inputs):
+              seen = {}
+              for x in inputs:
+                  y = f(x)
+                  if y in seen:
+                      return (seen[y], x)
+                  seen[y] = x
+              return None
+
+          print(collision(lambda x: x % 10, [12, 7, 45, 22, 17]))
+        tests: |
+          _last = lambda x: x % 10
+          assert collision(_last, [12, 7, 45, 22, 17]) == (12, 22), "12 and 22 are the first two inputs with the same last digit. The earlier one comes first in the tuple."
+          assert collision(_last, [1, 2, 3]) is None, "No two of 1, 2, 3 share a last digit"
+          assert collision(_last, []) is None, "No inputs, no collision"
+          assert collision(len, ["a", "bb", "cc", "d"]) == ("bb", "cc"), "bb and cc collide before d collides with a: the collision that is completed first"
+          assert collision(lambda x: x * x, [3, -3]) == (3, -3), "Squaring sends 3 and -3 to the same output"
+          assert collision(lambda x: 0, [5, 6, 7]) == (5, 6), "A constant function collides at once"
+          _eleven = collision(_last, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
+          assert _eleven == (10, 20), "Eleven inputs and ten possible last digits: the pigeonhole principle guarantees a collision"
+        wrong:
+          - "def collision(f, inputs):\n    seen = {}\n    for x in inputs:\n        y = f(x)\n        if y in seen:\n            return (x, seen[y])\n        seen[y] = x\n    return None\n"
+          - "def collision(f, inputs):\n    seen = {}\n    for x in inputs:\n        y = f(x)\n        seen[y] = x\n        if y in seen:\n            return (seen[y], x)\n    return None\n"
+          - "def collision(f, inputs):\n    for i in range(len(inputs)):\n        for j in range(i + 1, len(inputs)):\n            if f(inputs[i]) == f(inputs[j]):\n                return (inputs[i], inputs[j])\n    return None\n"
+        explanation: The dictionary maps each output seen so far to the input that produced it. It is a partial inverse of f, built as you go. The moment an output turns up that is already a key, the inverse would need two values there, and those two inputs are the collision. This single pass is how duplicate files and repeated training examples are found in practice.
+        hints:
+          - Keep a dictionary from outputs to the input that gave them.
+          - For each new input, compute its output and look it up before storing it.
+          - If it is already there, you have both members of the pair.
+    - question:
+        id: fix-surjective-direction
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `preimage(f, inputs, targets)` returns the set of inputs that `f` sends into the set `targets`, and it is correct. `is_surjective(f, inputs, codomain)` should return `True` exactly when every member of `codomain` is the output of some input, by checking that each one-point preimage is non-empty. It returns `True` for squaring on `{-1, 0, 1}` with the codomain `{0, 1, 2}`, although nothing is sent to 2. Find the mistake and fix it.
+        starter: |
+          def preimage(f, inputs, targets):
+              found = set()
+              for x in inputs:
+                  if f(x) in targets:
+                      found.add(x)
+              return found
+
+          def is_surjective(f, inputs, codomain):
+              for y in codomain:
+                  if len(preimage(f, inputs, {y})) > 0:
+                      return True
+              return False
+
+          print(is_surjective(lambda x: x * x, {-1, 0, 1}, {0, 1, 2}))
+        solution: |
+          def preimage(f, inputs, targets):
+              found = set()
+              for x in inputs:
+                  if f(x) in targets:
+                      found.add(x)
+              return found
+
+          def is_surjective(f, inputs, codomain):
+              for y in codomain:
+                  if len(preimage(f, inputs, {y})) == 0:
+                      return False
+              return True
+
+          print(is_surjective(lambda x: x * x, {-1, 0, 1}, {0, 1, 2}))
+        tests: |
+          _sq = lambda x: x * x
+          assert preimage(_sq, {-2, -1, 0, 1, 2}, {1, 4}) == {-2, -1, 1, 2}, "Leave preimage as it was"
+          assert is_surjective(_sq, {-1, 0, 1}, {0, 1, 2}) is False, "Nothing is sent to 2, so it is not surjective. One hit is not enough: every target must be hit."
+          assert is_surjective(_sq, {-1, 0, 1}, {0, 1}) is True, "Both 0 and 1 are hit"
+          assert is_surjective(_sq, {-1, 0, 1}, set()) is True, "With an empty codomain there is nothing to miss"
+          assert is_surjective(_sq, set(), {0}) is False, "With no inputs, 0 is missed"
+          assert is_surjective(lambda x: x % 3, {0, 1, 2, 3, 4}, {0, 1, 2}) is True, "Remainders on division by 3 cover 0, 1 and 2"
+          assert is_surjective(lambda x: x % 3, {0, 3, 6}, {0, 1, 2}) is False, "Multiples of 3 all have remainder 0"
+        wrong:
+          - "def preimage(f, inputs, targets):\n    found = set()\n    for x in inputs:\n        if f(x) in targets:\n            found.add(x)\n    return found\n\ndef is_surjective(f, inputs, codomain):\n    for y in codomain:\n        if len(preimage(f, inputs, {y})) == 0:\n            return False\n        return True\n    return True\n"
+          - "def preimage(f, inputs, targets):\n    found = set()\n    for x in inputs:\n        if f(x) in targets:\n            found.add(x)\n    return found\n\ndef is_surjective(f, inputs, codomain):\n    for y in codomain:\n        if len(preimage(f, inputs, {y})) != 1:\n            return False\n    return True\n"
+        explanation: |
+          The definition says "for **every** $y$ there is an $x$". The starter returned as soon as it found one $y$ that was hit, which checks "for **some** $y$". A claim about every member can only be confirmed after all of them have passed, but it can be refuted by the first failure. So the loop returns `False` early and `True` only at the end. This pattern, and the mistake of reversing it, comes up whenever "every" and "some" are turned into loops.
+        hints:
+          - Does the definition say "every target" or "some target"?
+          - When can you be sure the answer is False? When can you be sure it is True?
+          - Return False inside the loop and True after it.
+    - question:
+        id: work-pigeonhole-hash
+        type: numeric
+        system: s2
+        prompt: |
+          A hash function gives every file a code of 16 bits. A folder contains 200,000 files. The pigeonhole principle guarantees that some code is shared by at least how many files? Use $2^{16} = 65{,}536$.
+        answer: "4"
+        explanation: |
+          If every code were shared by at most 3 files, there could be at most $3 \times 65{,}536 = 196{,}608$ files. There are more than that, so some code has at least 4. It cannot be pushed to 5 by this argument, since $4 \times 65{,}536 = 262{,}144$ is more than 200,000.
+        hints:
+          - How many different codes are there?
+          - If no code had more than k files, how many files could there be at most?
+          - Find the largest k for which that maximum is still below 200,000, then add one.
+    - question:
+        id: work-count-bijections
+        type: numeric
+        system: s2
+        prompt: |
+          How many bijections are there from the set $\{1, 2, 3, 4\}$ to itself?
+        answer: "24"
+        explanation: |
+          Choose the output of 1: four choices. The output of 2 must be different: three choices. Then two, then one. $4 \times 3 \times 2 \times 1 = 24$. A bijection from a set to itself is a rearrangement, or **permutation**, of it, and the number of permutations of $n$ things is the product of all whole numbers from 1 to $n$.
+        hints:
+          - Choose the outputs one input at a time.
+          - After the output of 1 is chosen, how many are left for 2?
+          - The choices shrink by one each time. Multiply them.
+  connections:
+    - text: |
+        Three words, and a way of thinking that you will use without noticing from now on. Faced with any function, ask what it merges and what it misses.
+
+        The answers decide what can be done with it. An **injective** function loses no information: its input can be recovered from its output. That is the requirement on every encoding, every identifier, every key in a database. A function that is **not** injective discards information, and that is often exactly what is wanted. A classifier that sends every photograph to "cat" or "dog" is useful precisely because it merges millions of different pictures into one word. A neural network's layers, each a function, deliberately throw away what does not matter for the task and keep what does. The pigeonhole principle tells you when loss is unavoidable: you cannot squeeze a large set into a small one without collisions, which is why no method can compress every file, and why a model with a fixed number of parameters cannot memorise an unlimited amount of data.
+
+        A **bijection** is a perfect dictionary between two sets. It lets you do your thinking in whichever set is easier and carry the answer across. You have used one already: the logarithm is a bijection from the positive numbers to all the real numbers which turns multiplication into addition, and its inverse carries the answer back.
+
+        That inverse, the exponential function, is where we go next, and today's ideas say what to expect of it. $x \mapsto b^x$ is strictly increasing when $b > 1$, so it is injective, and its range is $(0, \infty)$, so onto that set it is a bijection. But among all the possible bases $b$ there is one that the mathematics itself singles out, a number near 2.718 that appears whenever anything grows in proportion to its own size. Finding it, and seeing why it deserves to be called natural, is the next lesson: [[m2.the-exponential-and-e]].
