@@ -1,7 +1,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
-import { costMicroUsd, tutorEffort, tutorModel } from "../tutor/config";
+import { costMicroUsd, writerEffort, tutorModel } from "../tutor/config";
 import type { Ask } from "./generate";
 
 let client: Anthropic | undefined;
@@ -14,7 +14,7 @@ export const askModel: Ask = async (system, message, shape) => {
     .stream({
       model,
       max_tokens: 16000,
-      output_config: { effort: tutorEffort(), format: betaZodOutputFormat(shape) },
+      output_config: { effort: writerEffort(), format: betaZodOutputFormat(shape) },
       // If the model declines for policy reasons, the API retries once on its default substitute.
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
