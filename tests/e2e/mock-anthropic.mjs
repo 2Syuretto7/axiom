@@ -38,6 +38,12 @@ function structured(body) {
   };
 }
 
+const REPLY = [
+  "Think of the **pebbles** again. ",
+  "Each sheep that comes home takes one away, so $12 - 3 = 9$.\n\n",
+  "<b>What</b> do the pebbles left over stand for?",
+];
+
 http
   .createServer(async (request, response) => {
     if (request.method === "GET" && request.url === "/last") {

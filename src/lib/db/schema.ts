@@ -107,6 +107,7 @@ export const reviewQuestions = pgTable("review_questions", {
   question: jsonb("question").notNull(),
   fingerprint: text("fingerprint").notNull(),
   shownIn: text("shown_in"),
+  purpose: text("purpose").$type<"recall" | "consolidation">().notNull().default("recall"),
   costMicroUsd: bigint("cost_micro_usd", { mode: "number" }).notNull().default(0),
   createdAt: createdAt(),
   answeredAt: timestamp("answered_at", { withTimezone: true }),

@@ -56,10 +56,17 @@ const initialDifficulty = (rating: number) => clamp(W[4] - (rating - 3) * W[5], 
 
 const dueAfter = (from: Date, stability: number) => new Date(from.getTime() + intervalDays(stability) * DAY);
 
-/** The memory of a lesson at the moment it is finished. Finishing it counts as a first successful recall. */
-export function firstMemory(finishedAt: Date): Memory {
-  const stability = W[GOOD - 1];
-  return { stability, difficulty: initialDifficulty(GOOD), reps: 0, lapses: 0, lastReviewedAt: finishedAt, dueAt: dueAfter(finishedAt, stability) };
+const HARD = 2;
+
+/**
+ * The memory of a lesson at the moment it is finished. Finishing it counts as a
+ * first successful recall: an ordinary one, or a hard one after a weak finish,
+ * which brings the lesson back in about a day instead of about four.
+ */
+export function firstMemory(finishedAt: Date, weak = false): Memory {
+  const rating = weak ? HARD : GOOD;
+  const stability = W[rating - 1];
+  return { stability, difficulty: initialDifficulty(rating), reps: 0, lapses: 0, lastReviewedAt: finishedAt, dueAt: dueAfter(finishedAt, stability) };
 }
 
 /** The memory after a review answered at `now`. */
