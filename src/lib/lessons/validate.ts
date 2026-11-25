@@ -139,6 +139,7 @@ export async function validateLessons(options: ValidateOptions): Promise<Issue[]
           questions.push(q);
           if (seen.has(q.id)) add(at, "Duplicate question id");
           seen.add(q.id);
+          if (part === "recall") add(at, "The Recall part holds no written questions: its three questions are written afresh for each learner");
           if (q.seconds !== undefined && q.system !== "s1") add(at, "Only fast (s1) questions are timed, so only they can set seconds");
           if (part === "drill" && q.system !== "s1") add(at, "Drill questions are fast retrieval (s1)");
           for (const id of q.concepts ?? []) {

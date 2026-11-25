@@ -28,7 +28,7 @@ const GOOD = 3;
 export const TARGET_RECALL = 0.9;
 export const MIN_INTERVAL_DAYS = 1;
 export const MAX_INTERVAL_DAYS = 365;
-/** A lesson's Recall part brings back at most this many earlier ideas, so a backlog never crowds out the lesson. */
+/** A lesson's Recall part is one set of exactly this many fresh questions, no more and no fewer. */
 export const RECALLS_PER_LESSON = 3;
 
 const DAY = 86_400_000;
@@ -94,3 +94,32 @@ export const reviewQueue = (memories: Due[], now: Date): string[] =>
     .filter((m) => m.dueAt.getTime() <= now.getTime())
     .sort((a, b) => chanceNow(a, now) - chanceNow(b, now) || a.conceptId.localeCompare(b.conceptId))
     .map((m) => m.conceptId);
+
+/**
+ * The ideas a lesson's Recall part asks about, one for each of its empty places.
+ *
+ * Ideas that are due come first, the most forgotten first. If they do not fill
+ * the set, the ideas that will be due soonest fill it. An idea already in the
+ * set is passed over while there are others, so the set is as varied as the
+ * learner's past allows. Only when fewer ideas exist than places, which happens
+ * in the first few lessons, is an idea asked about more than once, each time
+ * with a different question. With no finished lesson there is nothing to recall.
+ */
+export function recallSet(memories: Due[], now: Date, places: number, already: string[] = []): string[] {
+  const due = reviewQueue(memories, now);
+  const later = memories
+    .filter((m) => !due.includes(m.conceptId))
+    .sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime() || a.conceptId.localeCompare(b.conceptId))
+    .map((m) => m.conceptId);
+  const order = [...due, ...later];
+  if (order.length === 0) return [];
+  const uses = new Map(order.map((id) => [id, already.filter((used) => used === id).length]));
+  const picked: string[] = [];
+  while (picked.length < Math.max(0, places)) {
+    // The idea used least so far in this set; among equals, the most pressing.
+    const next = order.reduce((best, id) => (uses.get(id)! < uses.get(best)! ? id : best), order[0]);
+    picked.push(next);
+    uses.set(next, uses.get(next)! + 1);
+  }
+  return picked;
+}

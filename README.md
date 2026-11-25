@@ -30,11 +30,13 @@ What is planned after them, capstones and job-readiness, is in [ROADMAP.md](ROAD
 
 ## Recall, by spaced repetition
 
-Every lesson opens with a Recall part. Besides what the lesson itself writes there, it brings back up to three ideas from earlier lessons that are due, chosen by spaced repetition. A finished lesson is not given again as a screen of its own.
+Every lesson opens with a Recall part, and its questions are one set of exactly three, no more and no fewer. They are not written in the lesson files: a lesson's `recall` part holds only its opening words, and the lesson check refuses a question there. Which earlier ideas the three ask about is chosen by spaced repetition. A finished lesson is not given again as a screen of its own.
+
+The ideas that are due come first, the most forgotten first. If fewer than three are due, the ideas due soonest fill the set. The three are on three different ideas whenever three earlier lessons are finished. After only one or two finished lessons an idea is asked about more than once, each time with a different question. The very first lesson has no earlier idea, so it alone has no recall questions.
 
 When an idea is due is decided by the FSRS-4.5 memory model (`src/lib/review/schedule.ts`), which brings it back when the chance of recalling it has fallen to 90%: about 4 days after its lesson is finished, then about 2 weeks, 7 weeks and 20 weeks if it is recalled each time, and within days if it is missed.
 
-Each idea is recalled with one question, one try and no hints. The question is always new: it is written by the model for that one occasion, from the idea's lesson and the list of every recall question the learner has already had on it. It is shown only if it is not a repeat of any of those or of the lesson's own questions, and if a second, independent pass that is not told the answer solves it and reaches the same answer. Once answered, a question is never shown again. If no new question can be written, the idea is left out; an old question is never used instead.
+Each idea is recalled with one question, one try and no hints. The question is always new: it is written by the model for that one occasion, from the idea's lesson and the list of every recall question the learner has already had on it. It is shown only if it is not a repeat of any of those or of the lesson's own questions, and if a second, independent pass that is not told the answer solves it and reaches the same answer. Once answered, a question is never shown again. If a new question cannot be written, its place stays empty until the next visit; an old question is never used instead.
 
 These questions do not count towards finishing the lesson they appear in. They need `ANTHROPIC_API_KEY`, like the tutor, and each question's cost is recorded in `review_questions`.
 

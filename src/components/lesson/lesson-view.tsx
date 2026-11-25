@@ -37,7 +37,7 @@ export function LessonView({
   capstone?: string | null;
   solved: Set<string>;
   hintLevels: Map<string, number>;
-  /** Earlier ideas that spaced repetition says are due, shown at the end of the Recall part. */
+  /** The Recall part's questions: three fresh ones on earlier ideas, chosen by spaced repetition. */
   recall?: React.ReactNode;
 }) {
   const later = lesson.leads.filter((id) => id !== next);

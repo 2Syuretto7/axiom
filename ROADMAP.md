@@ -30,7 +30,7 @@ Every written cluster now has one. From here on, every new cluster ships with it
 
 ## Recall and timing
 
-Built. The Recall part of every lesson brings back earlier ideas that are due, chosen by the FSRS-4.5 memory model, each with a question the learner has never seen, written and independently checked for that one occasion. System One questions are timed and System Two questions are not. How both work is in the README.
+Built. The Recall part of every lesson is one set of exactly three questions on earlier ideas, chosen by the FSRS-4.5 memory model, each a question the learner has never seen, written and independently checked for that one occasion. System One questions are timed and System Two questions are not. How both work is in the README.
 
 Not built yet: mastery that weighs speed, hints and recency, with a short consolidation set after a weak finish; and the Map does not show how well each lesson is remembered.
 

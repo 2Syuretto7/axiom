@@ -34,6 +34,11 @@ export async function rememberFinishedLessons(db: Db, userId: string) {
     .onConflictDoNothing();
 }
 
+/** Where every finished lesson stands in the recall schedule, the one due soonest first. */
+export async function memoriesOf(db: Db, userId: string) {
+  return db.select().from(reviewStates).where(eq(reviewStates.userId, userId)).orderBy(asc(reviewStates.dueAt), asc(reviewStates.conceptId));
+}
+
 /** Every lesson that is due at `at`, or will be by then. */
 export async function dueBy(db: Db, userId: string, at: Date) {
   return db
@@ -45,13 +50,19 @@ export async function dueBy(db: Db, userId: string, at: Date) {
 
 export type StoredQuestion = { id: number; conceptId: string; question: ReviewQuestion };
 
-/** The question written for a lesson's next review and not yet answered, if there is one. */
-export async function waitingQuestion(db: Db, userId: string, conceptId: string): Promise<StoredQuestion | null> {
-  const [row] = await db
-    .select({ id: reviewQuestions.id, conceptId: reviewQuestions.conceptId, question: reviewQuestions.question })
+/**
+ * A question written for an idea and not yet answered, which is not already in the lesson `notIn`.
+ * One that has not been placed in any lesson comes first.
+ */
+export async function waitingQuestion(db: Db, userId: string, conceptId: string, notIn?: string): Promise<StoredQuestion | null> {
+  const rows = await db
+    .select({ id: reviewQuestions.id, conceptId: reviewQuestions.conceptId, question: reviewQuestions.question, shownIn: reviewQuestions.shownIn })
     .from(reviewQuestions)
-    .where(and(eq(reviewQuestions.userId, userId), eq(reviewQuestions.conceptId, conceptId), isNull(reviewQuestions.answeredAt)));
-  return row ? { ...row, question: reviewQuestion.parse(row.question) } : null;
+    .where(and(eq(reviewQuestions.userId, userId), eq(reviewQuestions.conceptId, conceptId), isNull(reviewQuestions.answeredAt)))
+    .orderBy(asc(reviewQuestions.id));
+  const free = rows.filter((row) => row.shownIn !== notIn || notIn === undefined);
+  const row = free.find((candidate) => candidate.shownIn === null) ?? free[0];
+  return row ? { id: row.id, conceptId: row.conceptId, question: reviewQuestion.parse(row.question) } : null;
 }
 
 /** Puts a waiting question in the Recall part of a lesson. It stays there, answered or not, on every later visit. */
@@ -91,8 +102,8 @@ export async function questionsWritten(db: Db, userId: string, conceptId: string
 }
 
 /**
- * Keeps a newly written question for the lesson's next review. Returns null if it
- * could not be kept: the same question was written before, or another one is already waiting.
+ * Keeps a newly written question. Returns null if it could not be kept because
+ * the same question was written for this idea before.
  */
 export async function keepQuestion(
   db: Db,

@@ -15,6 +15,7 @@ import {
   firstMemory,
   intervalDays,
   recallChance,
+  recallSet,
   reviewQueue,
   RECALLS_PER_LESSON,
   TARGET_RECALL,
@@ -90,6 +91,22 @@ describe("the schedule", () => {
     const staler = { conceptId: "b.staler", ...firstMemory(later(T0, -200)) };
     expect(reviewQueue([fresh, stale, staler], now)).toEqual(["b.staler", "a.stale"]);
     expect(reviewQueue([fresh], now)).toEqual([]);
+
+    // A lesson's Recall part is one set of exactly three. Due ideas come first, the most forgotten first.
+    expect(RECALLS_PER_LESSON).toBe(3);
+    const soon = { ...fresh, conceptId: "d.soon", dueAt: later(now, 1) };
+    expect(recallSet([fresh, stale, staler, soon], now, 3)).toEqual(["b.staler", "a.stale", "d.soon"]);
+    // With nothing due, the ideas due soonest fill the set, so it is still three.
+    expect(recallSet([fresh, soon], now, 2)).toEqual(["d.soon", "c.fresh"]);
+    // Fewer ideas than places: an idea is asked about again rather than leaving a place empty.
+    expect(recallSet([stale], now, 3)).toEqual(["a.stale", "a.stale", "a.stale"]);
+    expect(recallSet([fresh, stale], now, 3)).toEqual(["a.stale", "c.fresh", "a.stale"]);
+    // Places already filled count: the idea used least so far goes next.
+    expect(recallSet([fresh, stale], now, 1, ["a.stale"])).toEqual(["c.fresh"]);
+    expect(recallSet([fresh, stale, staler], now, 1, ["b.staler", "a.stale"])).toEqual(["c.fresh"]);
+    // The very first lesson has no earlier idea, so it has nothing to recall.
+    expect(recallSet([], now, 3)).toEqual([]);
+    expect(recallSet([stale], now, 0)).toEqual([]);
     expect(RECALLS_PER_LESSON).toBe(3);
   });
 });
@@ -281,8 +298,12 @@ describe("reviews in the database", () => {
 
     const kept = await keepQuestion(db, userId, "m0.counting", write(numeric));
     expect(await waitingQuestion(db, userId, "m0.counting")).toEqual(kept);
-    // Only one question waits at a time.
-    expect(await keepQuestion(db, userId, "m0.counting", write(choice))).toBeNull();
+    // The same question cannot be kept twice.
+    expect(await keepQuestion(db, userId, "m0.counting", write(numeric))).toBeNull();
+    // A question already in a lesson's set is not offered to that lesson again, so an idea asked twice there gets two different questions.
+    await showIn(db, userId, kept!.id, "e0.printing");
+    expect(await waitingQuestion(db, userId, "m0.counting", "e0.printing")).toBeNull();
+    expect(await waitingQuestion(db, userId, "m0.counting", "e0.variables")).toEqual(kept);
 
     // Letters where a number belongs are not an answer, so the one try is kept.
     expect(await answerReview(db, userId, kept!.id, () => "two dozen", 500)).toMatchObject({ correct: false, note: expect.any(String) });
@@ -305,7 +326,10 @@ describe("reviews in the database", () => {
     expect(await waitingQuestion(db, userId, "m0.counting")).toBeNull();
     expect(await answerReview(db, userId, kept!.id, () => "24", 1500)).toBeNull();
     expect(await keepQuestion(db, userId, "m0.counting", write({ ...numeric, prompt: "a tray holds 4 rows of 6 eggs, how many eggs" }))).toBeNull();
-    expect(await keepQuestion(db, userId, "m0.counting", write(choice))).not.toBeNull();
+    const next = await keepQuestion(db, userId, "m0.counting", write(choice));
+    expect(next).not.toBeNull();
+    // A question written ahead and not yet placed is the one a lesson takes.
+    expect(await waitingQuestion(db, userId, "m0.counting", "e0.variables")).toEqual(next);
     expect((await questionsWritten(db, userId, "m0.counting")).map((row) => row.question.type)).toEqual(["numeric", "choice"]);
   });
 

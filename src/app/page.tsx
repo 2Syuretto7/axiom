@@ -31,7 +31,7 @@ export default function Home() {
         </p>
         <BurnHeadline phrases={["Derive it.", "Build it.", "Keep it."]} className="display mt-6" />
         <p className="lead rise mt-6" style={{ "--delay": "420ms" } as React.CSSProperties}>
-          One button decides what comes next: a new idea whose foundations you have mastered. Each lesson opens by recalling the earlier ideas that are due.
+          One button decides what comes next: a new idea whose foundations you have mastered. Each lesson opens with three new recall questions on earlier ideas, chosen by spaced repetition.
         </p>
         <div className="rise mt-10" style={{ "--delay": "520ms" } as React.CSSProperties}>
           <Link href="/learn" className="btn btn-primary btn-large" prefetch={false}>

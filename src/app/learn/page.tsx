@@ -125,11 +125,11 @@ async function Lesson() {
         solved={solved}
         hintLevels={hints}
         recall={
-          // The lesson does not wait for this: earlier ideas that are due arrive in its Recall part when their questions are ready.
+          // The lesson does not wait for this: its three recall questions arrive in its Recall part when they are ready.
           <Suspense
             fallback={
               <p className="label recall-spaced-wait" role="status">
-                Checking which earlier ideas are due
+                Writing three fresh recall questions
               </p>
             }
           >

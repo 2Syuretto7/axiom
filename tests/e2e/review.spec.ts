@@ -19,10 +19,10 @@ async function sql<T extends Record<string, unknown>>(text: string, values: unkn
 }
 
 const recall = (page: Page) => page.getByRole("region", { name: "Recall", exact: true });
-const spaced = (page: Page) => page.getByRole("group", { name: "Recall from earlier lessons" });
+const spaced = (page: Page) => page.getByRole("group", { name: "Recall questions" });
 const card = (page: Page, n: number) => page.getByRole("region", { name: `Fresh recall question ${n}`, exact: true });
-/** The number of sheep in the first field, which the stand-in model changes with every question it writes. */
 const begin = (page: Page, n: number) => card(page, n).getByRole("button", { name: "Start" }).click();
+/** The number of sheep in the first field, which the stand-in model changes with every question it writes. */
 const sheep = async (page: Page, n: number) => Number((await card(page, n).locator(".q-prompt").innerText()).match(/has (\d+) sheep/)![1]);
 
 async function answer(page: Page, n: number, value: string) {
@@ -30,33 +30,27 @@ async function answer(page: Page, n: number, value: string) {
   await card(page, n).getByRole("button", { name: "Check" }).click();
 }
 
-test("a lesson's Recall brings back the earlier ideas that are due, with questions never seen before", async ({ page, request }) => {
-  // Reopen the last lesson. The two before it were finished minutes ago, so nothing is due and no question is written.
+test("a lesson's Recall is one set of exactly three questions never seen before, chosen by spaced repetition", async ({ page, request }) => {
+  // Reopen the last lesson, as though the two before it were finished five weeks ago and nothing has been recalled since.
   await sql("delete from lesson_progress where concept_id in ('e0.printing', 'capstone.e0')");
   await sql("delete from attempts where concept_id in ('e0.printing', 'capstone.e0')");
-  await page.goto("/learn");
-  await expect(page.getByRole("heading", { level: 1, name: "Printing" })).toBeVisible();
-  await expect(recall(page)).toContainText("In Adding you added counts by hand.");
-  await expect(recall(page).getByRole("status")).toHaveCount(0);
-  await expect(spaced(page)).toHaveCount(0);
-  expect(await sql("select 1 from review_questions")).toEqual([]);
-  expect((await sql("select 1 from review_states")).length).toBe(2);
-
-  // Five weeks pass before the learner opens the lesson again.
   await sql("update lesson_progress set completed_at = completed_at - interval '35 days', started_at = started_at - interval '35 days'");
+  await sql("delete from review_questions");
   await sql("delete from review_states");
 
   await page.goto("/learn");
-  // There is no review screen: Learn gives the lesson, and the ideas that are due arrive inside its Recall part.
+  // There is no review screen: Learn gives the lesson, and the recall questions are inside its Recall part.
   await expect(page.getByRole("heading", { level: 1, name: "Printing" })).toBeVisible();
   await expect(spaced(page)).toBeVisible({ timeout: 30_000 });
   await expect(recall(page).locator(spaced(page))).toBeVisible();
-  await expect(spaced(page)).toContainText("2 ideas from earlier lessons are due to be recalled.");
-  // What the lesson itself wrote for its Recall part is still there, before them.
+  await expect(spaced(page)).toContainText("3 questions on earlier ideas, chosen by spaced repetition.");
+  // The lesson's own words introduce the part, and it has no written questions of its own: the three fresh ones are the only set.
   await expect(recall(page)).toContainText("In Adding you added counts by hand.");
+  await expect(recall(page).getByRole("region")).toHaveCount(3);
   await expect(card(page, 1)).toBeVisible();
   await expect(card(page, 2)).toBeVisible();
-  await expect(card(page, 3)).toHaveCount(0);
+  await expect(card(page, 3)).toBeVisible();
+  await expect(card(page, 4)).toHaveCount(0);
 
   // Recall is fast retrieval, so each is timed: hidden until started, then a countdown.
   await expect(card(page, 1)).toContainText("Recall 1 · New question · One try · Timed, 1 min");
@@ -65,11 +59,11 @@ test("a lesson's Recall brings back the earlier ideas that are due, with questio
   await begin(page, 1);
   await expect(card(page, 1).getByRole("timer")).toHaveText(/^0:5\d|1:00$/);
   await begin(page, 2);
+  await begin(page, 3);
 
-  // Three questions were written for two ideas: one failed its independent check and was thrown away.
-  const counts = [await sheep(page, 1), await sheep(page, 2)];
-  expect(new Set(counts).size).toBe(2);
-  expect(Math.max(...counts)).toBe(3);
+  // Only two earlier ideas exist, so one is asked about twice, and all three questions are different.
+  const counts = [await sheep(page, 1), await sheep(page, 2), await sheep(page, 3)];
+  expect(new Set(counts).size).toBe(3);
   // The questions are the model's own text: mathematics is typeset, and raw HTML is shown as text, not run.
   await expect(card(page, 1).locator(".katex").first()).toBeVisible();
   await expect(card(page, 1).locator("b")).toHaveCount(0);
@@ -91,13 +85,14 @@ test("a lesson's Recall brings back the earlier ideas that are due, with questio
   const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).exclude(".cm-scroller").analyze();
   expect(results.violations.map((v) => `${v.id}: ${v.help} (${v.nodes[0]?.target})`)).toEqual([]);
 
-  // A reload shows the same questions; they are not written again.
+  // A reload shows the same three questions; they are not written again and no fourth is added.
   await page.reload();
   await expect(spaced(page)).toBeVisible({ timeout: 30_000 });
   await begin(page, 1);
   await begin(page, 2);
-  expect([await sheep(page, 1), await sheep(page, 2)]).toEqual(counts);
-  expect((await sql("select 1 from review_questions")).length).toBe(2);
+  await begin(page, 3);
+  expect([await sheep(page, 1), await sheep(page, 2), await sheep(page, 3)]).toEqual(counts);
+  expect((await sql("select 1 from review_questions where shown_in = 'e0.printing'")).length).toBe(3);
 
   // Something that is not a number does not use up the one try.
   await answer(page, 1, "twelve");
@@ -105,7 +100,7 @@ test("a lesson's Recall brings back the earlier ideas that are due, with questio
   await answer(page, 1, String(counts[0] + 10));
   await expect(card(page, 1)).toContainText("Recalled");
   await expect(card(page, 1)).toContainText("Count on from 10");
-  await expect(card(page, 1)).toContainText(/From (Counting|Adding)\. It comes back in \d+ days, with a different question\./);
+  await expect(card(page, 1)).toContainText(/From (Counting|Adding)\. It comes back in \d+ days?, with a different question\./);
   await expect(card(page, 1).getByRole("button", { name: "Check" })).toBeDisabled();
   await expect(card(page, 1).getByRole("timer")).toHaveCount(0);
 
@@ -115,6 +110,8 @@ test("a lesson's Recall brings back the earlier ideas that are due, with questio
   await expect(card(page, 2)).toContainText("Not this time. The answer is:");
   await expect(card(page, 2)).toContainText(`${counts[1] + 10} sheep`);
   await expect(card(page, 2)).toContainText(/It comes back in [1-9] days?, with a different question\./);
+  await answer(page, 3, String(counts[2] + 10));
+  await expect(card(page, 3)).toContainText("Recalled");
   await spaced(page).scrollIntoViewIfNeeded();
   await page.screenshot({ path: "test-results/screens/recall-spaced-laptop.png" });
 
@@ -123,14 +120,16 @@ test("a lesson's Recall brings back the earlier ideas that are due, with questio
   await page.reload();
   await expect(card(page, 1)).toContainText("Recalled");
   await expect(card(page, 2)).toContainText("Missed");
+  await expect(card(page, 3)).toContainText("Recalled");
   await expect(card(page, 2).getByRole("button", { name: "Check" })).toBeDisabled();
+  await expect(card(page, 4)).toHaveCount(0);
 
-  const asked = await sql<{ concept_id: string; correct: boolean; shown_in: string }>("select concept_id, correct, shown_in from review_questions order by id");
-  expect(asked.map((row) => [row.correct, row.shown_in])).toEqual([
-    [true, "e0.printing"],
-    [false, "e0.printing"],
-  ]);
+  const asked = await sql<{ concept_id: string; correct: boolean; shown_in: string; fingerprint: string }>(
+    "select concept_id, correct, shown_in, fingerprint from review_questions where shown_in = 'e0.printing' order by id",
+  );
+  expect(asked.map((row) => row.correct)).toEqual([true, false, true]);
   expect(new Set(asked.map((row) => row.concept_id))).toEqual(new Set(["m0.counting", "m0.adding"]));
+  expect(new Set(asked.map((row) => row.fingerprint)).size).toBe(3);
   const states = await sql<{ concept_id: string; lapses: number; days: number }>(
     "select concept_id, lapses, extract(epoch from due_at - now()) / 86400 as days from review_states order by due_at",
   );
@@ -140,28 +139,31 @@ test("a lesson's Recall brings back the earlier ideas that are due, with questio
   expect(Number(states[1].days)).toBeGreaterThan(14);
 });
 
-test("an idea that is due again gets a question it has never had", async ({ page }) => {
-  // As though the two questions had been answered in an earlier lesson, and the missed idea has come due again.
-  const [{ concept_id: idea }] = await sql<{ concept_id: string }>("select concept_id from review_states order by due_at limit 1");
-  const before = await sql<{ prompt: string }>("select question->>'prompt' as prompt from review_questions where concept_id = $1", [idea]);
-  expect(before).toHaveLength(1);
-  await sql("update review_questions set shown_in = 'm0.adding'");
-  await sql("update review_states set due_at = now() - interval '1 hour', last_reviewed_at = last_reviewed_at - interval '6 days' where concept_id = $1", [idea]);
+test("the next lesson's set is three more questions, none of them seen before", async ({ page }) => {
+  // As though the three questions had been answered in an earlier lesson.
+  const before = await sql<{ prompt: string }>("select question->>'prompt' as prompt from review_questions where answered_at is not null");
+  expect(before).toHaveLength(3);
+  await sql("update review_questions set shown_in = 'm0.adding' where answered_at is not null");
 
   await page.goto("/learn");
   await expect(page.getByRole("heading", { level: 1, name: "Printing" })).toBeVisible();
   await expect(spaced(page)).toBeVisible({ timeout: 30_000 });
-  await expect(spaced(page)).toContainText("One idea from an earlier lesson is due to be recalled.");
-  await expect(card(page, 2)).toHaveCount(0);
-  await begin(page, 1);
-  const count = await sheep(page, 1);
-  expect(before[0].prompt).not.toContain(`has ${count} sheep`);
-  await answer(page, 1, String(count + 10));
-  await expect(card(page, 1)).toContainText("Recalled");
+  await expect(spaced(page)).toContainText("3 questions on earlier ideas");
+  await expect(card(page, 3)).toBeVisible();
+  await expect(card(page, 4)).toHaveCount(0);
+  for (const n of [1, 2, 3]) {
+    await begin(page, n);
+    const count = await sheep(page, n);
+    for (const old of before) expect(old.prompt).not.toContain(`has ${count} sheep`);
+    await answer(page, n, String(count + 10));
+    await expect(card(page, n)).toContainText("Recalled");
+  }
 
-  const rows = await sql<{ answered: boolean; fingerprint: string }>("select answered_at is not null as answered, fingerprint from review_questions where concept_id = $1 order by id", [idea]);
-  expect(rows.map((row) => row.answered)).toEqual([true, true]);
-  expect(rows[0].fingerprint).not.toBe(rows[1].fingerprint);
+  const rows = await sql<{ answered: boolean; fingerprint: string; concept_id: string }>(
+    "select answered_at is not null as answered, fingerprint, concept_id from review_questions where answered_at is not null order by id",
+  );
+  expect(rows).toHaveLength(6);
+  expect(new Set(rows.map((row) => `${row.concept_id} ${row.fingerprint}`)).size).toBe(6);
 });
 
 test("System One questions are timed and System Two questions are not", async ({ page }) => {

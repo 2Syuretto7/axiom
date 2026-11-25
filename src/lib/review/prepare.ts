@@ -6,37 +6,52 @@ import { tutorConnected } from "../tutor/config";
 import { writeReviewQuestion } from "./generate";
 import { askModel } from "./model";
 import { fingerprint, summary } from "./question";
-import { keepQuestion, questionsWritten, waitingQuestion, type StoredQuestion } from "./service";
+import { keepQuestion, questionsWritten, showIn, waitingQuestion, type StoredQuestion } from "./service";
 
-const running = new Map<string, Promise<StoredQuestion | null>>();
+/** Work on one learner's questions for one idea happens one step at a time, so two questions written together cannot be the same. */
+const queues = new Map<string, Promise<unknown>>();
+
+function inTurn<T>(key: string, work: () => Promise<T>): Promise<T> {
+  const turn = (queues.get(key) ?? Promise.resolve()).then(work, work);
+  const settled = turn.catch(() => {});
+  queues.set(key, settled);
+  void settled.then(() => {
+    if (queues.get(key) === settled) queues.delete(key);
+  });
+  return turn;
+}
+
+/** Writes a question on an idea that the learner has never had, and keeps it. Null if none could be written. */
+async function writeNew(db: Db, userId: string, conceptId: string): Promise<StoredQuestion | null> {
+  const { graph, lessons } = content();
+  const lesson = lessons.get(conceptId);
+  if (!lesson || !tutorConnected()) return null;
+  const written = await questionsWritten(db, userId, conceptId);
+  const taken = new Set([...written.map((row) => row.fingerprint), ...questionsOf(lesson).map(fingerprint)]);
+  const fresh = await writeReviewQuestion({ graph, lesson, earlier: written.map((row) => summary(row.question)), taken }, askModel);
+  return fresh.question ? keepQuestion(db, userId, conceptId, fresh) : null;
+}
+
+const quietly = (error: unknown) => {
+  console.error("recall", error instanceof Error ? error.name : "error");
+  return null;
+};
 
 /**
- * The question for a lesson's next review: the one already waiting, or a new one
- * written now. Returns null when no new question could be written, for example
- * when the model is not connected. A review never falls back to an old question.
+ * One fresh question on an idea, placed in a lesson's Recall part: a question
+ * written ahead and still unanswered if there is one, otherwise a new one
+ * written now. Returns null when none could be written, for example when the
+ * model is not connected. An answered question is never used again.
  */
-export function prepareQuestion(db: Db, userId: string, conceptId: string): Promise<StoredQuestion | null> {
-  const key = `${userId}:${conceptId}`;
-  const existing = running.get(key);
-  if (existing) return existing;
-  const work = (async () => {
-    const waiting = await waitingQuestion(db, userId, conceptId);
-    if (waiting) return waiting;
-    const { graph, lessons } = content();
-    const lesson = lessons.get(conceptId);
-    if (!lesson || !tutorConnected()) return null;
-    const written = await questionsWritten(db, userId, conceptId);
-    const taken = new Set([...written.map((row) => row.fingerprint), ...questionsOf(lesson).map(fingerprint)]);
-    const fresh = await writeReviewQuestion({ graph, lesson, earlier: written.map((row) => summary(row.question)), taken }, askModel);
-    if (!fresh.question) return null;
-    // If another server instance wrote one in the meantime, that one is used and this one is dropped.
-    return (await keepQuestion(db, userId, conceptId, fresh)) ?? (await waitingQuestion(db, userId, conceptId));
-  })()
-    .catch((error) => {
-      console.error("review", error instanceof Error ? error.name : "error");
-      return null;
-    })
-    .finally(() => running.delete(key));
-  running.set(key, work);
-  return work;
+export function placeQuestion(db: Db, userId: string, conceptId: string, lessonId: string): Promise<StoredQuestion | null> {
+  return inTurn(`${userId}:${conceptId}`, async () => {
+    const question = (await waitingQuestion(db, userId, conceptId, lessonId)) ?? (await writeNew(db, userId, conceptId));
+    if (question) await showIn(db, userId, question.id, lessonId);
+    return question;
+  }).catch(quietly);
+}
+
+/** Writes a question on an idea ahead of time, unless one is already waiting to be placed. */
+export function writeAhead(db: Db, userId: string, conceptId: string, lessonId: string): Promise<StoredQuestion | null> {
+  return inTurn(`${userId}:${conceptId}`, async () => (await waitingQuestion(db, userId, conceptId, lessonId)) ?? (await writeNew(db, userId, conceptId))).catch(quietly);
 }
