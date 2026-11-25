@@ -69,7 +69,7 @@ test("the tutor answers beside the lesson, knows the lesson and the editor, and 
   };
   expect(sent.url).toContain("/v1/messages");
   expect(sent.body.model).toBe("claude-opus-5-5");
-  expect(sent.body.output_config.effort).toBe("high");
+  expect(sent.body.output_config.effort).toBe("medium");
   const system = sent.body.system[0];
   expect(system.cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
   expect(system.text).toContain("Feynman");

@@ -53,7 +53,7 @@ It first works out what a message is about, and answers accordingly:
 
 There is no hint ladder. Lessons carry no prepared hints and questions have no Hint button; the tutor is the only source of hints. Each reply opens with a line the learner never sees, in which the tutor states what it judged the message to be about and whether it gave a hint (`src/lib/tutor/turn.ts`). That judgement is stored with the reply in `tutor_messages`, and `attempts.hints_used` records how many hints the tutor had given on a question when each answer was submitted. This is the hint signal that mastery reads.
 
-It needs `ANTHROPIC_API_KEY` in the deployment. It runs on Claude Opus 5.5 at high effort (`AXIOM_TUTOR_MODEL` and `AXIOM_TUTOR_EFFORT` change that). Its spend is not capped; the cost of each reply is recorded in `tutor_messages`. Tests use a stand-in for the API (`tests/e2e/mock-anthropic.mjs`), so CI needs no key.
+It needs `ANTHROPIC_API_KEY` in the deployment. It runs on Claude Opus 5.5, always at medium effort (`AXIOM_TUTOR_MODEL` changes the model; the effort is fixed). Its spend is not capped; the cost of each reply is recorded in `tutor_messages`. Tests use a stand-in for the API (`tests/e2e/mock-anthropic.mjs`), so CI needs no key.
 
 ## Layout
 

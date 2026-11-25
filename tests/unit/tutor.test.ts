@@ -173,15 +173,13 @@ describe("the tutor's cost", () => {
     // An unknown model is charged at the dearest rate rather than at nothing.
     expect(costMicroUsd("some-new-model", { input_tokens: 1000 })).toBe(4_000);
   });
-  it("has defaults that the environment can change", () => {
+  it("always uses medium effort, whatever the environment says", () => {
     expect(tutorModel()).toBe("claude-opus-5-5");
-    // The tutor thinks hard by default: judging what help a learner needs is the whole job.
-    expect(tutorEffort()).toBe("high");
-    process.env.AXIOM_TUTOR_EFFORT = "low";
-    // Low effort is never used, even if asked for.
-    expect(tutorEffort()).toBe("high");
-    process.env.AXIOM_TUTOR_EFFORT = "medium";
     expect(tutorEffort()).toBe("medium");
+    for (const asked of ["low", "high", "xhigh", "max"]) {
+      process.env.AXIOM_TUTOR_EFFORT = asked;
+      expect(tutorEffort()).toBe("medium");
+    }
     delete process.env.AXIOM_TUTOR_EFFORT;
   });
 });

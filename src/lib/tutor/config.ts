@@ -15,17 +15,8 @@ export const HISTORY_TURNS = 16;
 
 export const tutorModel = () => process.env.AXIOM_TUTOR_MODEL?.trim() || DEFAULT_MODEL;
 
-// The tutor has to judge what a message is about and how much help the learner needs, so it thinks at high effort
-// unless told otherwise. Medium is the least it thinks. Low effort is never used.
-const EFFORTS = ["medium", "high", "xhigh"] as const;
-type Effort = (typeof EFFORTS)[number];
-function effort(fallback: Effort): Effort {
-  const value = process.env.AXIOM_TUTOR_EFFORT?.trim() as Effort | undefined;
-  return value && EFFORTS.includes(value) ? value : fallback;
-}
-export const tutorEffort = () => effort("high");
-/** Writing and checking a review question is a narrower job than tutoring, and is left at medium unless the environment says otherwise. */
-export const writerEffort = () => effort("medium");
+/** The tutor always thinks at medium effort. It is fixed here and cannot be raised or lowered from the environment. */
+export const tutorEffort = () => "medium" as const;
 
 export const tutorConnected = () => Boolean(process.env.ANTHROPIC_API_KEY);
 
