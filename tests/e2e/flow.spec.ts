@@ -32,7 +32,7 @@ test("the session cookie is HttpOnly, Secure and SameSite=Lax", async ({ page, c
   expect(await page.evaluate(() => document.cookie)).not.toContain("axiom_session");
 });
 
-test("Learn opens, sign-out ends the session, and a wrong passphrase is refused", async ({ page }) => {
+test("Learn opens, nothing offers to sign out, and a wrong passphrase is refused", async ({ page }) => {
   await page.goto("/sign-in");
   await expect(page.getByRole("heading", { name: "Paste your passphrase." })).toBeVisible();
 
@@ -52,10 +52,7 @@ test("Learn opens, sign-out ends the session, and a wrong passphrase is refused"
   await page.getByRole("link", { name: "Axiom home" }).click();
   await expect(page).toHaveURL(/\/$/);
 
-  await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page).toHaveURL(/\/sign-in$/);
-  await page.goto("/");
-  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
 });
 
 test("a second account cannot be created", async ({ page }) => {

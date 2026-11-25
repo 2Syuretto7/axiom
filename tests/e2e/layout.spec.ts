@@ -65,23 +65,22 @@ test("sign-in fits the screen and is accessible", async ({ browser }, info) => {
 test("every screen can be reached and used with the keyboard", async ({ page }) => {
   await page.goto("/");
   const order: string[] = [];
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 4; i++) {
     await page.keyboard.press("Tab");
     order.push(await page.evaluate(() => document.activeElement?.textContent?.trim() ?? ""));
   }
-  expect(order).toEqual(["AXIOM", "Map", "Light theme", "Sign out", "Learn›"]);
+  expect(order).toEqual(["AXIOM", "Map", "Light theme", "Learn›"]);
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/learn$/);
 });
 
-test("the wordmark, map link, theme switch and sign out sit on one line", async ({ page }) => {
+test("the wordmark, map link and theme switch sit on one line", async ({ page }) => {
   await page.goto("/");
   const centres = [];
   for (const item of [
     page.getByRole("link", { name: "Axiom home" }),
     page.getByRole("link", { name: "Map", exact: true }),
     page.getByRole("button", { name: /theme$/ }),
-    page.getByRole("button", { name: "Sign out" }),
   ]) {
     // Measure the text itself, not the element around it.
     centres.push(
@@ -112,7 +111,6 @@ test("the workspace top bar sits on one line", async ({ page }, info) => {
     page.getByRole("link", { name: "Axiom home" }),
     page.getByRole("link", { name: "Map", exact: true }),
     page.getByRole("button", { name: /theme$/ }),
-    page.getByRole("button", { name: "Sign out" }),
   ];
   if (info.project.name !== "phone") items.push(page.getByRole("status").filter({ hasText: /^Sav/ }));
   for (const item of items) {

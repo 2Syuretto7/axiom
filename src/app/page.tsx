@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { BurnHeadline } from "@/components/burn-headline";
 import { TopBar } from "@/components/chrome";
-import { signOutAction } from "@/lib/auth/actions";
 import { requireUser } from "@/lib/auth/session";
 
 /** Confirms the session against the database; redirects to sign-in if it is not valid. */
@@ -18,13 +17,7 @@ export default function Home() {
       <Suspense fallback={null}>
         <SessionGate />
       </Suspense>
-      <TopBar map>
-        <form action={signOutAction}>
-          <button type="submit" className="label bar-item">
-            Sign out
-          </button>
-        </form>
-      </TopBar>
+      <TopBar map />
       <main className="relative z-10 flex flex-1 flex-col justify-center px-4 pb-24 pt-8 sm:px-8 lg:px-[12.5vw]">
         <p className="label rise" style={{ "--delay": "100ms" } as React.CSSProperties}>
           Mathematics · Machine learning · Engineering

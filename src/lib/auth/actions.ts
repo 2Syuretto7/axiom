@@ -2,8 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { getDb } from "@/lib/db";
-import { clearSessionCookie, readSessionToken, requestFingerprint, setSessionCookie } from "./session";
-import { signIn, signOut, signUp } from "./service";
+import { requestFingerprint, setSessionCookie } from "./session";
+import { signIn, signUp } from "./service";
 
 export type AuthState = { passphrase?: string; error?: string };
 
@@ -28,10 +28,4 @@ export async function signInAction(_previous: AuthState, formData: FormData): Pr
   }
   await setSessionCookie(result.token);
   redirect("/");
-}
-
-export async function signOutAction() {
-  await signOut(getDb(), await readSessionToken());
-  await clearSessionCookie();
-  redirect("/sign-in");
 }

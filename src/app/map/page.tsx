@@ -3,7 +3,6 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { TopBar } from "@/components/chrome";
 import { MapView } from "@/components/map/map-view";
-import { signOutAction } from "@/lib/auth/actions";
 import { requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { buildMap } from "@/lib/learning/map";
@@ -67,13 +66,7 @@ async function Curriculum() {
 export default function MapPage() {
   return (
     <div className="flex min-h-dvh flex-col">
-      <TopBar map>
-        <form action={signOutAction}>
-          <button type="submit" className="label bar-item">
-            Sign out
-          </button>
-        </form>
-      </TopBar>
+      <TopBar map />
       <main className="map-page">
         <p className="label">Map</p>
         <h1>Where you are, and what it leads to</h1>

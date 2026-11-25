@@ -22,10 +22,6 @@ export async function setSessionCookie(token: string) {
   });
 }
 
-export async function clearSessionCookie() {
-  (await cookies()).delete(SESSION_COOKIE);
-}
-
 export async function readSessionToken() {
   return (await cookies()).get(SESSION_COOKIE)?.value;
 }

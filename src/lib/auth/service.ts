@@ -89,11 +89,6 @@ export async function userForToken(db: Db, token: string | undefined, now: Date 
   return { id: row.userId, sessionId: row.sessionId };
 }
 
-export async function signOut(db: Db, token: string | undefined) {
-  if (!token) return;
-  await db.delete(sessions).where(eq(sessions.tokenHash, sha256(token)));
-}
-
 export async function deleteExpiredSessions(db: Db, now: Date = new Date()) {
   await db.delete(sessions).where(sql`${sessions.expiresAt} <= ${now}`);
 }

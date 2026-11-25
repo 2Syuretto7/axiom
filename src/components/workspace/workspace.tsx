@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { signOutAction } from "@/lib/auth/actions";
 import { codeTests, reportCode, saveCode, type AnswerResult } from "@/lib/learning/actions";
 import { checkProgram, explainFailure } from "@/lib/lessons/harness";
 import { PythonRunner, type RunResult } from "@/lib/python/runner";
@@ -313,11 +312,6 @@ export function Workspace({
             {saved ? "Saved" : "Saving"}
           </span>
           <ThemeToggle />
-          <form action={signOutAction}>
-            <button type="submit" className="label bar-item">
-              Sign out
-            </button>
-          </form>
         </div>
       </header>
 

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ThemeToggle } from "./theme";
 
 /** The thin top line shared by every screen: wordmark left, quiet controls right. The Map link is only for signed-in screens. */
-export function TopBar({ map = false, children }: { map?: boolean; children?: React.ReactNode }) {
+export function TopBar({ map = false }: { map?: boolean }) {
   return (
     <header className="relative z-10 flex h-14 items-center justify-between px-4 sm:px-8">
       <Link href="/" className="bar-item font-mono text-[13px] tracking-[0.32em] text-ink" aria-label="Axiom home">
@@ -15,7 +15,6 @@ export function TopBar({ map = false, children }: { map?: boolean; children?: Re
           </Link>
         ) : null}
         <ThemeToggle />
-        {children}
       </nav>
     </header>
   );
