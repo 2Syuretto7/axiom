@@ -17,7 +17,7 @@ npm run dev
 | --- | --- |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | TypeScript |
-| `npm run lessons` | Checks every lesson and mini-capstone: answers, predicted outputs, reference solutions and hidden tests, run under the same Python the browser uses |
+| `npm run lessons` | Checks every lesson and mini-capstone: bridges, answers, predicted outputs, reference solutions and hidden tests, run under the same Python the browser uses |
 | `npm test` | Unit and database tests (Vitest) |
 | `npm run e2e` | Builds the app and runs browser tests at laptop, tablet and phone sizes |
 | `LIVE_URL=... npm run e2e` | Read-only smoke test of the deployed site |
@@ -27,6 +27,10 @@ npm run dev
 A mini-capstone closes a cluster. It is one small project in stages that needs several of the cluster's lessons at once, and it teaches nothing new. Learn gives it straight after the lesson that finishes the cluster. One lives at `content/capstones/<cluster>.yaml`, and its questions use the same format and checks as a lesson's.
 
 What is planned after them, capstones and job-readiness, is in [ROADMAP.md](ROADMAP.md).
+
+## Bridges
+
+When a lesson has a direct prerequisite in another track, the lesson file must have a `bridges` entry for it, keyed by that prerequisite's concept id: a short passage, at most 120 words, on how the earlier idea connects to this lesson. Learn shows it at the top of the lesson when that prerequisite was the lesson finished just before. `npm run lessons` fails if an entry is missing, or if one is written for anything other than a direct prerequisite in another track.
 
 ## Reviews
 
