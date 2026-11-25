@@ -26,6 +26,8 @@ export function LessonView({
   capstone,
   bridge,
   solved,
+  recall,
+  consolidation,
 }: {
   lesson: Lesson;
   concept: Concept;
@@ -37,6 +39,10 @@ export function LessonView({
   /** The lesson finished just before this one, when it is a prerequisite from another track, with this lesson's bridge for it. */
   bridge?: { from: Concept; text: string } | null;
   solved: Set<string>;
+  /** The Recall part's questions: three fresh ones on earlier ideas, chosen by spaced repetition. */
+  recall?: React.ReactNode;
+  /** The consolidation set, when every question is solved but the finish was weak. */
+  consolidation?: React.ReactNode;
 }) {
   const later = lesson.leads.filter((id) => id !== next);
   const numbers = new Map(questionsOf(lesson).map((q, i) => [q.id, i + 1]));
@@ -75,6 +81,7 @@ export function LessonView({
             const q = block.question;
             return <QuestionCard key={q.id} view={questionView(lesson.concept, q, numbers.get(q.id)!, solved.has(q.id))} />;
           })}
+          {part === "recall" ? recall : null}
         </section>
       ))}
 
@@ -93,6 +100,7 @@ export function LessonView({
           <span className="label">Later</span> {names(graph, later)}
         </p>
       ) : null}
+      {consolidation}
       <LessonEnd />
     </article>
   );

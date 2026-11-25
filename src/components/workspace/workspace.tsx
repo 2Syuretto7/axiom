@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { signOutAction } from "@/lib/auth/actions";
 import { codeTests, reportCode, saveCode, type AnswerResult } from "@/lib/learning/actions";
@@ -63,7 +64,7 @@ export function Workspace({
   breadcrumb: string[];
   starterCode: string;
   snapshots?: Snapshots;
-  lesson?: { total: number; solved: string[]; complete: boolean };
+  lesson?: { total: number; solved: string[]; complete: boolean; held?: boolean };
   tutor: TutorSetup;
   children: React.ReactNode;
 }) {
@@ -79,6 +80,9 @@ export function Workspace({
   const [saved, setSaved] = useState(true);
   const [solved, setSolved] = useState(() => new Set(lesson?.solved ?? []));
   const [complete, setComplete] = useState(lesson?.complete ?? false);
+  const [held, setHeld] = useState(lesson?.held ?? false);
+  const [mastery, setMastery] = useState<number | null>(null);
+  const router = useRouter();
   const [verdicts, setVerdicts] = useState<Record<string, CodeVerdict>>({});
   const [initial] = useState(() => (typeof window === "undefined" ? starterCode : load(scratch.key, starterCode, snapshots)));
   const code = useRef(initial);
@@ -166,7 +170,18 @@ export function Workspace({
 
   const settle = useCallback((questionId: string, outcome: AnswerResult) => {
     if (outcome.correct) setSolved((before) => new Set(before).add(questionId));
+    if (outcome.mastery !== undefined) setMastery(outcome.mastery);
     if (outcome.lessonComplete) setComplete(true);
+    else if (outcome.held) {
+      setHeld(true);
+      // The server writes the consolidation set and sends it into the lesson.
+      router.refresh();
+    }
+  }, [router]);
+
+  const finish = useCallback((value?: number) => {
+    if (value !== undefined) setMastery(value);
+    setComplete(true);
   }, []);
 
   /** Runs the open question's checks against the code in the editor. */
@@ -189,6 +204,8 @@ export function Workspace({
         outcome = { correct: false, note };
       }
       const recorded = await reportCode(id, question.id, outcome.correct, submitted, Date.now() - openedAt.current);
+      // A timed question whose time was up is not solved, even if its checks pass.
+      if (outcome.correct && !recorded.correct) outcome = { correct: false, note: recorded.note };
       outcome.explanationHtml = recorded.explanationHtml;
       settle(question.id, recorded);
     } catch {
@@ -242,6 +259,9 @@ export function Workspace({
       total: lesson?.total ?? 0,
       solved,
       complete,
+      held: held && !complete,
+      mastery,
+      finish,
       settle,
       attend,
       active: doc.question?.id ?? null,
@@ -250,7 +270,7 @@ export function Workspace({
       busy: running,
       verdicts,
     }),
-    [id, lesson?.total, solved, complete, settle, attend, doc, open, check, running, verdicts],
+    [id, lesson?.total, solved, complete, held, mastery, finish, settle, attend, doc, open, check, running, verdicts],
   );
 
   const drag = (event: React.PointerEvent<HTMLDivElement>) => {

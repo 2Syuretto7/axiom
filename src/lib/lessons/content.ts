@@ -5,6 +5,7 @@ import { capstoneCluster, capstoneQuestions, isCapstoneId, type Capstone } from 
 import { graphDir, loadCapstones, loadLessons, questionsOf } from "./load";
 import { renderBlock, renderInline } from "./render";
 import type { Lesson, Question } from "./schema";
+import { secondsFor } from "./timing";
 
 type Content = { graph: Graph; lessons: Map<string, Lesson>; /** Mini-capstones by cluster id. */ capstones: Map<string, Capstone> };
 let cached: Content | undefined;
@@ -53,6 +54,8 @@ export type QuestionView = {
   code?: string;
   mode?: "write" | "find-bug";
   starter?: string;
+  /** The time limit in seconds. Only System One questions have one. */
+  seconds?: number;
   solved: boolean;
   explanationHtml?: string;
 };
@@ -71,6 +74,7 @@ export function questionView(conceptId: string, q: Question, number: number, sol
     code: q.type === "predict" ? q.code : undefined,
     mode: q.type === "code" ? q.mode : undefined,
     starter: q.type === "code" ? q.starter : undefined,
+    seconds: secondsFor(q) ?? undefined,
     solved,
     explanationHtml: solved ? blockHtml(q.explanation) : undefined,
   };

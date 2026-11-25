@@ -15,11 +15,47 @@ export type AttemptInput = {
   ms: number | null;
 };
 
+export type AttemptRow = { questionId: string; correct: boolean; hintsUsed: number; ms: number | null; at: Date };
+
+/** Every answer the learner has given in a lesson or a mini-capstone, oldest first. */
+export async function attemptsIn(db: Db, userId: string, conceptId: string): Promise<AttemptRow[]> {
+  return db
+    .select({ questionId: attempts.questionId, correct: attempts.correct, hintsUsed: attempts.hintsUsed, ms: attempts.ms, at: attempts.createdAt })
+    .from(attempts)
+    .where(and(eq(attempts.userId, userId), eq(attempts.conceptId, conceptId)))
+    .orderBy(asc(attempts.id));
+}
+
+/** Every answer the learner has given anywhere, oldest first. */
+export async function allAttempts(db: Db, userId: string): Promise<(AttemptRow & { conceptId: string })[]> {
+  return db
+    .select({ conceptId: attempts.conceptId, questionId: attempts.questionId, correct: attempts.correct, hintsUsed: attempts.hintsUsed, ms: attempts.ms, at: attempts.createdAt })
+    .from(attempts)
+    .where(eq(attempts.userId, userId))
+    .orderBy(asc(attempts.id));
+}
+
+/** Marks a lesson or mini-capstone finished, if it is not already. */
+export async function completeUnit(db: Db, userId: string, conceptId: string) {
+  await db
+    .update(lessonProgress)
+    .set({ completedAt: sql`coalesce(${lessonProgress.completedAt}, now())` })
+    .where(and(eq(lessonProgress.userId, userId), eq(lessonProgress.conceptId, conceptId)));
+}
+
 /**
- * Stores one answer. `lessonQuestions` are all the question ids in the lesson;
- * once every one has a correct attempt the lesson is complete.
+ * Stores one answer. `lessonQuestions` are all the question ids in the lesson.
+ * Once every one has a correct attempt the unit is finished, unless `weak`
+ * says the finish was a weak one: then it is held open (`held`) for its
+ * consolidation set, and whoever runs that set finishes the unit.
  */
-export async function recordAttempt(db: Db, userId: string, input: AttemptInput, lessonQuestions: string[]) {
+export async function recordAttempt(
+  db: Db,
+  userId: string,
+  input: AttemptInput,
+  lessonQuestions: string[],
+  weak?: (answers: AttemptRow[]) => boolean,
+): Promise<{ lessonComplete: boolean; held?: boolean }> {
   const { conceptId, questionId } = input;
   // The only hints are the tutor's. Each attempt keeps how many the learner had been given on the question by then.
   const [hints] = await db
@@ -39,14 +75,15 @@ export async function recordAttempt(db: Db, userId: string, input: AttemptInput,
   });
   if (!input.correct) return { lessonComplete: false };
   const solved = await solvedQuestions(db, userId, conceptId);
-  const lessonComplete = lessonQuestions.every((id) => solved.has(id));
-  if (lessonComplete) {
-    await db
-      .update(lessonProgress)
-      .set({ completedAt: sql`coalesce(${lessonProgress.completedAt}, now())` })
-      .where(and(eq(lessonProgress.userId, userId), eq(lessonProgress.conceptId, conceptId)));
-  }
-  return { lessonComplete };
+  if (!lessonQuestions.every((id) => solved.has(id))) return { lessonComplete: false };
+  const [progress] = await db
+    .select({ completedAt: lessonProgress.completedAt })
+    .from(lessonProgress)
+    .where(and(eq(lessonProgress.userId, userId), eq(lessonProgress.conceptId, conceptId)));
+  if (progress?.completedAt) return { lessonComplete: true };
+  if (weak?.(await attemptsIn(db, userId, conceptId))) return { lessonComplete: false, held: true };
+  await completeUnit(db, userId, conceptId);
+  return { lessonComplete: true };
 }
 
 export async function solvedQuestions(db: Db, userId: string, conceptId: string): Promise<Set<string>> {

@@ -9,6 +9,7 @@ import { content, questionsIn } from "@/lib/lessons/content";
 import { costMicroUsd, MAX_MESSAGE_CHARS, tutorConnected } from "@/lib/tutor/config";
 import { systemPrompt, workspaceNote } from "@/lib/tutor/prompt";
 import { failureNote, streamReply } from "@/lib/tutor/reply";
+import { shownIn } from "@/lib/review/service";
 import { attemptHistory, saveTutorMessage, tutorHints, tutorHistory } from "@/lib/tutor/service";
 
 export const maxDuration = 120;
@@ -45,13 +46,19 @@ export async function POST(request: Request) {
 
   const questions = (unit && questionsIn(conceptId)) || [];
   const numbers = new Map(questions.map((q, i) => [q.id, i + 1]));
-  const [completed, solved, history, attempts, hints] = await Promise.all([
+  const [completed, solved, history, attempts, hints, recall, consolidation] = await Promise.all([
     completedConcepts(db, user.id),
     unit ? solvedQuestions(db, user.id, conceptId) : new Set<string>(),
     tutorHistory(db, user.id, conceptId),
     unit ? attemptHistory(db, user.id, conceptId) : undefined,
     unit ? tutorHints(db, user.id, conceptId) : undefined,
+    lesson ? shownIn(db, user.id, conceptId, "recall") : [],
+    lesson ? shownIn(db, user.id, conceptId, "consolidation") : [],
   ]);
+  const fresh = [
+    ...recall.map((row) => ({ ...row, purpose: "recall" as const })),
+    ...consolidation.map((row) => ({ ...row, purpose: "consolidation" as const })),
+  ].map((row) => ({ ...row, idea: graph.concepts.get(row.conceptId)?.title ?? "an earlier lesson" }));
   const system = systemPrompt({
     graph,
     completed: completed.filter((id) => id !== conceptId),
@@ -63,7 +70,7 @@ export async function POST(request: Request) {
         ? (nextConcept(graph, new Set(lessons.keys()), completed)?.id ?? null)
         : null,
   });
-  const note = workspaceNote(unit, { questionId, attendingId, code, output, solved: [...solved], attempts, hints });
+  const note = workspaceNote(unit, { questionId, attendingId, code, output, solved: [...solved], attempts, hints, fresh });
   await saveTutorMessage(db, user.id, conceptId, "user", message);
 
   const encoder = new TextEncoder();

@@ -4,10 +4,21 @@ import { getDb } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
 import { blockHtml, displayOrder, findQuestion } from "@/lib/lessons/content";
 import { grade } from "@/lib/lessons/grade";
+import { late, secondsFor } from "@/lib/lessons/timing";
 import { recordAttempt, saveSnapshot } from "./service";
+import { masteryOf, weakCheck } from "./standing";
 import { clearTutorHistory } from "../tutor/service";
 
-export type AnswerResult = { correct: boolean; note?: string; explanationHtml?: string; lessonComplete: boolean };
+export type AnswerResult = {
+  correct: boolean;
+  note?: string;
+  explanationHtml?: string;
+  lessonComplete: boolean;
+  /** Every question is solved, but the finish was weak: the lesson stays open for its consolidation set. */
+  held?: boolean;
+  /** Mastery of the lesson as it is finished, from 0 to 100. */
+  mastery?: number;
+};
 
 async function learner() {
   const user = await getCurrentUser();
@@ -16,6 +27,17 @@ async function learner() {
 }
 
 const clean = (value: unknown, max: number) => String(value ?? "").slice(0, max);
+
+const TIME_UP = "Time was up before this answer arrived. Start the question again when you are ready.";
+/** Time is kept only for timed (System One) questions. For the rest it is neither measured nor stored. */
+const kept = (question: Parameters<typeof secondsFor>[0], ms: number) => (secondsFor(question) === null ? null : Number(ms) || 0);
+
+/** Mastery of a unit at the moment it is finished, as a whole percentage. */
+async function finishedMastery(userId: string, unitId: string, complete: boolean): Promise<number | undefined> {
+  if (!complete) return undefined;
+  const value = await masteryOf(getDb(), userId, unitId);
+  return value === null ? undefined : Math.round(value * 100);
+}
 
 /** Grades a numeric, choice, predict or order answer on the server and records the attempt. */
 export async function submitAnswer(conceptId: string, questionId: string, answer: unknown, ms: number): Promise<AnswerResult> {
@@ -30,18 +52,21 @@ export async function submitAnswer(conceptId: string, questionId: string, answer
   else if (question.type === "order") given = Array.isArray(answer) ? answer.slice(0, 8).map((position) => order[Number(position)]) : undefined;
   else given = clean(answer, 4000);
 
-  const verdict = grade(question, given);
-  const { lessonComplete } = await recordAttempt(
+  // A timed question answered after its time is up is not solved, whatever the answer.
+  const verdict = late(question, Number(ms)) ? { correct: false, note: TIME_UP } : grade(question, given);
+  const outcome = await recordAttempt(
     getDb(),
     user.id,
-    { conceptId: unitId, questionId: question.id, system: question.system, correct: verdict.correct, answer: given ?? null, ms },
+    { conceptId: unitId, questionId: question.id, system: question.system, correct: verdict.correct, answer: given ?? null, ms: kept(question, ms) },
     questions.map((q) => q.id),
+    weakCheck(unitId),
   );
   return {
     correct: verdict.correct,
     note: verdict.note,
     explanationHtml: verdict.correct ? blockHtml(question.explanation) : undefined,
-    lessonComplete,
+    ...outcome,
+    mastery: await finishedMastery(user.id, unitId, outcome.lessonComplete),
   };
 }
 
@@ -58,13 +83,36 @@ export async function reportCode(conceptId: string, questionId: string, passed: 
   const user = await learner();
   const { unitId, questions, question } = findQuestion(clean(conceptId, 200), clean(questionId, 200));
   if (question.type !== "code") throw new Error("Not a code question");
-  const { lessonComplete } = await recordAttempt(
+  const tooLate = late(question, Number(ms));
+  const correct = passed === true && !tooLate;
+  const outcome = await recordAttempt(
     getDb(),
     user.id,
-    { conceptId: unitId, questionId: question.id, system: question.system, correct: passed === true, answer: clean(code, 50_000), ms },
+    { conceptId: unitId, questionId: question.id, system: question.system, correct, answer: clean(code, 50_000), ms: kept(question, ms) },
+    questions.map((q) => q.id),
+    weakCheck(unitId),
+  );
+  return {
+    correct,
+    note: tooLate ? TIME_UP : undefined,
+    explanationHtml: correct ? blockHtml(question.explanation) : undefined,
+    ...outcome,
+    mastery: await finishedMastery(user.id, unitId, outcome.lessonComplete),
+  };
+}
+
+/** Records that a timed question's time ran out before it was answered. */
+export async function timeUp(conceptId: string, questionId: string): Promise<void> {
+  const user = await learner();
+  const { unitId, questions, question } = findQuestion(clean(conceptId, 200), clean(questionId, 200));
+  const seconds = secondsFor(question);
+  if (seconds === null) return;
+  await recordAttempt(
+    getDb(),
+    user.id,
+    { conceptId: unitId, questionId: question.id, system: question.system, correct: false, answer: { timedOut: true }, ms: seconds * 1000 },
     questions.map((q) => q.id),
   );
-  return { correct: passed === true, explanationHtml: passed === true ? blockHtml(question.explanation) : undefined, lessonComplete };
 }
 
 export async function saveCode(key: string, code: string): Promise<void> {

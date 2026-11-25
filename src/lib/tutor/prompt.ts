@@ -33,6 +33,10 @@ Judge whether the learner can solve it without you, and act on that judgement. D
 
 No open discussion of the question until it is solved. Apart from a hint, or telling them they can do it, say nothing about an unsolved question. Do not talk through approaches, compare methods, explain what the answer means or where the idea leads, or go over why a wrong answer was wrong beyond what a hint needs. If the learner wants to discuss it, tell them you will gladly do so once they have solved it.
 
+# A fresh question
+
+Besides its written questions, a lesson shows a few fresh questions: recall questions on earlier lessons at its start, and sometimes a consolidation set at its end. Each was written for this learner for this one occasion, and the learner gets one try at it, from memory. They are listed in the workspace report with their answers. A fresh question that is not yet answered is a test of memory, so you give no help with it of any kind: no solution, no hint, no nudge, no discussion, and no explanation of its idea that would answer it. Say so kindly and tell the learner you will go through it once they have answered. Mark such a reply about="unsolved" with no question number and hint="no". Once a fresh question is answered, right or wrong, discuss it openly, as you would a solved question.
+
 # A solved question
 
 Open discussion. Say anything that helps: the answer and why it is right, why their earlier answers went wrong, other ways to reach it, harder versions, where the idea leads. A solved question never unlocks an unsolved one, so do not let talk about it settle a question that is still open.
@@ -198,8 +202,39 @@ export type WorkspaceState = {
   attempts?: Map<string, { correct: boolean; answer: unknown; ms: number | null; at: Date }[]>;
   /** Hints the tutor has given so far, by question id. */
   hints?: Map<string, number>;
+  /** The fresh questions shown in this lesson: its recall questions and, after a weak finish, its consolidation set. */
+  fresh?: FreshQuestion[];
   now?: Date;
 };
+
+export type FreshQuestion = {
+  purpose: "recall" | "consolidation";
+  /** The title of the lesson whose idea it asks about. */
+  idea: string;
+  question:
+    | { type: "numeric"; prompt: string; answer: string; unit?: string }
+    | { type: "choice"; prompt: string; options: string[]; answer: number }
+    | { type: "predict"; prompt: string; code: string; output: string };
+  answered: boolean;
+  correct: boolean | null;
+};
+
+function freshLines(fresh: FreshQuestion[]): string[] {
+  const lines: string[] = [];
+  for (const purpose of ["recall", "consolidation"] as const) {
+    fresh
+      .filter((row) => row.purpose === purpose)
+      .forEach((row, i) => {
+        const q = row.question;
+        const state = row.answered ? `answered, ${row.correct ? "right" : "wrong"}: open to discussion` : "not answered yet: give no help with it";
+        lines.push(`Fresh ${purpose} question ${i + 1}, on ${row.idea} (${state}):`, `  ${q.prompt.trim().replace(/\n/g, "\n  ")}`);
+        if (q.type === "predict") lines.push("  Code:", ...q.code.trim().split("\n").map((line) => `    ${line}`), `  It prints: ${q.output}`);
+        if (q.type === "choice") lines.push(`  Options: ${q.options.join(" | ")}`, `  Answer: ${q.options[q.answer]}`);
+        if (q.type === "numeric") lines.push(`  Answer: ${q.answer}${q.unit ? ` ${q.unit}` : ""}`);
+      });
+  }
+  return lines;
+}
 
 const duration = (ms: number) => (ms < 60_000 ? `${Math.max(1, Math.round(ms / 1000))} s` : `${Math.round(ms / 60_000)} min`);
 
@@ -258,6 +293,7 @@ export function workspaceNote(unit: Lesson | Capstone | null, state: WorkspaceSt
     const open = state.questionId ? number(state.questionId) : 0;
     if (open > 0) lines.push(`The editor holds the learner's attempt at question ${open} (${status(state.questionId!)}).`);
   }
+  if (state.fresh?.length) lines.push(...freshLines(state.fresh));
   if (state.code?.trim()) lines.push("Code in the editor:", "```python", cut(state.code, 6000), "```");
   if (state.output?.trim()) lines.push("Output of the last run:", "```", cut(state.output, 2000), "```");
   return lines.length ? `<workspace>\n${lines.join("\n")}\n</workspace>` : "";

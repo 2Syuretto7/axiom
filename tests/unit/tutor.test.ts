@@ -111,6 +111,20 @@ describe("how the tutor judges a message", () => {
     expect(workspaceNote(lesson, {})).toContain("The learner has not touched a question since opening this page. The first one not solved is question 1.");
   });
 
+  it("knows the fresh recall and consolidation questions, and gives no help with one until it is answered", () => {
+    expect(text).toContain("A fresh question that is not yet answered is a test of memory, so you give no help with it of any kind");
+    const note = workspaceNote(lessons.get("m0.adding")!, {
+      fresh: [
+        { purpose: "recall", idea: "Counting", question: { type: "numeric", prompt: "How many sheep?", answer: "11", unit: "sheep" }, answered: false, correct: null },
+        { purpose: "recall", idea: "Counting", question: { type: "choice", prompt: "Which is largest?", options: ["3", "8", "5"], answer: 1 }, answered: true, correct: false },
+        { purpose: "consolidation", idea: "Adding", question: { type: "predict", prompt: "What does it print?", code: "print(1 + 2)", output: "3" }, answered: true, correct: true },
+      ],
+    });
+    expect(note).toContain("Fresh recall question 1, on Counting (not answered yet: give no help with it):\n  How many sheep?\n  Answer: 11 sheep");
+    expect(note).toContain("Fresh recall question 2, on Counting (answered, wrong: open to discussion):\n  Which is largest?\n  Options: 3 | 8 | 5\n  Answer: 8");
+    expect(note).toContain("Fresh consolidation question 1, on Adding (answered, right: open to discussion):\n  What does it print?\n  Code:\n    print(1 + 2)\n  It prints: 3");
+  });
+
   it("reads the opening line of a reply and keeps it from the learner", () => {
     expect(parseTurn('<turn about="unsolved" question="2" hint="yes">')).toEqual({ about: "unsolved", question: 2, hint: true });
     expect(parseTurn('<turn about="unsolved" question="2" hint="no">')).toEqual({ about: "unsolved", question: 2, hint: false });
