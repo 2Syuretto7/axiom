@@ -51,6 +51,13 @@ export default defineConfig({
           dependencies: ["laptop", "tablet", "phone"],
           use: { viewport: sizes.laptop, storageState: "test-results/.auth/learner.json" },
         },
+        // Brings the finished fixture lessons back for review, as if weeks had passed.
+        {
+          name: "review",
+          testMatch: /review\.spec\.ts/,
+          dependencies: ["lessons"],
+          use: { viewport: sizes.phone, hasTouch: true, storageState: "test-results/.auth/learner.json" },
+        },
       ],
   webServer: previewUrl
     ? undefined

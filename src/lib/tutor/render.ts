@@ -24,3 +24,6 @@ const marked = new Marked(
 );
 
 export const renderReply = (text: string): string => marked.parse(text, { async: false });
+
+/** The same, for one line of text that sits inside other markup, such as an option of a question. */
+export const renderReplyInline = (text: string): string => marked.parseInline(text, { async: false });
