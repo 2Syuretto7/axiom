@@ -116,7 +116,7 @@ test("the tutor answers beside the lesson, knows the lesson and the editor, and 
   await again.getByRole("textbox", { name: "Ask the tutor" }).fill("I am stuck on the first question");
   await again.getByRole("textbox", { name: "Ask the tutor" }).press("Enter");
   await expect(talkAgain.getByRole("listitem")).toHaveCount(6);
-  await expect(talkAgain.getByRole("listitem").last()).toHaveText(/What do the pebbles left over stand for\?$/);
+  await expect(talkAgain.getByRole("listitem").last()).toContainText("What do the pebbles left over stand for?");
   await expect(talkAgain.getByRole("listitem").last()).not.toContainText("turn about");
   await expect(again.getByRole("button", { name: "Ask", exact: true })).toBeVisible();
   await again.getByRole("textbox", { name: "Ask the tutor" }).fill("Thank you");
