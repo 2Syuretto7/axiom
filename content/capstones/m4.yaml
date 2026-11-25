@@ -1,0 +1,318 @@
+cluster: M4
+title: Which film next?
+minutes: 60
+claim: You will have turned tastes and films into vectors, measured how well they agree by length, dot product, angle and projection, seen where each measure misleads, and written the function that picks the film closest in direction to a viewer's taste.
+brief: |
+  A vector is an arrow, and it is also a list of numbers. This cluster moved between the two pictures until they were one. This project uses that to make a judgement a machine can carry out: which of several things is most like another.
+
+  **The project.** A film service describes every film by three numbers: how much action, comedy and drama it contains. It describes a viewer's taste by the same three numbers. One viewer has the taste vector
+
+  $$t = (3, 0, 4),$$
+
+  some action, no comedy and rather more drama. The films on offer are
+
+  $$A = (4, 0, 3), \qquad B = (0, 5, 0), \qquad C = (6, 0, 8), \qquad D = (1, 2, 2).$$
+
+  You are to decide which film suits this viewer best. To do that you first have to decide what "best" means, and there are several candidates. Each is a lesson of this cluster, and they do not agree.
+
+  Nothing here is new. Keep your results as you go.
+starter: |
+  # Scratch space for the films.
+  import math
+
+  t = [3, 0, 4]
+  A = [4, 0, 3]
+  print(sum(a * b for a, b in zip(t, A)))
+stages:
+  - title: How strong a taste is
+    blocks:
+      - question:
+          id: length
+          type: numeric
+          system: s1
+          concepts: [m4.norms-and-distance, m4.vectors-as-arrows-and-as-lists]
+          prompt: What is the length of $t$, that is, its Euclidean norm $\lVert t \rVert$?
+          answer: "5"
+          explanation: |
+            $\lVert t \rVert = \sqrt{3^2 + 0^2 + 4^2} = \sqrt{25} = 5$. As an arrow, $t$ is five units long. As a taste, the length says how strongly the viewer feels overall, and the direction says about what.
+          hints:
+            - The length of an arrow comes from the theorem of Pythagoras applied to its components.
+            - Square each component, add, and take the square root.
+  - title: Agreement as a dot product, and as an angle
+    blocks:
+      - question:
+          id: dot
+          type: numeric
+          system: s1
+          concepts: [m4.dot-product]
+          prompt: What is $t \cdot A$?
+          answer: "24"
+          explanation: |
+            $3 \times 4 + 0 \times 0 + 4 \times 3 = 24$. Each product is large when the taste and the film are both large in the same component.
+          hints:
+            - Multiply matching components and add the products.
+            - There are three products to add, and one of them is zero.
+      - question:
+          id: cosine-a
+          type: numeric
+          system: s2
+          concepts: [m4.angle-and-cosine-similarity, m4.dot-product, m4.norms-and-distance]
+          prompt: What is the cosine of the angle between $t$ and $A$?
+          answer: "0.96"
+          explanation: |
+            $\cos\theta = \dfrac{t \cdot A}{\lVert t \rVert\,\lVert A \rVert} = \dfrac{24}{5 \times 5} = 0.96$. The two arrows point in nearly the same direction, about 16 degrees apart.
+          hints:
+            - The dot product equals the product of the two lengths and the cosine of the angle between them. Solve that for the cosine.
+            - You need the length of $A$ as well as the length of $t$.
+      - text: |
+          Now compare the films by dot product alone: $t \cdot B = 0$, $t \cdot A = 24$ and $t \cdot C = 50$.
+      - question:
+          id: dot-misleads
+          type: choice
+          system: s2
+          concepts: [m4.dot-product, m4.angle-and-cosine-similarity, m4.vector-addition-and-scaling]
+          prompt: The dot product with $C$ is more than twice the dot product with $A$. What is the right reading of these three numbers?
+          options:
+            - "$C = 2t$ points exactly along the taste, with cosine 1, and $B$ is perpendicular to it, with cosine 0. But part of $C$'s large dot product is only its length: doubling any film doubles its dot product without changing its direction."
+            - "$C$ suits the viewer a little more than twice as well as $A$, because the dot product measures agreement and nothing else."
+            - "$B$ is the opposite of the viewer's taste, because its dot product is the smallest possible."
+            - "The three numbers cannot be compared, because the films have different lengths."
+          answer: 0
+          explanation: |
+            $t \cdot v = \lVert t \rVert\,\lVert v \rVert \cos\theta$ mixes two things: how long $v$ is and how well it is aimed. $C$ is aimed perfectly, being a positive multiple of $t$. $B$ shares no component with $t$, so the angle is a right angle. That is unrelated, not opposite. The opposite of a taste would be a negative multiple of it, with cosine $-1$. Dividing by the lengths removes the first effect and leaves the aim, which is what cosine similarity is.
+          hints:
+            - Write the dot product in terms of the two lengths and the angle. Which of those differ between $A$ and $C$?
+            - Compare $C$ with $t$ component by component.
+            - A dot product of zero and an opposite direction are different things. Which angle does each correspond to?
+  - title: Near in distance, near in direction
+    blocks:
+      - text: |
+          Another way to say that two vectors are alike is that their tips are close together. The distance between two vectors is the length of their difference.
+      - question:
+          id: distance
+          type: numeric
+          system: s1
+          concepts: [m4.norms-and-distance, m4.vector-addition-and-scaling]
+          prompt: What is the distance between $t$ and $A$, to three decimal places?
+          answer: "1.414"
+          tolerance: "0.001"
+          explanation: |
+            $A - t = (1, 0, -1)$, and its length is $\sqrt{1 + 0 + 1} = \sqrt{2} \approx 1.414$.
+          hints:
+            - Subtract one vector from the other, component by component.
+            - Then find the length of the difference.
+      - question:
+          id: which-measure
+          type: choice
+          system: s2
+          concepts: [m4.norms-and-distance, m4.angle-and-cosine-similarity]
+          prompt: |
+            The distance from $t$ to $C$ is 5, far more than the distance to $A$. Yet $C$ has cosine 1 with $t$ and $A$ has less. The service wants films with the **same mixture** of action, comedy and drama as the viewer likes, however intense the film is. Which measure should it rank by, and which film wins?
+          options:
+            - Cosine similarity, and $C$ wins. It has exactly the viewer's mixture, at twice the intensity, and the angle ignores intensity.
+            - Distance, and $A$ wins. A smaller distance always means a better match, whatever is being matched.
+            - The dot product, and $C$ wins. The largest dot product always picks the best-aimed film.
+            - Distance, and $C$ wins, because it is the longest film.
+          answer: 0
+          explanation: |
+            Distance and angle answer different questions. Distance asks whether two vectors are nearly the same vector, length included. The angle asks whether they point the same way. The service asked about mixture, which is direction, so cosine is the right measure and $C$ is the match. The dot product happens to pick $C$ here too, but it would also pick a film ten times as long as $A$ over $C$, for the wrong reason.
+          hints:
+            - Which property of a vector is its mixture, the length or the direction?
+            - Which of the measures does not change when a film vector is doubled?
+  - title: The part of a film that matches
+    blocks:
+      - text: |
+          Film $D = (1, 2, 2)$ is a mixture of things this viewer likes and things the viewer does not care about. Projection splits it into the part that lies along the taste and the part that does not.
+      - question:
+          id: projection
+          type: numeric
+          system: s2
+          concepts: [m4.projection-onto-a-vector, m4.dot-product]
+          prompt: The projection of $D$ onto $t$ is $c\,t$ for some number $c$. What is $c$?
+          answer: "0.44"
+          explanation: |
+            $c = \dfrac{D \cdot t}{t \cdot t} = \dfrac{3 + 0 + 8}{25} = 0.44$. So the part of $D$ along the taste is $0.44\,t = (1.32, 0, 1.76)$.
+          hints:
+            - The coefficient is a ratio of two dot products.
+            - The bottom of the ratio is the dot product of the taste with itself.
+      - question:
+          id: residual
+          type: choice
+          system: s2
+          concepts: [m4.projection-onto-a-vector, m4.dot-product, m4.vector-addition-and-scaling]
+          prompt: Subtract that projection from $D$. What is left over, and how is it related to $t$?
+          options:
+            - "$(-0.32, 2, 0.24)$, which is perpendicular to $t$: its dot product with $t$ is $-0.96 + 0 + 0.96 = 0$."
+            - "$(-0.32, 2, 0.24)$, which is parallel to $t$, since it came from $t$."
+            - "$(0, 2, 0)$, the comedy, since that is the only component the viewer does not like."
+            - "$(2.32, 2, 3.76)$, which is longer than $D$ and so further from the taste."
+          answer: 0
+          explanation: |
+            $D - 0.44\,t = (1 - 1.32,\ 2 - 0,\ 2 - 1.76) = (-0.32, 2, 0.24)$. The coefficient was chosen precisely so that what remains has nothing in the direction of $t$. $D$ is therefore the sum of two perpendicular pieces, one the viewer cares about and one the viewer does not. The leftover is not simply the comedy, because $D$'s action and drama are not in the viewer's proportions of 3 to 4.
+          hints:
+            - Subtract component by component.
+            - Take the dot product of what is left with $t$.
+  - title: What two tastes can make
+    blocks:
+      - text: |
+          A second viewer likes comedy and nothing else: $u = (0, 5, 0)$. The service wonders which films can be described as a blend of these two tastes, that is, as $a\,t + b\,u$ for some numbers $a$ and $b$.
+      - question:
+          id: combination
+          type: numeric
+          system: s1
+          concepts: [m4.linear-combinations-and-span, m4.vector-addition-and-scaling]
+          prompt: The film $E = (6, 10, 8)$ equals $a\,t + b\,u$. What is $a$?
+          answer: "2"
+          explanation: |
+            $a\,t + b\,u = (3a, 5b, 4a)$. Matching the first component gives $3a = 6$, so $a = 2$, and the third agrees, since $4a = 8$. The second gives $b = 2$. So $E = 2t + 2u$.
+          hints:
+            - Write out $a\,t + b\,u$ as a single vector with components in terms of $a$ and $b$.
+            - Match components with $E$, one at a time.
+      - question:
+          id: span
+          type: choice
+          system: s2
+          concepts: [m4.linear-combinations-and-span, m4.linear-independence]
+          prompt: Which statement about blends is true?
+          options:
+            - "$t$ and $u$ are linearly independent, and their span is a plane. A pure action film $(1, 0, 0)$ is not in it, because it would need $3a = 1$ and $4a = 0$ at once."
+            - "$t$ and $u$ are linearly independent, so their span is all of three-dimensional space and every film is a blend of them."
+            - "$t$ and $C$ are linearly independent, so they span a plane that contains every film with no comedy."
+            - "$t$ and $u$ are linearly dependent, because their dot product is zero."
+          answer: 0
+          explanation: |
+            Neither of $t$ and $u$ is a multiple of the other, so they are independent, and two independent vectors span a plane, not the whole of space. Every blend has the form $(3a, 5b, 4a)$, with action and drama locked in the ratio 3 to 4, and pure action breaks that ratio. $t$ and $C$ are dependent, since $C = 2t$, and span only a line. A dot product of zero means perpendicular, which for nonzero vectors implies independent.
+          hints:
+            - What does every blend $a\,t + b\,u$ look like, component by component?
+            - Two vectors are dependent exactly when one is a multiple of the other.
+            - How many independent vectors does it take to span three-dimensional space?
+  - title: The recommender
+    blocks:
+      - text: |
+          Now make the machine do it, for vectors of any length and any number of films.
+      - question:
+          id: recommend
+          type: code
+          mode: write
+          system: s2
+          concepts: [m4.angle-and-cosine-similarity, m4.dot-product, m4.norms-and-distance, m4.vectors-as-arrows-and-as-lists]
+          prompt: |
+            Write two functions. Vectors are lists of numbers.
+
+            `cosine(u, v)` returns the cosine of the angle between `u` and `v`. Neither is the zero vector.
+
+            `most_similar(taste, films)` takes a taste vector and a dictionary from film names to film vectors, and returns the **name** of the film whose direction is closest to the taste.
+          starter: |
+            import math
+
+
+            def cosine(u, v):
+                return 0
+
+
+            def most_similar(taste, films):
+                return None
+          solution: |
+            import math
+
+
+            def dot(u, v):
+                return sum(a * b for a, b in zip(u, v))
+
+
+            def cosine(u, v):
+                return dot(u, v) / (math.sqrt(dot(u, u)) * math.sqrt(dot(v, v)))
+
+
+            def most_similar(taste, films):
+                best = None
+                for name in films:
+                    if best is None or cosine(taste, films[name]) > cosine(taste, films[best]):
+                        best = name
+                return best
+          tests: |
+            assert abs(cosine([3, 0, 4], [4, 0, 3]) - 0.96) < 1e-9, "the cosine of the taste and film A should match what you found by hand"
+            assert abs(cosine([3, 0, 4], [6, 0, 8]) - 1) < 1e-9, "a positive multiple of a vector has cosine 1 with it"
+            assert abs(cosine([3, 0, 4], [0, 5, 0])) < 1e-9, "perpendicular vectors have cosine 0"
+            assert abs(cosine([1, 2], [-2, -4]) + 1) < 1e-9, "opposite vectors have cosine -1, and vectors may have any number of components"
+            _films = {"near": [4, 0, 3], "aimed": [6, 0, 8], "loud": [40, 0, 30], "other": [0, 5, 0]}
+            _pick = most_similar([3, 0, 4], _films)
+            assert _pick in _films, "most_similar should return the name of a film"
+            assert _pick != "loud", "a long film has a large dot product without being better aimed: divide the lengths out"
+            assert _pick != "near", "the film at the smallest distance is not always the one closest in direction"
+            assert _pick == "aimed", "return the film with the greatest cosine similarity to the taste"
+            assert most_similar([1, 1], {"x": [1, 0], "y": [2, 3], "z": [-1, -1]}) == "y", "the same should work in two dimensions"
+          wrong:
+            - |
+              import math
+
+
+              def dot(u, v):
+                  return sum(a * b for a, b in zip(u, v))
+
+
+              def cosine(u, v):
+                  return dot(u, v) / (math.sqrt(dot(u, u)) * math.sqrt(dot(v, v)))
+
+
+              def most_similar(taste, films):
+                  best = None
+                  for name in films:
+                      if best is None or dot(taste, films[name]) > dot(taste, films[best]):
+                          best = name
+                  return best
+            - |
+              import math
+
+
+              def dot(u, v):
+                  return sum(a * b for a, b in zip(u, v))
+
+
+              def cosine(u, v):
+                  return dot(u, v) / (math.sqrt(dot(u, u)) * math.sqrt(dot(v, v)))
+
+
+              def distance(u, v):
+                  return math.sqrt(sum((a - b) ** 2 for a, b in zip(u, v)))
+
+
+              def most_similar(taste, films):
+                  best = None
+                  for name in films:
+                      if best is None or distance(taste, films[name]) < distance(taste, films[best]):
+                          best = name
+                  return best
+            - |
+              import math
+
+
+              def dot(u, v):
+                  return sum(a * b for a, b in zip(u, v))
+
+
+              def cosine(u, v):
+                  return dot(u, v) / math.sqrt(dot(u, u))
+
+
+              def most_similar(taste, films):
+                  best = None
+                  for name in films:
+                      if best is None or cosine(taste, films[name]) > cosine(taste, films[best]):
+                          best = name
+                  return best
+          explanation: |
+            A helper for the dot product does most of the work, because a length is the square root of a vector's dot product with itself. `cosine` divides the dot product by both lengths. `most_similar` is the search for an extreme: keep the best name seen so far and replace it when a film has a greater cosine. The tests offered a long film and a nearby film as decoys, which are exactly the two mistakes of the earlier stages.
+          hints:
+            - Write a small function for the dot product first. The length of a vector can be had from it.
+            - The cosine is the dot product divided by the product of the two lengths.
+            - To find the best film, keep the name of the best one seen so far and compare each film with it.
+review: |
+  You started with four films and a taste, and ended with a function that recommends. On the way you met every way this cluster has of comparing two vectors:
+
+  - Treating a taste as both an arrow and a list of numbers was [[m4.vectors-as-arrows-and-as-lists]], and its length was a norm, from [[m4.norms-and-distance]].
+  - Agreement was first a dot product, from [[m4.dot-product]], and then, with the lengths divided out, an angle, from [[m4.angle-and-cosine-similarity]].
+  - Splitting a film into the part along a taste and the part perpendicular to it was [[m4.projection-onto-a-vector]].
+  - Asking which films two tastes can make between them was [[m4.linear-combinations-and-span]], and whether the two tastes were really two was [[m4.linear-independence]].
+
+  The lesson of the middle stages is that "most alike" has no meaning until you choose a measure, and the measures disagree. Dot product, distance and cosine each picked for a different reason. Later in this course, words, images and whole documents become vectors with hundreds of components, and finding the most alike among millions of them is done with the function you have just written.

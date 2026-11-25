@@ -1,0 +1,454 @@
+cluster: E5
+title: Rent by neighbours, without a loop
+minutes: 90
+claim: You will have written a small predictor that estimates a flat's rent from the flats most like it, in whole-array operations with no Python loop, and made it give finite answers where the obvious formula gives nan.
+brief: |
+  This cluster taught you to stop thinking one number at a time. Shapes, axes and broadcasting let a single line of NumPy do what a loop inside a loop would, and the last lessons taught you to distrust a formula that is right on paper and wrong in floating point. This project needs all of that at once.
+
+  **The project.** An agency knows the area, the age and the monthly rent of some flats it has let. For a new flat it wants an estimate of the rent. Its method is the oldest one there is: look at the known flats that are most like the new one, and average their rents, giving more say to the more similar.
+
+  The known flats are the rows of an array `X` of shape `(n, d)`: `n` flats, `d` features each. Their rents are an array `y` of shape `(n,)`. The new flats are the rows of `Q`, of shape `(m, d)`.
+
+  ```python
+  X = np.array([[650.0, 12.0], [900.0, 3.0], [480.0, 25.0], [1100.0, 8.0]])
+  y = np.array([18000.0, 31000.0, 11000.0, 36000.0])
+  Q = np.array([[700.0, 10.0], [1000.0, 5.0]])
+  ```
+
+  You will write four functions and join them in a fifth. There is one rule throughout: **no `for` and no `while`**. Every function works on whole arrays. Before writing each one, say to yourself what shape goes in and what shape must come out. Most mistakes in array code are mistakes of shape, and they are found by thinking, not by running.
+
+  Keep your finished functions, because the last stage joins them. Nothing here is new.
+starter: |
+  # Scratch space for the predictor.
+  import numpy as np
+
+  X = np.array([[650.0, 12.0], [900.0, 3.0], [480.0, 25.0], [1100.0, 8.0]])
+  y = np.array([18000.0, 31000.0, 11000.0, 36000.0])
+  Q = np.array([[700.0, 10.0], [1000.0, 5.0]])
+  print(X.shape, y.shape, Q.shape)
+stages:
+  - title: Features on one scale
+    blocks:
+      - text: |
+          Area is measured in hundreds of square feet and age in years. If likeness is measured by distance, a difference of 50 square feet will swamp a difference of 20 years, only because of the units. The cure is to put every feature on the same scale: from each column subtract that column's mean, and divide by that column's standard deviation.
+      - question:
+          id: axis-shape
+          type: choice
+          system: s1
+          concepts: [e5.axis-operations-and-reductions, e5.arrays-dtype-and-shape]
+          prompt: "`X` has shape `(4, 2)`. What is the shape of `X.mean(axis=0)`, and what does it hold?"
+          options:
+            - "`(2,)`: one mean for each feature, taken down the four flats."
+            - "`(4,)`: one mean for each flat, taken across its two features."
+            - "`(4, 2)`: the mean of each entry with itself."
+            - "`()`: a single mean of all eight numbers."
+          answer: 0
+          explanation: |
+            The axis named is the one that disappears. `axis=0` runs down the rows, so the four flats are averaged away and one number remains for each of the two columns. The mean area and the mean age are what standardising needs. `axis=1` would average a flat's area with its age, which means nothing.
+          hints:
+            - Which axis has length 4, and which has length 2?
+            - A reduction removes the axis it is given.
+      - question:
+          id: standardise
+          type: code
+          mode: write
+          system: s2
+          concepts: [e5.broadcasting, e5.axis-operations-and-reductions, e5.reshaping-views-and-copies]
+          prompt: |
+            Write `standardise(X)`. It returns a **new** array of the same shape in which every column has mean 0 and standard deviation 1. `X` itself must be left as it was.
+          starter: |
+            import numpy as np
+
+
+            def standardise(X):
+                return X
+          solution: |
+            import numpy as np
+
+
+            def standardise(X):
+                return (X - X.mean(axis=0)) / X.std(axis=0)
+          tests: |
+            import numpy as _np
+            _X = _np.array([[650.0, 12.0], [900.0, 3.0], [480.0, 25.0], [1100.0, 8.0]])
+            _before = _X.copy()
+            _Z = standardise(_X)
+            assert _Z is not None and _Z.shape == (4, 2), "the result should have the same shape as X"
+            assert _np.allclose(_Z.mean(axis=0), 0), "every column of the result should have mean 0: check which axis you reduced along"
+            assert _np.allclose(_Z.std(axis=0), 1), "every column of the result should have standard deviation 1"
+            assert _np.array_equal(_X, _before), "X itself was changed: build a new array instead of working in place"
+            assert _Z is not _X and not _np.shares_memory(_Z, _X), "the result should be a new array, not a view of X"
+            _W = standardise(_np.array([[1.0, 10.0, 100.0], [3.0, 30.0, 300.0]]))
+            assert _np.allclose(_W, [[-1, -1, -1], [1, 1, 1]]), "each column should be scaled by its own mean and its own standard deviation"
+            assert "for " not in source and "while " not in source, "no loops: let broadcasting do the work"
+          wrong:
+            - |
+                import numpy as np
+
+
+                def standardise(X):
+                    return (X - X.mean(axis=1, keepdims=True)) / X.std(axis=1, keepdims=True)
+            - |
+                import numpy as np
+
+
+                def standardise(X):
+                    X -= X.mean(axis=0)
+                    X /= X.std(axis=0)
+                    return X
+            - |
+                import numpy as np
+
+
+                def standardise(X):
+                    return (X - X.mean()) / X.std()
+            - |
+                import numpy as np
+
+
+                def standardise(X):
+                    return X - X.mean(axis=0)
+          explanation: |
+            `X.mean(axis=0)` has shape `(d,)` and `X` has shape `(n, d)`. Broadcasting lines the shapes up from the right, so the `(d,)` array is stretched down all `n` rows, and each column has its own mean subtracted. The same happens with the division. `X - ...` builds a new array, so the caller's `X` is untouched. Writing `X -= ...` would have changed the caller's data behind their back, which is the kind of bug that is found weeks later.
+          hints:
+            - You need one mean and one standard deviation for each column. Which axis gives that?
+            - What shape is that array of means, and how does broadcasting line it up against X?
+            - Which form of subtraction makes a new array, and which changes the old one in place?
+  - title: Every new flat against every known flat
+    blocks:
+      - text: |
+          Likeness is distance: two flats are alike when the Euclidean distance between their feature vectors is small. You need the distance from each of the `m` new flats to each of the `n` known ones, as an array of shape `(m, n)`.
+
+          With loops that is a loop inside a loop. With broadcasting it is one subtraction, provided the two arrays are first given shapes that broadcast against each other.
+      - question:
+          id: gap-shape
+          type: choice
+          system: s2
+          concepts: [e5.broadcasting, e5.indexing-and-slicing, e5.arrays-dtype-and-shape]
+          prompt: "`Q` has shape `(2, 2)` and `X` has shape `(4, 2)`. What is the shape of `Q[:, np.newaxis, :] - X[np.newaxis, :, :]`?"
+          options:
+            - "`(2, 4, 2)`: for each of the 2 new flats and each of the 4 known flats, the 2 differences in their features."
+            - "`(4, 2, 2)`: for each of the 4 known flats and each of the 2 new flats, the 2 differences in their features."
+            - "`(2, 2)`: the new flats minus the first two known flats."
+            - "It raises an error, because 2 rows cannot be subtracted from 4 rows."
+          answer: 0
+          explanation: |
+            `Q[:, np.newaxis, :]` has shape `(2, 1, 2)` and `X[np.newaxis, :, :]` has shape `(1, 4, 2)`. Compared from the right: 2 and 2 match, 1 stretches to 4, and 2 against 1 stretches the 1 to 2. The result is `(2, 4, 2)`, with entry `[i, j, k]` equal to feature `k` of new flat `i` minus feature `k` of known flat `j`. Without the new axes the shapes `(2, 2)` and `(4, 2)` do not broadcast, because 2 and 4 are different and neither is 1.
+          hints:
+            - Write down the shape of each operand after its new axis is inserted.
+            - Broadcasting compares shapes from the right, and a length of 1 stretches to match.
+      - question:
+          id: distances
+          type: code
+          mode: write
+          system: s2
+          concepts: [e5.broadcasting, e5.vectorisation, e5.axis-operations-and-reductions, e5.indexing-and-slicing]
+          prompt: |
+            Write `distances(X, Q)`. `X` has shape `(n, d)` and `Q` has shape `(m, d)`. Return the array of shape `(m, n)` whose entry `[i, j]` is the Euclidean distance from row `i` of `Q` to row `j` of `X`.
+          starter: |
+            import numpy as np
+
+
+            def distances(X, Q):
+                return np.zeros((Q.shape[0], X.shape[0]))
+          solution: |
+            import numpy as np
+
+
+            def distances(X, Q):
+                gaps = Q[:, np.newaxis, :] - X[np.newaxis, :, :]
+                return np.sqrt((gaps ** 2).sum(axis=2))
+          tests: |
+            import numpy as _np
+            _X = _np.array([[0.0, 0.0], [3.0, 4.0], [6.0, 8.0], [0.0, 1.0]])
+            _Q = _np.array([[0.0, 0.0], [3.0, 0.0]])
+            _D = distances(_X, _Q)
+            assert _D is not None and _D.shape == (2, 4), "the result should have one row for each row of Q and one column for each row of X"
+            assert _np.allclose(_D[0], [0, 5, 10, 1]), "row 0 should hold the distances from the first new flat to each known flat: remember the square root"
+            assert _np.allclose(_D[1], [3, 4, _np.sqrt(73), _np.sqrt(10)]), "row 1 should hold the distances from the second new flat"
+            _X3 = _np.arange(15.0).reshape(5, 3)
+            _Q3 = _np.array([[1.0, 0.0, 2.0], [4.0, 4.0, 4.0], [0.0, 9.0, 1.0], [2.0, 2.0, 2.0], [7.0, 1.0, 3.0], [5.0, 5.0, 0.0]])
+            _D3 = distances(_X3, _Q3)
+            assert _D3.shape == (6, 5), "with 6 new flats and 5 known ones the shape should be (6, 5), whatever the number of features"
+            assert _np.allclose(_D3, [[_np.sqrt(((_q - _x) ** 2).sum()) for _x in _X3] for _q in _Q3]), "an entry is wrong: entry [i, j] is the distance from row i of Q to row j of X"
+            assert "for " not in source and "while " not in source, "no loops: let broadcasting do the work"
+          wrong:
+            - |
+                import numpy as np
+
+
+                def distances(X, Q):
+                    gaps = Q[:, np.newaxis, :] - X[np.newaxis, :, :]
+                    return (gaps ** 2).sum(axis=2)
+            - |
+                import numpy as np
+
+
+                def distances(X, Q):
+                    gaps = Q[:, np.newaxis, :] - X[np.newaxis, :, :]
+                    return np.sqrt((gaps ** 2).sum(axis=1))
+            - |
+                import numpy as np
+
+
+                def distances(X, Q):
+                    gaps = X[:, np.newaxis, :] - Q[np.newaxis, :, :]
+                    return np.sqrt((gaps ** 2).sum(axis=2))
+            - |
+                import numpy as np
+
+
+                def distances(X, Q):
+                    gaps = Q[:, np.newaxis, :] - X[np.newaxis, :, :]
+                    return np.abs(gaps).sum(axis=2)
+          explanation: |
+            The subtraction builds all the differences at once, in an array of shape `(m, n, d)`. Squaring is done entry by entry. The sum is taken over the last axis, the features, which is the axis that must disappear to leave `(m, n)`. Then one square root for the whole array. Each step is one line of NumPy and runs in compiled code, and the only thinking required was about shapes.
+          hints:
+            - Give Q and X shapes that broadcast to (m, n, d), as in the question above.
+            - A Euclidean distance is the square root of a sum of squared differences. Over which axis is that sum?
+            - Check the shape of your result before checking its numbers.
+      - question:
+          id: argmin-trace
+          type: predict
+          system: s1
+          concepts: [e5.axis-operations-and-reductions]
+          prompt: "`D` holds the distances from 2 new flats to 3 known flats. What does this print?"
+          code: |
+            import numpy as np
+
+            D = np.array([[3.0, 1.0, 2.0], [0.5, 4.0, 0.2]])
+            print(D.argmin(axis=1))
+            print(D.shape, D.argmin(axis=1).shape)
+          output: |
+            [1 2]
+            (2, 3) (2,)
+          explanation: |
+            `argmin(axis=1)` looks along each row and reports the position of its smallest entry: position 1 in the first row and position 2 in the second. Those are the indices of the known flat nearest to each new flat. The axis that was reduced, of length 3, is gone.
+          hints:
+            - argmin returns a position, not a value.
+            - With axis=1 the search runs along each row.
+  - title: From distances to weights, without nan
+    blocks:
+      - text: |
+          Taking only the single nearest flat throws information away. A gentler rule gives every known flat a **weight** that falls off with its distance and makes the weights of each new flat add up to 1. The standard way is the softmax of the negated distances: for a row of scores $s$,
+
+          $$w_j = \frac{e^{s_j}}{\sum_k e^{s_k}}.$$
+
+          A larger score, meaning a smaller distance, gets a larger weight. On paper that formula is all there is to it.
+      - question:
+          id: why-stable
+          type: choice
+          system: s2
+          concepts: [e5.log-sum-exp-and-stable-formulations, e5.numerical-error-analysis-in-practice]
+          prompt: |
+            Computed exactly as written, the formula returns `nan` for the row of scores `[-1000.0, -1001.0]`, and also for `[1000.0, 1001.0]`. Why, and what is the cure?
+          options:
+            - In the first case every exponential underflows to 0 and the result is 0 divided by 0. In the second every exponential overflows to inf and the result is inf divided by inf. Subtracting the row's largest score from every score first changes nothing mathematically, since the common factor cancels, and makes the largest exponent 0.
+            - The scores are too close together for a float to tell apart. The cure is to use a wider float type.
+            - The exponential of a negative number is not defined in floating point. The cure is to take absolute values first.
+            - The division loses precision because the numbers are large. The cure is to multiply instead of dividing.
+          answer: 0
+          explanation: |
+            $e^{-1000}$ is far smaller than the smallest positive float and $e^{1000}$ far larger than the largest. Yet the true weights are perfectly ordinary, about 0.73 for the larger score and 0.27 for the smaller in both cases, because only the differences between scores matter: multiplying top and bottom by $e^{-c}$ changes nothing. Choosing $c$ to be the row's maximum makes the largest exponential exactly 1, so nothing overflows and the sum cannot be 0. It is the same idea as the log-sum-exp trick.
+          hints:
+            - What does a float hold when the true value is too small to represent, and when it is too large?
+            - If the same number is subtracted from every score in a row, what happens to the top and the bottom of the fraction?
+      - question:
+          id: softmax
+          type: code
+          mode: write
+          system: s2
+          concepts: [e5.log-sum-exp-and-stable-formulations, e5.axis-operations-and-reductions, e5.broadcasting]
+          prompt: |
+            Write `softmax(scores)`. `scores` has shape `(m, n)`. Return the array of the same shape in which each **row** is the softmax of the matching row of `scores`. It must give finite, correct weights however large or small the scores are.
+          starter: |
+            import numpy as np
+
+
+            def softmax(scores):
+                return scores
+          solution: |
+            import numpy as np
+
+
+            def softmax(scores):
+                shifted = scores - scores.max(axis=1, keepdims=True)
+                weights = np.exp(shifted)
+                return weights / weights.sum(axis=1, keepdims=True)
+          tests: |
+            import numpy as _np
+            _W = softmax(_np.array([[0.0, 0.0], [0.0, _np.log(3.0)]]))
+            assert _W is not None and _W.shape == (2, 2), "the result should have the same shape as the scores"
+            assert _np.allclose(_W, [[0.5, 0.5], [0.25, 0.75]]), "equal scores should share the weight equally, and a score larger by log 3 should get three times the weight"
+            _S = _np.array([[1.0, 2.0, 3.0], [-4.0, 0.0, 9.0], [5.0, 5.0, 5.0], [0.0, -2.0, 7.0]])
+            _W = softmax(_S)
+            assert _np.allclose(_W.sum(axis=1), 1), "the weights of each row should add up to 1: check the axis"
+            assert _np.allclose(_W, softmax(_S + 100.0)), "adding the same number to every score should not change the weights"
+            assert _np.allclose(_W[0], _np.exp(_S[0]) / _np.exp(_S[0]).sum()), "each row should be the softmax of that row alone"
+            _big = softmax(_np.array([[1000.0, 1001.0], [-1000.0, -1001.0], [0.0, 5000.0]]))
+            assert _np.isfinite(_big).all(), "very large or very small scores gave inf or nan: subtract each row's largest score before taking exponentials"
+            assert _np.allclose(_big, [[0.2689414, 0.7310586], [0.7310586, 0.2689414], [0.0, 1.0]]), "the weights for very large or very small scores are not right"
+            assert "for " not in source and "while " not in source, "no loops: reduce along an axis instead"
+          wrong:
+            - |
+                import numpy as np
+
+
+                def softmax(scores):
+                    weights = np.exp(scores)
+                    return weights / weights.sum(axis=1, keepdims=True)
+            - |
+                import numpy as np
+
+
+                def softmax(scores):
+                    shifted = scores - scores.max()
+                    weights = np.exp(shifted)
+                    return weights / weights.sum()
+            - |
+                import numpy as np
+
+
+                def softmax(scores):
+                    shifted = scores - scores.max(axis=0, keepdims=True)
+                    weights = np.exp(shifted)
+                    return weights / weights.sum(axis=0, keepdims=True)
+            - |
+                import numpy as np
+
+
+                def softmax(scores):
+                    shifted = scores - scores.max(axis=1, keepdims=True)
+                    return shifted / shifted.sum(axis=1, keepdims=True)
+          explanation: |
+            `scores.max(axis=1, keepdims=True)` has shape `(m, 1)`, so it broadcasts against the `(m, n)` scores and each row has its own maximum subtracted. Without `keepdims` the maxima would have shape `(m,)`, which lines up against the columns instead of the rows. After the shift every exponent is at most 0, the largest in each row is exactly 0, and so each row's sum is at least 1. Nothing can overflow, and the division can never be 0 by 0.
+          hints:
+            - Each row is treated on its own. Which axis do the maximum and the sum run along?
+            - A row maximum of shape (m,) will not broadcast against the rows of an (m, n) array. Which keyword keeps the reduced axis with length 1?
+            - Subtract before taking the exponential, not after.
+  - title: The estimate
+    blocks:
+      - text: |
+          Everything is in place. For each new flat, the estimated rent is the weighted average of the known rents, with weights from the softmax of the negated distances.
+
+          If `W` is the `(m, n)` array of weights and `y` the `(n,)` array of rents, then the `m` weighted averages are a matrix-vector product: row `i` of `W` dotted with `y`.
+      - question:
+          id: predict
+          type: code
+          mode: write
+          system: s2
+          concepts: [e5.vectorisation, e5.broadcasting, e5.log-sum-exp-and-stable-formulations, e5.axis-operations-and-reductions]
+          prompt: |
+            Paste `distances` and `softmax` where the comment says. Then write `predict(X, y, Q)`, which returns an array of shape `(m,)` holding the estimated rent of each row of `Q`. The features are assumed to be on one scale already.
+          starter: |
+            import numpy as np
+
+
+            # Paste distances and softmax from the earlier stages here.
+
+
+            def predict(X, y, Q):
+                return np.zeros(Q.shape[0])
+          solution: |
+            import numpy as np
+
+
+            def distances(X, Q):
+                gaps = Q[:, np.newaxis, :] - X[np.newaxis, :, :]
+                return np.sqrt((gaps ** 2).sum(axis=2))
+
+
+            def softmax(scores):
+                shifted = scores - scores.max(axis=1, keepdims=True)
+                weights = np.exp(shifted)
+                return weights / weights.sum(axis=1, keepdims=True)
+
+
+            def predict(X, y, Q):
+                return softmax(-distances(X, Q)) @ y
+          tests: |
+            import numpy as _np
+            for _needed in ["distances", "softmax"]:
+                assert _needed in globals(), "paste your " + _needed + " function above predict"
+            _X = _np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 2.0], [50.0, 50.0]])
+            _y = _np.array([10.0, 20.0, 40.0, 900.0])
+            _Q = _np.array([[0.0, 0.0], [50.0, 50.0], [0.5, 0.0]])
+            _p = predict(_X, _y, _Q)
+            assert _p is not None and _np.shape(_p) == (3,), "the result should hold one estimate for each row of Q"
+            assert abs(_p[1] - 900) < 1e-6, "a new flat identical to a known flat that is far from all the others should get that flat's rent: nearer flats must weigh more, not less"
+            _d = _np.sqrt(((_Q[:, None, :] - _X[None, :, :]) ** 2).sum(axis=2))
+            _w = _np.exp(-_d)
+            _w = _w / _w.sum(axis=1, keepdims=True)
+            assert _np.allclose(_p, _w @ _y), "the estimate should be the average of the known rents weighted by the softmax of the negated distances"
+            assert _y.min() <= _p.min() and _p.max() <= _y.max(), "a weighted average cannot fall outside the range of the rents it averages"
+            _far = predict(_X * 1000.0, _y, _Q * 1000.0)
+            assert _np.isfinite(_far).all(), "with large distances the estimate became inf or nan: use your stable softmax"
+            assert "for " not in source and "while " not in source, "no loops"
+          wrong:
+            - |
+                import numpy as np
+
+
+                def distances(X, Q):
+                    gaps = Q[:, np.newaxis, :] - X[np.newaxis, :, :]
+                    return np.sqrt((gaps ** 2).sum(axis=2))
+
+
+                def softmax(scores):
+                    shifted = scores - scores.max(axis=1, keepdims=True)
+                    weights = np.exp(shifted)
+                    return weights / weights.sum(axis=1, keepdims=True)
+
+
+                def predict(X, y, Q):
+                    return softmax(distances(X, Q)) @ y
+            - |
+                import numpy as np
+
+
+                def distances(X, Q):
+                    gaps = Q[:, np.newaxis, :] - X[np.newaxis, :, :]
+                    return np.sqrt((gaps ** 2).sum(axis=2))
+
+
+                def softmax(scores):
+                    shifted = scores - scores.max(axis=1, keepdims=True)
+                    weights = np.exp(shifted)
+                    return weights / weights.sum(axis=1, keepdims=True)
+
+
+                def predict(X, y, Q):
+                    return y[distances(X, Q).argmin(axis=1)]
+            - |
+                import numpy as np
+
+
+                def distances(X, Q):
+                    gaps = Q[:, np.newaxis, :] - X[np.newaxis, :, :]
+                    return np.sqrt((gaps ** 2).sum(axis=2))
+
+
+                def softmax(scores):
+                    shifted = scores - scores.max(axis=1, keepdims=True)
+                    weights = np.exp(shifted)
+                    return weights / weights.sum(axis=1, keepdims=True)
+
+
+                def predict(X, y, Q):
+                    return (-distances(X, Q)) @ y
+          explanation: |
+            `predict` is one line because each piece returns exactly the shape the next piece needs: `distances` gives `(m, n)`, negating and `softmax` keep `(m, n)`, and `@ y` with `y` of shape `(n,)` gives `(m,)`. The distances are negated because softmax favours large scores and the predictor must favour small distances. Leaving out the minus sign still runs and still returns numbers of a plausible size, weighted towards the flats least like the new one. That is why the tests checked a case whose answer is known.
+          hints:
+            - Work out the shape after each step. What do you have after distances, and what must you have at the end?
+            - Softmax gives the largest weight to the largest score. Which flats should get the largest weight?
+            - A weighted average of y for every row of weights at once is a single product.
+review: |
+  You have a predictor in a dozen lines, with no loop in it, and you can say what every axis of every array means:
+
+  - Knowing that `X` is `(n, d)` and what each axis counts was [[e5.arrays-dtype-and-shape]], and reducing along the right one was [[e5.axis-operations-and-reductions]].
+  - Standardising subtracted a `(d,)` array from an `(n, d)` one, and the distances subtracted `(1, n, d)` from `(m, 1, d)`. Both were [[e5.broadcasting]], with the new axes put in by [[e5.indexing-and-slicing]].
+  - Leaving the caller's array untouched was the difference between a new array and a change in place, from [[e5.reshaping-views-and-copies]].
+  - Replacing a loop inside a loop by whole-array arithmetic was [[e5.vectorisation]].
+  - The softmax that survives scores of a thousand was [[e5.log-sum-exp-and-stable-formulations]], and recognising that the formula on paper returns `nan` was [[e5.numerical-error-analysis-in-practice]].
+
+  What you have built is a small version of something central. A weighted average, with weights from a softmax of scores that measure likeness, computed for many queries at once by broadcasting and a matrix product, is the operation at the heart of the attention layers you will meet much later. The shapes will be larger and the scores will be learnt, but the lines of NumPy will look like these.
