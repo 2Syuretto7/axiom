@@ -1,0 +1,292 @@
+cluster: M5
+title: The transform tool
+minutes: 75
+claim: You will have built the heart of a drawing program's transform tool, reading matrices as what they do to the plane, composing them in the right order, undoing them when they can be undone, saying exactly why one cannot be, and writing the three functions that carry it out.
+brief: |
+  A matrix is a table of numbers, and it is also a movement of the whole plane. This cluster was about seeing the second in the first. A drawing program is a good place to practise, because there every matrix is something you can watch happen.
+
+  **The project.** A drawing program lets the user turn, stretch and skew a shape. Inside, each of those is a $2 \times 2$ matrix, and a shape is a list of points, each a vector. The program must apply a transformation, combine several into one, and undo one when the user presses Undo.
+
+  Four matrices appear throughout:
+
+  $$R = \begin{pmatrix} 0 & -1 \\ 1 & 0 \end{pmatrix}, \qquad S = \begin{pmatrix} 2 & 0 \\ 0 & 1 \end{pmatrix}, \qquad A = \begin{pmatrix} 3 & 1 \\ 1 & 2 \end{pmatrix}, \qquad B = \begin{pmatrix} 1 & 2 \\ 2 & 4 \end{pmatrix}.$$
+
+  You will work out by hand what each does, and then write the code that does it for any matrix. Nothing here is new. Keep your results as you go.
+starter: |
+  # Scratch space for the transform tool. A matrix is a list of rows.
+  R = [[0, -1], [1, 0]]
+  v = [1, 1]
+  print([sum(a * x for a, x in zip(row, v)) for row in R])
+stages:
+  - title: A matrix is what it does to the basis
+    blocks:
+      - text: |
+          The user asks for a quarter-turn anticlockwise about the origin. That turn sends the first basis vector $e_1 = (1, 0)$ to $(0, 1)$, and the second, $e_2 = (0, 1)$, to $(-1, 0)$.
+      - question:
+          id: columns
+          type: choice
+          system: s1
+          concepts: [m5.matrices-as-linear-maps]
+          prompt: Which matrix is the quarter-turn, and why?
+          options:
+            - "$R$, because the columns of a matrix are the images of $e_1$ and $e_2$, in that order."
+            - "$R$, because the rows of a matrix are the images of $e_1$ and $e_2$, in that order."
+            - "$\\begin{pmatrix} 0 & 1 \\\\ -1 & 0 \\end{pmatrix}$, because the columns of a matrix are the images of $e_1$ and $e_2$, in that order."
+            - "$S$, because a turn changes the first coordinate and leaves the second."
+          answer: 0
+          explanation: |
+            A linear map is fixed by what it does to the basis vectors, and the matrix records exactly that, one image to a column. The first column of $R$ is $(0, 1)$, the image of $e_1$, and the second is $(-1, 0)$, the image of $e_2$. The third option has those images as its rows, which makes it the quarter-turn the other way.
+          hints:
+            - A linear map is known completely once you know where two particular vectors go.
+            - Are those images written down the columns or along the rows?
+      - question:
+          id: apply-by-hand
+          type: choice
+          system: s1
+          concepts: [m5.matrix-vector-product, m5.matrices-as-linear-maps]
+          prompt: A corner of the user's shape is at $(1, 1)$. Where does $R$ send it?
+          options:
+            - "$(-1, 1)$"
+            - "$(1, -1)$"
+            - "$(1, 1)$"
+            - "$(-1, -1)$"
+          answer: 0
+          explanation: |
+            $R\,(1, 1)$ is 1 times the first column plus 1 times the second: $(0, 1) + (-1, 0) = (-1, 1)$. A matrix times a vector is a linear combination of the columns, with the entries of the vector as the weights. The picture agrees: a quarter-turn anticlockwise carries the point up and to the right to the point up and to the left.
+          hints:
+            - The product of a matrix and a vector is a combination of the matrix's columns.
+            - Use the two entries of the point as the weights.
+  - title: Two steps as one matrix
+    blocks:
+      - text: |
+          $S$ stretches everything to twice its width and leaves heights alone. The user stretches the shape and **then** turns it. The program wants a single matrix for the two steps together, so that it can apply one matrix to each of ten thousand points instead of two.
+      - question:
+          id: order
+          type: choice
+          system: s2
+          concepts: [m5.matrix-multiplication-as-composition, m5.matrix-vector-product]
+          prompt: Which product is "stretch, then turn", and where does it send the corner $(1, 1)$?
+          options:
+            - "$RS = \\begin{pmatrix} 0 & -1 \\\\ 2 & 0 \\end{pmatrix}$, which sends it to $(-1, 2)$."
+            - "$SR = \\begin{pmatrix} 0 & -2 \\\\ 1 & 0 \\end{pmatrix}$, which sends it to $(-2, 1)$."
+            - "$RS = \\begin{pmatrix} 0 & -2 \\\\ 1 & 0 \\end{pmatrix}$, which sends it to $(-2, 1)$."
+            - "Either product, because the same two steps are involved and the result is the same."
+          answer: 0
+          explanation: |
+            In $RS\,v = R(S\,v)$ the matrix next to the vector acts first, so the first step is written on the right. Check by doing the steps one at a time: stretching $(1, 1)$ gives $(2, 1)$, and turning that gives $(-1, 2)$. The other order, turn then stretch, gives $(-2, 1)$, a different point. Matrix multiplication is composition, and composition depends on order.
+          hints:
+            - In a product applied to a vector, which matrix reaches the vector first?
+            - Check your choice by carrying the corner through the two steps separately.
+  - title: Undo
+    blocks:
+      - text: |
+          The user applies the skew $A$ to a drawing and then presses Undo. To undo $A$ the program needs $A^{-1}$, and whether that exists is decided by one number.
+      - question:
+          id: det
+          type: numeric
+          system: s1
+          concepts: [m5.determinant]
+          prompt: What is the determinant of $A$?
+          answer: "5"
+          explanation: |
+            $\det A = 3 \times 2 - 1 \times 1 = 5$. Geometrically, $A$ sends the unit square to a parallelogram of area 5. Every shape's area is multiplied by 5, and since 5 is not zero, nothing has been flattened.
+          hints:
+            - For a two-by-two matrix the determinant is a difference of two products.
+            - Multiply along each diagonal and subtract.
+      - question:
+          id: undo-point
+          type: choice
+          system: s2
+          concepts: [m5.identity-and-inverse, m5.elimination-and-linear-systems]
+          prompt: After the skew, one corner of the drawing is at $(5, 5)$. Where was that corner before?
+          options:
+            - "$(1, 2)$"
+            - "$(20, 15)$"
+            - "$(5, 5)$"
+            - "$(2, 1)$"
+          answer: 0
+          explanation: |
+            You need the $v$ with $A\,v = (5, 5)$, that is, $3x + y = 5$ and $x + 2y = 5$. Eliminating: three times the second equation minus the first gives $5y = 10$, so $y = 2$ and then $x = 1$. The inverse does the same for every point at once: $A^{-1} = \dfrac{1}{5}\begin{pmatrix} 2 & -1 \\ -1 & 3 \end{pmatrix}$, and $A^{-1}(5, 5) = \dfrac{1}{5}(5, 10) = (1, 2)$. Check: $A\,(1, 2) = (5, 5)$. The second option applies $A$ again instead of undoing it.
+          hints:
+            - Undoing asks which point $A$ sends to $(5, 5)$. Write that as two equations in two unknowns.
+            - Solve them by elimination, or find the inverse matrix and apply it.
+            - Check your answer by applying $A$ to it.
+      - question:
+          id: det-product
+          type: numeric
+          system: s1
+          concepts: [m5.determinant, m5.matrix-multiplication-as-composition]
+          prompt: By what factor does "stretch, then turn" multiply the area of a shape?
+          answer: "2"
+          explanation: |
+            The determinant of a product is the product of the determinants: $\det(RS) = \det R \times \det S = 1 \times 2 = 2$. It could be no other way. The stretch doubles every area and the turn changes none, so the two together double it. The matrix from the last stage agrees: $0 \times 0 - (-1) \times 2 = 2$.
+          hints:
+            - What does each of the two steps do to areas on its own?
+            - What does the determinant of a matrix measure?
+  - title: A transformation that cannot be undone
+    blocks:
+      - text: |
+          A user types the matrix $B$ by hand, applies it, and presses Undo. Nothing sensible can happen, and the program must be able to say why.
+      - question:
+          id: rank
+          type: numeric
+          system: s1
+          concepts: [m5.rank]
+          prompt: What is the rank of $B$?
+          answer: "1"
+          explanation: |
+            The second column, $(2, 4)$, is twice the first, $(1, 2)$, so the columns span only a line. One independent column means rank 1. Elimination says the same: subtracting twice the first row from the second leaves a row of zeros and a single pivot.
+          hints:
+            - Compare the two columns. Is either a multiple of the other?
+            - The rank is the number of independent columns.
+      - question:
+          id: why-no-undo
+          type: choice
+          system: s2
+          concepts: [m5.column-space-and-null-space, m5.identity-and-inverse, m5.determinant]
+          prompt: Why can $B$ not be undone?
+          options:
+            - "$B$ sends $(2, -1)$ to the origin, so any point $v$ and the point $v + (2, -1)$ land in the same place, and nothing can tell afterwards which one it came from. Every output lies on the line through $(1, 2)$."
+            - "$B$ has determinant $0$ only because its entries are small. Scaling $B$ up first would make it invertible."
+            - "$B$ sends every point to the origin, so all information is lost."
+            - "$B$ can be undone, by the matrix $\\dfrac{1}{0}\\begin{pmatrix} 4 & -2 \\\\ -2 & 1 \\end{pmatrix}$, which the program should compute."
+          answer: 0
+          explanation: |
+            $B\,(2, -1) = (2 - 2,\ 4 - 4) = (0, 0)$, so $(2, -1)$ is in the null space, and by linearity $B(v + (2, -1)) = B\,v$. Two different inputs with one output cannot both be recovered. The column space is the line of multiples of $(1, 2)$: the whole plane has been flattened onto it, which is what a determinant of zero means. One dimension of output and one dimension of null space add up to the two dimensions of the plane.
+          hints:
+            - Find a vector other than zero that $B$ sends to zero.
+            - If two different points have the same image, what would an inverse have to do with that image?
+  - title: The code behind the tool
+    blocks:
+      - text: |
+          Now write what the program runs. A matrix is a list of rows, so $R$ is `[[0, -1], [1, 0]]`, and a vector is a list of numbers.
+      - question:
+          id: tool
+          type: code
+          mode: write
+          system: s2
+          concepts: [m5.matrix-vector-product, m5.matrix-multiplication-as-composition, m5.identity-and-inverse, m5.determinant]
+          prompt: |
+            Write three functions.
+
+            `apply(A, v)` returns the vector $A\,v$, for a matrix with any number of rows and columns.
+
+            `matmul(A, B)` returns the matrix $AB$, for any two matrices whose sizes allow it.
+
+            `inverse2(A)` returns the inverse of a $2 \times 2$ matrix, or `None` when the matrix cannot be undone.
+          starter: |
+            def apply(A, v):
+                return v
+
+
+            def matmul(A, B):
+                return A
+
+
+            def inverse2(A):
+                return None
+          solution: |
+            def apply(A, v):
+                return [sum(a * x for a, x in zip(row, v)) for row in A]
+
+
+            def matmul(A, B):
+                return [[sum(A[i][k] * B[k][j] for k in range(len(B))) for j in range(len(B[0]))] for i in range(len(A))]
+
+
+            def inverse2(A):
+                det = A[0][0] * A[1][1] - A[0][1] * A[1][0]
+                if det == 0:
+                    return None
+                return [[A[1][1] / det, -A[0][1] / det], [-A[1][0] / det, A[0][0] / det]]
+          tests: |
+            _R = [[0, -1], [1, 0]]
+            _S = [[2, 0], [0, 1]]
+            _A = [[3, 1], [1, 2]]
+            _B = [[1, 2], [2, 4]]
+            assert apply(_R, [1, 1]) == [-1, 1], "apply should agree with what you found by hand for the quarter-turn"
+            assert apply([[1, 2, 3], [4, 5, 6]], [1, 0, -1]) == [-2, -2], "apply should work for a matrix that is not square: one entry of the result for each row"
+            assert matmul(_R, _S) == [[0, -1], [2, 0]], "matmul(R, S) should be the matrix for stretch, then turn"
+            assert matmul(_S, _R) == [[0, -2], [1, 0]], "matmul(S, R) should be the matrix for turn, then stretch"
+            assert matmul([[1, 2, 3], [4, 5, 6]], [[1, 0], [0, 1], [1, 1]]) == [[4, 5], [10, 11]], "matmul should work for matrices that are not square"
+            for _v in [[1, 1], [3, -2], [0, 5]]:
+                assert apply(matmul(_A, _S), _v) == apply(_A, apply(_S, _v)), "applying a product should be the same as applying the right-hand matrix and then the left-hand one"
+            _inv = inverse2(_A)
+            assert _inv is not None, "A can be undone, so inverse2 should return a matrix for it"
+            assert all(abs(_inv[i][j] - [[0.4, -0.2], [-0.2, 0.6]][i][j]) < 1e-9 for i in range(2) for j in range(2)), "the inverse of A is not right: applying it after A should bring every point back"
+            _back = apply(_inv, apply(_A, [7, -3]))
+            assert abs(_back[0] - 7) < 1e-9 and abs(_back[1] + 3) < 1e-9, "applying the inverse after the matrix should return the starting point"
+            assert inverse2(_B) is None, "a matrix that flattens the plane cannot be undone"
+          wrong:
+            - |
+              def apply(A, v):
+                  return [sum(a * x for a, x in zip(row, v)) for row in A]
+
+
+              def matmul(A, B):
+                  return [[A[i][j] * B[i][j] for j in range(len(A[0]))] for i in range(len(A))]
+
+
+              def inverse2(A):
+                  det = A[0][0] * A[1][1] - A[0][1] * A[1][0]
+                  if det == 0:
+                      return None
+                  return [[A[1][1] / det, -A[0][1] / det], [-A[1][0] / det, A[0][0] / det]]
+            - |
+              def apply(A, v):
+                  return [sum(a * x for a, x in zip(row, v)) for row in A]
+
+
+              def matmul(A, B):
+                  return [[sum(B[i][k] * A[k][j] for k in range(len(A))) for j in range(len(A[0]))] for i in range(len(B))]
+
+
+              def inverse2(A):
+                  det = A[0][0] * A[1][1] - A[0][1] * A[1][0]
+                  if det == 0:
+                      return None
+                  return [[A[1][1] / det, -A[0][1] / det], [-A[1][0] / det, A[0][0] / det]]
+            - |
+              def apply(A, v):
+                  return [sum(a * x for a, x in zip(row, v)) for row in A]
+
+
+              def matmul(A, B):
+                  return [[sum(A[i][k] * B[k][j] for k in range(len(B))) for j in range(len(B[0]))] for i in range(len(A))]
+
+
+              def inverse2(A):
+                  det = A[0][0] * A[1][1] - A[0][1] * A[1][0]
+                  if det == 0:
+                      return None
+                  return [[A[1][1], -A[0][1]], [-A[1][0], A[0][0]]]
+            - |
+              def apply(A, v):
+                  return [sum(a * x for a, x in zip(row, v)) for row in A]
+
+
+              def matmul(A, B):
+                  return [[sum(A[i][k] * B[k][j] for k in range(len(B))) for j in range(len(B[0]))] for i in range(len(A))]
+
+
+              def inverse2(A):
+                  det = A[0][0] * A[1][1] + A[0][1] * A[1][0]
+                  if det == 0:
+                      return None
+                  return [[A[1][1] / det, -A[0][1] / det], [-A[1][0] / det, A[0][0] / det]]
+          explanation: |
+            `apply` takes one dot product for each row. `matmul` puts in row $i$ and column $j$ the dot product of row $i$ of the first matrix with column $j$ of the second, which is the rule that makes the product act like one map after another. Multiplying matching entries would be simpler to write and would not do that. `inverse2` swaps the diagonal entries, changes the sign of the other two, and divides by the determinant. The determinant is checked first, because a determinant of zero is the program's way of knowing that the plane was flattened and there is nothing to go back to.
+          hints:
+            - Each entry of a matrix times a vector is the dot product of one row with the vector.
+            - The entry in row i and column j of a product uses row i of the left matrix and column j of the right one.
+            - For a two-by-two matrix the inverse has a formula. What does it divide by, and what if that number is zero?
+review: |
+  You now have the inside of a transform tool, and you can say what every part of it means:
+
+  - Reading a matrix column by column as the images of the basis vectors was [[m5.matrices-as-linear-maps]], and moving a point was [[m5.matrix-vector-product]].
+  - Combining two steps into one matrix, in the right order, was [[m5.matrix-multiplication-as-composition]].
+  - Undo was an inverse, from [[m5.identity-and-inverse]], and finding where one point came from was a small linear system, from [[m5.elimination-and-linear-systems]].
+  - Whether Undo is possible at all was the determinant, from [[m5.determinant]]: the factor by which areas are scaled, zero exactly when the plane is flattened.
+  - What the flattening destroys and what survives were the null space and the column space, from [[m5.column-space-and-null-space]], and their sizes were counted by [[m5.rank]].
+
+  The four matrices of this project are small enough to draw, and that is their value. A layer of a neural network is a matrix with thousands of rows and columns, and nobody can draw what it does. But the questions are the same ones: where do the basis vectors go, what happens when two are applied in turn, what is flattened and what survives.

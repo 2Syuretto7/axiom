@@ -1,0 +1,680 @@
+cluster: E3
+title: A metro route planner
+minutes: 90
+claim: You will have built a route planner for a small metro, with a graph held in dictionaries, a search by queue for the fewest stops, a search by heap for the least time, and a binary search through a timetable, and joined them into one function.
+brief: |
+  This cluster was a catalogue: each lesson gave you a structure or an algorithm and said what it costs. The skill is choosing among them, and a choice only means something inside a problem.
+
+  **The project.** A city has a small metro:
+
+  | From | To | Minutes |
+  | --- | --- | --- |
+  | Airport | Central | 20 |
+  | Airport | Market | 5 |
+  | Market | Lake | 5 |
+  | Lake | Central | 5 |
+  | Central | Museum | 4 |
+  | Depot | Yard | 3 |
+
+  Trains run both ways along every line. The Depot and the Yard are joined to each other and to nothing else.
+
+  A passenger asks the planner two different things: the route with the fewest stops, and the route that takes the least time. They also ask when the next train leaves. Each question has a structure that fits it, and the wrong structure gives a wrong answer or a slow one.
+
+  Keep each finished function, because the last stage joins them. Nothing here is new.
+starter: |
+  # Scratch space for the metro.
+  edges = [("Airport", "Central", 20), ("Airport", "Market", 5), ("Market", "Lake", 5),
+           ("Lake", "Central", 5), ("Central", "Museum", 4), ("Depot", "Yard", 3)]
+  for a, b, minutes in edges:
+      print(a, "to", b, "takes", minutes)
+stages:
+  - title: The network as a graph
+    blocks:
+      - text: |
+          The table is a list of edges, which is easy to write and awkward to search. Every search will ask the same thing again and again: from this station, where can I go, and how long does each leg take? A dictionary of dictionaries answers that in constant time on average:
+
+          ```python
+          graph["Central"]            # {"Airport": 20, "Lake": 5, "Museum": 4}
+          graph["Central"]["Lake"]    # 5
+          ```
+      - question:
+          id: build
+          type: code
+          mode: write
+          system: s2
+          concepts: [e3.hash-tables, e3.graphs-and-traversal]
+          prompt: |
+            Write `build(edges)`. It takes a list of `(a, b, minutes)` triples and returns the dictionary of dictionaries described above. Every line runs both ways, and every station that appears in any triple is a key.
+          starter: |
+            def build(edges):
+                return {}
+          solution: |
+            def build(edges):
+                graph = {}
+                for a, b, minutes in edges:
+                    if a not in graph:
+                        graph[a] = {}
+                    if b not in graph:
+                        graph[b] = {}
+                    graph[a][b] = minutes
+                    graph[b][a] = minutes
+                return graph
+          tests: |
+            _edges = [("Airport", "Central", 20), ("Airport", "Market", 5), ("Market", "Lake", 5), ("Lake", "Central", 5), ("Central", "Museum", 4), ("Depot", "Yard", 3)]
+            _g = build(_edges)
+            assert _g is not None and len(_g) == 7, "every station that appears in an edge should be a key of the graph"
+            assert _g["Central"]["Lake"] == 5, "graph[a][b] should be the minutes from a to b"
+            assert _g["Lake"]["Central"] == 5, "trains run both ways, so each edge should be stored in both directions"
+            assert _g["Central"] == {"Airport": 20, "Lake": 5, "Museum": 4}, "a station on several lines should keep all its neighbours, not only the last one seen"
+            assert _g["Museum"] == {"Central": 4}, "a station at the end of a line has one neighbour"
+            assert build([]) == {}, "no edges, no stations"
+          wrong:
+            - |
+                def build(edges):
+                    graph = {}
+                    for a, b, minutes in edges:
+                        if a not in graph:
+                            graph[a] = {}
+                        graph[a][b] = minutes
+                    return graph
+            - |
+                def build(edges):
+                    graph = {}
+                    for a, b, minutes in edges:
+                        graph[a] = {b: minutes}
+                        graph[b] = {a: minutes}
+                    return graph
+            - |
+                def build(edges):
+                    graph = {}
+                    for a, b, minutes in edges:
+                        if a not in graph:
+                            graph[a] = []
+                        if b not in graph:
+                            graph[b] = []
+                        graph[a].append(b)
+                        graph[b].append(a)
+                    return graph
+          explanation: |
+            Each station's entry is created the first time the station is seen and added to after that, which is why the membership test comes before the assignment. Each edge is stored twice, once from each end. The inner dictionaries make the question "how long from here to there" a single lookup, which the searches below ask thousands of times.
+          hints:
+            - A station may appear in several edges. What must not happen to its entry the second time it is seen?
+            - A line can be ridden in both directions, so each triple gives two entries.
+            - Check whether a station is already a key before giving it an empty dictionary.
+  - title: The fewest stops
+    blocks:
+      - text: |
+          A passenger with heavy luggage wants as few stops as possible, whatever the time. Count a journey's length in **hops**: Airport to Central directly is one hop.
+      - question:
+          id: hops-by-hand
+          type: numeric
+          system: s1
+          concepts: [e3.graphs-and-traversal]
+          prompt: By hand, from the table, what is the fewest number of hops from Airport to Museum?
+          answer: "2"
+          explanation: |
+            Airport to Central is one hop and Central to Museum is another. No single line joins Airport to Museum, so two is the least.
+          hints:
+            - Which stations can be reached from Airport in one hop?
+            - Is Museum one of them? If not, is it a neighbour of one of them?
+      - question:
+          id: fewest-stops
+          type: code
+          mode: write
+          system: s2
+          concepts: [e3.stacks-and-queues, e3.graphs-and-traversal, e3.hash-tables]
+          prompt: |
+            Write `fewest_stops(graph, start, goal)`. It returns the fewest hops from `start` to `goal`, which is 0 when they are the same station, or `None` when `goal` cannot be reached. `graph` is in the form that `build` returns.
+          starter: |
+            def fewest_stops(graph, start, goal):
+                return None
+          solution: |
+            from collections import deque
+
+
+            def fewest_stops(graph, start, goal):
+                hops = {start: 0}
+                queue = deque([start])
+                while queue:
+                    here = queue.popleft()
+                    if here == goal:
+                        return hops[here]
+                    for there in graph[here]:
+                        if there not in hops:
+                            hops[there] = hops[here] + 1
+                            queue.append(there)
+                return None
+          tests: |
+            _graph = {
+                "Airport": {"Central": 20, "Market": 5},
+                "Central": {"Airport": 20, "Lake": 5, "Museum": 4},
+                "Market": {"Airport": 5, "Lake": 5},
+                "Lake": {"Market": 5, "Central": 5},
+                "Museum": {"Central": 4},
+                "Depot": {"Yard": 3},
+                "Yard": {"Depot": 3},
+            }
+            assert fewest_stops(_graph, "Airport", "Airport") == 0, "a station is zero hops from itself"
+            assert fewest_stops(_graph, "Airport", "Market") == 1, "a neighbour is one hop away"
+            assert fewest_stops(_graph, "Airport", "Central") == 1, "there is a direct line here, and the search should find it rather than a longer way round"
+            assert fewest_stops(_graph, "Airport", "Museum") == 2, "this should match what you found by hand"
+            assert fewest_stops(_graph, "Museum", "Market") == 3, "count hops, not stations"
+            assert fewest_stops(_graph, "Airport", "Depot") is None, "a station that cannot be reached gives None"
+            _ring = {"s": {"a": 1, "b": 1}, "a": {"s": 1, "t": 1}, "b": {"s": 1, "x": 1}, "x": {"b": 1, "t": 1}, "t": {"a": 1, "x": 1}}
+            assert fewest_stops(_ring, "s", "t") == 2, "a station can be reached the long way round before the short way is tried: stations must be explored in order of hops"
+          wrong:
+            - |
+                def fewest_stops(graph, start, goal):
+                    hops = {start: 0}
+                    stack = [start]
+                    while stack:
+                        here = stack.pop()
+                        if here == goal:
+                            return hops[here]
+                        for there in graph[here]:
+                            if there not in hops:
+                                hops[there] = hops[here] + 1
+                                stack.append(there)
+                    return None
+            - |
+                from collections import deque
+
+
+                def fewest_stops(graph, start, goal):
+                    hops = {start: 1}
+                    queue = deque([start])
+                    while queue:
+                        here = queue.popleft()
+                        if here == goal:
+                            return hops[here]
+                        for there in graph[here]:
+                            if there not in hops:
+                                hops[there] = hops[here] + 1
+                                queue.append(there)
+                    return None
+            - |
+                from collections import deque
+
+
+                def fewest_stops(graph, start, goal):
+                    hops = {start: 0}
+                    queue = deque([start])
+                    while queue:
+                        here = queue.popleft()
+                        for there in graph[here]:
+                            if there not in hops:
+                                hops[there] = hops[here] + 1
+                                queue.append(there)
+                    return hops[goal]
+          explanation: |
+            This is breadth-first search. A queue hands stations back in the order they were found, so every station one hop away is looked at before any station two hops away, and the first time a station is reached is by a path with the fewest hops. The dictionary of hops doubles as the record of what has been seen, which stops the search going round the loop for ever. With a stack in place of the queue the search dives down one route first and can reach a station the long way round before it has tried the short way.
+          hints:
+            - Which traversal reaches stations in order of their distance in hops from the start?
+            - Which structure gives things back in the order they were put in? Taking from its front must be cheap.
+            - Record the number of hops to each station when it is first found. That record also tells you which stations you have already seen.
+  - title: The least time
+    blocks:
+      - question:
+          id: why-not-bfs
+          type: choice
+          system: s2
+          concepts: [e3.shortest-paths-and-beam-search, e3.graphs-and-traversal]
+          prompt: Another passenger wants the quickest journey from Airport to Central. Why can the search from the last stage not simply be reused?
+          options:
+            - It finds the route with the fewest hops, the direct line of 20 minutes. Going through Market and Lake takes three hops but only 15 minutes, and a search ordered by hops never prefers it.
+            - It can be reused. The route with the fewest hops is always the quickest.
+            - It cannot handle graphs with loops, and this network has one.
+            - It can be reused if the queue is replaced by a stack, which explores the longer routes first.
+          answer: 0
+          explanation: |
+            Breadth-first search treats every leg as costing the same. When legs have different costs, the cheapest route may have more legs. What is needed is to look at stations in order of the time taken to reach them, not the number of hops, and that is what a priority queue provides.
+          hints:
+            - Compare the direct line from Airport to Central with the route through Market and Lake, in hops and in minutes.
+            - In what order would the stations need to be explored for the first arrival at a station to be the quickest?
+      - text: |
+          A heap is the structure that always hands back the smallest item, whatever order the items went in.
+      - question:
+          id: heap-trace
+          type: predict
+          system: s1
+          concepts: [e3.trees-and-heaps]
+          prompt: What does this print?
+          code: |
+            import heapq
+
+            heap = []
+            for item in [(20, "Central"), (5, "Market"), (10, "Lake")]:
+                heapq.heappush(heap, item)
+            print(heapq.heappop(heap))
+            print(len(heap))
+          output: |
+            (5, 'Market')
+            2
+          explanation: |
+            Tuples are compared by their first items, so the heap orders these by minutes. `heappop` removes and returns the smallest, whatever order they were pushed in, and two remain.
+          hints:
+            - How does Python compare two tuples?
+            - Does popping remove the item or only look at it?
+      - question:
+          id: fastest
+          type: code
+          mode: write
+          system: s2
+          concepts: [e3.shortest-paths-and-beam-search, e3.trees-and-heaps, e3.hash-tables]
+          prompt: |
+            Write `fastest(graph, start, goal)`. It returns the least total number of minutes from `start` to `goal`, which is 0 when they are the same station, or `None` when `goal` cannot be reached.
+          starter: |
+            def fastest(graph, start, goal):
+                return None
+          solution: |
+            import heapq
+
+
+            def fastest(graph, start, goal):
+                best = {start: 0}
+                heap = [(0, start)]
+                while heap:
+                    minutes, here = heapq.heappop(heap)
+                    if here == goal:
+                        return minutes
+                    if minutes == best[here]:
+                        for there, leg in graph[here].items():
+                            if there not in best or minutes + leg < best[there]:
+                                best[there] = minutes + leg
+                                heapq.heappush(heap, (best[there], there))
+                return None
+          tests: |
+            _graph = {
+                "Airport": {"Central": 20, "Market": 5},
+                "Central": {"Airport": 20, "Lake": 5, "Museum": 4},
+                "Market": {"Airport": 5, "Lake": 5},
+                "Lake": {"Market": 5, "Central": 5},
+                "Museum": {"Central": 4},
+                "Depot": {"Yard": 3},
+                "Yard": {"Depot": 3},
+            }
+            assert fastest(_graph, "Airport", "Airport") == 0, "a station is zero minutes from itself"
+            assert fastest(_graph, "Airport", "Market") == 5, "a neighbour on the only sensible line is one leg away"
+            assert fastest(_graph, "Airport", "Central") == 15, "the direct line is not the quickest way here: a route with more hops takes less time"
+            assert fastest(_graph, "Airport", "Museum") == 19, "add up the legs of the quickest route"
+            assert fastest(_graph, "Museum", "Airport") == 19, "the quickest time is the same in both directions on this network"
+            assert fastest(_graph, "Airport", "Yard") is None, "a station that cannot be reached gives None"
+            _trap = {"a": {"b": 1, "c": 10}, "b": {"a": 1, "c": 2, "d": 50}, "c": {"a": 10, "b": 2, "d": 3}, "d": {"b": 50, "c": 3}}
+            assert fastest(_trap, "a", "d") == 6, "a station may be found first by a slow route and later by a quicker one: the quicker one must win"
+          wrong:
+            - |
+                from collections import deque
+
+
+                def fastest(graph, start, goal):
+                    total = {start: 0}
+                    queue = deque([start])
+                    while queue:
+                        here = queue.popleft()
+                        if here == goal:
+                            return total[here]
+                        for there in graph[here]:
+                            if there not in total:
+                                total[there] = total[here] + graph[here][there]
+                                queue.append(there)
+                    return None
+            - |
+                import heapq
+
+
+                def fastest(graph, start, goal):
+                    best = {start: 0}
+                    heap = [(0, start)]
+                    while heap:
+                        minutes, here = heapq.heappop(heap)
+                        for there, leg in graph[here].items():
+                            if there not in best:
+                                best[there] = minutes + leg
+                                if there == goal:
+                                    return best[there]
+                                heapq.heappush(heap, (best[there], there))
+                    return None
+            - |
+                import heapq
+
+
+                def fastest(graph, start, goal):
+                    best = {start: 0}
+                    heap = [(0, start)]
+                    while heap:
+                        minutes, here = heapq.heappop(heap)
+                        if here == goal:
+                            return minutes
+                        for there, leg in graph[here].items():
+                            if there not in best:
+                                best[there] = leg
+                                heapq.heappush(heap, (leg, there))
+                    return None
+          explanation: |
+            This is Dijkstra's algorithm. The heap always yields the station that can be reached soonest among those not yet settled, so when the goal comes off the heap its time is final. That is why the answer is returned when the goal is **popped**, not when it is first seen: Central is first seen at 20 minutes and later improved to 15. A station can sit in the heap more than once with different times, and the check against `best` skips the stale entries.
+          hints:
+            - Keep the best time known so far to each station in a dictionary, and a heap of pairs with the time first.
+            - A station found once may be found again by a quicker route. What should happen then?
+            - At which moment is a station's time certain to be the least, when it is pushed or when it is popped?
+  - title: The next train
+    blocks:
+      - text: |
+          Departure times at a station are whole minutes after midnight, so `495` is quarter past eight in the morning. A busy station has hundreds a day, and the planner is asked for the next one thousands of times an hour.
+      - question:
+          id: search-cost
+          type: choice
+          system: s1
+          concepts: [e3.binary-search, e3.sorting]
+          prompt: A station's $n$ departure times are held in a sorted list. What does finding the first departure at or after a given minute cost, and what makes that possible?
+          options:
+            - About $\log_2 n$ comparisons by binary search, because the list is sorted, so one comparison with the middle item rules out half of what remains.
+            - About $n$ comparisons, because each time must be looked at once whether or not the list is sorted.
+            - One comparison, because a list can be indexed in constant time.
+            - About $n \log n$ comparisons, because the list must be sorted again for every question.
+          answer: 0
+          explanation: |
+            Sorting is paid for once, when the timetable is made. After that each question halves the candidates with every comparison: a thousand departures need about ten comparisons and a million about twenty. An unsorted list offers no way to rule anything out, so it must be scanned.
+          hints:
+            - What does one comparison with the middle item of a sorted list tell you about all the items on one side of it?
+            - How many times can a thousand be halved before one item is left?
+      - question:
+          id: next-departure
+          type: code
+          mode: write
+          system: s2
+          concepts: [e3.binary-search]
+          prompt: |
+            Write `next_departure(times, now)`. `times` is a sorted list of departure times. Return the first time that is at or after `now`, or `None` if the last train has gone. Use the `bisect` module, not a loop.
+          starter: |
+            import bisect
+
+
+            def next_departure(times, now):
+                return None
+          solution: |
+            import bisect
+
+
+            def next_departure(times, now):
+                i = bisect.bisect_left(times, now)
+                if i == len(times):
+                    return None
+                return times[i]
+          tests: |
+            _times = [360, 420, 495, 600, 1320]
+            assert next_departure(_times, 430) == 495, "return the first departure after now, as a time"
+            assert next_departure(_times, 495) == 495, "a train leaving exactly now can still be caught"
+            assert next_departure(_times, 0) == 360, "before the first train, the next departure is the first"
+            assert next_departure(_times, 1320) == 1320, "the last train can be caught at its own minute"
+            assert next_departure(_times, 1321) is None, "after the last train there is no next departure"
+            assert next_departure([], 100) is None, "a station with no trains has no next departure"
+            assert "for " not in source and "while " not in source, "use bisect instead of a loop"
+          wrong:
+            - |
+                import bisect
+
+
+                def next_departure(times, now):
+                    i = bisect.bisect_right(times, now)
+                    if i == len(times):
+                        return None
+                    return times[i]
+            - |
+                import bisect
+
+
+                def next_departure(times, now):
+                    return bisect.bisect_left(times, now)
+            - |
+                import bisect
+
+
+                def next_departure(times, now):
+                    i = bisect.bisect_left(times, now)
+                    if i == len(times):
+                        return times[0]
+                    return times[i]
+          explanation: |
+            `bisect_left` returns the position of the first item that is not less than `now`, which is exactly the first departure that can still be caught, including one leaving this very minute. `bisect_right` would skip that one. When every departure is earlier, the position is the length of the list, which is not a valid index, so that case is answered with `None` before indexing.
+          hints:
+            - bisect has two functions that differ in what they do when the value is already in the list. Which one keeps a train that leaves exactly now?
+            - What position does it return when every time in the list is earlier than now? Is that a valid index?
+  - title: The planner
+    blocks:
+      - text: |
+          Now join them. `plan(edges, timetable, start, goal, now)` answers the passenger's whole question: when do I leave, and when do I arrive?
+
+          `timetable` is a dictionary from each station to a list of its departure times, in whatever order the operator typed them. The passenger takes the first departure from `start` at or after `now`, and arrives after the least possible travelling time. Trains at later stations are assumed to connect without waiting.
+
+          The result is the pair `(leave, arrive)`, or `None` if there is no route or no train left today.
+      - question:
+          id: plan
+          type: code
+          mode: write
+          system: s2
+          concepts: [e3.shortest-paths-and-beam-search, e3.binary-search, e3.sorting, e3.hash-tables, e3.graphs-and-traversal]
+          prompt: |
+            Paste `build`, `fastest` and `next_departure` from the earlier stages where the comment says. Then write `plan(edges, timetable, start, goal, now)`.
+          starter: |
+            # Paste build, fastest and next_departure from the earlier stages here.
+
+
+            def plan(edges, timetable, start, goal, now):
+                return None
+          solution: |
+            def build(edges):
+                graph = {}
+                for a, b, minutes in edges:
+                    if a not in graph:
+                        graph[a] = {}
+                    if b not in graph:
+                        graph[b] = {}
+                    graph[a][b] = minutes
+                    graph[b][a] = minutes
+                return graph
+
+
+            import heapq
+
+
+            def fastest(graph, start, goal):
+                best = {start: 0}
+                heap = [(0, start)]
+                while heap:
+                    minutes, here = heapq.heappop(heap)
+                    if here == goal:
+                        return minutes
+                    if minutes == best[here]:
+                        for there, leg in graph[here].items():
+                            if there not in best or minutes + leg < best[there]:
+                                best[there] = minutes + leg
+                                heapq.heappush(heap, (best[there], there))
+                return None
+
+
+            import bisect
+
+
+            def next_departure(times, now):
+                i = bisect.bisect_left(times, now)
+                if i == len(times):
+                    return None
+                return times[i]
+
+
+            def plan(edges, timetable, start, goal, now):
+                minutes = fastest(build(edges), start, goal)
+                leave = next_departure(sorted(timetable[start]), now)
+                if minutes is None or leave is None:
+                    return None
+                return (leave, leave + minutes)
+          tests: |
+            for _needed in ["build", "fastest", "next_departure"]:
+                assert _needed in globals(), "paste your " + _needed + " function above plan"
+            _edges = [("Airport", "Central", 20), ("Airport", "Market", 5), ("Market", "Lake", 5), ("Lake", "Central", 5), ("Central", "Museum", 4), ("Depot", "Yard", 3)]
+            _timetable = {"Airport": [600, 360, 495, 420], "Central": [365, 500], "Depot": [700]}
+            _result = plan(_edges, _timetable, "Airport", "Central", 430)
+            assert _result is not None and len(_result) == 2, "plan returns the pair of the time of leaving and the time of arriving"
+            assert _result[0] == 495, "the timetable is not in order: something must be done before it can be searched"
+            assert _result[1] == 510, "arrival is the time of leaving plus the least travelling time"
+            assert plan(_edges, _timetable, "Airport", "Museum", 300) == (360, 379), "before the first train, leave on the first"
+            assert plan(_edges, _timetable, "Central", "Airport", 501) is None, "when the last train has gone there is no plan"
+            assert plan(_edges, _timetable, "Depot", "Central", 0) is None, "when there is no route there is no plan"
+            assert _timetable["Airport"] == [600, 360, 495, 420], "leave the operator's timetable as it was given"
+          wrong:
+            - |
+                def build(edges):
+                    graph = {}
+                    for a, b, minutes in edges:
+                        if a not in graph:
+                            graph[a] = {}
+                        if b not in graph:
+                            graph[b] = {}
+                        graph[a][b] = minutes
+                        graph[b][a] = minutes
+                    return graph
+
+
+                import heapq
+
+
+                def fastest(graph, start, goal):
+                    best = {start: 0}
+                    heap = [(0, start)]
+                    while heap:
+                        minutes, here = heapq.heappop(heap)
+                        if here == goal:
+                            return minutes
+                        if minutes == best[here]:
+                            for there, leg in graph[here].items():
+                                if there not in best or minutes + leg < best[there]:
+                                    best[there] = minutes + leg
+                                    heapq.heappush(heap, (best[there], there))
+                    return None
+
+
+                import bisect
+
+
+                def next_departure(times, now):
+                    i = bisect.bisect_left(times, now)
+                    if i == len(times):
+                        return None
+                    return times[i]
+
+
+                def plan(edges, timetable, start, goal, now):
+                    minutes = fastest(build(edges), start, goal)
+                    leave = next_departure(timetable[start], now)
+                    if minutes is None or leave is None:
+                        return None
+                    return (leave, leave + minutes)
+            - |
+                def build(edges):
+                    graph = {}
+                    for a, b, minutes in edges:
+                        if a not in graph:
+                            graph[a] = {}
+                        if b not in graph:
+                            graph[b] = {}
+                        graph[a][b] = minutes
+                        graph[b][a] = minutes
+                    return graph
+
+
+                import heapq
+
+
+                def fastest(graph, start, goal):
+                    best = {start: 0}
+                    heap = [(0, start)]
+                    while heap:
+                        minutes, here = heapq.heappop(heap)
+                        if here == goal:
+                            return minutes
+                        if minutes == best[here]:
+                            for there, leg in graph[here].items():
+                                if there not in best or minutes + leg < best[there]:
+                                    best[there] = minutes + leg
+                                    heapq.heappush(heap, (best[there], there))
+                    return None
+
+
+                import bisect
+
+
+                def next_departure(times, now):
+                    i = bisect.bisect_left(times, now)
+                    if i == len(times):
+                        return None
+                    return times[i]
+
+
+                def plan(edges, timetable, start, goal, now):
+                    minutes = fastest(build(edges), start, goal)
+                    leave = next_departure(sorted(timetable[start]), now)
+                    if minutes is None or leave is None:
+                        return None
+                    return (leave, now + minutes)
+            - |
+                def build(edges):
+                    graph = {}
+                    for a, b, minutes in edges:
+                        if a not in graph:
+                            graph[a] = {}
+                        if b not in graph:
+                            graph[b] = {}
+                        graph[a][b] = minutes
+                        graph[b][a] = minutes
+                    return graph
+
+
+                import heapq
+
+
+                def fastest(graph, start, goal):
+                    best = {start: 0}
+                    heap = [(0, start)]
+                    while heap:
+                        minutes, here = heapq.heappop(heap)
+                        if here == goal:
+                            return minutes
+                        if minutes == best[here]:
+                            for there, leg in graph[here].items():
+                                if there not in best or minutes + leg < best[there]:
+                                    best[there] = minutes + leg
+                                    heapq.heappush(heap, (best[there], there))
+                    return None
+
+
+                import bisect
+
+
+                def next_departure(times, now):
+                    i = bisect.bisect_left(times, now)
+                    if i == len(times):
+                        return None
+                    return times[i]
+
+
+                def plan(edges, timetable, start, goal, now):
+                    minutes = fastest(build(edges), start, goal)
+                    leave = next_departure(sorted(timetable[start]), now)
+                    if minutes is None:
+                        return None
+                    return (leave, minutes)
+          explanation: |
+            Each line of `plan` hands one question to the structure that suits it. The graph is built once into dictionaries, the heap finds the least time, and the timetable is sorted so that binary search can find the train. Binary search on an unsorted list does not fail loudly; it quietly returns a wrong time, which is why the sorting cannot be skipped. `sorted` makes a new list, so the operator's timetable is left as it was. In a real planner the sorting and the building would be done once, when the data arrive, and not for every passenger.
+          hints:
+            - There are three questions inside this one. How long is the quickest route, when is the next train, and are both of those answers real?
+            - Binary search promises a right answer only for a list in a particular state. Is the timetable in that state?
+            - Either of your helpers may return None. What should plan do then?
+review: |
+  You have a planner, and every part of it is a choice between structures:
+
+  - The network became a dictionary of dictionaries, so that a station's neighbours and a leg's time are each one lookup, from [[e3.hash-tables]] and [[e3.graphs-and-traversal]].
+  - The fewest stops came from a queue, from [[e3.stacks-and-queues]], because giving stations back in the order they were found is what makes the first arrival the nearest.
+  - The least time came from a heap, from [[e3.trees-and-heaps]], used the way [[e3.shortest-paths-and-beam-search]] uses it, because legs of different lengths need stations in order of time and not of hops.
+  - The next train came from a sorted list, from [[e3.sorting]], searched by halving, from [[e3.binary-search]].
+
+  Notice that two of the stages differ in one thing only. Swap the queue for a heap and breadth-first search becomes Dijkstra's algorithm, and the question answered changes from fewest hops to least time. The structure you choose decides what the algorithm computes as well as how fast it runs.

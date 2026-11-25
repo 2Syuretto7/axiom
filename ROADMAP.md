@@ -17,12 +17,16 @@ Built. A mini-capstone closes one cluster. It is one small project in stages tha
 | M0 Arithmetic and number sense | Will the photographs fit? |
 | E0 First steps in programming | A marks ledger |
 | M1 Algebra | Pricing a chai stall |
-| M2, E1, M3, M10, M4, E3, M5, E5 | Not written yet |
+| M2 Functions and notation | A recurring deposit |
+| E1 Python proper | A bank statement reader |
+| M3 Logic and proof | Evidence is not proof |
+| M10 Single-variable calculus | The cheapest tin |
+| M4 Vectors and geometry | Which film next? |
+| E3 Data structures and algorithms | A metro route planner |
+| M5 Matrices and linear maps | The transform tool |
+| E5 NumPy and numerical computing | Rent by neighbours, without a loop |
 
-Next:
-
-1. Write the mini-capstones for the eight written clusters that lack one, in the order Learn walks them.
-2. From then on, every new cluster ships with its mini-capstone in the same batch as its lessons.
+Every written cluster now has one. From here on, every new cluster ships with its mini-capstone in the same batch as its lessons.
 
 ## Capstones
 
