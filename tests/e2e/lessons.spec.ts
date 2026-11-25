@@ -506,7 +506,20 @@ test("phone: code is read, written, checked by hidden tests and fixed", async ({
   await page.getByRole("button", { name: /^Check/ }).click();
   await expect(output).toContainText("All checks passed.");
   await lessonTab.click();
+  // Three of the five questions took a second try, so the finish is weak: the lesson is held open for its consolidation set.
+  await expect(page.getByText("Every question is solved, but not securely yet.")).toBeVisible();
+  await expect(page.getByText("Lesson complete.")).toHaveCount(0);
+  for (const n of [1, 2, 3]) {
+    const extra = page.getByRole("region", { name: `Consolidation question ${n}`, exact: true });
+    await expect(extra).toBeVisible({ timeout: 30_000 });
+    await extra.getByRole("button", { name: "Start" }).click();
+    const sheep = Number((await extra.locator(".q-prompt").innerText()).match(/has (\d+) sheep/)![1]);
+    await extra.getByRole("textbox").fill(String(sheep + 10));
+    await extra.getByRole("button", { name: "Check" }).click();
+    await expect(extra).toContainText("Right");
+  }
   await expect(page.getByText("Lesson complete.")).toBeVisible();
+  await expect(page.locator(".lesson-end-mastery")).toContainText(/Mastery \d+%/);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
   await page.screenshot({ path: "test-results/screens/lesson-phone.png" });
@@ -572,9 +585,9 @@ test("laptop: a mini-capstone closes the cluster before Learn moves on", async (
   await expect(page.getByText("3 of 3 written lessons done.")).toBeVisible();
   await expect(page.getByText("1 of 1 mini-capstones done. You have finished every lesson written so far.")).toBeVisible();
   await expect(page.getByRole("region", { name: "The order Learn follows" }).getByRole("listitem")).toHaveText([
-    "M0CountingDone",
-    "M0AddingDone",
-    "E0PrintingDone",
+    /^M0CountingDone · Mastery \d+%$/,
+    /^M0AddingDone · Mastery \d+%$/,
+    /^E0PrintingDone · Mastery \d+%$/,
   ]);
   await expect(page.getByRole("button", { name: "E0 First programs, finished" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("region", { name: "Selected cluster" }).getByRole("listitem").last()).toHaveText("Mini-capstone: A sum, shownDone");

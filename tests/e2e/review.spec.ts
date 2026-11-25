@@ -217,3 +217,83 @@ test("System One questions are timed and System Two questions are not", async ({
   );
   expect(timing).toEqual({ s1_untimed: "0", s2_timed: "0" });
 });
+
+test("a weak finish is held open for a consolidation set of three fresh questions, and mastery is shown", async ({ page }) => {
+  // The three code questions were solved only after two wrong tries each. Question 1 is the last one unsolved.
+  const [{ id: userId }] = await sql<{ id: string }>("select id from users");
+  for (const [question, system] of [
+    ["write-sum", "s2"],
+    ["write-hello", "s1"],
+    ["fix-sum", "s2"],
+  ]) {
+    for (const correct of [false, false, true]) {
+      await sql("insert into attempts (user_id, concept_id, question_id, system, correct, answer, ms) values ($1, 'e0.printing', $2, $3, $4, '\"x\"', $5)", [
+        userId,
+        question,
+        system,
+        correct,
+        system === "s1" ? 20_000 : null,
+      ]);
+    }
+  }
+  const before = await sql<{ prompt: string }>("select question->>'prompt' as prompt from review_questions");
+
+  await page.goto("/learn");
+  await expect(page.getByRole("heading", { level: 1, name: "Printing" })).toBeVisible();
+  await expect(page.getByText("4 of 5 questions solved")).toBeVisible();
+  const consolidation = page.getByRole("region", { name: "Consolidation", exact: true });
+  const extra = (n: number) => page.getByRole("region", { name: `Consolidation question ${n}`, exact: true });
+  await expect(consolidation).toHaveCount(0);
+
+  const last = page.getByRole("region", { name: "Question 1", exact: true });
+  await last.getByRole("textbox").fill("7\na + 5");
+  await last.getByRole("button", { name: "Check" }).click();
+  await expect(last).toContainText("Solved");
+
+  // Every question is solved, but the lesson is not finished: its consolidation set arrives instead.
+  await expect(page.getByText("5 of 5 questions solved")).toBeVisible();
+  await expect(page.getByText("Lesson complete.")).toHaveCount(0);
+  await expect(page.getByText("Every question is solved, but not securely yet.")).toBeVisible();
+  await expect(consolidation).toBeVisible({ timeout: 30_000 });
+  await expect(consolidation.getByRole("region")).toHaveCount(3);
+  await expect(extra(1)).toContainText("Consolidation 1 · New question · One try · Timed, 1 min");
+  expect((await sql("select 1 from lesson_progress where concept_id = 'e0.printing' and completed_at is not null")).length).toBe(0);
+  // The recall set is untouched: still its own three.
+  await expect(spaced(page).getByRole("region")).toHaveCount(3);
+
+  // The questions are on this lesson, and none has been seen before, in recall or anywhere else.
+  const set = await sql<{ concept_id: string; prompt: string }>("select concept_id, question->>'prompt' as prompt from review_questions where purpose = 'consolidation' order by id");
+  expect(set.map((row) => row.concept_id)).toEqual(["e0.printing", "e0.printing", "e0.printing"]);
+  expect(new Set(set.map((row) => row.prompt)).size).toBe(3);
+  for (const row of set) expect(before.map((old) => old.prompt)).not.toContain(row.prompt);
+
+  const reply = async (n: number, right: boolean) => {
+    await extra(n).getByRole("button", { name: "Start" }).click();
+    const count = Number((await extra(n).locator(".q-prompt").innerText()).match(/has (\d+) sheep/)![1]);
+    await extra(n).getByRole("textbox").fill(String(right ? count + 10 : 1));
+    await extra(n).getByRole("button", { name: "Check" }).click();
+    await expect(extra(n)).toContainText(right ? "Right" : "Missed");
+  };
+  await reply(1, true);
+  await reply(2, false);
+  await expect(page.getByText("Lesson complete.")).toHaveCount(0);
+  await reply(3, false);
+
+  // The last answer finishes the lesson, and its mastery is shown: well short of full after such a finish.
+  await expect(page.getByText("Lesson complete.")).toBeVisible();
+  const shown = await page.locator(".lesson-end-mastery").innerText();
+  const percent = Number(shown.match(/Mastery (\d+)%/)![1]);
+  expect(percent).toBeGreaterThan(0);
+  expect(percent).toBeLessThan(70);
+  await consolidation.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "test-results/screens/consolidation-laptop.png" });
+
+  expect((await sql("select 1 from lesson_progress where concept_id = 'e0.printing' and completed_at is not null")).length).toBe(1);
+  // Most of the set was missed, so the lesson's first recall comes in about a day, not about four.
+  const [state] = await sql<{ days: number }>("select extract(epoch from due_at - now()) / 86400 as days from review_states where concept_id = 'e0.printing'");
+  expect(Number(state.days)).toBeLessThan(2);
+
+  // The Map shows mastery beside each finished lesson.
+  await page.goto("/map");
+  await expect(page.locator(".map-path li").filter({ hasText: "Printing" })).toContainText(/Done · Mastery \d+%/);
+});

@@ -75,6 +75,11 @@ export async function recordAttempt(
   if (!input.correct) return { lessonComplete: false };
   const solved = await solvedQuestions(db, userId, conceptId);
   if (!lessonQuestions.every((id) => solved.has(id))) return { lessonComplete: false };
+  const [progress] = await db
+    .select({ completedAt: lessonProgress.completedAt })
+    .from(lessonProgress)
+    .where(and(eq(lessonProgress.userId, userId), eq(lessonProgress.conceptId, conceptId)));
+  if (progress?.completedAt) return { lessonComplete: true };
   if (weak?.(await attemptsIn(db, userId, conceptId))) return { lessonComplete: false, held: true };
   await completeUnit(db, userId, conceptId);
   return { lessonComplete: true };

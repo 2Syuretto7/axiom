@@ -3,21 +3,26 @@
 import { useState, useTransition } from "react";
 import { clock, spoken } from "@/lib/lessons/timing";
 import { useCountdown } from "../lesson/countdown";
+import { useWorkspace } from "../workspace/context";
 import { submitRecall } from "@/lib/review/actions";
 import type { RecallView, Revealed } from "@/lib/review/view";
 
 // The text is written by the model, so the server renders it with raw HTML shown as text.
 const Html = ({ html, className }: { html: string; className?: string }) => <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
 
-/** One fresh recall question. It takes one answer, then shows the explanation and the lesson the idea came from. */
-export function RecallCard({ view, number }: { view: RecallView; number: number }) {
+/**
+ * One fresh question, in a lesson's Recall part or in its consolidation set.
+ * It takes one answer, then shows the explanation and the lesson the idea came from.
+ */
+export function RecallCard({ view, number, kind = "recall" }: { view: RecallView; number: number; kind?: "recall" | "consolidation" }) {
+  const ws = useWorkspace();
   const [pending, start] = useTransition();
   const [done, setDone] = useState<(Revealed & { nextInDays?: number }) | null>(view.done ?? null);
   const [note, setNote] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [choice, setChoice] = useState<number | null>(null);
 
-  const name = `Fresh recall question ${number}`;
+  const name = kind === "recall" ? `Fresh recall question ${number}` : `Consolidation question ${number}`;
   const locked = done !== null || pending;
 
   const send = (answer: unknown, ms: number) => {
@@ -28,6 +33,7 @@ export function RecallCard({ view, number }: { view: RecallView; number: number 
         else {
           setNote(null);
           setDone(result);
+          if (result.lessonComplete) ws.finish(result.mastery);
         }
       } catch {
         setNote("Could not reach Axiom. Check your connection and try again.");
@@ -48,9 +54,9 @@ export function RecallCard({ view, number }: { view: RecallView; number: number 
     <section className="q" aria-label={name} data-solved={done?.correct === true} data-timed="true">
       <header className="q-head">
         <span className="label">
-          Recall {number} · New question · One try · Timed, {spoken(view.seconds)}
+          {kind === "recall" ? "Recall" : "Consolidation"} {number} · New question · One try · Timed, {spoken(view.seconds)}
         </span>
-        {done ? <span className={done.correct ? "label q-solved" : "label text-error"}>{done.correct ? "Recalled" : "Missed"}</span> : null}
+        {done ? <span className={done.correct ? "label q-solved" : "label text-error"}>{done.correct ? (kind === "recall" ? "Recalled" : "Right") : "Missed"}</span> : null}
         {done === null && timer.running ? (
           <span className="label q-timer" role="timer" aria-label="Time left" data-low={timer.left <= 10}>
             {clock(timer.left)}
@@ -159,7 +165,7 @@ export function RecallCard({ view, number }: { view: RecallView; number: number 
           <>
             <Html html={done.explanationHtml} className="q-explanation" />
             <p className="recall-from text-ink-secondary">
-              From {done.from}.
+              {kind === "recall" ? `From ${done.from}.` : null}
               {done.nextInDays ? ` It comes back in ${done.nextInDays} ${done.nextInDays === 1 ? "day" : "days"}, with a different question.` : ""}
             </p>
           </>

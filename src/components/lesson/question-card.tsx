@@ -281,11 +281,16 @@ export function LessonEnd({ capstone = false }: { capstone?: boolean }) {
       {ws.complete ? (
         <>
           <p className="lesson-end-title">{capstone ? "Mini-capstone complete." : "Lesson complete."}</p>
+          {ws.mastery !== null ? (
+            <p className="text-ink-secondary lesson-end-mastery">Mastery {ws.mastery}%. It counts wrong tries, hints from the tutor and speed on timed questions, and it fades until the idea is recalled.</p>
+          ) : null}
           {/* A full page load, so the server chooses the next lesson from fresh progress. */}
           <a className="btn btn-primary" href="/learn">
             Continue
           </a>
         </>
+      ) : ws.held ? (
+        <p className="text-ink-secondary">Every question is solved, but not securely yet. Answer the consolidation questions above to finish this lesson.</p>
       ) : (
         <p className="text-ink-secondary">
           {capstone ? "Solve every question to finish this mini-capstone. It closes the cluster." : "Solve every question to finish this lesson. The next one builds on it."}

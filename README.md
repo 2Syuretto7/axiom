@@ -50,6 +50,19 @@ System One questions (`system: s1`, shown as Quick) are fast retrieval, so they 
 
 System Two questions (`system: s2`, shown as Think) are slow reasoning. They are never timed, and no time is measured or stored for them.
 
+## Mastery and consolidation
+
+Mastery of a lesson is a number from 0 to 100%, worked out from the record of answers each time it is shown and never stored (`src/lib/learning/mastery.ts`). It weighs:
+
+- accuracy: a question solved at the first try counts in full, and each wrong try before the right one counts against it;
+- hints: each hint the tutor gave on a question before it was solved counts against it (`attempts.hints_used`);
+- speed: on a timed (System One) question, an answer in the first half of the time counts in full and a slower one counts for less. Untimed (System Two) questions have no speed;
+- recency: newer answers weigh more than older ones, with a half-life of 30 days, and mastery fades by the forgetting curve until the idea is recalled. The fresh recall questions answered on the lesson later count too.
+
+Solving every question is no longer enough to finish a lesson. If every question is solved but the lesson's quality is below 70%, the finish is weak: the lesson stays open and a consolidation set appears at its end. That is three fresh questions on the same lesson, written and checked like recall questions, timed, one try each, never seen before and never shown again. The lesson is finished when all three are answered. If most of the set is missed, the lesson's first recall comes in about a day instead of about four.
+
+Mastery is shown when a lesson is finished and beside each finished lesson on the Map. Mini-capstones are finished as before. Without `ANTHROPIC_API_KEY` no consolidation set can be written, so a lesson is never held open for one.
+
 ## Tutor
 
 The tutor sits beside the lesson and the editor (a third tab on a phone). It is told the lesson in progress, the lessons already finished and what comes next, and it sees the code in the editor when a question is asked.

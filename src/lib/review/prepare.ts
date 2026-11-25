@@ -22,14 +22,14 @@ function inTurn<T>(key: string, work: () => Promise<T>): Promise<T> {
 }
 
 /** Writes a question on an idea that the learner has never had, and keeps it. Null if none could be written. */
-async function writeNew(db: Db, userId: string, conceptId: string): Promise<StoredQuestion | null> {
+async function writeNew(db: Db, userId: string, conceptId: string, consolidates?: string): Promise<StoredQuestion | null> {
   const { graph, lessons } = content();
   const lesson = lessons.get(conceptId);
   if (!lesson || !tutorConnected()) return null;
   const written = await questionsWritten(db, userId, conceptId);
   const taken = new Set([...written.map((row) => row.fingerprint), ...questionsOf(lesson).map(fingerprint)]);
   const fresh = await writeReviewQuestion({ graph, lesson, earlier: written.map((row) => summary(row.question)), taken }, askModel);
-  return fresh.question ? keepQuestion(db, userId, conceptId, fresh) : null;
+  return fresh.question ? keepQuestion(db, userId, conceptId, fresh, consolidates) : null;
 }
 
 const quietly = (error: unknown) => {
@@ -54,4 +54,12 @@ export function placeQuestion(db: Db, userId: string, conceptId: string, lessonI
 /** Writes a question on an idea ahead of time, unless one is already waiting to be placed. */
 export function writeAhead(db: Db, userId: string, conceptId: string, lessonId: string): Promise<StoredQuestion | null> {
   return inTurn(`${userId}:${conceptId}`, async () => (await waitingQuestion(db, userId, conceptId, lessonId)) ?? (await writeNew(db, userId, conceptId))).catch(quietly);
+}
+
+/**
+ * Writes one more question for a lesson's consolidation set: a fresh question on
+ * that same lesson, placed in it as it is written. Null if none could be written.
+ */
+export function consolidationQuestion(db: Db, userId: string, lessonId: string): Promise<StoredQuestion | null> {
+  return inTurn(`${userId}:${lessonId}`, () => writeNew(db, userId, lessonId, lessonId)).catch(quietly);
 }

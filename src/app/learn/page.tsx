@@ -1,15 +1,17 @@
 import "katex/dist/katex.min.css";
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { CapstoneView } from "@/components/lesson/capstone-view";
 import { LessonView } from "@/components/lesson/lesson-view";
+import { Consolidation } from "@/components/review/consolidation";
 import { SpacedRecall } from "@/components/review/spaced-recall";
 import { Workspace } from "@/components/workspace/workspace";
 import { requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { capstoneId, capstoneQuestions } from "@/lib/capstones/schema";
 import { nextAfter, nextStep } from "@/lib/learning/next";
-import { completedCapstones, completedConcepts, hintLevels, snapshotsFor, solvedQuestions } from "@/lib/learning/service";
+import { completeUnit, completedCapstones, completedConcepts, hintLevels, snapshotsFor, solvedQuestions } from "@/lib/learning/service";
 import { content } from "@/lib/lessons/content";
 import { questionsOf } from "@/lib/lessons/load";
 import { tutorConnected } from "@/lib/tutor/config";
@@ -23,7 +25,7 @@ async function tutorSetup(db: Db, userId: string, conceptId: string) {
 
 export const metadata: Metadata = { title: "Learn" };
 // Writing and checking fresh recall questions can take the model a while. The lesson is shown meanwhile.
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 const TRACKS = { M: "Mathematics", L: "Machine learning", E: "Engineering" } as const;
 
@@ -104,6 +106,13 @@ async function Lesson() {
     tutorSetup(db, user.id, concept.id),
   ]);
   const ids = questionsOf(lesson).map((q) => q.id);
+  // Every question is solved and the lesson is still open: the finish was weak, and its consolidation set closes it.
+  const held = ids.length > 0 && ids.every((id) => solved.has(id));
+  if (held && !tutorConnected()) {
+    // The model that writes the consolidation set has been disconnected, so the lesson is not kept waiting for it.
+    await completeUnit(db, user.id, concept.id);
+    redirect("/learn");
+  }
   // Finishing this lesson finishes its cluster, so the cluster's mini-capstone comes before the next lesson.
   // The lesson finished just before this one. If it is a prerequisite from another track, this lesson has a bridge for it.
   const previous = graph.concepts.get(completed.at(-1) ?? "");
@@ -116,7 +125,7 @@ async function Lesson() {
       breadcrumb={[TRACKS[concept.track], graph.clusters.get(concept.cluster)!.title, concept.title]}
       starterCode={lesson.starter ?? "# Scratch space. Try things here.\n"}
       snapshots={snapshots}
-      lesson={{ total: ids.length, solved: ids.filter((id) => solved.has(id)), complete: false }}
+      lesson={{ total: ids.length, solved: ids.filter((id) => solved.has(id)), complete: false, held }}
       tutor={tutor}
     >
       <LessonView
@@ -139,6 +148,19 @@ async function Lesson() {
           >
             <SpacedRecall userId={user.id} lessonId={concept.id} />
           </Suspense>
+        }
+        consolidation={
+          held ? (
+            <Suspense
+              fallback={
+                <p className="label recall-spaced-wait" role="status">
+                  Writing three fresh consolidation questions
+                </p>
+              }
+            >
+              <Consolidation userId={user.id} lessonId={concept.id} />
+            </Suspense>
+          ) : null
         }
       />
     </Workspace>

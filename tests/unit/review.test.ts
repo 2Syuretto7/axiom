@@ -346,4 +346,35 @@ describe("reviews in the database", () => {
     const [state] = await dueBy(db, userId, later(new Date(), 400));
     expect(state.lapses).toBe(1);
   });
+
+  it("holds a weak finish open, and keeps its consolidation set apart from recall", async () => {
+    const ids = ["a", "b", "c"];
+    const solve = (questionId: string, weak?: () => boolean) =>
+      recordAttempt(db, userId, { conceptId: "m0.counting", questionId, system: "s2", correct: true, answer: "x", ms: null }, ids, weak);
+    for (const id of ids.slice(0, -1)) expect(await solve(id, () => true)).toEqual({ lessonComplete: false });
+    // Every question solved, but weakly: the lesson is held, not finished.
+    expect(await solve(ids.at(-1)!, () => true)).toEqual({ lessonComplete: false, held: true });
+    await rememberFinishedLessons(db, userId);
+    expect(await dueBy(db, userId, later(new Date(), 400))).toEqual([]);
+
+    // Its consolidation questions are placed in the lesson as they are written, and are not recall questions.
+    const first = await keepQuestion(db, userId, "m0.counting", write(numeric), "m0.counting");
+    expect(await waitingQuestion(db, userId, "m0.counting")).toBeNull();
+    expect(await shownIn(db, userId, "m0.counting")).toEqual([]);
+    expect((await shownIn(db, userId, "m0.counting", "consolidation")).map((row) => row.id)).toEqual([first!.id]);
+    // They share the lesson's record of questions, so a recall question can never repeat one.
+    expect(await keepQuestion(db, userId, "m0.counting", write(numeric))).toBeNull();
+
+    // Answering one moves no recall schedule: the lesson is not finished yet.
+    expect(await answerReview(db, userId, first!.id, () => "24", 900)).toMatchObject({ correct: true, purpose: "consolidation" });
+    expect(await dueBy(db, userId, later(new Date(), 400))).toEqual([]);
+
+    // A finish that is not weak finishes the lesson, and a finished lesson is never held again.
+    expect(await solve(ids[0], () => false)).toEqual({ lessonComplete: true });
+    expect(await solve(ids[0], () => true)).toEqual({ lessonComplete: true });
+
+    // After a weak finish the lesson's first recall comes in about a day instead of about four.
+    expect(intervalDays(firstMemory(T0, true).stability)).toBeLessThan(2);
+    expect(intervalDays(firstMemory(T0).stability)).toBeGreaterThan(3);
+  });
 });

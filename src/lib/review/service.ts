@@ -17,10 +17,6 @@ const memoryOf = (row: typeof reviewStates.$inferSelect): Memory => ({
   dueAt: row.dueAt,
 });
 
-/**
- * Gives every finished lesson a memory, dated from the moment it was finished.
- * Lessons finished before reviews existed are picked up the same way, so nothing has to be migrated.
- */
 /** Starts a lesson's memory at the moment it is finished. A weak finish brings it back sooner. */
 export async function rememberLesson(db: Db, userId: string, conceptId: string, finishedAt: Date, weak: boolean) {
   await db
@@ -38,11 +34,10 @@ export async function freshAnswers(db: Db, userId: string) {
   return rows.map((row) => ({ conceptId: row.conceptId, type: reviewQuestion.parse(row.question).type, correct: row.correct === true, ms: row.ms, at: row.at! }));
 }
 
-/** Where every finished lesson stands in the recall schedule. */
-export async function memories(db: Db, userId: string) {
-  return db.select().from(reviewStates).where(eq(reviewStates.userId, userId));
-}
-
+/**
+ * Gives every finished lesson a memory, dated from the moment it was finished.
+ * Lessons finished before reviews existed are picked up the same way, so nothing has to be migrated.
+ */
 export async function rememberFinishedLessons(db: Db, userId: string) {
   const finished = await db
     .select({ id: lessonProgress.conceptId, at: lessonProgress.completedAt })
