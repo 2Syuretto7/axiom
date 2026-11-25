@@ -4,7 +4,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema";
 
 type Db = NodePgDatabase<typeof schema>;
-const { attempts, hintViews, lessonProgress, codeSnapshots } = schema;
+const { attempts, lessonProgress, codeSnapshots, tutorMessages } = schema;
 
 export type AttemptInput = {
   conceptId: string;
@@ -21,10 +21,11 @@ export type AttemptInput = {
  */
 export async function recordAttempt(db: Db, userId: string, input: AttemptInput, lessonQuestions: string[]) {
   const { conceptId, questionId } = input;
-  const [hint] = await db
-    .select({ level: hintViews.level })
-    .from(hintViews)
-    .where(and(eq(hintViews.userId, userId), eq(hintViews.conceptId, conceptId), eq(hintViews.questionId, questionId)));
+  // The only hints are the tutor's. Each attempt keeps how many the learner had been given on the question by then.
+  const [hints] = await db
+    .select({ given: sql<string>`count(*)` })
+    .from(tutorMessages)
+    .where(and(eq(tutorMessages.userId, userId), eq(tutorMessages.conceptId, conceptId), eq(tutorMessages.questionId, questionId), eq(tutorMessages.hint, true)));
   await db.insert(lessonProgress).values({ userId, conceptId }).onConflictDoNothing();
   await db.insert(attempts).values({
     userId,
@@ -33,7 +34,7 @@ export async function recordAttempt(db: Db, userId: string, input: AttemptInput,
     system: input.system,
     correct: input.correct,
     answer: input.answer ?? null,
-    hintsUsed: hint?.level ?? 0,
+    hintsUsed: Number(hints?.given ?? 0),
     ms: input.ms === null ? null : Math.max(0, Math.min(Math.round(input.ms), 86_400_000)),
   });
   if (!input.correct) return { lessonComplete: false };
@@ -73,27 +74,6 @@ export async function completedConcepts(db: Db, userId: string): Promise<string[
 /** The clusters whose mini-capstone is finished. They are kept apart from lessons so they never change which lesson comes next. */
 export async function completedCapstones(db: Db, userId: string): Promise<Set<string>> {
   return new Set((await completedUnits(db, userId)).filter(isCapstoneId).map(capstoneCluster));
-}
-
-export async function hintLevels(db: Db, userId: string, conceptId: string): Promise<Map<string, number>> {
-  const rows = await db
-    .select({ id: hintViews.questionId, level: hintViews.level })
-    .from(hintViews)
-    .where(and(eq(hintViews.userId, userId), eq(hintViews.conceptId, conceptId)));
-  return new Map(rows.map((row) => [row.id, row.level]));
-}
-
-/** Climbs one rung of the hint ladder and returns the new level, at most `max`. */
-export async function revealNextHint(db: Db, userId: string, conceptId: string, questionId: string, max: number) {
-  const [row] = await db
-    .insert(hintViews)
-    .values({ userId, conceptId, questionId, level: 1 })
-    .onConflictDoUpdate({
-      target: [hintViews.userId, hintViews.conceptId, hintViews.questionId],
-      set: { level: sql`least(${hintViews.level} + 1, ${max})`, updatedAt: sql`now()` },
-    })
-    .returning({ level: hintViews.level });
-  return row.level;
 }
 
 export async function saveSnapshot(db: Db, userId: string, key: string, code: string) {

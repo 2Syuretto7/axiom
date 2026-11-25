@@ -17,14 +17,14 @@ import { requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { capstoneId, capstoneQuestions } from "@/lib/capstones/schema";
 import { nextAfter, nextStep } from "@/lib/learning/next";
-import { completedCapstones, completedConcepts, hintLevels, snapshotsFor, solvedQuestions } from "@/lib/learning/service";
+import { completedCapstones, completedConcepts, snapshotsFor, solvedQuestions } from "@/lib/learning/service";
 import { content } from "@/lib/lessons/content";
 import { questionsOf } from "@/lib/lessons/load";
 import { tutorConnected } from "@/lib/tutor/config";
 import { tutorHistory } from "@/lib/tutor/service";
 import type { Db } from "@/lib/db";
 
-/** The tutor's conversation on this lesson so far, and how much of the month's budget is left. */
+/** The tutor's conversation on this lesson so far. */
 async function tutorSetup(db: Db, userId: string, conceptId: string) {
   return { messages: await tutorHistory(db, userId, conceptId), connected: tutorConnected() };
 }
@@ -107,8 +107,7 @@ async function Lesson() {
               </p>
               <h1>{concept.title}</h1>
               <p className="lesson-claim">
-                You last worked on this lesson {days} {days === 1 ? "day" : "days"} ago. Here is a question you have not seen before. You get one try, and
-                there are no hints.
+                You last worked on this lesson {days} {days === 1 ? "day" : "days"} ago. Here is a question you have not seen before. You get one try.
               </p>
               <ReviewCard key={stored.id} view={view} />
             </article>
@@ -143,9 +142,8 @@ async function Lesson() {
     const capstone = capstones.get(next.cluster)!;
     const cluster = graph.clusters.get(next.cluster)!;
     const id = capstoneId(cluster.id);
-    const [solved, hints, snapshots, tutor] = await Promise.all([
+    const [solved, snapshots, tutor] = await Promise.all([
       solvedQuestions(db, user.id, id),
-      hintLevels(db, user.id, id),
       snapshotsFor(db, user.id, `axiom-code:${id}`),
       tutorSetup(db, user.id, id),
     ]);
@@ -160,16 +158,15 @@ async function Lesson() {
         lesson={{ total: ids.length, solved: ids.filter((q) => solved.has(q)), complete: false }}
         tutor={tutor}
       >
-        <CapstoneView capstone={capstone} cluster={cluster} graph={graph} solved={solved} hintLevels={hints} />
+        <CapstoneView capstone={capstone} cluster={cluster} graph={graph} solved={solved} />
       </Workspace>
     );
   }
 
   const lesson = lessons.get(next.id)!;
   const concept = graph.concepts.get(next.id)!;
-  const [solved, hints, snapshots, tutor] = await Promise.all([
+  const [solved, snapshots, tutor] = await Promise.all([
     solvedQuestions(db, user.id, concept.id),
-    hintLevels(db, user.id, concept.id),
     snapshotsFor(db, user.id, `axiom-code:${concept.id}`),
     tutorSetup(db, user.id, concept.id),
   ]);
@@ -193,7 +190,6 @@ async function Lesson() {
         next={nextAfter(graph, written, completed, concept.id)}
         capstone={closesCluster && !capstonesDone.has(concept.cluster) ? capstones.get(concept.cluster)?.title : null}
         solved={solved}
-        hintLevels={hints}
       />
     </Workspace>
   );

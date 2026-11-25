@@ -32,15 +32,24 @@ What is planned after them, capstones and job-readiness, is in [ROADMAP.md](ROAD
 
 Every finished lesson comes back for review at growing gaps: about 4 days after it is finished, then about 2 weeks, 7 weeks and 20 weeks if it is recalled each time, and within days if it is missed. The schedule is the FSRS-4.5 memory model (`src/lib/review/schedule.ts`), which brings a lesson back when the chance of recalling it has fallen to 90%.
 
-A review is one question with one try and no hints. The question is always new: it is written by the model for that one review, from the lesson and the list of every review question the learner has already had on it. It is shown only if it is not a repeat of any of those or of the lesson's own questions, and if a second, independent pass that is not told the answer solves it and reaches the same answer. Once answered, a question is never shown again. If no new question can be written, no review is given; an old question is never used instead.
+A review is one question with one try. The question is always new: it is written by the model for that one review, from the lesson and the list of every review question the learner has already had on it. It is shown only if it is not a repeat of any of those or of the lesson's own questions, and if a second, independent pass that is not told the answer solves it and reaches the same answer. Once answered, a question is never shown again. If no new question can be written, no review is given; an old question is never used instead.
 
 Learn gives reviews between lessons, never in the middle of one, and at most three in a row while new material is waiting. Reviews need `ANTHROPIC_API_KEY`, like the tutor, and each question's cost is recorded in `review_questions`.
 
 ## Tutor
 
-The tutor sits beside the lesson and the editor (a third tab on a phone). It is told the lesson in progress, the lessons already finished and what comes next, and it sees the code in the editor when a question is asked.
+The tutor sits beside the lesson and the editor (a third tab on a phone). It is told the lesson in progress, the lessons already finished and what comes next. With each message it is also told which questions are solved, every answer given to each question so far, the question last worked on, and the code in the editor.
 
-It needs `ANTHROPIC_API_KEY` in the deployment. Its spend is not capped; the cost of each reply is recorded in `tutor_messages`. Tests use a stand-in for the API (`tests/e2e/mock-anthropic.mjs`), so CI needs no key.
+It first works out what a message is about, and answers accordingly:
+
+- A question not yet solved. The tutor never gives the solution. It judges whether the learner can solve the question without help. If so, it does not nudge at all. If not, it gives one hint written for that moment. It does not discuss the question openly until the question is solved.
+- A solved question. Open discussion: the answer, other approaches, where the idea leads.
+- The lesson but not a question. It teaches in full.
+- Anything else. It answers plainly.
+
+There is no hint ladder. Lessons carry no prepared hints and questions have no Hint button; the tutor is the only source of hints. Each reply opens with a line the learner never sees, in which the tutor states what it judged the message to be about and whether it gave a hint (`src/lib/tutor/turn.ts`). That judgement is stored with the reply in `tutor_messages`, and `attempts.hints_used` records how many hints the tutor had given on a question when each answer was submitted. This is the hint signal that mastery reads.
+
+It needs `ANTHROPIC_API_KEY` in the deployment. It runs on Claude Opus 5.5 at high effort (`AXIOM_TUTOR_MODEL` and `AXIOM_TUTOR_EFFORT` change that). Its spend is not capped; the cost of each reply is recorded in `tutor_messages`. Tests use a stand-in for the API (`tests/e2e/mock-anthropic.mjs`), so CI needs no key.
 
 ## Layout
 

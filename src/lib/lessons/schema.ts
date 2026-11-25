@@ -7,8 +7,6 @@ const base = {
   prompt: z.string().min(1),
   /** Shown only once the question is solved. */
   explanation: z.string().min(1),
-  /** The tutor's hint ladder, smallest hint first. Never contains the answer. */
-  hints: z.array(z.string().min(1)).min(2).max(6),
   /** Concepts this question exercises. Defaults to the lesson's own concept. */
   concepts: z.array(z.string()).min(1).optional(),
 };

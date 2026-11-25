@@ -3,7 +3,7 @@ import { grade, normaliseOutput, shuffled } from "@/lib/lessons/grade";
 import { parseRational, sameNumber } from "@/lib/lessons/number";
 import type { Question } from "@/lib/lessons/schema";
 
-const common = { id: "q", system: "s1" as const, prompt: "p", explanation: "e", hints: ["a", "b"] };
+const common = { id: "q", system: "s1" as const, prompt: "p", explanation: "e" };
 const same = (a: string, b: string) => sameNumber(parseRational(a)!, parseRational(b)!);
 
 describe("numbers", () => {

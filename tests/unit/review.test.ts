@@ -226,7 +226,7 @@ beforeAll(async () => {
   await migrate(url, () => {});
 });
 beforeEach(async () => {
-  await pool.query("truncate users, sessions, login_attempts, attempts, hint_views, lesson_progress, code_snapshots restart identity cascade");
+  await pool.query("truncate users, sessions, login_attempts, attempts, lesson_progress, code_snapshots restart identity cascade");
   const created = await signUp(db, "vitest");
   if (!created.ok) throw new Error("sign-up failed");
   userId = (await pool.query<{ id: string }>("select id from users")).rows[0].id;

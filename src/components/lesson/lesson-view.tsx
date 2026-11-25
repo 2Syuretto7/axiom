@@ -25,7 +25,6 @@ export function LessonView({
   next,
   capstone,
   solved,
-  hintLevels,
 }: {
   lesson: Lesson;
   concept: Concept;
@@ -35,7 +34,6 @@ export function LessonView({
   /** The title of the mini-capstone Learn gives straight after this lesson, if this lesson closes a cluster that has one. */
   capstone?: string | null;
   solved: Set<string>;
-  hintLevels: Map<string, number>;
 }) {
   const later = lesson.leads.filter((id) => id !== next);
   const numbers = new Map(questionsOf(lesson).map((q, i) => [q.id, i + 1]));
@@ -64,7 +62,7 @@ export function LessonView({
               return <Figure key={i} name={block.figure} props={block.props} />;
             }
             const q = block.question;
-            return <QuestionCard key={q.id} view={questionView(lesson.concept, q, numbers.get(q.id)!, solved.has(q.id), hintLevels.get(q.id) ?? 0)} />;
+            return <QuestionCard key={q.id} view={questionView(lesson.concept, q, numbers.get(q.id)!, solved.has(q.id))} />;
           })}
         </section>
       ))}

@@ -4,12 +4,12 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { capstoneCluster, isCapstoneId } from "@/lib/capstones/schema";
 import { nextAfter, nextConcept } from "@/lib/learning/next";
-import { completedConcepts, hintLevels, solvedQuestions } from "@/lib/learning/service";
-import { content } from "@/lib/lessons/content";
+import { completedConcepts, solvedQuestions } from "@/lib/learning/service";
+import { content, questionsIn } from "@/lib/lessons/content";
 import { costMicroUsd, MAX_MESSAGE_CHARS, tutorConnected } from "@/lib/tutor/config";
 import { systemPrompt, workspaceNote } from "@/lib/tutor/prompt";
 import { failureNote, streamReply } from "@/lib/tutor/reply";
-import { questionEffort, saveTutorMessage, tutorHistory } from "@/lib/tutor/service";
+import { attemptHistory, saveTutorMessage, tutorHints, tutorHistory } from "@/lib/tutor/service";
 
 export const maxDuration = 120;
 
@@ -17,6 +17,7 @@ const body = z.object({
   conceptId: z.string().min(1).max(200),
   message: z.string().trim().min(1).max(MAX_MESSAGE_CHARS),
   questionId: z.string().max(200).nullish(),
+  attendingId: z.string().max(200).nullish(),
   code: z.string().max(50_000).optional(),
   output: z.string().max(50_000).optional(),
 });
@@ -36,18 +37,20 @@ export async function POST(request: Request) {
 
   const db = getDb();
   const { graph, lessons, capstones } = content();
-  const { conceptId, message, questionId, code, output } = parsed.data;
+  const { conceptId, message, questionId, attendingId, code, output } = parsed.data;
   const lesson = lessons.get(conceptId) ?? null;
   const capstone = isCapstoneId(conceptId) ? (capstones.get(capstoneCluster(conceptId)) ?? null) : null;
   const unit = lesson ?? capstone;
   if (!unit && conceptId !== "scratch") return refuse(404, "That lesson does not exist.");
 
-  const [completed, solved, history, effort, hints] = await Promise.all([
+  const questions = (unit && questionsIn(conceptId)) || [];
+  const numbers = new Map(questions.map((q, i) => [q.id, i + 1]));
+  const [completed, solved, history, attempts, hints] = await Promise.all([
     completedConcepts(db, user.id),
     unit ? solvedQuestions(db, user.id, conceptId) : new Set<string>(),
     tutorHistory(db, user.id, conceptId),
-    unit ? questionEffort(db, user.id, conceptId) : undefined,
-    unit ? hintLevels(db, user.id, conceptId) : undefined,
+    unit ? attemptHistory(db, user.id, conceptId) : undefined,
+    unit ? tutorHints(db, user.id, conceptId) : undefined,
   ]);
   const system = systemPrompt({
     graph,
@@ -60,7 +63,7 @@ export async function POST(request: Request) {
         ? (nextConcept(graph, new Set(lessons.keys()), completed)?.id ?? null)
         : null,
   });
-  const note = workspaceNote(unit, { questionId, code, output, solved: [...solved], effort, hints });
+  const note = workspaceNote(unit, { questionId, attendingId, code, output, solved: [...solved], attempts, hints });
   await saveTutorMessage(db, user.id, conceptId, "user", message);
 
   const encoder = new TextEncoder();
@@ -84,7 +87,7 @@ export async function POST(request: Request) {
 
   const work = (async () => {
     try {
-      const reply = await streamReply({ system, history, message, note, onText: (delta) => send({ delta }) });
+      const reply = await streamReply({ system, history, numbers, message, note, onText: (delta) => send({ delta }) });
       const cost = costMicroUsd(reply.model, reply.usage);
       let text = reply.text;
       if (reply.refused || !text.trim()) {
@@ -95,7 +98,13 @@ export async function POST(request: Request) {
         text += tail;
         send({ delta: tail });
       }
-      await saveTutorMessage(db, user.id, conceptId, "assistant", text, cost);
+      // The tutor's own judgement of the message. A hint counts only on a real question that was unsolved when it was given.
+      const question = reply.turn?.question ? (questions[reply.turn.question - 1] ?? null) : null;
+      const judged =
+        reply.turn && !reply.refused
+          ? { about: reply.turn.about, questionId: question?.id ?? null, hint: reply.turn.hint && question !== null && !solved.has(question.id) }
+          : null;
+      await saveTutorMessage(db, user.id, conceptId, "assistant", text, cost, judged);
       send({ done: true });
     } catch (error) {
       console.error("tutor", error instanceof Error ? error.name : "error");

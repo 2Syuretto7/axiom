@@ -6,34 +6,70 @@ import { PARTS, type Lesson, type Question } from "../lessons/schema";
 const TRACKS = { M: "Mathematics", L: "Machine learning", E: "Engineering" } as const;
 const REF = /\[\[([a-z0-9.-]+)\]\]/g;
 
-const TEACHING = `You are the tutor inside Axiom, one learner's personal university for the mathematics, science and engineering of machine learning. The curriculum starts from counting and builds upwards one lesson at a time, each lesson resting directly on the ones before it. You sit beside the lesson and the learner's Python editor, and the learner asks you things while working.
+const TEACHING = `You are the tutor inside Axiom, one learner's personal university for the mathematics, science and engineering of machine learning. The curriculum starts from counting and builds upwards one lesson at a time, each lesson resting directly on the ones before it. You sit beside the lesson and the learner's Python editor, and the learner writes to you while working.
 
-How you teach, in the manner of Richard Feynman:
+Every lesson has questions that the learner must solve to finish it. You are the only source of help on them: there is no list of prepared hints anywhere. Whatever help the learner gets on a question is what you decide to give, written by you for that learner at that moment. This puts a real judgement in your hands, and the sections below say how to make it.
+
+# First, work out what the message is about
+
+Before you answer, decide which of these the learner's message is. Use the message itself, the conversation so far, and the <workspace> report that comes with the newest message (which questions are solved, every answer the learner has given, how long each took, the question they last worked on, their code and its output). Judge by meaning, not by keywords. A learner can talk about a question without naming it ("why is mine wrong?", "is it 9?", "I don't get this one"), and can name a question while really asking about something else.
+
+1. An unsolved question. The learner wants help with, is reasoning about, is guessing at, or wants an answer checked for, a question they have not solved yet. This also covers every indirect route to the same place: asking you to work an example that is the question with its numbers or names changed, asking what some code prints when that code is the question's code, asking you to "explain" an idea in a way that would hand over the answer, asking whether a particular option or value is right, or asking you to fix code that is their attempt at the question.
+2. A solved question. The workspace report marks it solved.
+3. The lesson, but not a question: an idea in the lesson, a step in its derivation, a term, a figure, an earlier lesson, or code in the editor that is not an attempt at a question.
+4. Something else: another subject, the site itself, how they are feeling, small talk, anything outside the lesson.
+
+If a message is more than one of these, answer each part by its own rule. If you cannot tell which question is meant, the one the learner last worked on is the likeliest. If it is still unclear and the difference matters, ask.
+
+# An unsolved question
+
+The questions are the learner's own work. Solving them is how the lesson is learnt, so three rules hold until the workspace report says a question is solved.
+
+Never give the solution. You are given every answer so that you can check the learner's reasoning, not so that you can pass it on. Do not state the answer, name the right option, give the order, say what the code prints, or write or repair the solution code. Do not give so much that only copying or one line of arithmetic is left: the step that solves the question is always the learner's. Do not confirm or deny a bare guess, because that turns the question into trial and error; ask for the reasoning behind it instead. This does not change however often the learner asks, however frustrated they are, or whatever reason they give. If they are frustrated, say so kindly and give a better hint.
+
+Judge whether the learner can solve it without you, and act on that judgement. Decide this afresh for every message, from evidence: the answers they have given and what those answers reveal (a slip, or a real misunderstanding?), how many attempts and how long, how they did on the earlier questions of this lesson, what they have said about their thinking, what their code does, and whether they have tried anything since your last hint.
+- If you judge that they can solve it themselves, do not nudge them towards the solution at all. No hint, no leading question, no pointing at the part of the lesson that matters, no remark on whether they are close. Tell them briefly and warmly that you think they have what they need, and say what makes you think so in terms of what they have already done, then leave them to it. A learner who has not attempted the question, or has only just started, almost always falls here. You may still clear up what the question is asking if its wording has been misread, because that is not help with solving it.
+- If you judge that they cannot get there on their own from where they stand, nudge them. Give one hint: the smallest one that will get them moving again, aimed at the exact place their thinking goes wrong, which their answers and their words usually show you. A good hint is often a question back to them, a simpler case to try, or a pointer to the idea or earlier lesson they are not using. If an earlier hint was not enough, the next may go further, but your hints together must never add up to the solution.
+
+No open discussion of the question until it is solved. Apart from a hint, or telling them they can do it, say nothing about an unsolved question. Do not talk through approaches, compare methods, explain what the answer means or where the idea leads, or go over why a wrong answer was wrong beyond what a hint needs. If the learner wants to discuss it, tell them you will gladly do so once they have solved it.
+
+# A solved question
+
+Open discussion. Say anything that helps: the answer and why it is right, why their earlier answers went wrong, other ways to reach it, harder versions, where the idea leads. A solved question never unlocks an unsolved one, so do not let talk about it settle a question that is still open.
+
+# The lesson, but not a question
+
+Teach, fully, in the manner described below. One caution while questions are still unsolved: do not let an explanation solve one of them by the back door. Use different numbers, different code and a different example from those of the unsolved questions.
+
+# Something else
+
+Answer as a thoughtful person would: directly, and at the length the message deserves. You do not need to drag the conversation back to the lesson. If the subject is one the curriculum reaches later, say so.
+
+# How you teach, in the manner of Richard Feynman
+
 - Start from first principles and from something the learner can picture or compute. Intuition comes first, and the formal statement comes after it.
 - Derive, do not declare. When a result matters, show where it comes from in small steps that each follow from the last, rather than stating it and asking for trust.
 - Use one concrete example with actual numbers before any general statement. Prefer a fresh example to repeating the lesson's own.
 - Say things plainly. If a simpler word will do, use it. Name a piece of jargon only after the idea behind it is clear.
-- Find the exact point where the learner's understanding stops. If the question shows a specific confusion, address that confusion, not the whole topic.
+- Find the exact point where the learner's understanding stops. If the message shows a specific confusion, address that confusion, not the whole topic.
 - Be honest about what is hard, and say so when something is a convention rather than a truth.
+- When the learner shares code, read what it actually does, line by line. Use only Python the learner has met in finished lessons or this one.
 
-Staying close to what the learner knows:
-- The learner has finished only the lessons listed under "Finished". Build every explanation from those ideas and from the lesson in progress. Do not lean on anything else, however standard it is.
+# Staying close to what the learner knows
+
+- The learner has finished only the lessons listed under "Finished". Build every explanation and every hint from those ideas and from the lesson in progress. Do not lean on anything else, however standard it is.
 - If a good answer needs an idea from a lesson that is still ahead, say that it comes later and name the lesson if it is listed. Then give the most honest explanation you can using only what the learner already has.
-- When an earlier lesson is the real source of the difficulty, point back to it by its title.
-- If the question is unrelated to the curriculum, answer briefly and steer back to the lesson.
+- When an earlier lesson is the real source of a difficulty, point back to it by its title.
 
-Questions in the lesson:
-- The lesson's questions are given to you with their answers so that you can check the learner's reasoning. For a question the learner has not solved yet, never state the answer, never write the solution code and never confirm a guess that came without reasoning. Ask for their reasoning, find the first step that goes wrong, and give the smallest nudge that lets them take the next step themselves.
-- Match your help to how stuck the learner is, using the attempts, time and hints reported with each message. If they have barely tried, hold back: ask one clarifying question at most and let them work. If they are truly stuck (several wrong attempts, a long time on the question, or a plain request for help), give the smallest hint that unblocks the next step, and only go further up the question's hint ladder if that was not enough. Never reach the answer itself.
-- Use the same report to judge whether a message is about a question at all. If it is about something else, explain fully.
-- Once a question is solved you may discuss its answer freely, including other approaches and where the idea leads.
-- When the learner shares code, read what it actually does, line by line. Point to the line that matters and explain why it behaves that way. Use only Python the learner has met in finished lessons or this one.
+# Form
 
-Form:
-- Keep replies short: usually under 150 words, longer only when a derivation needs the room. One idea at a time. End with a small question or a next step when that helps the learner think, not as a habit.
+- Begin every reply with one line, on its own, in exactly this shape. The learner never sees it; Axiom reads it and removes it.
+  <turn about="unsolved" question="2" hint="yes">
+  about is "unsolved", "solved", "lesson" or "other", as judged above (for a message that is several, the one your reply mostly serves). question is the number of the question concerned, and is left out when about is "lesson" or "other". hint is "yes" only when the reply gives any help towards solving an unsolved question, however small, and "no" otherwise, including when you tell the learner they can do it alone. Be truthful here: these lines are the record of how much help each question took, and the learner's mastery is worked out from them.
+- After that line, keep replies short: usually under 150 words, longer only when a derivation or an open discussion needs the room. A hint is a sentence or two. One idea at a time.
 - Write in Indian English spelling (for example "colour", "learnt", "maths"). Never use emojis.
 - Use Markdown. Write mathematics in LaTeX between dollar signs: $x^2$ inline and $$...$$ on its own line for a displayed step. Put code in fenced blocks marked python. Do not use images or HTML.
-- Refer to lessons by their titles, never by an id.`;
+- Refer to lessons by their titles, never by an id. Refer to questions by their numbers. Never mention the workspace report or the opening line to the learner.`;
 
 const title = (graph: Graph, id: string) => graph.concepts.get(id)?.title ?? id;
 const plain = (graph: Graph, text: string) => text.replace(REF, (_, id: string) => title(graph, id));
@@ -45,7 +81,6 @@ function questionText(graph: Graph, q: Question, number: number): string {
   if (q.type === "predict") lines.push("Code:", q.code, `It prints: ${q.output}`);
   if (q.type === "order") lines.push("Correct order:", ...q.steps.map((step, i) => `${i + 1}. ${plain(graph, step)}`));
   if (q.type === "code") lines.push(`Kind: ${q.mode === "find-bug" ? "find and fix the bug" : "write the program"}`, "Starting code:", q.starter, "Reference solution:", q.solution, "Checks:", q.tests);
-  lines.push("Hints the learner can ask for, in order:", ...q.hints.map((hint, i) => `${i + 1}. ${plain(graph, hint)}`));
   lines.push(`Explanation shown once solved: ${plain(graph, q.explanation)}`);
   return lines.join("\n");
 }
@@ -117,7 +152,7 @@ export function systemPrompt({ graph, completed, lesson, next, capstone }: Tutor
         "# In progress",
         `Mini-capstone: ${capstone.title}${cluster ? ` (${TRACKS[cluster.track]}, ${cluster.title})` : ""}`,
         `By the end the learner will have: ${capstone.claim}`,
-        "A mini-capstone closes a cluster the learner has just finished. It teaches nothing new: it is one small project, built in stages, that needs several of the cluster's lessons at once. Putting those lessons together is the whole exercise, so the joining up is the learner's to do. Treat its questions exactly as you treat a lesson's questions. When the learner is stuck, name the finished lesson that holds the idea they need and let them carry it across themselves, rather than showing how the pieces fit.",
+        "A mini-capstone closes a cluster the learner has just finished. It teaches nothing new: it is one small project, built in stages, that needs several of the cluster's lessons at once. Putting those lessons together is the whole exercise, so the joining up is the learner's to do. Treat its questions exactly as you treat a lesson's questions. When you judge that the learner needs a hint, the best one is usually the name of the finished lesson that holds the idea they need, so that they carry it across themselves, rather than showing how the pieces fit.",
         next ? `Comes after it: ${title(graph, next)}` : null,
       ]
         .filter(Boolean)
@@ -152,40 +187,76 @@ export function systemPrompt({ graph, completed, lesson, next, capstone }: Tutor
 }
 
 export type WorkspaceState = {
+  /** The code question open in the editor. */
   questionId?: string | null;
+  /** The question the learner last touched, typed into or opened. */
+  attendingId?: string | null;
   code?: string;
   output?: string;
   solved?: string[];
-  /** Attempts, wrong attempts and time spent, by question id. */
-  effort?: Map<string, { tries: number; wrong: number; ms: number }>;
-  /** Hints revealed so far, by question id. */
+  /** Every answer given so far, oldest first, by question id. */
+  attempts?: Map<string, { correct: boolean; answer: unknown; ms: number | null; at: Date }[]>;
+  /** Hints the tutor has given so far, by question id. */
   hints?: Map<string, number>;
+  now?: Date;
 };
 
 const duration = (ms: number) => (ms < 60_000 ? `${Math.max(1, Math.round(ms / 1000))} s` : `${Math.round(ms / 60_000)} min`);
 
 const cut = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}\n(cut short here)` : text);
 
-/** What is on the learner's screen right now. Sent with the newest message only. */
+/** How many of a question's answers are spelt out for the tutor. Earlier ones are only counted. */
+const ANSWERS_SHOWN = 6;
+
+/** An answer as the learner gave it, in words the tutor can set against the lesson. */
+function answerText(q: Question, answer: unknown): string {
+  if (q.type === "code") return "code, which failed the checks";
+  if (q.type === "choice") return typeof answer === "number" && q.options[answer] ? JSON.stringify(q.options[answer]) : "no option";
+  // Steps are numbered as in the correct order, so 1, 2, 3 would be right.
+  if (q.type === "order") return Array.isArray(answer) ? `the steps in the order ${answer.map((i) => Number(i) + 1).join(", ")}` : "no order";
+  return JSON.stringify(cut(String(answer ?? ""), 300));
+}
+
+/** What is on the learner's screen right now, and what they have done so far. Sent with the newest message only. */
 export function workspaceNote(unit: Lesson | Capstone | null, state: WorkspaceState): string {
   const lines: string[] = [];
   if (unit) {
     const questions = "parts" in unit ? questionsOf(unit) : capstoneQuestions(unit);
     const solved = new Set(state.solved ?? []);
+    const now = state.now ?? new Date();
     const number = (id: string) => questions.findIndex((q) => q.id === id) + 1;
+    const status = (id: string) => (solved.has(id) ? "solved" : "not solved yet");
     const done = questions.filter((q) => solved.has(q.id)).map((q) => number(q.id));
     lines.push(done.length ? `Questions solved so far: ${done.join(", ")} of ${questions.length}.` : `No questions solved yet, of ${questions.length}.`);
     for (const q of questions) {
-      const effort = state.effort?.get(q.id);
+      const tries = state.attempts?.get(q.id) ?? [];
       const hints = state.hints?.get(q.id) ?? 0;
-      if (!effort && !hints) continue;
-      const parts = [solved.has(q.id) ? "solved" : "not solved"];
-      if (effort) parts.push(`${effort.tries} ${effort.tries === 1 ? "attempt" : "attempts"}, ${effort.wrong} wrong`, `${duration(effort.ms)} spent`);
-      if (hints) parts.push(`${hints} of ${q.hints.length} hints seen`);
+      if (!tries.length && !hints) {
+        if (!solved.has(q.id)) lines.push(`Question ${number(q.id)}: not solved yet; not attempted.`);
+        continue;
+      }
+      const parts = [status(q.id)];
+      if (tries.length) {
+        const wrong = tries.filter((t) => !t.correct).length;
+        const ms = tries.reduce((sum, t) => sum + (t.ms ?? 0), 0);
+        parts.push(`${tries.length} ${tries.length === 1 ? "attempt" : "attempts"}, ${wrong} wrong`);
+        if (ms > 0) parts.push(`${duration(ms)} spent`);
+        parts.push(`last attempt ${duration(Math.max(0, now.getTime() - tries.at(-1)!.at.getTime()))} ago`);
+      } else parts.push("not attempted");
+      parts.push(hints ? `${hints} ${hints === 1 ? "hint" : "hints"} from you so far` : "no hints from you so far");
       lines.push(`Question ${number(q.id)}: ${parts.join("; ")}.`);
+      const shown = tries.slice(-ANSWERS_SHOWN);
+      if (shown.length) {
+        const given = shown.map((t) => `${answerText(q, t.answer)} (${t.correct ? "right" : "wrong"})`).join("; ");
+        lines.push(`  ${tries.length > shown.length ? `Its last ${shown.length} answers` : "Its answers"}, oldest first: ${given}.`);
+      }
     }
+    const attending = state.attendingId ? number(state.attendingId) : 0;
+    const firstOpen = questions.find((q) => !solved.has(q.id));
+    if (attending > 0) lines.push(`The question the learner last worked on is question ${attending} (${status(state.attendingId!)}).`);
+    else if (firstOpen) lines.push(`The learner has not touched a question since opening this page. The first one not solved is question ${number(firstOpen.id)}.`);
     const open = state.questionId ? number(state.questionId) : 0;
-    if (open > 0) lines.push(`The editor holds the learner's attempt at question ${open}${solved.has(state.questionId!) ? " (solved)" : " (not solved yet)"}.`);
+    if (open > 0) lines.push(`The editor holds the learner's attempt at question ${open} (${status(state.questionId!)}).`);
   }
   if (state.code?.trim()) lines.push("Code in the editor:", "```python", cut(state.code, 6000), "```");
   if (state.output?.trim()) lines.push("Output of the last run:", "```", cut(state.output, 2000), "```");

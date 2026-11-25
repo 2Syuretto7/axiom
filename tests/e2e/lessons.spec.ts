@@ -366,11 +366,10 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   await expect(gaps).toContainText("neighbouring float64 values are 1.5 × 10^−8 apart.");
   await expect(page.locator(".prose-lesson img")).toHaveCount(0);
 
-  // Wrong, then a hint, then right. Fractions and words are handled by the grader.
+  // Wrong, then right. There is no hint ladder: hints come from the tutor. Fractions and words are handled by the grader.
   await answerNumber(page, 1, "8");
   await expect(question(page, 1)).toContainText("Not yet");
-  await question(page, 1).getByRole("button", { name: /^Hint/ }).click();
-  await expect(question(page, 1)).toContainText("Each returning sheep removes exactly one pebble.");
+  await expect(page.getByRole("button", { name: /hint/i })).toHaveCount(0);
   await expect(question(page, 1)).not.toContainText("12 - 3");
   await answerNumber(page, 1, "18/2");
   await expect(question(page, 1)).toContainText("Solved");

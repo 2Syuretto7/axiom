@@ -145,7 +145,6 @@ export async function validateLessons(options: ValidateOptions): Promise<Issue[]
           }
           await checkText(at, q.prompt);
           await checkText(at, q.explanation);
-          for (const hint of q.hints) await checkText(at, hint);
           await checkQuestion(q, at, add, run, checkCode, checkText);
         }
       }
@@ -248,10 +247,6 @@ export async function checkQuestion(
       const answer = parseRational(q.answer);
       if (!answer) add(at, `Answer "${q.answer}" is not a number`);
       if (q.tolerance && !parseRational(q.tolerance)) add(at, `Tolerance "${q.tolerance}" is not a number`);
-      const digits = q.answer.replace(/[^\d]/g, "");
-      if (digits.length >= 2 && q.hints.some((hint) => new RegExp(`(^|[^\\d.])${q.answer.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}([^\\d]|$)`).test(hint))) {
-        add(at, "A hint contains the answer");
-      }
       break;
     }
     case "choice":
@@ -269,9 +264,6 @@ export async function checkQuestion(
       if (result.error) add(at, `The code fails when run: ${result.error.trim().split("\n").at(-1)}`);
       else if (normaliseOutput(result.out) !== normaliseOutput(q.output)) {
         add(at, `Stated output is wrong. The code really prints: ${JSON.stringify(normaliseOutput(result.out))}`);
-      }
-      if (q.hints.some((hint) => normaliseOutput(hint).includes(normaliseOutput(q.output)) && normaliseOutput(q.output).length >= 3)) {
-        add(at, "A hint contains the output");
       }
       break;
     }

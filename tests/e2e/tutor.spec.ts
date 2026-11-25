@@ -56,6 +56,8 @@ test("the tutor answers beside the lesson, knows the lesson and the editor, and 
   await expect(reply.locator(".katex").first()).toBeVisible();
   await expect(reply.locator("b")).toHaveCount(0);
   await expect(reply).toContainText("<b>What</b>");
+  // The line the tutor opens with, saying what it judged the message to be about, is for Axiom only.
+  await expect(reply).not.toContainText("turn about");
   await expect(box).toHaveValue("");
   // The spend is neither shown nor capped.
   await expect(tutor).not.toContainText(/used this month/i);
@@ -67,17 +69,22 @@ test("the tutor answers beside the lesson, knows the lesson and the editor, and 
   };
   expect(sent.url).toContain("/v1/messages");
   expect(sent.body.model).toBe("claude-opus-5-5");
-  expect(sent.body.output_config.effort).toBe("medium");
+  expect(sent.body.output_config.effort).toBe("high");
   const system = sent.body.system[0];
   expect(system.cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
   expect(system.text).toContain("Feynman");
   expect(system.text).toContain("Lesson: Counting");
   expect(system.text).toContain("Comes next: Adding");
   expect(system.text).toContain("A shepherd has no words for numbers.");
+  expect(system.text).toContain("Never give the solution.");
+  expect(system.text).toContain("No open discussion of the question until it is solved.");
+  expect(system.text).not.toMatch(/hint ladder|Hints the learner can ask for/i);
   const asked = sent.body.messages.at(-1)!;
   expect(asked.role).toBe("user");
   expect(asked.content).toContain("print(pebbles - 3)");
   expect(asked.content).toContain("No questions solved yet, of 3.");
+  expect(asked.content).toContain("Question 1: not solved yet;");
+  expect(asked.content).toContain("The first one not solved is question 1.");
   expect(asked.content.endsWith("Why do the pebbles work?")).toBe(true);
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -101,6 +108,23 @@ test("the tutor answers beside the lesson, knows the lesson and the editor, and 
   const second = (await (await request.get(`${MOCK}/last`)).json()) as { body: { messages: { role: string; content: string }[] } };
   expect(second.body.messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
   expect(second.body.messages[0].content).toBe("Why do the pebbles work?");
+  // The tutor is shown its own earlier judgement again.
+  expect(second.body.messages[1].content).toMatch(/^<turn about="lesson" hint="no">\nThink of the/);
+
+  // A hint is the tutor's to give. Once given, it is counted against the question and the tutor is told so.
+  const talkAgain = again.getByRole("list", { name: "Conversation with the tutor" });
+  await again.getByRole("textbox", { name: "Ask the tutor" }).fill("I am stuck on the first question");
+  await again.getByRole("textbox", { name: "Ask the tutor" }).press("Enter");
+  await expect(talkAgain.getByRole("listitem")).toHaveCount(6);
+  await expect(talkAgain.getByRole("listitem").last()).toHaveText(/What do the pebbles left over stand for\?$/);
+  await expect(talkAgain.getByRole("listitem").last()).not.toContainText("turn about");
+  await expect(again.getByRole("button", { name: "Ask", exact: true })).toBeVisible();
+  await again.getByRole("textbox", { name: "Ask the tutor" }).fill("Thank you");
+  await again.getByRole("textbox", { name: "Ask the tutor" }).press("Enter");
+  await expect(talkAgain.getByRole("listitem")).toHaveCount(8);
+  const third = (await (await request.get(`${MOCK}/last`)).json()) as { body: { messages: { role: string; content: string }[] } };
+  expect(third.body.messages.at(-2)!.content).toMatch(/^<turn about="unsolved" question="1" hint="yes">\nWhat do the pebbles/);
+  expect(third.body.messages.at(-1)!.content).toMatch(/Question 1: not solved yet; not attempted; \d hints? from you so far\./);
 
   // Closing it gives the room back to the lesson and the code.
   if (info.project.name !== "phone") {

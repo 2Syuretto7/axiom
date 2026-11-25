@@ -2,9 +2,9 @@
 
 import { getDb } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
-import { blockHtml, displayOrder, findQuestion, inlineHtml } from "@/lib/lessons/content";
+import { blockHtml, displayOrder, findQuestion } from "@/lib/lessons/content";
 import { grade } from "@/lib/lessons/grade";
-import { recordAttempt, revealNextHint, saveSnapshot } from "./service";
+import { recordAttempt, saveSnapshot } from "./service";
 import { clearTutorHistory } from "../tutor/service";
 
 export type AnswerResult = { correct: boolean; note?: string; explanationHtml?: string; lessonComplete: boolean };
@@ -65,14 +65,6 @@ export async function reportCode(conceptId: string, questionId: string, passed: 
     questions.map((q) => q.id),
   );
   return { correct: passed === true, explanationHtml: passed === true ? blockHtml(question.explanation) : undefined, lessonComplete };
-}
-
-/** The next hint on a question's ladder. Hints never contain the answer. */
-export async function nextHint(conceptId: string, questionId: string): Promise<string[]> {
-  const user = await learner();
-  const { unitId, question } = findQuestion(clean(conceptId, 200), clean(questionId, 200));
-  const level = await revealNextHint(getDb(), user.id, unitId, question.id, question.hints.length);
-  return question.hints.slice(0, level).map(inlineHtml);
 }
 
 export async function saveCode(key: string, code: string): Promise<void> {

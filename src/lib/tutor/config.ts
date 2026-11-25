@@ -15,11 +15,12 @@ export const HISTORY_TURNS = 16;
 
 export const tutorModel = () => process.env.AXIOM_TUTOR_MODEL?.trim() || DEFAULT_MODEL;
 
-// Medium is the least the tutor thinks. Low effort is never used.
-const EFFORTS = ["medium", "high"] as const;
+// The tutor has to judge what a message is about and how much help the learner needs, so it thinks at high effort
+// unless told otherwise. Medium is the least it thinks. Low effort is never used.
+const EFFORTS = ["medium", "high", "xhigh"] as const;
 export function tutorEffort(): (typeof EFFORTS)[number] {
   const value = process.env.AXIOM_TUTOR_EFFORT?.trim() as (typeof EFFORTS)[number] | undefined;
-  return value && EFFORTS.includes(value) ? value : "medium";
+  return value && EFFORTS.includes(value) ? value : "high";
 }
 
 export const tutorConnected = () => Boolean(process.env.ANTHROPIC_API_KEY);

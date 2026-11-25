@@ -53,13 +53,11 @@ export type QuestionView = {
   code?: string;
   mode?: "write" | "find-bug";
   starter?: string;
-  hintCount: number;
-  hints: string[];
   solved: boolean;
   explanationHtml?: string;
 };
 
-export function questionView(conceptId: string, q: Question, number: number, solved: boolean, hintLevel: number): QuestionView {
+export function questionView(conceptId: string, q: Question, number: number, solved: boolean): QuestionView {
   const order = displayOrder(conceptId, q);
   const source = q.type === "choice" ? q.options : q.type === "order" ? q.steps : undefined;
   return {
@@ -73,8 +71,6 @@ export function questionView(conceptId: string, q: Question, number: number, sol
     code: q.type === "predict" ? q.code : undefined,
     mode: q.type === "code" ? q.mode : undefined,
     starter: q.type === "code" ? q.starter : undefined,
-    hintCount: q.hints.length,
-    hints: q.hints.slice(0, hintLevel).map(inlineHtml),
     solved,
     explanationHtml: solved ? blockHtml(q.explanation) : undefined,
   };

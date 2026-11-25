@@ -11,13 +11,11 @@ export function CapstoneView({
   cluster,
   graph,
   solved,
-  hintLevels,
 }: {
   capstone: Capstone;
   cluster: Cluster;
   graph: Graph;
   solved: Set<string>;
-  hintLevels: Map<string, number>;
 }) {
   const id = capstoneId(cluster.id);
   const questions = capstoneQuestions(capstone);
@@ -54,7 +52,7 @@ export function CapstoneView({
             if ("text" in block) return <div key={i} className="lesson-text" dangerouslySetInnerHTML={{ __html: blockHtml(block.text) }} />;
             if ("figure" in block) return <Figure key={i} name={block.figure} props={block.props} />;
             const q = block.question;
-            return <QuestionCard key={q.id} view={questionView(id, q, numbers.get(q.id)!, solved.has(q.id), hintLevels.get(q.id) ?? 0)} />;
+            return <QuestionCard key={q.id} view={questionView(id, q, numbers.get(q.id)!, solved.has(q.id))} />;
           })}
         </section>
       ))}

@@ -88,6 +88,7 @@ export function Workspace({
   const syncTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const tests = useRef(new Map<string, string>());
   const openedAt = useRef(0);
+  const attending = useRef<string | null>(null);
   const main = useRef<HTMLDivElement>(null);
   const resultRef = useRef<RunResult | null>(null);
 
@@ -104,7 +105,7 @@ export function Workspace({
   const tutorContext = useCallback((): TutorContext => {
     const last = resultRef.current;
     const output = last ? [...last.out.map((chunk) => chunk.text), last.error ?? ""].join("\n").trim() : "";
-    return { code: code.current, output, questionId: docRef.current.question?.id ?? null };
+    return { code: code.current, output, questionId: docRef.current.question?.id ?? null, attendingId: attending.current };
   }, []);
 
   useEffect(() => {
@@ -159,6 +160,10 @@ export function Workspace({
     setRunning(false);
   }, [running]);
 
+  const attend = useCallback((questionId: string) => {
+    attending.current = questionId;
+  }, []);
+
   const settle = useCallback((questionId: string, outcome: AnswerResult) => {
     if (outcome.correct) setSolved((before) => new Set(before).add(questionId));
     if (outcome.lessonComplete) setComplete(true);
@@ -197,6 +202,7 @@ export function Workspace({
   const open = useCallback(
     (question: { id: string; number: number; starter: string }) => {
       openedAt.current = Date.now();
+      attending.current = question.id;
       show({ key: `axiom-code:${id}:${question.id}`, starter: question.starter, question: { id: question.id, number: question.number } });
       setPane("code");
       editor.current?.focus();
@@ -237,13 +243,14 @@ export function Workspace({
       solved,
       complete,
       settle,
+      attend,
       active: doc.question?.id ?? null,
       open,
       check: () => void check(),
       busy: running,
       verdicts,
     }),
-    [id, lesson?.total, solved, complete, settle, doc, open, check, running, verdicts],
+    [id, lesson?.total, solved, complete, settle, attend, doc, open, check, running, verdicts],
   );
 
   const drag = (event: React.PointerEvent<HTMLDivElement>) => {

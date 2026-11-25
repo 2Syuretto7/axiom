@@ -57,9 +57,10 @@ describe("lesson validation", () => {
     expect(await messages("m0.adding", withTable("| $a$ | $b$ |"))).not.toContain("inside mathematics");
   });
 
-  it("rejects answers that are not numbers and hints that give the answer away", async () => {
+  it("rejects answers that are not numbers, and has no place for prepared hints", async () => {
     expect(await messages("m0.adding", (l) => (question(l, "sum-slow").answer = "twelve"))).toContain("is not a number");
-    expect(await messages("m0.adding", (l) => question(l, "sum-slow").hints.push("It is 12."))).toContain("hint contains the answer");
+    // Hints come from the tutor alone. A lesson that tries to carry its own is malformed.
+    expect(await messages("m0.adding", (l) => (question(l, "sum-slow").hints = ["Add them."]))).not.toBe("");
   });
 
   describe("closeness: only what is learnt, being learnt, or next", () => {
