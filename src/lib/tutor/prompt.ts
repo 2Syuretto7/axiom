@@ -50,7 +50,8 @@ function questionText(graph: Graph, q: Question, number: number): string {
   return lines.join("\n");
 }
 
-function lessonText(graph: Graph, lesson: Lesson): string {
+/** A lesson as plain text, with its questions and their answers. */
+export function lessonText(graph: Graph, lesson: Lesson): string {
   const numbers = new Map(questionsOf(lesson).map((q, i) => [q.id, i + 1]));
   const out: string[] = [];
   for (const part of PARTS) {

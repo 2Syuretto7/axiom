@@ -1,0 +1,111 @@
+/**
+ * When a finished lesson comes back for review.
+ *
+ * This is the FSRS-4.5 memory model with its published default weights. Each
+ * finished lesson has two numbers:
+ *
+ * - stability: how many days it takes for the chance of recalling the lesson to
+ *   fall to 90%. A lesson recalled correctly gains stability, so the gap to its
+ *   next review grows. The gain is largest when the review came late and the
+ *   lesson was still recalled, and smallest when it came early.
+ * - difficulty: from 1 to 10. It rises when a review is missed and falls back
+ *   slowly towards the middle. Hard lessons gain stability more slowly.
+ *
+ * A review is one question with one try, so there are two outcomes: recalled or
+ * not. A lesson is due when its chance of recall has fallen to the target.
+ */
+
+const W = [0.4872, 1.4003, 3.7145, 13.8206, 5.1618, 1.2298, 0.8975, 0.031, 1.6474, 0.1367, 1.0461, 2.1072, 0.0793, 0.3246, 1.587, 0.2272, 2.8755];
+const DECAY = -0.5;
+const FACTOR = 19 / 81;
+const AGAIN = 1;
+const GOOD = 3;
+
+/** The chance of recall at which a lesson is brought back. */
+export const TARGET_RECALL = 0.9;
+export const MIN_INTERVAL_DAYS = 1;
+export const MAX_INTERVAL_DAYS = 365;
+/** At most this many reviews are given in a row between two lessons, so a backlog never blocks new material. */
+export const REVIEWS_BETWEEN_UNITS = 3;
+
+const DAY = 86_400_000;
+const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
+
+export type Memory = {
+  /** Days for the chance of recall to fall to 90%. */
+  stability: number;
+  /** 1 (easy) to 10 (hard). */
+  difficulty: number;
+  reps: number;
+  lapses: number;
+  lastReviewedAt: Date;
+  dueAt: Date;
+};
+
+/** The chance, from 0 to 1, that the lesson would be recalled `days` after it was last seen. */
+export const recallChance = (stability: number, days: number) => Math.pow(1 + (FACTOR * Math.max(0, days)) / stability, DECAY);
+
+/** Days until the chance of recall falls to the target. */
+export const intervalDays = (stability: number) =>
+  clamp((stability / FACTOR) * (Math.pow(TARGET_RECALL, 1 / DECAY) - 1), MIN_INTERVAL_DAYS, MAX_INTERVAL_DAYS);
+
+const initialDifficulty = (rating: number) => clamp(W[4] - (rating - 3) * W[5], 1, 10);
+
+const dueAfter = (from: Date, stability: number) => new Date(from.getTime() + intervalDays(stability) * DAY);
+
+/** The memory of a lesson at the moment it is finished. Finishing it counts as a first successful recall. */
+export function firstMemory(finishedAt: Date): Memory {
+  const stability = W[GOOD - 1];
+  return { stability, difficulty: initialDifficulty(GOOD), reps: 0, lapses: 0, lastReviewedAt: finishedAt, dueAt: dueAfter(finishedAt, stability) };
+}
+
+/** The memory after a review answered at `now`. */
+export function afterReview(memory: Memory, recalled: boolean, now: Date): Memory {
+  const days = (now.getTime() - memory.lastReviewedAt.getTime()) / DAY;
+  const recall = recallChance(memory.stability, days);
+  const rating = recalled ? GOOD : AGAIN;
+  const { stability: s, difficulty: d } = memory;
+
+  const difficulty = clamp(W[7] * initialDifficulty(GOOD) + (1 - W[7]) * (d - W[6] * (rating - 3)), 1, 10);
+  const stability = recalled
+    ? s * (1 + Math.exp(W[8]) * (11 - d) * Math.pow(s, -W[9]) * (Math.exp(W[10] * (1 - recall)) - 1))
+    : Math.min(s, W[11] * Math.pow(d, -W[12]) * (Math.pow(s + 1, W[13]) - 1) * Math.exp(W[14] * (1 - recall)));
+
+  return {
+    stability: Math.max(0.1, stability),
+    difficulty,
+    reps: memory.reps + 1,
+    lapses: memory.lapses + (recalled ? 0 : 1),
+    lastReviewedAt: now,
+    dueAt: dueAfter(now, Math.max(0.1, stability)),
+  };
+}
+
+export type Due = { conceptId: string; stability: number; lastReviewedAt: Date; dueAt: Date };
+
+const chanceNow = (m: Due, now: Date) => recallChance(m.stability, (now.getTime() - m.lastReviewedAt.getTime()) / DAY);
+
+/** The lessons due at `now`, the one most likely to have been forgotten first. */
+export const reviewQueue = (memories: Due[], now: Date): string[] =>
+  memories
+    .filter((m) => m.dueAt.getTime() <= now.getTime())
+    .sort((a, b) => chanceNow(a, now) - chanceNow(b, now) || a.conceptId.localeCompare(b.conceptId))
+    .map((m) => m.conceptId);
+
+/**
+ * The lesson to review now, or null if Learn should carry on with new material.
+ *
+ * Reviews are only given between units, never in the middle of a lesson or a
+ * mini-capstone that has been started. While there is new material waiting, at
+ * most REVIEWS_BETWEEN_UNITS reviews come in a row. Among the lessons that are
+ * due, the one most likely to have been forgotten comes first.
+ */
+export function pickReview(
+  memories: Due[],
+  now: Date,
+  place: { unitWaiting: boolean; unitStarted: boolean; reviewsSinceUnit: number },
+): string | null {
+  if (place.unitStarted) return null;
+  if (place.unitWaiting && place.reviewsSinceUnit >= REVIEWS_BETWEEN_UNITS) return null;
+  return reviewQueue(memories, now)[0] ?? null;
+}

@@ -28,6 +28,12 @@ Built. A mini-capstone closes one cluster. It is one small project in stages tha
 
 Every written cluster now has one. From here on, every new cluster ships with its mini-capstone in the same batch as its lessons.
 
+## Reviews
+
+Built. Every finished lesson comes back at growing gaps, set by the FSRS-4.5 memory model, and each review is one question the learner has never seen, written and independently checked for that review. Learn gives reviews between lessons. How it works is in the README.
+
+Not built yet: the Map does not show how well each lesson is remembered, and mini-capstones are not reviewed.
+
 ## Capstones
 
 Not built. A capstone is a larger project that spans several clusters and usually more than one track. Unlike a mini-capstone, it ends in something the learner keeps: a working program and a short written account of it.

@@ -2,11 +2,40 @@
  * Stands in for the Anthropic API in browser tests, so they need no key and spend nothing.
  * It speaks just enough of the streaming Messages API for the SDK: every request is
  * answered with one short reply, and GET /last returns the request it was last sent.
+ *
+ * A request that asks for a fixed JSON shape is the review question writer or its
+ * checker. The writer is given a new sum each time, with raw HTML in it to prove
+ * it is shown as text. The checker agrees with the writer, except that the first
+ * question it ever sees is declared unsound, to prove such a question is thrown away.
  */
 import http from "node:http";
 
 const port = Number(process.env.MOCK_ANTHROPIC_PORT ?? 3199);
 let last = null;
+let written = 0;
+let checks = 0;
+let answer = "";
+
+function structured(body) {
+  const fields = body.output_config?.format?.schema?.properties;
+  if (!fields) return null;
+  if ("sound" in fields) {
+    checks += 1;
+    return checks === 1 ? { sound: false, problem: "It can be read two ways.", answer } : { sound: true, problem: "", answer };
+  }
+  written += 1;
+  answer = String(written + 10);
+  return {
+    type: "numeric",
+    prompt: `A shepherd has ${written} sheep in one field and $10$ in another. <b>How many</b> sheep is that altogether?`,
+    code: "",
+    options: [],
+    answer,
+    tolerance: "",
+    unit: "sheep",
+    explanation: `Count on from 10: $10 + ${written} = ${answer}$.`,
+  };
+}
 
 const REPLY = [
   "Think of the **pebbles** again. ",
@@ -44,7 +73,8 @@ http
       },
     });
     send({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
-    for (const text of REPLY) {
+    const json = structured(last.body);
+    for (const text of json ? [JSON.stringify(json)] : REPLY) {
       send({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text } });
       await new Promise((done) => setTimeout(done, 30));
     }

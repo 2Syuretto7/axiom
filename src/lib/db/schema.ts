@@ -1,4 +1,4 @@
-import { bigint, boolean, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, doublePrecision, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 
@@ -83,4 +83,33 @@ export const tutorMessages = pgTable("tutor_messages", {
   costMicroUsd: bigint("cost_micro_usd", { mode: "number" }).notNull().default(0),
   clearedAt: timestamp("cleared_at", { withTimezone: true }),
   createdAt: createdAt(),
+});
+
+export const reviewStates = pgTable(
+  "review_states",
+  {
+    userId: uuid("user_id").notNull(),
+    conceptId: text("concept_id").notNull(),
+    stability: doublePrecision("stability").notNull(),
+    difficulty: doublePrecision("difficulty").notNull(),
+    reps: integer("reps").notNull().default(0),
+    lapses: integer("lapses").notNull().default(0),
+    lastReviewedAt: timestamp("last_reviewed_at", { withTimezone: true }).notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.conceptId] })],
+);
+
+export const reviewQuestions = pgTable("review_questions", {
+  id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+  userId: uuid("user_id").notNull(),
+  conceptId: text("concept_id").notNull(),
+  question: jsonb("question").notNull(),
+  fingerprint: text("fingerprint").notNull(),
+  costMicroUsd: bigint("cost_micro_usd", { mode: "number" }).notNull().default(0),
+  createdAt: createdAt(),
+  answeredAt: timestamp("answered_at", { withTimezone: true }),
+  correct: boolean("correct"),
+  answer: jsonb("answer"),
+  ms: integer("ms"),
 });
