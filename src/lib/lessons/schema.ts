@@ -79,6 +79,12 @@ export const lesson = z.strictObject({
   uses: z.array(z.string()),
   /** Later concepts this lesson points forward to. Each must depend on this one. */
   leads: z.array(z.string()),
+  /**
+   * One entry for every direct prerequisite in another track, keyed by that prerequisite's concept id.
+   * A short passage on how that earlier idea connects to this lesson. Learn shows it at the top of
+   * this lesson when that prerequisite was the lesson finished just before.
+   */
+  bridges: z.record(z.string(), z.string().min(1)).optional(),
   starter: z.string().optional(),
   parts: z.strictObject(Object.fromEntries(PARTS.map((part) => [part, z.array(block).min(1)])) as Record<(typeof PARTS)[number], z.ZodArray<typeof block>>),
 });

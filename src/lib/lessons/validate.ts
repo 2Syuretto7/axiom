@@ -25,6 +25,15 @@ export type ValidateOptions = {
 
 export const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
 
+/** A bridge is a short passage, not a second recall section. The most words one may have. */
+export const BRIDGE_MAX_WORDS = 120;
+
+/** The direct prerequisites of a concept that are in another track. Each needs a bridge in that concept's lesson. */
+export const crossTrackPrerequisites = (graph: Graph, concept: string): string[] => {
+  const { track, requires } = graph.concepts.get(concept)!;
+  return requires.filter((id) => graph.concepts.get(id)!.track !== track);
+};
+
 /**
  * Everything a lesson must satisfy before the learner can see it.
  *
@@ -33,7 +42,9 @@ export const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
  *
  * Continuity: Learn can walk the written lessons as one chain in which each
  * lesson builds directly on the one before it, and each lesson recalls every
- * direct prerequisite.
+ * direct prerequisite. Where a direct prerequisite is in another track, the
+ * lesson also carries a bridge for it: a short passage on how that idea
+ * connects to this one, which Learn shows when the learner arrives from there.
  *
  * Closeness: a lesson may only lean on what the learner has learnt (its
  * prerequisites), what it is teaching now (its own concept) and what comes
@@ -98,6 +109,14 @@ export async function validateLessons(options: ValidateOptions): Promise<Issue[]
     for (const id of graph.concepts.get(concept)!.requires) {
       if (!lesson.recalls.includes(id)) add("recalls", `Must recall its direct prerequisite ${id}`);
     }
+    // Arriving from another track is a change of subject, so the lesson says how that idea connects to this one.
+    const crossing = crossTrackPrerequisites(graph, concept);
+    for (const id of crossing) {
+      if (!lesson.bridges?.[id]) add("bridges", `Must have a bridges entry for ${id}, its direct prerequisite in another track`);
+    }
+    for (const id of Object.keys(lesson.bridges ?? {})) {
+      if (!crossing.includes(id)) add("bridges", `${id} is not a direct prerequisite of ${concept} in another track, so its bridge would never be shown`);
+    }
     for (const id of lesson.leads) {
       if (!future.has(id)) add("leads", `${id} does not depend on ${concept}, so it is not what comes next`);
     }
@@ -124,6 +143,11 @@ export async function validateLessons(options: ValidateOptions): Promise<Issue[]
     const questions: Question[] = [];
     let prose = 0;
     if (lesson.starter) await checkCode("starter", lesson.starter);
+    for (const [id, text] of Object.entries(lesson.bridges ?? {})) {
+      const where = `bridges.${id}`;
+      if (words(text) > BRIDGE_MAX_WORDS) add(where, `A bridge is short: ${words(text)} words, and the most is ${BRIDGE_MAX_WORDS}`);
+      await checkText(where, text);
+    }
 
     for (const part of PARTS) {
       for (const [index, block] of lesson.parts[part].entries()) {
