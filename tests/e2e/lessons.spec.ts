@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
-// One learner works through the three fixture lessons in order, so these run in sequence.
+// One learner works through the three fixture lessons and the mini-capstone in order, so these run in sequence.
 test.describe.configure({ mode: "serial" });
 
 const FIRST_RUN = 90_000;
@@ -422,8 +422,8 @@ test("tablet: the next lesson is in the same track and then crosses to another",
   await page.getByRole("link", { name: "Continue" }).click();
   await expect(page.getByRole("heading", { level: 1, name: next, exact: true })).toBeVisible();
   await expect(page.getByText("Builds on Adding")).toBeVisible();
-  // Nothing written follows the last lesson, so it promises no next lesson, only what comes later.
-  await expect(page.locator(".lesson-next")).toHaveCount(0);
+  // Printing closes its cluster, so the cluster's mini-capstone is next. No lesson is written after that, only what comes later.
+  await expect(page.locator(".lesson-next")).toHaveText(/^Next\s*Mini-capstone: A sum, shown$/i);
   await expect(page.getByText("Later Later")).toBeVisible();
   await expect(page.getByRole("list", { name: "Where you are" })).toContainText("Engineering");
 });
@@ -482,16 +482,70 @@ test("phone: code is read, written, checked by hidden tests and fixed", async ({
   expect(overflow).toBeLessThanOrEqual(0);
   await page.screenshot({ path: "test-results/screens/lesson-phone.png" });
 
+  // The lesson that closes a cluster leads to that cluster's mini-capstone, as the lesson said it would.
+  await page.getByRole("link", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "A sum, shown" })).toBeVisible();
+});
+
+test("laptop: a mini-capstone closes the cluster before Learn moves on", async ({ page }) => {
+  await page.goto("/learn");
+  await expect(page.getByRole("heading", { level: 1, name: "A sum, shown" })).toBeVisible();
+  await expect(page.getByText("E0 · First programs · Mini-capstone · 15 min")).toBeVisible();
+  await expect(page.getByText("Brings together Printing")).toBeVisible();
+  await expect(page.getByRole("list", { name: "Where you are" })).toContainText("Mini-capstone");
+  // Lessons it names show their titles, and its stages are numbered.
+  await expect(page.getByRole("region", { name: "The project" })).toContainText("as in Printing");
+  await expect(page.getByRole("region", { name: "Stage 3" })).toContainText("Stage 3 of 3");
+  await expect(page.getByRole("heading", { level: 3, name: "Write it" })).toBeVisible();
+  await expect(page.getByText("0 of 3 questions solved")).toBeVisible();
+  await expect(page.getByText("Solve every question to finish this mini-capstone.")).toBeVisible();
+  // The closing account names what each stage was, so it stays hidden until every stage is solved.
+  await expect(page.getByRole("region", { name: "What you built" })).toHaveCount(0);
+
+  // The map agrees with Learn about what is due, and does not count the mini-capstone as a lesson.
+  await page.getByRole("link", { name: "Map", exact: true }).click();
+  await expect(page.getByText("3 of 3 written lessons done.")).toBeVisible();
+  await expect(page.getByText("0 of 1 mini-capstones done. Learn will give you the E0 mini-capstone, A sum, shown, now.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "E0 First programs, you are here" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("region", { name: "Selected cluster" }).getByRole("listitem")).toHaveText(["PrintingDone", "Mini-capstone: A sum, shownNow"]);
+  await page.getByRole("link", { name: "Learn" }).first().click();
+  await expect(page.getByRole("heading", { level: 1, name: "A sum, shown" })).toBeVisible();
+
+  // Its questions are graded and remembered exactly as a lesson's are.
+  await answerNumber(page, 1, "12");
+  await expect(question(page, 1)).toContainText("Not yet");
+  await answerNumber(page, 1, "11");
+  await expect(question(page, 1)).toContainText("Solved");
+  await page.reload();
+  await expect(page.getByText("1 of 3 questions solved")).toBeVisible();
+  await question(page, 2).getByRole("textbox").fill("11");
+  await question(page, 2).getByRole("button", { name: "Check" }).click();
+  await expect(question(page, 2)).toContainText("Solved");
+  await question(page, 3).getByRole("button", { name: "Open in the editor" }).click();
+  await expect(page.getByTestId("doc-name")).toHaveText("Question 3");
+  await replaceCode(page, "total = 5 + 6\nprint(total)");
+  await question(page, 3).getByRole("button", { name: "Check my code" }).click();
+  await expect(page.getByTestId("output")).toContainText("All checks passed.", { timeout: FIRST_RUN });
+  await expect(question(page, 3)).toContainText("Solved");
+
+  await expect(page.getByText("Mini-capstone complete.")).toBeVisible();
+  await expect(page.getByRole("region", { name: "What you built" })).toContainText("You added by hand in Adding and by machine in Printing.");
+  const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).exclude(".cm-scroller").analyze();
+  expect(results.violations.map((v) => `${v.id}: ${v.help} (${v.nodes[0]?.target})`)).toEqual([]);
+  await page.screenshot({ path: "test-results/screens/capstone-laptop.png" });
+
   await page.getByRole("link", { name: "Continue" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "You have finished every lesson written so far." })).toBeVisible();
 
   // The map records the path that was actually taken, in the order it was taken.
   await page.getByRole("link", { name: "Map", exact: true }).click();
   await expect(page.getByText("3 of 3 written lessons done.")).toBeVisible();
+  await expect(page.getByText("1 of 1 mini-capstones done. You have finished every lesson written so far.")).toBeVisible();
   await expect(page.getByRole("region", { name: "The order Learn follows" }).getByRole("listitem")).toHaveText([
     "M0CountingDone",
     "M0AddingDone",
     "E0PrintingDone",
   ]);
   await expect(page.getByRole("button", { name: "E0 First programs, finished" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("region", { name: "Selected cluster" }).getByRole("listitem").last()).toHaveText("Mini-capstone: A sum, shownDone");
 });

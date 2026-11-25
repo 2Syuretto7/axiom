@@ -1,23 +1,36 @@
 import "server-only";
 import { loadGraph, type Graph } from "../graph/load";
 import { shuffled } from "./grade";
-import { graphDir, loadLessons, questionsOf } from "./load";
+import { capstoneCluster, capstoneQuestions, isCapstoneId, type Capstone } from "../capstones/schema";
+import { graphDir, loadCapstones, loadLessons, questionsOf } from "./load";
 import { renderBlock, renderInline } from "./render";
 import type { Lesson, Question } from "./schema";
 
-type Content = { graph: Graph; lessons: Map<string, Lesson> };
+type Content = { graph: Graph; lessons: Map<string, Lesson>; /** Mini-capstones by cluster id. */ capstones: Map<string, Capstone> };
 let cached: Content | undefined;
 
 /** The curriculum, read once per server instance. It only changes with a deployment. */
 export function content(): Content {
-  return (cached ??= { graph: loadGraph(graphDir()), lessons: loadLessons() });
+  return (cached ??= { graph: loadGraph(graphDir()), lessons: loadLessons(), capstones: loadCapstones() });
 }
 
-export function findQuestion(conceptId: string, questionId: string) {
-  const lesson = content().lessons.get(conceptId);
-  const question = lesson && questionsOf(lesson).find((q) => q.id === questionId);
-  if (!lesson || !question) throw new Error("Unknown question");
-  return { lesson, question };
+/** The questions of a lesson (by concept id) or of a mini-capstone (by its capstone id). */
+export function questionsIn(unitId: string): Question[] | null {
+  const { lessons, capstones } = content();
+  if (isCapstoneId(unitId)) {
+    const capstone = capstones.get(capstoneCluster(unitId));
+    return capstone ? capstoneQuestions(capstone) : null;
+  }
+  const lesson = lessons.get(unitId);
+  return lesson ? questionsOf(lesson) : null;
+}
+
+/** A question in a lesson or a mini-capstone, with every question that must be solved to finish that unit. */
+export function findQuestion(unitId: string, questionId: string) {
+  const questions = questionsIn(unitId);
+  const question = questions?.find((q) => q.id === questionId);
+  if (!questions || !question) throw new Error("Unknown question");
+  return { unitId, questions, question };
 }
 
 export const titles = (id: string) => content().graph.concepts.get(id)?.title;

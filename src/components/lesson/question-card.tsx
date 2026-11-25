@@ -230,8 +230,8 @@ export function QuestionCard({ view }: { view: QuestionView }) {
   );
 }
 
-/** Progress through the lesson's questions, and the way on once all are solved. */
-export function LessonEnd() {
+/** Progress through the questions of a lesson or a mini-capstone, and the way on once all are solved. */
+export function LessonEnd({ capstone = false }: { capstone?: boolean }) {
   const ws = useWorkspace();
   return (
     <footer className="lesson-end" aria-live="polite">
@@ -240,15 +240,29 @@ export function LessonEnd() {
       </p>
       {ws.complete ? (
         <>
-          <p className="lesson-end-title">Lesson complete.</p>
+          <p className="lesson-end-title">{capstone ? "Mini-capstone complete." : "Lesson complete."}</p>
           {/* A full page load, so the server chooses the next lesson from fresh progress. */}
           <a className="btn btn-primary" href="/learn">
             Continue
           </a>
         </>
       ) : (
-        <p className="text-ink-secondary">Solve every question to finish this lesson. The next one builds on it.</p>
+        <p className="text-ink-secondary">
+          {capstone ? "Solve every question to finish this mini-capstone. It closes the cluster." : "Solve every question to finish this lesson. The next one builds on it."}
+        </p>
       )}
     </footer>
+  );
+}
+
+/** The closing account of a mini-capstone. It names what each stage was, so it appears only once every stage is solved. */
+export function CapstoneReview({ html }: { html: string }) {
+  const ws = useWorkspace();
+  if (!ws.complete) return null;
+  return (
+    <section className="lesson-part" aria-label="What you built">
+      <h2 className="label lesson-part-label">What you built</h2>
+      <Html html={html} className="lesson-text" />
+    </section>
   );
 }

@@ -1,3 +1,4 @@
+import { capstoneQuestions, type Capstone } from "../capstones/schema";
 import type { Graph } from "../graph/load";
 import { questionsOf } from "../lessons/load";
 import { PARTS, type Lesson, type Question } from "../lessons/schema";
@@ -63,6 +64,21 @@ function lessonText(graph: Graph, lesson: Lesson): string {
   return out.join("\n\n");
 }
 
+function capstoneText(graph: Graph, capstone: Capstone): string {
+  const numbers = new Map(capstoneQuestions(capstone).map((q, i) => [q.id, i + 1]));
+  const out = ["## The project", plain(graph, capstone.brief)];
+  capstone.stages.forEach((stage, s) => {
+    out.push(`## Stage ${s + 1} of ${capstone.stages.length}: ${plain(graph, stage.title)}`);
+    for (const block of stage.blocks) {
+      if ("text" in block) out.push(plain(graph, block.text));
+      else if ("figure" in block) out.push(`(An interactive figure is shown here: ${block.figure.replace(/-/g, " ")}.)`);
+      else out.push(questionText(graph, block.question, numbers.get(block.question.id)!));
+    }
+  });
+  out.push("## What you built (the learner sees this only once every stage is solved)", plain(graph, capstone.review));
+  return out.join("\n\n");
+}
+
 /** Finished lessons grouped by cluster, in the order of the curriculum. */
 function finishedText(graph: Graph, completed: string[]): string {
   const done = new Set(completed);
@@ -82,6 +98,8 @@ export type TutorPosition = {
   lesson: Lesson | null;
   /** The lesson Learn gives after this one. */
   next: string | null;
+  /** The mini-capstone in progress, when Learn has given one instead of a lesson. */
+  capstone?: Capstone | null;
 };
 
 /**
@@ -89,9 +107,23 @@ export type TutorPosition = {
  * which lessons are finished, so it is identical for every question asked during a lesson
  * and can be cached. Anything that changes from question to question goes in `workspaceNote`.
  */
-export function systemPrompt({ graph, completed, lesson, next }: TutorPosition): string {
+export function systemPrompt({ graph, completed, lesson, next, capstone }: TutorPosition): string {
   const sections = [TEACHING, `# Finished\n${finishedText(graph, completed)}`];
-  if (lesson) {
+  if (capstone) {
+    const cluster = graph.clusters.get(capstone.cluster);
+    sections.push(
+      [
+        "# In progress",
+        `Mini-capstone: ${capstone.title}${cluster ? ` (${TRACKS[cluster.track]}, ${cluster.title})` : ""}`,
+        `By the end the learner will have: ${capstone.claim}`,
+        "A mini-capstone closes a cluster the learner has just finished. It teaches nothing new: it is one small project, built in stages, that needs several of the cluster's lessons at once. Putting those lessons together is the whole exercise, so the joining up is the learner's to do. Treat its questions exactly as you treat a lesson's questions. When the learner is stuck, name the finished lesson that holds the idea they need and let them carry it across themselves, rather than showing how the pieces fit.",
+        next ? `Comes after it: ${title(graph, next)}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      `# The mini-capstone as the learner sees it\n${capstoneText(graph, capstone)}`,
+    );
+  } else if (lesson) {
     const concept = graph.concepts.get(lesson.concept);
     const cluster = concept && graph.clusters.get(concept.cluster);
     const recent = completed.at(-1);
@@ -134,10 +166,10 @@ const duration = (ms: number) => (ms < 60_000 ? `${Math.max(1, Math.round(ms / 1
 const cut = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}\n(cut short here)` : text);
 
 /** What is on the learner's screen right now. Sent with the newest message only. */
-export function workspaceNote(lesson: Lesson | null, state: WorkspaceState): string {
+export function workspaceNote(unit: Lesson | Capstone | null, state: WorkspaceState): string {
   const lines: string[] = [];
-  if (lesson) {
-    const questions = questionsOf(lesson);
+  if (unit) {
+    const questions = "parts" in unit ? questionsOf(unit) : capstoneQuestions(unit);
     const solved = new Set(state.solved ?? []);
     const number = (id: string) => questions.findIndex((q) => q.id === id) + 1;
     const done = questions.filter((q) => solved.has(q.id)).map((q) => number(q.id));

@@ -201,7 +201,7 @@ describe("the map", () => {
   it("lays clusters out below what they need and marks where the learner is", () => {
     const map = buildMap(graph, written, ["m0.counting"]);
     expect(map.now).toBe("m0.adding");
-    expect(map.counts).toEqual({ done: 1, written: 3, planned: 1 });
+    expect(map.counts).toEqual({ done: 1, written: 3, planned: 1, capstones: 0, capstonesDone: 0 });
     expect(map.clusters.map((c) => [c.id, c.row, c.state])).toEqual(
       expect.arrayContaining([
         ["M0", 0, "now"],

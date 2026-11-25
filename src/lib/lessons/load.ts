@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { parse } from "yaml";
+import { capstone as capstoneSchema, type Capstone } from "../capstones/schema";
 import { lesson as lessonSchema, PARTS, type Lesson, type Question } from "./schema";
 
 /** Tests and browser tests point this at a small fixture curriculum. */
@@ -8,6 +9,7 @@ import { lesson as lessonSchema, PARTS, type Lesson, type Question } from "./sch
 // so the bundler is told not to trace these run-time paths itself.
 export const contentRoot = () => process.env.AXIOM_CONTENT_DIR ?? process.cwd();
 export const lessonsDir = (root = contentRoot()) => path.join(/* turbopackIgnore: true */ root, "content", "lessons");
+export const capstonesDir = (root = contentRoot()) => path.join(/* turbopackIgnore: true */ root, "content", "capstones");
 export const graphDir = (root = contentRoot()) => path.join(/* turbopackIgnore: true */ root, "graph");
 
 export type LessonFile = { file: string; raw: unknown };
@@ -38,6 +40,17 @@ export function loadLessons(dir: string = lessonsDir()): Map<string, Lesson> {
     lessons.set(parsed.data.concept, parsed.data);
   }
   return lessons;
+}
+
+/** Mini-capstones by cluster id. Throws on a malformed one; CI stops those before they are merged. */
+export function loadCapstones(dir: string = capstonesDir()): Map<string, Capstone> {
+  const capstones = new Map<string, Capstone>();
+  for (const { file, raw } of readLessonFiles(dir)) {
+    const parsed = capstoneSchema.safeParse(raw);
+    if (!parsed.success) throw new Error(`${file}: ${parsed.error.issues[0]?.message}`);
+    capstones.set(parsed.data.cluster, parsed.data);
+  }
+  return capstones;
 }
 
 export function questionsOf(lesson: Lesson): Question[] {

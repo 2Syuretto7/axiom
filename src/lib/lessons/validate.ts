@@ -23,7 +23,7 @@ export type ValidateOptions = {
   only?: (file: string) => boolean;
 };
 
-const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
+export const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
 
 /**
  * Everything a lesson must satisfy before the learner can see it.
@@ -118,39 +118,7 @@ export async function validateLessons(options: ValidateOptions): Promise<Issue[]
       .flat()
       .flatMap((block) => ("text" in block ? pythonExamples(block.text) : []))
       .join("\n");
-    const checkCode = async (where: string, code: string, context = "") => {
-      const result = await run(featureProgram(code, context));
-      const listed = result.out.trim();
-      if (result.error || listed === "syntax-error") return false;
-      const beyond = (JSON.parse(listed) as string[]).filter((feature) => !allowedPython.has(feature));
-      if (beyond.length > 0) add(where, `Uses Python the learner has not been taught yet: ${beyond.join(", ")}`);
-      return true;
-    };
-    const checkText = async (where: string, text: string, inline = false) => {
-      for (const id of conceptRefs(text)) {
-        if (!mentionable.has(id)) add(where, `Mentions [[${id}]], which is not this concept, a listed prerequisite or a listed next concept`);
-      }
-      if (/in your own words/i.test(text)) add(where, "Explain-it-back prompts are not allowed");
-      // A bar inside mathematics would be read as the edge of a table cell.
-      const barInMaths = (row: string) =>
-        /^\s*\|/.test(row) &&
-        row
-          .replace(/\\\|/g, "")
-          .split("$")
-          .some((piece, i) => i % 2 === 1 && piece.includes("|"));
-      if (text.split("\n").some(barInMaths)) {
-        add(where, "A table row has a | inside mathematics; write \\lvert and \\rvert there instead");
-      }
-      try {
-        (inline ? renderInline : renderBlock)(text);
-      } catch (error) {
-        add(where, `Does not render: ${(error as Error).message}`);
-      }
-      // Examples are read in the light of the whole lesson, so a class defined in one passage may be used in a later one.
-      for (const code of pythonExamples(text)) {
-        if (!(await checkCode(where, code, shown))) add(where, "A Python example in the text does not parse");
-      }
-    };
+    const { checkCode, checkText } = textChecks({ add, mentionable, allowedPython, shown, run });
 
     const seen = new Set<string>();
     const questions: Question[] = [];
@@ -196,15 +164,77 @@ export async function validateLessons(options: ValidateOptions): Promise<Issue[]
   return issues;
 }
 
+export type Checks = {
+  checkCode: (where: string, code: string, context?: string) => Promise<boolean>;
+  checkText: (where: string, text: string, inline?: boolean) => Promise<void>;
+};
+
+/**
+ * The checks on a passage of text and on a piece of code, shared by lessons and mini-capstones.
+ * `mentionable` are the concepts the text may name, `allowedPython` the features its code may use,
+ * and `shown` the code of every example in the unit, whose definitions later examples may rely on.
+ */
+export function textChecks({
+  add,
+  mentionable,
+  allowedPython,
+  shown,
+  run,
+  stray = "which is not this concept, a listed prerequisite or a listed next concept",
+}: {
+  add: (where: string, message: string) => void;
+  mentionable: Set<string>;
+  allowedPython: Set<string>;
+  shown: string;
+  run: RunPython;
+  /** How the complaint about a concept that may not be named ends. */
+  stray?: string;
+}): Checks {
+  const checkCode = async (where: string, code: string, context = "") => {
+    const result = await run(featureProgram(code, context));
+    const listed = result.out.trim();
+    if (result.error || listed === "syntax-error") return false;
+    const beyond = (JSON.parse(listed) as string[]).filter((feature) => !allowedPython.has(feature));
+    if (beyond.length > 0) add(where, `Uses Python the learner has not been taught yet: ${beyond.join(", ")}`);
+    return true;
+  };
+  const checkText = async (where: string, text: string, inline = false) => {
+    for (const id of conceptRefs(text)) {
+      if (!mentionable.has(id)) add(where, `Mentions [[${id}]], ${stray}`);
+    }
+    if (/in your own words/i.test(text)) add(where, "Explain-it-back prompts are not allowed");
+    // A bar inside mathematics would be read as the edge of a table cell.
+    const barInMaths = (row: string) =>
+      /^\s*\|/.test(row) &&
+      row
+        .replace(/\\\|/g, "")
+        .split("$")
+        .some((piece, i) => i % 2 === 1 && piece.includes("|"));
+    if (text.split("\n").some(barInMaths)) {
+      add(where, "A table row has a | inside mathematics; write \\lvert and \\rvert there instead");
+    }
+    try {
+      (inline ? renderInline : renderBlock)(text);
+    } catch (error) {
+      add(where, `Does not render: ${(error as Error).message}`);
+    }
+    // Examples are read in the light of the whole lesson, so a class defined in one passage may be used in a later one.
+    for (const code of pythonExamples(text)) {
+      if (!(await checkCode(where, code, shown))) add(where, "A Python example in the text does not parse");
+    }
+  };
+  return { checkCode, checkText };
+}
+
 /** The Python examples in a passage. A method shown on its own, indented as it would be in its class, is moved to the margin. */
-const pythonExamples = (text: string) =>
+export const pythonExamples = (text: string) =>
   [...text.matchAll(/```python\n([\s\S]*?)```/g)].map(([, code]) => {
     const lines = code.split("\n");
     const margin = Math.min(...lines.filter((line) => line.trim()).map((line) => line.length - line.trimStart().length));
     return lines.map((line) => line.slice(Number.isFinite(margin) ? margin : 0)).join("\n");
   });
 
-async function checkQuestion(
+export async function checkQuestion(
   q: Question,
   at: string,
   add: (where: string, message: string) => void,

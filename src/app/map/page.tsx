@@ -7,7 +7,7 @@ import { signOutAction } from "@/lib/auth/actions";
 import { requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { buildMap } from "@/lib/learning/map";
-import { completedConcepts } from "@/lib/learning/service";
+import { completedCapstones, completedConcepts } from "@/lib/learning/service";
 import { content } from "@/lib/lessons/content";
 
 export const metadata: Metadata = { title: "Map" };
@@ -20,14 +20,23 @@ const STEP = { done: "Done", now: "Now", written: "" } as const;
  */
 async function Curriculum() {
   const user = await requireUser();
-  const { graph, lessons } = content();
-  const map = buildMap(graph, new Set(lessons.keys()), await completedConcepts(getDb(), user.id));
+  const { graph, lessons, capstones } = content();
+  const db = getDb();
+  const [completed, capstonesDone] = await Promise.all([completedConcepts(db, user.id), completedCapstones(db, user.id)]);
+  const titles = new Map([...capstones].map(([cluster, capstone]) => [cluster, capstone.title]));
+  const map = buildMap(graph, new Set(lessons.keys()), completed, titles, capstonesDone);
   const now = map.path.find((step) => step.state === "now");
+  const giving = map.capstoneNow
+    ? `Learn will give you the ${map.capstoneNow} mini-capstone, ${titles.get(map.capstoneNow)}, now.`
+    : now
+      ? `Learn will give you ${now.title} now.`
+      : "You have finished every lesson written so far.";
   return (
     <>
       <p className="map-summary">
         {map.counts.done} of {map.counts.written} written lessons done. {map.counts.planned} more {map.counts.planned === 1 ? "is" : "are"} planned.{" "}
-        {now ? `Learn will give you ${now.title} now.` : "You have finished every lesson written so far."}
+        {map.counts.capstones > 0 ? `${map.counts.capstonesDone} of ${map.counts.capstones} mini-capstones done. ` : ""}
+        {giving}
       </p>
       <MapView map={map} />
       <section className="map-path" aria-labelledby="map-path-title">

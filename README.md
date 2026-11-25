@@ -17,9 +17,16 @@ npm run dev
 | --- | --- |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | TypeScript |
+| `npm run lessons` | Checks every lesson and mini-capstone: answers, predicted outputs, reference solutions and hidden tests, run under the same Python the browser uses |
 | `npm test` | Unit and database tests (Vitest) |
 | `npm run e2e` | Builds the app and runs browser tests at laptop, tablet and phone sizes |
 | `LIVE_URL=... npm run e2e` | Read-only smoke test of the deployed site |
+
+## Mini-capstones
+
+A mini-capstone closes a cluster. It is one small project in stages that needs several of the cluster's lessons at once, and it teaches nothing new. Learn gives it straight after the lesson that finishes the cluster. One lives at `content/capstones/<cluster>.yaml`, and its questions use the same format and checks as a lesson's.
+
+What is planned after them, capstones and job-readiness, is in [ROADMAP.md](ROADMAP.md).
 
 ## Tutor
 
@@ -32,6 +39,8 @@ It needs `ANTHROPIC_API_KEY` in the deployment. Its spend is not capped; the cos
 - `migrations/` plain SQL, applied in order by `scripts/migrate.ts` during every build
 - `src/lib/auth/` passphrase generation, Argon2id hashing, sessions, rate limiting
 - `src/app/` screens: home, sign-in, learn
+- `content/` the lessons and mini-capstones, and `graph/` the clusters and what each needs
+- `src/lib/capstones/` the mini-capstone format and its checks
 - `src/lib/tutor/` the tutor beside each lesson: what it is told, what it costs, its conversation
 - `tests/` unit tests and browser tests
 

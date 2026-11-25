@@ -137,7 +137,7 @@ for (const theme of ["dark", "light"] as const) {
     await page.getByRole("link", { name: "Map", exact: true }).click();
     await expect(page).toHaveURL(/\/map$/);
     await expect(page.getByRole("heading", { level: 1, name: "Where you are, and what it leads to" })).toBeVisible();
-    await expect(page.getByText("0 of 3 written lessons done. 1 more is planned. Learn will give you Counting now.")).toBeVisible();
+    await expect(page.getByText("0 of 3 written lessons done. 1 more is planned. 0 of 1 mini-capstones done. Learn will give you Counting now.")).toBeVisible();
 
     // The cluster the learner is in is selected to begin with.
     const panel = page.getByRole("region", { name: "Selected cluster" });
