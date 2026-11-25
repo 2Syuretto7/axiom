@@ -305,7 +305,7 @@ export function Workspace({
           <button type="button" className="label bar-item ws-tutor-toggle" aria-pressed={tutorOpen} onClick={() => toggleTutor(!tutorOpen)}>
             Tutor
           </button>
-          <Link href="/map" className="label bar-item" prefetch={false}>
+          <Link href="/map" className="label bar-item">
             Map
           </Link>
           <span className="label bar-item ws-status" role="status">

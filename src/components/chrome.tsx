@@ -10,7 +10,7 @@ export function TopBar({ map = false }: { map?: boolean }) {
       </Link>
       <nav className="flex items-center gap-4 sm:gap-6" aria-label="Site">
         {map ? (
-          <Link href="/map" className="label bar-item" prefetch={false}>
+          <Link href="/map" className="label bar-item">
             Map
           </Link>
         ) : null}
