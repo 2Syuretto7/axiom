@@ -1,23 +1,17 @@
 import "katex/dist/katex.min.css";
 import type { Metadata } from "next";
-import { after } from "next/server";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { TopBar } from "@/components/chrome";
-import { ReviewCard, type ReviewView } from "@/components/review/review-card";
-import { signOutAction } from "@/lib/auth/actions";
-import { prepareQuestion } from "@/lib/review/prepare";
-import { optionOrder } from "@/lib/review/question";
-import { pickReview, reviewQueue } from "@/lib/review/schedule";
-import { dueBy, rememberFinishedLessons, reviewsSinceLastUnit, unitStarted } from "@/lib/review/service";
-import { renderReply, renderReplyInline } from "@/lib/tutor/render";
 import { CapstoneView } from "@/components/lesson/capstone-view";
 import { LessonView } from "@/components/lesson/lesson-view";
+import { Consolidation } from "@/components/review/consolidation";
+import { SpacedRecall } from "@/components/review/spaced-recall";
 import { Workspace } from "@/components/workspace/workspace";
 import { requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { capstoneId, capstoneQuestions } from "@/lib/capstones/schema";
 import { nextAfter, nextStep } from "@/lib/learning/next";
-import { completedCapstones, completedConcepts, hintLevels, snapshotsFor, solvedQuestions } from "@/lib/learning/service";
+import { completeUnit, completedCapstones, completedConcepts, hintLevels, snapshotsFor, solvedQuestions } from "@/lib/learning/service";
 import { content } from "@/lib/lessons/content";
 import { questionsOf } from "@/lib/lessons/load";
 import { tutorConnected } from "@/lib/tutor/config";
@@ -30,12 +24,8 @@ async function tutorSetup(db: Db, userId: string, conceptId: string) {
 }
 
 export const metadata: Metadata = { title: "Learn" };
-// Writing and checking a fresh review question can take the model a while.
-export const maxDuration = 120;
-
-const DAY = 86_400_000;
-/** Questions are written ahead for lessons that fall due within this many days, so a review rarely has to wait for one. */
-const WRITE_AHEAD_DAYS = 2;
+// Writing and checking fresh recall questions can take the model a while. The lesson is shown meanwhile.
+export const maxDuration = 300;
 
 const TRACKS = { M: "Mathematics", L: "Machine learning", E: "Engineering" } as const;
 
@@ -49,9 +39,8 @@ print("1 + 2 + ... + 10 =", total)
 
 /**
  * Learn is the whole navigation: it works out the one thing to do now.
- * That is a review of a finished lesson that is due, a lesson that builds
- * directly on the lesson just finished, or the mini-capstone that closes the
- * cluster just finished.
+ * That is a lesson that builds directly on the lesson just finished, or the
+ * mini-capstone that closes the cluster just finished.
  */
 async function Lesson() {
   const user = await requireUser();
@@ -60,63 +49,6 @@ async function Lesson() {
   const written = new Set(lessons.keys());
   const [completed, capstonesDone] = await Promise.all([completedConcepts(db, user.id), completedCapstones(db, user.id)]);
   const next = nextStep(graph, written, new Set(capstones.keys()), completed, capstonesDone);
-
-  // A finished lesson comes back when it is due, with a question written for this one review.
-  if (tutorConnected()) {
-    await rememberFinishedLessons(db, user.id);
-    const now = new Date();
-    const unitId = next ? (next.kind === "capstone" ? capstoneId(next.cluster) : next.id) : null;
-    const [soon, started, since] = await Promise.all([
-      dueBy(db, user.id, new Date(now.getTime() + WRITE_AHEAD_DAYS * DAY)),
-      unitId ? unitStarted(db, user.id, unitId) : false,
-      reviewsSinceLastUnit(db, user.id),
-    ]);
-    const memories = soon.filter((memory) => lessons.has(memory.conceptId));
-    const reviewing = pickReview(memories, now, { unitWaiting: next !== null, unitStarted: started, reviewsSinceUnit: since });
-    const ahead = [...reviewQueue(memories, now), ...memories.map((memory) => memory.conceptId)].filter((id, i, all) => id !== reviewing && all.indexOf(id) === i);
-    after(async () => {
-      for (const id of ahead.slice(0, 2)) await prepareQuestion(db, user.id, id);
-    });
-    const stored = reviewing ? await prepareQuestion(db, user.id, reviewing) : null;
-    if (stored) {
-      const concept = graph.concepts.get(stored.conceptId)!;
-      const memory = memories.find((m) => m.conceptId === stored.conceptId)!;
-      const q = stored.question;
-      const view: ReviewView = {
-        id: stored.id,
-        type: q.type,
-        promptHtml: renderReply(q.prompt),
-        unit: q.type === "numeric" ? q.unit : undefined,
-        items: q.type === "choice" ? optionOrder(q, `review:${stored.id}`).map((i) => renderReplyInline(q.options[i])) : undefined,
-        code: q.type === "predict" ? q.code : undefined,
-      };
-      const days = Math.max(1, Math.round((now.getTime() - memory.lastReviewedAt.getTime()) / DAY));
-      return (
-        <div className="flex min-h-dvh flex-col">
-          <TopBar map>
-            <form action={signOutAction}>
-              <button type="submit" className="label bar-item">
-                Sign out
-              </button>
-            </form>
-          </TopBar>
-          <main className="review-page">
-            <article className="prose-lesson">
-              <p className="label">
-                Review · {concept.cluster} · {graph.clusters.get(concept.cluster)!.title}
-              </p>
-              <h1>{concept.title}</h1>
-              <p className="lesson-claim">
-                You last worked on this lesson {days} {days === 1 ? "day" : "days"} ago. Here is a question you have not seen before. You get one try, and
-                there are no hints.
-              </p>
-              <ReviewCard key={stored.id} view={view} />
-            </article>
-          </main>
-        </div>
-      );
-    }
-  }
 
   if (!next) {
     const [snapshots, tutor] = await Promise.all([snapshotsFor(db, user.id, "axiom-code:scratch"), tutorSetup(db, user.id, "scratch")]);
@@ -174,6 +106,13 @@ async function Lesson() {
     tutorSetup(db, user.id, concept.id),
   ]);
   const ids = questionsOf(lesson).map((q) => q.id);
+  // Every question is solved and the lesson is still open: the finish was weak, and its consolidation set closes it.
+  const held = ids.length > 0 && ids.every((id) => solved.has(id));
+  if (held && !tutorConnected()) {
+    // The model that writes the consolidation set has been disconnected, so the lesson is not kept waiting for it.
+    await completeUnit(db, user.id, concept.id);
+    redirect("/learn");
+  }
   // Finishing this lesson finishes its cluster, so the cluster's mini-capstone comes before the next lesson.
   // The lesson finished just before this one. If it is a prerequisite from another track, this lesson has a bridge for it.
   const previous = graph.concepts.get(completed.at(-1) ?? "");
@@ -186,7 +125,7 @@ async function Lesson() {
       breadcrumb={[TRACKS[concept.track], graph.clusters.get(concept.cluster)!.title, concept.title]}
       starterCode={lesson.starter ?? "# Scratch space. Try things here.\n"}
       snapshots={snapshots}
-      lesson={{ total: ids.length, solved: ids.filter((id) => solved.has(id)), complete: false }}
+      lesson={{ total: ids.length, solved: ids.filter((id) => solved.has(id)), complete: false, held }}
       tutor={tutor}
     >
       <LessonView
@@ -198,6 +137,31 @@ async function Lesson() {
         capstone={closesCluster && !capstonesDone.has(concept.cluster) ? capstones.get(concept.cluster)?.title : null}
         solved={solved}
         hintLevels={hints}
+        recall={
+          // The lesson does not wait for this: its three recall questions arrive in its Recall part when they are ready.
+          <Suspense
+            fallback={
+              <p className="label recall-spaced-wait" role="status">
+                Writing three fresh recall questions
+              </p>
+            }
+          >
+            <SpacedRecall userId={user.id} lessonId={concept.id} />
+          </Suspense>
+        }
+        consolidation={
+          held ? (
+            <Suspense
+              fallback={
+                <p className="label recall-spaced-wait" role="status">
+                  Writing three fresh consolidation questions
+                </p>
+              }
+            >
+              <Consolidation userId={user.id} lessonId={concept.id} />
+            </Suspense>
+          ) : null
+        }
       />
     </Workspace>
   );

@@ -10,6 +10,12 @@ export type WorkspaceApi = {
   total: number;
   solved: ReadonlySet<string>;
   complete: boolean;
+  /** Every question is solved, but the finish was weak: the lesson is open until its consolidation set is answered. */
+  held: boolean;
+  /** Mastery of the lesson as it was finished, from 0 to 100. */
+  mastery: number | null;
+  /** Marks the lesson finished, when the last consolidation question is answered. */
+  finish: (mastery?: number) => void;
   /** Record the outcome of an answer so progress and the end of the lesson update. */
   settle: (questionId: string, result: AnswerResult) => void;
   /** The code question whose answer is in the editor, if any. */

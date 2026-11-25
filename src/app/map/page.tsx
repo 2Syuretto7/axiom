@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { buildMap } from "@/lib/learning/map";
 import { completedCapstones, completedConcepts } from "@/lib/learning/service";
+import { masteryByLesson } from "@/lib/learning/standing";
 import { content } from "@/lib/lessons/content";
 
 export const metadata: Metadata = { title: "Map" };
@@ -22,7 +23,8 @@ async function Curriculum() {
   const user = await requireUser();
   const { graph, lessons, capstones } = content();
   const db = getDb();
-  const [completed, capstonesDone] = await Promise.all([completedConcepts(db, user.id), completedCapstones(db, user.id)]);
+  const [completed, capstonesDone, mastery] = await Promise.all([completedConcepts(db, user.id), completedCapstones(db, user.id), masteryByLesson(db, user.id)]);
+  const percent = (id: string) => (mastery.has(id) ? ` · Mastery ${Math.round(mastery.get(id)! * 100)}%` : "");
   const titles = new Map([...capstones].map(([cluster, capstone]) => [cluster, capstone.title]));
   const map = buildMap(graph, new Set(lessons.keys()), completed, titles, capstonesDone);
   const now = map.path.find((step) => step.state === "now");
@@ -41,13 +43,19 @@ async function Curriculum() {
       <MapView map={map} />
       <section className="map-path" aria-labelledby="map-path-title">
         <h2 id="map-path-title">The order Learn follows</h2>
-        <p>Each lesson builds directly on the one above it. This list and the Next line of every lesson come from the rule Learn uses.</p>
+        <p>
+          Each lesson builds directly on the one above it. This list and the Next line of every lesson come from the rule Learn uses. Mastery of a finished lesson counts wrong tries,
+          hints from the tutor and speed on timed questions. It weighs recent answers more, and it fades until the idea is recalled.
+        </p>
         <ol>
           {map.path.map((step) => (
             <li key={step.id} data-state={step.state} aria-current={step.state === "now" ? "step" : undefined}>
               <span className="label">{step.cluster}</span>
               <span>{step.title}</span>
-              <span className="label">{STEP[step.state]}</span>
+              <span className="label">
+                {STEP[step.state]}
+                {step.state === "done" ? percent(step.id) : ""}
+              </span>
             </li>
           ))}
         </ol>

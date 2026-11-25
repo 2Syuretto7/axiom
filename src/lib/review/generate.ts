@@ -12,7 +12,7 @@ const EARLIER_SENT = 40;
 
 const ROLE = `You write and check recall questions for Axiom, one learner's personal university for the mathematics, science and engineering of machine learning. The curriculum starts from counting and builds upwards one lesson at a time.
 
-Axiom brings each finished lesson back for review at growing gaps of time. A review is a single question, answered in one try with no hints, that the learner has never seen before. Its purpose is to make the learner pull the lesson's idea out of memory and use it. The lesson below is the one being reviewed. The learner finished it some time ago and does not have it open.`;
+Axiom brings each finished lesson back for review at growing gaps of time. A review is a single timed question, answered in one try with no hints, that the learner has never seen before. Its purpose is to make the learner pull the lesson's idea out of memory and use it. The lesson below is the one being reviewed. The learner finished it some time ago and does not have it open.`;
 
 /** What the model is told about the lesson. It is the same for writing and checking, and for every review of the lesson, so it is cached. */
 export function reviewSystem(graph: Graph, lesson: Lesson): string {
@@ -34,7 +34,7 @@ const WRITE = `Write one new recall question on this lesson.
 
 What it must test:
 - The idea in "After it the learner can", or a key idea the lesson rests on. Not a detail of the lesson's stories or examples.
-- It can be answered from memory with a little working, in under two minutes, without a calculator.
+- It is timed: the learner has 30 seconds for a choice question and 60 seconds for a numeric or predict question, counted from the moment the question appears. It must be answerable from memory in well under that, reading included, without a calculator. Keep the prompt short.
 - It uses only ideas taught in this lesson and the earlier lessons it builds on. For code, only Python this lesson has shown.
 
 It must be new:

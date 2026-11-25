@@ -7,8 +7,25 @@ test.describe.configure({ mode: "serial" });
 const FIRST_RUN = 90_000;
 const question = (page: Page, n: number) => page.getByRole("region", { name: `Question ${n}`, exact: true });
 
+/** A timed (System One) question is hidden until its clock is started. An untimed one has nothing to start. */
+async function begin(page: Page, n: number) {
+  const q = question(page, n);
+  await expect(q).toBeVisible();
+  if ((await q.getAttribute("data-timed")) !== "true" || (await q.getAttribute("data-solved")) === "true") return;
+  const start = q.getByRole("button", { name: /^Start/ });
+  if (await start.isVisible()) await start.click();
+}
+
+/** Opens a code question in the editor. Starting a timed one opens it already. */
+async function openInEditor(page: Page, n: number, name: string) {
+  await begin(page, n);
+  const button = question(page, n).getByRole("button", { name });
+  if (await button.isVisible()) await button.click();
+}
+
 async function answerNumber(page: Page, n: number, value: string) {
   const q = question(page, n);
+  await begin(page, n);
   await q.getByRole("textbox").fill(value);
   await q.getByRole("button", { name: "Check" }).click();
 }
@@ -376,6 +393,7 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   await expect(question(page, 1)).toContainText("Solved");
   await expect(question(page, 1).locator(".q-explanation")).toBeVisible();
 
+  await begin(page, 2);
   await question(page, 2).getByText("11", { exact: true }).click();
   await question(page, 2).getByRole("button", { name: "Check" }).click();
   await expect(question(page, 2)).toContainText("Solved");
@@ -388,6 +406,7 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   // Put the steps in order with the move buttons.
   const wanted = ["Touch a stone", "Repeat until", "The last number"];
   const q3 = question(page, 3);
+  await begin(page, 3);
   for (let target = 0; target < wanted.length; target++) {
     for (;;) {
       const texts = await q3.locator(".q-step-text").allInnerTexts();
@@ -442,18 +461,21 @@ test("phone: code is read, written, checked by hidden tests and fixed", async ({
   const output = page.getByTestId("output");
 
   // Reading code: predict exactly what it prints.
+  await begin(page, 1);
   await question(page, 1).getByRole("textbox").fill("7\n7");
   await question(page, 1).getByRole("button", { name: "Check" }).click();
   await expect(question(page, 1)).toContainText("Not yet");
+  await begin(page, 1);
   await question(page, 1).getByRole("textbox").fill("7\na + 5");
   await question(page, 1).getByRole("button", { name: "Check" }).click();
   await expect(question(page, 1)).toContainText("Solved");
+  await begin(page, 2);
   await question(page, 2).getByRole("textbox").fill("2");
   await question(page, 2).getByRole("button", { name: "Check" }).click();
   await expect(question(page, 2)).toContainText("Solved");
 
   // Writing code: the starter fails with a message that does not give the answer.
-  await question(page, 3).getByRole("button", { name: "Open in the editor" }).click();
+  await openInEditor(page, 3, "Open in the editor");
   await expect(page.getByTestId("doc-name")).toHaveText("Question 3");
   await expect(page.locator(".cm-content")).toContainText("total = 0");
   await page.getByRole("button", { name: /^Check/ }).click();
@@ -467,7 +489,7 @@ test("phone: code is read, written, checked by hidden tests and fixed", async ({
   await expect(question(page, 3)).toContainText("Solved");
 
   // A crash in the learner's own code shows their line, not the checker's internals.
-  await question(page, 4).getByRole("button", { name: "Open in the editor" }).click();
+  await openInEditor(page, 4, "Open in the editor");
   await replaceCode(page, "print(pebble)");
   await page.getByRole("button", { name: /^Check/ }).click();
   await expect(output).toContainText("NameError");
@@ -478,13 +500,26 @@ test("phone: code is read, written, checked by hidden tests and fixed", async ({
 
   // Finding a bug: the broken code is loaded, and each question keeps its own code.
   await lessonTab.click();
-  await question(page, 5).getByRole("button", { name: "Open the broken code" }).click();
+  await openInEditor(page, 5, "Open the broken code");
   await expect(page.locator(".cm-content")).toContainText('print("4 + 5")');
   await replaceCode(page, "print(4 + 5)");
   await page.getByRole("button", { name: /^Check/ }).click();
   await expect(output).toContainText("All checks passed.");
   await lessonTab.click();
+  // Three of the five questions took a second try, so the finish is weak: the lesson is held open for its consolidation set.
+  await expect(page.getByText("Every question is solved, but not securely yet.")).toBeVisible();
+  await expect(page.getByText("Lesson complete.")).toHaveCount(0);
+  for (const n of [1, 2, 3]) {
+    const extra = page.getByRole("region", { name: `Consolidation question ${n}`, exact: true });
+    await expect(extra).toBeVisible({ timeout: 30_000 });
+    await extra.getByRole("button", { name: "Start" }).click();
+    const sheep = Number((await extra.locator(".q-prompt").innerText()).match(/has (\d+) sheep/)![1]);
+    await extra.getByRole("textbox").fill(String(sheep + 10));
+    await extra.getByRole("button", { name: "Check" }).click();
+    await expect(extra).toContainText("Right");
+  }
   await expect(page.getByText("Lesson complete.")).toBeVisible();
+  await expect(page.locator(".lesson-end-mastery")).toContainText(/Mastery \d+%/);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
   await page.screenshot({ path: "test-results/screens/lesson-phone.png" });
@@ -525,10 +560,11 @@ test("laptop: a mini-capstone closes the cluster before Learn moves on", async (
   await expect(question(page, 1)).toContainText("Solved");
   await page.reload();
   await expect(page.getByText("1 of 3 questions solved")).toBeVisible();
+  await begin(page, 2);
   await question(page, 2).getByRole("textbox").fill("11");
   await question(page, 2).getByRole("button", { name: "Check" }).click();
   await expect(question(page, 2)).toContainText("Solved");
-  await question(page, 3).getByRole("button", { name: "Open in the editor" }).click();
+  await openInEditor(page, 3, "Open in the editor");
   await expect(page.getByTestId("doc-name")).toHaveText("Question 3");
   await replaceCode(page, "total = 5 + 6\nprint(total)");
   await question(page, 3).getByRole("button", { name: "Check my code" }).click();
@@ -549,9 +585,9 @@ test("laptop: a mini-capstone closes the cluster before Learn moves on", async (
   await expect(page.getByText("3 of 3 written lessons done.")).toBeVisible();
   await expect(page.getByText("1 of 1 mini-capstones done. You have finished every lesson written so far.")).toBeVisible();
   await expect(page.getByRole("region", { name: "The order Learn follows" }).getByRole("listitem")).toHaveText([
-    "M0CountingDone",
-    "M0AddingDone",
-    "E0PrintingDone",
+    /^M0CountingDone · Mastery \d+%$/,
+    /^M0AddingDone · Mastery \d+%$/,
+    /^E0PrintingDone · Mastery \d+%$/,
   ]);
   await expect(page.getByRole("button", { name: "E0 First programs, finished" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("region", { name: "Selected cluster" }).getByRole("listitem").last()).toHaveText("Mini-capstone: A sum, shownDone");

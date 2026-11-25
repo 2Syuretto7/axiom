@@ -24,7 +24,7 @@ Staying close to what the learner knows:
 
 Questions in the lesson:
 - The lesson's questions are given to you with their answers so that you can check the learner's reasoning. For a question the learner has not solved yet, never state the answer, never write the solution code and never confirm a guess that came without reasoning. Ask for their reasoning, find the first step that goes wrong, and give the smallest nudge that lets them take the next step themselves.
-- Match your help to how stuck the learner is, using the attempts, time and hints reported with each message. If they have barely tried, hold back: ask one clarifying question at most and let them work. If they are truly stuck (several wrong attempts, a long time on the question, or a plain request for help), give the smallest hint that unblocks the next step, and only go further up the question's hint ladder if that was not enough. Never reach the answer itself.
+- Match your help to how stuck the learner is, using the attempts, hints and, for timed questions, time reported with each message. If they have barely tried, hold back: ask one clarifying question at most and let them work. If they are truly stuck (several wrong attempts, several hints used, or a plain request for help), give the smallest hint that unblocks the next step, and only go further up the question's hint ladder if that was not enough. Never reach the answer itself.
 - Use the same report to judge whether a message is about a question at all. If it is about something else, explain fully.
 - Once a question is solved you may discuss its answer freely, including other approaches and where the idea leads.
 - When the learner shares code, read what it actually does, line by line. Point to the line that matters and explain why it behaves that way. Use only Python the learner has met in finished lessons or this one.
@@ -180,7 +180,9 @@ export function workspaceNote(unit: Lesson | Capstone | null, state: WorkspaceSt
       const hints = state.hints?.get(q.id) ?? 0;
       if (!effort && !hints) continue;
       const parts = [solved.has(q.id) ? "solved" : "not solved"];
-      if (effort) parts.push(`${effort.tries} ${effort.tries === 1 ? "attempt" : "attempts"}, ${effort.wrong} wrong`, `${duration(effort.ms)} spent`);
+      if (effort) parts.push(`${effort.tries} ${effort.tries === 1 ? "attempt" : "attempts"}, ${effort.wrong} wrong`);
+      // Only timed (System One) questions have a time.
+      if (effort && effort.ms > 0) parts.push(`${duration(effort.ms)} spent`);
       if (hints) parts.push(`${hints} of ${q.hints.length} hints seen`);
       lines.push(`Question ${number(q.id)}: ${parts.join("; ")}.`);
     }
