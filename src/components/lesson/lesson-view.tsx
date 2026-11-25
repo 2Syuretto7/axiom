@@ -24,6 +24,7 @@ export function LessonView({
   graph,
   next,
   capstone,
+  bridge,
   solved,
   hintLevels,
   recall,
@@ -35,6 +36,8 @@ export function LessonView({
   next: string | null;
   /** The title of the mini-capstone Learn gives straight after this lesson, if this lesson closes a cluster that has one. */
   capstone?: string | null;
+  /** The lesson finished just before this one, when it is a prerequisite from another track, with this lesson's bridge for it. */
+  bridge?: { from: Concept; text: string } | null;
   solved: Set<string>;
   hintLevels: Map<string, number>;
   /** The Recall part's questions: three fresh ones on earlier ideas, chosen by spaced repetition. */
@@ -53,6 +56,14 @@ export function LessonView({
         <p className="lesson-links">
           <span className="label">Builds on</span> {names(graph, lesson.recalls)}
         </p>
+      ) : null}
+      {bridge ? (
+        <aside className="lesson-bridge" aria-label="Bridge from your last lesson">
+          <p className="label">
+            Bridge from {bridge.from.cluster} · {bridge.from.title}
+          </p>
+          <div className="lesson-text" dangerouslySetInnerHTML={{ __html: blockHtml(bridge.text) }} />
+        </aside>
       ) : null}
 
       {PARTS.map((part) => (
