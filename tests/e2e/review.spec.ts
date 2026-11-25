@@ -295,5 +295,5 @@ test("a weak finish is held open for a consolidation set of three fresh question
 
   // The Map shows mastery beside each finished lesson.
   await page.goto("/map");
-  await expect(page.locator(".map-path li").filter({ hasText: "Printing" })).toContainText(/Done · Mastery \d+%/);
+  await expect(page.locator(".map-body li").filter({ hasText: "Printing" })).toContainText(/Mastery \d+%/);
 });

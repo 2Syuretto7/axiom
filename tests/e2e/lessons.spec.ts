@@ -545,10 +545,11 @@ test("laptop: a mini-capstone closes the cluster before Learn moves on", async (
 
   // The map agrees with Learn about what is due, and does not count the mini-capstone as a lesson.
   await page.getByRole("link", { name: "Map", exact: true }).click();
-  await expect(page.getByText("3 of 3 written lessons done.")).toBeVisible();
-  await expect(page.getByText("0 of 1 mini-capstones done. Learn will give you the E0 mini-capstone, A sum, shown, now.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "E0 First programs, you are here" })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("region", { name: "Selected cluster" }).getByRole("listitem")).toHaveText(["PrintingDone", "Mini-capstone: A sum, shownNow"]);
+  await expect(page.getByText("3 of 3 lessons done · 0 of 1 mini-capstones · 1 more planned")).toBeVisible();
+  await expect(page.locator(".map-now")).toContainText("Next in LearnMini-capstone: A sum, shownFirst programs");
+  const due = page.locator('.map-stage[aria-current="step"]');
+  await expect(due.locator("summary")).toHaveText("First programsEngineering · Mini-capstone left");
+  await expect(due.locator(".map-body li")).toHaveText([/^Printing(Done|Mastery \d+%)$/, "Mini-capstone: A sum, shownNow"]);
   await page.getByRole("link", { name: "Learn" }).first().click();
   await expect(page.getByRole("heading", { level: 1, name: "A sum, shown" })).toBeVisible();
 
@@ -581,13 +582,9 @@ test("laptop: a mini-capstone closes the cluster before Learn moves on", async (
 
   // The map records the path that was actually taken, in the order it was taken.
   await page.getByRole("link", { name: "Map", exact: true }).click();
-  await expect(page.getByText("3 of 3 written lessons done.")).toBeVisible();
-  await expect(page.getByText("1 of 1 mini-capstones done. You have finished every lesson written so far.")).toBeVisible();
-  await expect(page.getByRole("region", { name: "The order Learn follows" }).getByRole("listitem")).toHaveText([
-    /^M0CountingDone · Mastery \d+%$/,
-    /^M0AddingDone · Mastery \d+%$/,
-    /^E0PrintingDone · Mastery \d+%$/,
-  ]);
-  await expect(page.getByRole("button", { name: "E0 First programs, finished" })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("region", { name: "Selected cluster" }).getByRole("listitem").last()).toHaveText("Mini-capstone: A sum, shownDone");
+  await expect(page.getByText("3 of 3 lessons done · 1 of 1 mini-capstones · 1 more planned")).toBeVisible();
+  await expect(page.locator(".map-now")).toContainText("You have finished every lesson written so far.");
+  const stages = page.getByRole("region", { name: "Your route" }).locator(".map-stage");
+  await expect(stages.locator("summary")).toHaveText(["CountingMathematics · Done", "First programsEngineering · Done"]);
+  await expect(stages.locator(".map-body li")).toHaveText([/^CountingMastery \d+%$/, /^AddingMastery \d+%$/, /^PrintingMastery \d+%$/, "Mini-capstone: A sum, shownDone"]);
 });

@@ -129,32 +129,33 @@ test("the workspace top bar sits on one line", async ({ page }, info) => {
 });
 
 for (const theme of ["dark", "light"] as const) {
-  test(`the map shows every cluster, where the learner is, and the order Learn follows (${theme})`, async ({ page }, info) => {
+  test(`the map shows where the learner is, the route Learn follows, and what is still to be written (${theme})`, async ({ page }, info) => {
     await page.addInitScript((t) => localStorage.setItem("axiom-theme", t), theme);
     await page.goto("/");
     await page.getByRole("link", { name: "Map", exact: true }).click();
     await expect(page).toHaveURL(/\/map$/);
     await expect(page.getByRole("heading", { level: 1, name: "Where you are, and what it leads to" })).toBeVisible();
-    await expect(page.getByText("0 of 3 written lessons done. 1 more is planned. 0 of 1 mini-capstones done. Learn will give you Counting now.")).toBeVisible();
+    await expect(page.locator(".map-now")).toContainText("Next in LearnCountingCounting");
+    await expect(page.getByText("0 of 3 lessons done · 0 of 1 mini-capstones · 1 more planned")).toBeVisible();
 
-    // The cluster the learner is in is selected to begin with.
-    const panel = page.getByRole("region", { name: "Selected cluster" });
-    await expect(page.getByRole("button", { name: "M0 Counting, you are here" })).toHaveAttribute("aria-pressed", "true");
-    await expect(panel).toContainText("Needs Nothing. This is where everything starts.");
-    await expect(panel).toContainText("Opens E0 First programs");
-    await expect(panel.getByRole("listitem")).toHaveText(["CountingNow", "AddingWritten"]);
+    // The route is the order Learn takes, and the cluster the learner is in is open to begin with.
+    const stages = page.getByRole("region", { name: "Your route" }).locator(".map-stage");
+    await expect(stages.locator("summary")).toHaveText(["CountingMathematics · 2 lessons", "First programsEngineering · 1 lesson"]);
+    await expect(stages.first()).toHaveAttribute("aria-current", "step");
+    await expect(stages.first().locator(".map-body li")).toHaveText(["CountingNow", "Adding"]);
 
-    // Any cluster can be looked at, written or not.
-    const planned = page.getByRole("button", { name: "L1 Not written yet, planned, not written yet" });
-    await planned.click();
-    await expect(planned).toHaveAttribute("aria-pressed", "true");
-    await expect(panel).toContainText("Needs E0 First programs");
-    await expect(panel.getByRole("listitem")).toHaveText(["LaterPlanned"]);
-    expect((await planned.boundingBox())!.height).toBeGreaterThanOrEqual(40);
+    // Any other written cluster opens with one tap.
+    const later = stages.nth(1);
+    await expect(later.locator(".map-body")).toBeHidden();
+    await later.locator("summary").click();
+    await expect(later.locator(".map-body")).toContainText("Builds on Counting.");
+    await expect(later.locator(".map-body li")).toHaveText(["Printing", "Mini-capstone: A sum, shown"]);
+    expect((await later.locator("summary").boundingBox())!.height).toBeGreaterThanOrEqual(40);
 
-    // The path is the order Learn takes, which is what each lesson's Next line shows.
-    const path = page.getByRole("region", { name: "The order Learn follows" });
-    await expect(path.getByRole("listitem")).toHaveText(["M0CountingNow", "M0Adding", "E0Printing"]);
+    // What is not written yet is named, by track, and nothing more.
+    const ahead = page.getByRole("region", { name: "Further on, not written yet" });
+    await expect(ahead.getByRole("heading", { level: 3 })).toHaveText(["Machine learning"]);
+    await expect(ahead.getByRole("listitem")).toHaveText(["Not written yet1 lesson"]);
 
     await expectNoHorizontalScroll(page);
     await expectAccessible(page);

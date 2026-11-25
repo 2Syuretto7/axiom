@@ -210,23 +210,22 @@ describe("rendering", () => {
 
 describe("the map", () => {
   const written = new Set(["m0.counting", "m0.adding", "e0.printing"]);
-  it("lays clusters out below what they need and marks where the learner is", () => {
+  it("puts the clusters Learn reaches in order, the unwritten ones after, and marks where the learner is", () => {
     const map = buildMap(graph, written, ["m0.counting"]);
     expect(map.now).toBe("m0.adding");
     expect(map.counts).toEqual({ done: 1, written: 3, planned: 1, capstones: 0, capstonesDone: 0 });
-    expect(map.clusters.map((c) => [c.id, c.row, c.state])).toEqual(
+    expect(map.clusters.map((c) => [c.id, c.state])).toEqual(
       expect.arrayContaining([
-        ["M0", 0, "now"],
-        ["E0", 1, "written"],
-        ["L1", 2, "planned"],
+        ["M0", "now"],
+        ["E0", "written"],
+        ["L1", "planned"],
       ]),
     );
+    expect(map.route).toEqual(["M0", "E0"]);
+    expect(map.ahead).toEqual(["L1"]);
     const m0 = map.clusters.find((c) => c.id === "M0")!;
-    expect(m0.opens).toEqual(["E0"]);
     expect(m0.lessons.map((l) => l.state)).toEqual(["done", "now"]);
-    for (const cluster of map.clusters) {
-      for (const need of cluster.requires) expect(map.clusters.find((c) => c.id === need)!.row).toBeLessThan(cluster.row);
-    }
+    expect(map.clusters.find((c) => c.id === "E0")!.requires).toEqual(["M0"]);
   });
   it("lists lessons in the order Learn gives them", () => {
     expect(buildMap(graph, written, []).path.map((s) => [s.id, s.state])).toEqual([
