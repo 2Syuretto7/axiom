@@ -122,6 +122,9 @@ test("the tutor answers beside the lesson, knows the lesson and the editor, and 
   await again.getByRole("textbox", { name: "Ask the tutor" }).fill("Thank you");
   await again.getByRole("textbox", { name: "Ask the tutor" }).press("Enter");
   await expect(talkAgain.getByRole("listitem")).toHaveCount(8);
+  // Wait for the reply itself, so the request read back below is this one.
+  await expect(talkAgain.getByRole("listitem").last()).toContainText("do the pebbles left over stand for?");
+  await expect(again.getByRole("button", { name: "Ask", exact: true })).toBeVisible();
   const third = (await (await request.get(`${MOCK}/last`)).json()) as { body: { messages: { role: string; content: string }[] } };
   expect(third.body.messages.at(-2)!.content).toMatch(/^<turn about="unsolved" question="1" hint="yes">\nWhat do the pebbles/);
   expect(third.body.messages.at(-1)!.content).toMatch(/Question 1: not solved yet; not attempted; \d hints? from you so far\./);
