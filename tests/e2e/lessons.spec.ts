@@ -405,6 +405,8 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   await page.getByRole("link", { name: "Continue" }).click();
   await expect(page.getByRole("heading", { level: 1, name: next, exact: true })).toBeVisible();
   await expect(page.getByText("Builds on Counting")).toBeVisible();
+  // Adding follows Counting in the same track, so there is no bridge.
+  await expect(page.getByRole("complementary", { name: "Bridge from your last lesson" })).toHaveCount(0);
 });
 
 test("tablet: the next lesson is in the same track and then crosses to another", async ({ page }) => {
@@ -421,6 +423,11 @@ test("tablet: the next lesson is in the same track and then crosses to another",
   await page.getByRole("link", { name: "Continue" }).click();
   await expect(page.getByRole("heading", { level: 1, name: next, exact: true })).toBeVisible();
   await expect(page.getByText("Builds on Adding")).toBeVisible();
+  // Printing is in another track from Adding, the lesson just finished, so its bridge for Adding is shown.
+  const bridge = page.getByRole("complementary", { name: "Bridge from your last lesson" });
+  await expect(bridge).toContainText("Bridge from M0 · Adding");
+  await expect(bridge).toContainText("Python does the same sum when you write it inside print.");
+  await page.screenshot({ path: "test-results/screens/bridge-tablet.png" });
   // Printing closes its cluster, so the cluster's mini-capstone is next. No lesson is written after that, only what comes later.
   await expect(page.locator(".lesson-next")).toHaveText(/^Next\s*Mini-capstone: A sum, shown$/i);
   await expect(page.getByText("Later Later")).toBeVisible();

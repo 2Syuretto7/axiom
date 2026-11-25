@@ -172,6 +172,9 @@ async function Lesson() {
   ]);
   const ids = questionsOf(lesson).map((q) => q.id);
   // Finishing this lesson finishes its cluster, so the cluster's mini-capstone comes before the next lesson.
+  // The lesson finished just before this one. If it is a prerequisite from another track, this lesson has a bridge for it.
+  const previous = graph.concepts.get(completed.at(-1) ?? "");
+  const bridgeText = previous ? lesson.bridges?.[previous.id] : undefined;
   const closesCluster = graph.clusters.get(concept.cluster)!.concepts.every((id) => id === concept.id || completed.includes(id));
   return (
     <Workspace
@@ -188,6 +191,7 @@ async function Lesson() {
         concept={concept}
         graph={graph}
         next={nextAfter(graph, written, completed, concept.id)}
+        bridge={previous && bridgeText ? { from: previous, text: bridgeText } : null}
         capstone={closesCluster && !capstonesDone.has(concept.cluster) ? capstones.get(concept.cluster)?.title : null}
         solved={solved}
       />

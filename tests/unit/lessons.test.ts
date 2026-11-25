@@ -90,6 +90,17 @@ describe("lesson validation", () => {
     it("requires a lesson to recall every direct prerequisite", async () => {
       expect(await messages("e0.printing", (l) => (l.recalls = []))).toContain("Must recall its direct prerequisite m0.adding");
     });
+    it("requires a bridge for every direct prerequisite in another track", async () => {
+      expect(await messages("e0.printing", (l) => delete l.bridges)).toContain("Must have a bridges entry for m0.adding");
+      expect(await messages("e0.printing", (l) => (l.bridges = {}))).toContain("Must have a bridges entry for m0.adding");
+    });
+    it("rejects a bridge that would never be shown, one that is long, and one that names a concept out of reach", async () => {
+      // Counting is a prerequisite of Adding in the same track, and of Printing only indirectly.
+      expect(await messages("m0.adding", (l) => (l.bridges = { "m0.counting": "Counting comes first." }))).toContain("its bridge would never be shown");
+      expect(await messages("e0.printing", (l) => (l.bridges["m0.counting"] = "Counting comes first."))).toContain("its bridge would never be shown");
+      expect(await messages("e0.printing", (l) => (l.bridges["m0.adding"] = "word ".repeat(121)))).toContain("A bridge is short: 121 words");
+      expect(await messages("e0.printing", (l) => (l.bridges["m0.adding"] = "Nothing like [[m9.unknown]]."))).toContain("Mentions [[m9.unknown]]");
+    });
     it("rejects a half-written cluster", async () => {
       const partial = files().filter((f) => (f.raw as Raw).concept !== "m0.adding");
       expect((await check(partial)).map((i) => i.message).join("\n")).toContain("Half-written cluster");
