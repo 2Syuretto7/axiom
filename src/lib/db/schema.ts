@@ -35,22 +35,11 @@ export const attempts = pgTable("attempts", {
   system: text("system").notNull(),
   correct: boolean("correct").notNull(),
   answer: jsonb("answer"),
+  /** How many hints the tutor had given on this question when the answer was submitted. */
   hintsUsed: integer("hints_used").notNull().default(0),
   ms: integer("ms"),
   createdAt: createdAt(),
 });
-
-export const hintViews = pgTable(
-  "hint_views",
-  {
-    userId: uuid("user_id").notNull(),
-    conceptId: text("concept_id").notNull(),
-    questionId: text("question_id").notNull(),
-    level: integer("level").notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [primaryKey({ columns: [t.userId, t.conceptId, t.questionId] })],
-);
 
 export const lessonProgress = pgTable(
   "lesson_progress",
@@ -81,6 +70,12 @@ export const tutorMessages = pgTable("tutor_messages", {
   role: text("role").$type<"user" | "assistant">().notNull(),
   content: text("content").notNull(),
   costMicroUsd: bigint("cost_micro_usd", { mode: "number" }).notNull().default(0),
+  /** On a reply: what the tutor judged the learner's message to be about. */
+  about: text("about").$type<"unsolved" | "solved" | "lesson" | "other">(),
+  /** On a reply about a question: that question. */
+  questionId: text("question_id"),
+  /** True on a reply that gave a hint on a question the learner had not yet solved. */
+  hint: boolean("hint").notNull().default(false),
   clearedAt: timestamp("cleared_at", { withTimezone: true }),
   createdAt: createdAt(),
 });

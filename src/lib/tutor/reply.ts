@@ -2,10 +2,20 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { HISTORY_TURNS, tutorEffort, tutorModel, type Usage } from "./config";
 import type { TutorMessage } from "./service";
+import { TurnReader, turnLine, type Turn } from "./turn";
 
 let client: Anthropic | undefined;
 
-export type Reply = { text: string; usage: Usage; model: string; refused: boolean; cutShort: boolean };
+export type Reply = {
+  /** The reply as the learner sees it, without its opening line. */
+  text: string;
+  /** The tutor's judgement of the message, from the opening line. Null if it wrote none. */
+  turn: Turn | null;
+  usage: Usage;
+  model: string;
+  refused: boolean;
+  cutShort: boolean;
+};
 
 /**
  * Asks the model for the tutor's next reply and passes the text on as it arrives.
@@ -15,6 +25,8 @@ export type Reply = { text: string; usage: Usage; model: string; refused: boolea
 export async function streamReply(input: {
   system: string;
   history: TutorMessage[];
+  /** The number of each question in the lesson, by id, so earlier judgements can be shown to the tutor again. */
+  numbers: Map<string, number>;
   message: string;
   note: string;
   onText: (delta: string) => void;
@@ -22,7 +34,13 @@ export async function streamReply(input: {
   client ??= new Anthropic();
   const model = tutorModel();
   const messages: Anthropic.Beta.BetaMessageParam[] = [
-    ...input.history.slice(-HISTORY_TURNS).map((m) => ({ role: m.role, content: m.content })),
+    ...input.history.slice(-HISTORY_TURNS).map((m) => ({
+      role: m.role,
+      content:
+        m.role === "assistant" && m.about
+          ? `${turnLine({ about: m.about, question: (m.questionId && input.numbers.get(m.questionId)) || null, hint: m.hint ?? false })}\n${m.content}`
+          : m.content,
+    })),
     { role: "user", content: input.note ? `${input.note}\n\n${input.message}` : input.message },
   ];
   // The API wants the conversation to open with the learner.
@@ -30,7 +48,7 @@ export async function streamReply(input: {
 
   const stream = client.beta.messages.stream({
     model,
-    max_tokens: 8000,
+    max_tokens: 16000,
     output_config: { effort: tutorEffort() },
     // If the model declines a question for policy reasons, the API retries it once on its default substitute.
     betas: ["server-side-fallback-2026-07-01"],
@@ -38,10 +56,15 @@ export async function streamReply(input: {
     system: [{ type: "text", text: input.system, cache_control: { type: "ephemeral", ttl: "1h" } }],
     messages,
   });
-  stream.on("text", input.onText);
+  // The opening line is the tutor's note to Axiom. It is read here and never reaches the learner.
+  const reader = new TurnReader();
+  const show = (text: string) => {
+    if (text) input.onText(text);
+  };
+  stream.on("text", (delta) => show(reader.push(delta)));
   const final = await stream.finalMessage();
-  const text = final.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
-  return { text, usage: final.usage, model, refused: final.stop_reason === "refusal", cutShort: final.stop_reason === "max_tokens" };
+  show(reader.end());
+  return { text: reader.text, turn: reader.turn, usage: final.usage, model, refused: final.stop_reason === "refusal", cutShort: final.stop_reason === "max_tokens" };
 }
 
 /** A sentence for the learner when the request fails. Never includes details of the failure. */

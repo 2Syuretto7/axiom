@@ -104,10 +104,6 @@ parts:
           resumed
           goodbye
         explanation: Calling greet runs nothing, so "created" is printed first. The first next runs the body from the top as far as the first yield, printing "started" and handing back "hello". The body then waits, and "between" is printed by the caller. The second next resumes after the first yield.
-        hints:
-          - Does calling a generator function run any of its body?
-          - How far does the body run on each call of next?
-          - Where does the body resume the second time?
     - text: |
         **Two pieces of code taking turns.** The last question shows something new. Until now, when one function called another, the caller stopped and waited until the other had completely finished. A generator and the loop that consumes it **alternate**. The loop asks, the generator runs a little and yields, the loop does its work with that value, asks again, and the generator runs a little more. Neither finishes before the other.
 
@@ -155,9 +151,6 @@ parts:
           print(first, next(d))
         output: "[3, 6, 12] 24"
         explanation: The generator keeps its variable value between requests. Each next yields the current value and, when resumed, doubles it. After three values have been taken, the fourth request continues the same sequence.
-        hints:
-          - What is yielded first, before any doubling?
-          - The generator does not start again. It carries on from where it paused.
     - text: |
         **Pipelines.** A generator function can take an iterable as its argument and yield something made from each item. Such generators can be joined end to end, each consuming the one before.
 
@@ -210,10 +203,6 @@ parts:
           - squares yields 4 to the loop.
           - The loop body runs with x equal to 4.
         explanation: Creating the generators does no work. The first request travels inwards through the chain, and values travel back out. A value that a stage rejects causes that stage to ask again, and nothing reaches the loop until a value has passed every stage.
-        hints:
-          - Does calling a generator function run any of its body?
-          - Which generator actually produces the first number?
-          - What does evens do with an odd number?
     - text: |
         **Yielding everything from another iterable.** Sometimes a generator wants to pass on all the values of another iterable. A loop does it:
 
@@ -281,9 +270,6 @@ parts:
           print(list(outer()))
         output: "['a', 'b', 'c', 'd']"
         explanation: outer yields "a" itself, then relays every value that inner produces, and only when inner is exhausted goes on to yield "d".
-        hints:
-          - yield from passes on every value of the other generator, in order.
-          - What does outer do once the inner generator has finished?
     - text: |
         **What `with` really does.** One piece of the language is still unexplained. Since [[e1.files-and-data-formats]] you have written `with open(path) as f:` as a formula that closes the file whatever happens. In the lesson on testing the same statement appeared as `with pytest.raises(ValueError):`, doing a different job entirely. So `with` is not about files. What is it about?
 
@@ -361,10 +347,6 @@ parts:
           exit
           caught oops
         explanation: __enter__ runs first, and what it returns is bound to v. The body prints and then raises. The rest of the body is skipped, but __exit__ is still called before the exception leaves the with statement. It returns None, so the exception carries on and is caught outside.
-        hints:
-          - Which method runs before the body, and what does v become?
-          - Does __exit__ run when the body raises?
-          - Is the exception swallowed by __exit__, or does it carry on?
     - text: |
         **A context manager from a generator.** Writing a class with two methods is a lot of ceremony for "do this before, do that after". Look at the shape of the job again: some code, then a pause while the body of the `with` runs, then some more code. A pause in the middle of a function, with its variables kept. That is a generator with one `yield`.
 
@@ -431,9 +413,6 @@ parts:
           - It contains a while True loop.
         answer: 1
         explanation: The presence of yield anywhere in the body changes what calling the function does. It no longer runs the body. It returns a generator.
-        hints:
-          - Which word hands back a value and pauses?
-          - It is the only thing that separates the two kinds of function.
     - question:
         id: drill-call
         type: choice
@@ -447,9 +426,6 @@ parts:
           - It raises StopIteration.
         answer: 2
         explanation: Calling a generator function only creates the generator. The body starts to run at the first request for a value.
-        hints:
-          - When does the body of a generator function start running?
-          - What is needed to make it run as far as the first yield?
     - question:
         id: drill-simple
         type: predict
@@ -464,9 +440,6 @@ parts:
           print("-".join(letters()), len(list(letters())))
         output: "x-y-z 3"
         explanation: Each call of letters makes a fresh generator, which yields three values. join walks the first one and list walks the second.
-        hints:
-          - How many values does one call of letters produce?
-          - The two calls make two separate generators.
     - question:
         id: drill-once
         type: predict
@@ -481,9 +454,6 @@ parts:
           print(sum(g), sum(g), sum(up_to(4)))
         output: "6 0 6"
         explanation: The first sum walks the generator to its end. The second finds it exhausted, and the empty sum is 0. The third calls the function again and gets a fresh generator.
-        hints:
-          - A generator object can be walked once.
-          - What does calling the generator function again give you?
     - question:
         id: drill-take-from-endless
         type: predict
@@ -504,9 +474,6 @@ parts:
           print(result)
         output: "[1, 4, 9, 16, 25, 36, 49]"
         explanation: The generator would go on for ever, but the loop that consumes it stops at the first square over 50. Only eight values are ever produced.
-        hints:
-          - Who decides when to stop, the generator or the loop?
-          - Which is the first whole number whose square exceeds 50?
     - question:
         id: drill-memory
         type: choice
@@ -521,9 +488,6 @@ parts:
           - "$O(n^2)$"
         answer: 0
         explanation: Each line passes through every stage before the next is read, and nothing is kept. The time is O(n), but the memory does not grow with the file.
-        hints:
-          - Does any stage build a list?
-          - How many lines exist in the program at any one moment?
     - question:
         id: drill-with-methods
         type: choice
@@ -537,9 +501,6 @@ parts:
           - "`__open__` and `__close__`"
         answer: 2
         explanation: with calls __enter__ before the block and __exit__ after it, however the block ends.
-        hints:
-          - One is called on the way in and one on the way out.
-          - Their names say exactly that.
     - question:
         id: drill-exit-always
         type: predict
@@ -563,9 +524,6 @@ parts:
           print(work(), log)
         output: "done ['in', 'work', 'out']"
         explanation: The body returns from inside the with block. __exit__ still runs before the function actually hands back its value, just as a finally block would.
-        hints:
-          - Does leaving the block by return skip __exit__?
-          - In which order are the three items appended?
   work:
     - question:
         id: write-take
@@ -631,10 +589,6 @@ parts:
           - "def take(n, items):\n    for k, item in enumerate(items):\n        yield item\n"
         explanation: |
           The generator yields an item, counts it, and returns as soon as the count reaches `n`, before the loop can draw another. A bare `return` in a generator ends it. The check comes **after** the `yield` so that the item after the last one wanted is never requested. That matters when drawing a value is costly, or changes something. The first two wrong answers in the tests are not generators at all. One of them calls `list` on the source, which on an endless generator would never return.
-        hints:
-          - Loop over items, yielding each one and counting.
-          - When the count reaches n, end the generator with a bare return.
-          - Deal with n = 0 before the loop, so that nothing is drawn.
     - question:
         id: write-running-mean
         type: code
@@ -683,10 +637,6 @@ parts:
           - "def running_mean(values):\n    total = 0\n    count = 0\n    for value in values:\n        total = value\n        count += 1\n        yield total / count\n"
         explanation: |
           The generator's two local variables carry everything it needs from one value to the next, and they survive each pause. The `yield` is **inside** the loop, after the update, so there is one mean for each value. This is the `Meter` class of an earlier lesson rewritten as a generator: the attributes have become local variables, and the method calls have become requests for the next value. Put a generator like this in a pipeline after a stream of losses and you have the smoothed curve that every training run plots.
-        hints:
-          - Keep a total and a count as local variables.
-          - Update both for each value, then yield.
-          - The yield belongs inside the loop.
     - question:
         id: fix-batched
         type: code
@@ -730,10 +680,6 @@ parts:
           - "def batched(items, size):\n    items = list(items)\n    for i in range(0, len(items), size):\n        yield items[i:i + size]\n\nprint(list(batched([1, 2, 3, 4, 5], 2)))\n"
         explanation: |
           When the source runs out, the loop ends with whatever part-filled batch is in hand, and the starter simply dropped it. The leftover must be yielded after the loop, but only if there is one, or an exact division would end with an empty batch. These are the same two boundary cases you wrote tests for in the lesson on testing: a remainder, and no remainder. The second wrong answer in the tests gives right answers on small inputs by turning the whole source into a list first, which defeats the purpose and never returns on an endless stream.
-        hints:
-          - What is in the variable batch when the loop ends, for five items in twos?
-          - Where should the leftover items be yielded?
-          - What must be checked first, so that an empty batch is never yielded?
     - question:
         id: write-walk
         type: code
@@ -779,10 +725,6 @@ parts:
           - "def leaves(data):\n    if isinstance(data, dict):\n        for key in data:\n            yield from leaves(key)\n    elif isinstance(data, list):\n        for item in data:\n            yield from leaves(item)\n    else:\n        yield data\n"
         explanation: |
           The description of the data has three cases, and the function has the same three. A number is the base case, and is yielded. A list or a dictionary is walked, and for each part the function calls itself, trusting that call to produce the leaves of the part, and relays them with `yield from`. The second wrong answer in the tests writes plain `yield` there, which hands back the inner **generator object** as a single value instead of the values it would produce. A model's parameters are stored in just such a nested structure of names and lists of numbers, and counting them, or saving them, is a walk like this one.
-        hints:
-          - What should happen when data is a plain number?
-          - For a list, each item is a smaller structure of the same kind. For a dictionary, each value is.
-          - To pass on everything that a recursive call produces, use yield from.
     - question:
         id: write-evaluating-class
         type: code
@@ -857,10 +799,6 @@ parts:
           - "class Model:\n    def __init__(self):\n        self.training = True\n\nclass Evaluating:\n    def __init__(self, model):\n        self.model = model\n\n    def __enter__(self):\n        self.previous = self.model.training\n        self.model.training = False\n\n    def __exit__(self, kind, error, trace):\n        self.model.training = self.previous\n\nnet = Model()\nwith Evaluating(net) as m:\n    print(m is net, net.training)\nprint(net.training)\n"
         explanation: |
           `__enter__` saves the old value on `self`, makes the change, and returns the model, which is what `as` receives. `__exit__` puts the saved value back. Python calls `__exit__` however the block ends, so no `try` is needed inside the class: the `with` statement is the `try` and `finally`. Two details matter. Restore what was there before, not `True`: if the model was already not training, it must stay so. And return nothing from `__exit__`. The second wrong answer in the tests returns `True`, which tells Python to swallow whatever exception the block raised, and a failed evaluation would then pass in silence.
-        hints:
-          - __enter__ takes only self. Save the old value on self before changing it.
-          - What __enter__ returns is what the name after as receives.
-          - __exit__ takes self and three more parameters. What should it put back, and what should it return?
     - question:
         id: fix-contextmanager-finally
         type: code
@@ -926,10 +864,6 @@ parts:
           - "from contextlib import contextmanager\n\n@contextmanager\ndef temporarily(settings, key, value):\n    old = settings[key]\n    try:\n        yield settings\n    finally:\n        settings[key] = old\n\noptions = {\"mode\": \"quiet\"}\nprint(\"quiet\")\n"
         explanation: |
           When the body of the `with` raises, the exception arrives inside the generator at the `yield`, as though that line had raised it. Without a `try`, the generator is abandoned there and the restoring line is never reached. `try` and `finally` around the `yield` make the restoring run on every way out. Note the first wrong answer in the tests, which uses `except` in place of `finally`. It restores on failure but not on success, and it also swallows the exception, since a handler that does not raise again ends the matter. The clean-up belongs in `finally`, which runs in both cases and hides nothing.
-        hints:
-          - Where, inside the generator, does an exception from the with block appear?
-          - What happens to the lines after that point when there is no try?
-          - Which clause of try runs whether or not an exception was raised?
     - question:
         id: numeric-lazy-reads
         type: numeric
@@ -942,10 +876,6 @@ parts:
           `take` returns as soon as it has yielded its second value, without asking for a third. How many lines of the file are read?
         answer: "8"
         explanation: Lines are read one at a time, only when asked for. The first error is line 3, and the second is line 8. Once take has yielded the second, it stops and asks for nothing more, so line 9 and everything after it is never read.
-        hints:
-          - A line is read only when the stages above it ask for another value.
-          - On which line is the second error?
-          - Does take ask for anything after its second value?
   connections:
     - text: |
         The puzzle asked for a function that could hand back a value and then carry on from where it was. `yield` does that. A generator function, when called, runs nothing and returns a paused generator. Each request for a value runs the body to the next `yield`, and the local variables survive the pause. So a sequence may be endless, since only the terms asked for are ever computed, and a chain of generators passes one item at a time through every stage, in constant memory, reading no more than is needed. The same pause, used once, lets `with` run your code between a setting-up and a putting-back that cannot be skipped.

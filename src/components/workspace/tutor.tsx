@@ -5,8 +5,8 @@ import { clearTutor } from "@/lib/learning/actions";
 
 export type TutorMessage = { id: number | string; role: "user" | "assistant"; content: string };
 export type TutorSetup = { messages: TutorMessage[]; connected: boolean };
-/** What is on screen when a question is asked: the code, its last output and the open question. */
-export type TutorContext = { code: string; output: string; questionId: string | null };
+/** What is on screen when a question is asked: the code, its last output, the question open in the editor and the question last worked on. */
+export type TutorContext = { code: string; output: string; questionId: string | null; attendingId: string | null };
 
 const MAX = 4000;
 const STARTERS = ["Explain this part again, more simply", "Show me another example", "Why is this true?", "Look at my code"];
@@ -149,8 +149,8 @@ export function Tutor({
         {messages.length === 0 ? (
           <li className="tutor-empty">
             <p>
-              Ask about anything in this lesson. The tutor knows the lesson, the lessons you have finished, and what is in
-              your editor.
+              Ask about anything in this lesson. The tutor knows the lesson, the lessons you have finished, your answers so
+              far, and what is in your editor. On a question you have not solved it gives hints, never the solution.
             </p>
             {off ? null : (
               <div className="tutor-starters">

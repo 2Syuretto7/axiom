@@ -56,13 +56,11 @@ export type QuestionView = {
   starter?: string;
   /** The time limit in seconds. Only System One questions have one. */
   seconds?: number;
-  hintCount: number;
-  hints: string[];
   solved: boolean;
   explanationHtml?: string;
 };
 
-export function questionView(conceptId: string, q: Question, number: number, solved: boolean, hintLevel: number): QuestionView {
+export function questionView(conceptId: string, q: Question, number: number, solved: boolean): QuestionView {
   const order = displayOrder(conceptId, q);
   const source = q.type === "choice" ? q.options : q.type === "order" ? q.steps : undefined;
   return {
@@ -77,8 +75,6 @@ export function questionView(conceptId: string, q: Question, number: number, sol
     mode: q.type === "code" ? q.mode : undefined,
     starter: q.type === "code" ? q.starter : undefined,
     seconds: secondsFor(q) ?? undefined,
-    hintCount: q.hints.length,
-    hints: q.hints.slice(0, hintLevel).map(inlineHtml),
     solved,
     explanationHtml: solved ? blockHtml(q.explanation) : undefined,
   };

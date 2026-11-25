@@ -157,10 +157,6 @@ stages:
                     return Transaction(parts[0].strip(), parts[1].strip().lower(), paise)
           explanation: |
             There are two ways for a line to be bad, and they are caught differently. The wrong number of fields is something you check for and raise yourself. An amount that is not a number makes `int` raise its own `ValueError`, whose message is about the number and not about the line, so it is caught and replaced by one that names the line. Either way, the caller sees one kind of error with one kind of message. Returning `None` instead would only move the problem to wherever the `None` is first used.
-          hints:
-            - Split the line at the commas and look at how many pieces you get before using any of them.
-            - What does int do when its text is not a number? Try it in the scratch editor and read the message.
-            - You can catch that error and raise your own in its place, with a message that contains the line.
   - title: A whole export, bad lines and all
     blocks:
       - text: |
@@ -319,10 +315,6 @@ stages:
                     return good, bad
           explanation: |
             The `try` sits inside the loop and wraps one line's worth of work. That placement is the whole design: an error in one line is caught, the line is set aside, and the loop goes on to the next. A `try` around the whole loop would stop reading at the first bad line. Only `ValueError` is caught, because that is the one failure `load` knows how to deal with. Anything else is a bug and should be seen.
-          hints:
-            - Walk the text one line at a time. Which string method gives you the lines?
-            - Decide where the try belongs. What should happen to the lines after a bad one?
-            - A line of spaces is blank too.
   - title: A ledger you can add to another
     blocks:
       - text: |
@@ -496,10 +488,6 @@ stages:
                         return totals
           explanation: |
             `len(x)`, `for t in x` and `a + b` are each a method call under a special name: `__len__`, `__iter__` and `__add__`. `__add__` builds a new `Ledger`, because nobody expects `a + b` to change `a`. The constructor copies the list it is given with `list(...)`, so that the ledger and its caller are not two names for one list. `total` is a generator expression handed to `sum`, and `by_category` is the counting pattern with amounts in place of ones.
-          hints:
-            - Which special method does len call, which does a for loop call, and which does + call?
-            - Should a + b change a? What must the method return for that not to happen?
-            - If the ledger stores the very list it was given, who else can change it?
   - title: A balance after every line
     blocks:
       - text: |
@@ -579,10 +567,6 @@ stages:
                         yield opening + t.paise
           explanation: |
             The body does not run when `running` is called. It runs up to the first `yield` when the first balance is asked for, pauses there with `balance` kept, and resumes from that point for the next. That is why the tests could see that only one transaction had been read after one balance was produced. The opening balance itself is not yielded, because a statement shows the balance after each line.
-          hints:
-            - Which keyword hands back one value and pauses the function until the next is wanted?
-            - Keep the balance in a variable and update it before handing it back.
-            - Is the opening balance itself one of the values asked for?
   - title: Tests that would catch a bug
     blocks:
       - text: |
@@ -682,10 +666,6 @@ stages:
                     assert rupees(105) == "₹1.50"
           explanation: |
             The boundaries of this function are the sign of the amount, a paise part below ten, which needs its leading zero, and a paise part of exactly zero. A test with one case from each catches all three broken versions. Notice what your passing test establishes: that the function is right for the cases you tried. It establishes nothing about the cases you did not try, which is why choosing them is the skill.
-          hints:
-            - Money can leave an account as well as enter it.
-            - How should one rupee and five paise be shown? What might a careless version show?
-            - What about an exact number of rupees, or nothing at all?
       - question:
           id: duplicates-cost
           type: choice
@@ -701,9 +681,6 @@ stages:
           answer: 0
           explanation: |
             `in` on a list is a hidden loop: it compares the new line with the lines seen so far, one by one. Doing that for each of $n$ lines costs about $n^2 / 2$ comparisons. A set finds a member by hashing it, in constant time on average, so the same loop over a set is linear. At a million lines that is the difference between a moment and most of a day.
-          hints:
-            - What does Python have to do to decide whether a value is in a list?
-            - Which container was built for fast membership tests?
   - title: The statement
     blocks:
       - text: |
@@ -949,10 +926,6 @@ stages:
                     return lines
           explanation: |
             `statement` is four lines long, and that is the point. `load` has already dealt with every bad line, so nothing here needs a `try`. `running` hands out balances one at a time, and `zip` pairs each transaction with the balance after it. The comprehension turns each pair into a line, and `rupees` takes care of how money looks. Each of those pieces was written and checked alone, and none of them knows about the others.
-          hints:
-            - Start by calling load. You then have the readable transactions and the bad lines, and nothing below needs to worry about errors.
-            - You need each transaction next to the balance that follows it. Which built-in function walks two sequences in step?
-            - Build the lines with a comprehension, then add the last line.
 review: |
   You have a program that takes untidy text and produces a statement, and it is made of pieces you can name:
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { nextHint, submitAnswer, timeUp } from "@/lib/learning/actions";
+import { submitAnswer, timeUp } from "@/lib/learning/actions";
 import { clock, spoken } from "@/lib/lessons/timing";
 import type { QuestionView } from "@/lib/lessons/content";
 import { useWorkspace } from "../workspace/context";
@@ -15,7 +15,6 @@ const Html = ({ html, className }: { html: string; className?: string }) => (
 export function QuestionCard({ view }: { view: QuestionView }) {
   const ws = useWorkspace();
   const [pending, start] = useTransition();
-  const [hints, setHints] = useState(view.hints);
   const [feedback, setFeedback] = useState<{ note?: string; explanationHtml?: string; offline?: boolean } | null>(null);
   const [text, setText] = useState("");
   const [choice, setChoice] = useState<number | null>(null);
@@ -58,13 +57,6 @@ export function QuestionCard({ view }: { view: QuestionView }) {
       }
     });
   };
-  const hint = () =>
-    start(async () => {
-      try {
-        setHints(await nextHint(ws.conceptId, view.id));
-      } catch {}
-    });
-
   const move = (from: number, by: -1 | 1) => {
     setOrder((before) => {
       const next = [...before];
@@ -81,7 +73,7 @@ export function QuestionCard({ view }: { view: QuestionView }) {
   );
 
   return (
-    <section className="q" aria-label={name} data-solved={solved} data-question={view.id} data-timed={view.seconds !== undefined}>
+    <section className="q" aria-label={name} data-solved={solved} data-question={view.id} data-timed={view.seconds !== undefined} onFocusCapture={() => ws.attend(view.id)} onClickCapture={() => ws.attend(view.id)}>
       <header className="q-head">
         <span className="label">
           {name} · {view.system === "s1" ? `Quick · Timed, ${spoken(view.seconds!)}` : "Think · Not timed"}
@@ -246,25 +238,6 @@ export function QuestionCard({ view }: { view: QuestionView }) {
         {solved && explanation ? <Html html={explanation} className="q-explanation" /> : null}
       </div>
 
-      {!solved ? (
-        <div className="q-hints">
-          {hints.length > 0 ? (
-            <ol>
-              {hints.map((html, i) => (
-                <li key={i}>
-                  <span className="label">Hint {i + 1}</span>
-                  <span dangerouslySetInnerHTML={{ __html: html }} />
-                </li>
-              ))}
-            </ol>
-          ) : null}
-          {hints.length < view.hintCount ? (
-            <button type="button" className="q-hint-button label" onClick={hint} disabled={pending}>
-              {hints.length === 0 ? "Hint" : "Another hint"} · {hints.length} of {view.hintCount} used
-            </button>
-          ) : null}
-        </div>
-      ) : null}
       </>
     );
   }

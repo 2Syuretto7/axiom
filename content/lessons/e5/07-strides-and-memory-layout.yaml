@@ -117,10 +117,6 @@ parts:
         answer: 1
         explanation: |
           The place of an entry is the start plus each index times its stride. Exchange which index goes with which stride and you have exchanged rows with columns. Nothing depends on the number of entries: the work is the same for a table of twelve numbers as for one of twelve thousand million. The reading order of the transpose is **not** the order of the block, which is why it could not be reshaped without a copy, and why, as the puzzle of this lesson suggests, working through it row by row will be slow.
-        hints:
-          - Where in the block is the entry of a at [j, i]?
-          - What strides would send index [i, j] to that same byte?
-          - Does the answer depend on the size of the table?
     - text: |
         **Stored in reading order.** An array is called **contiguous**, in the row-by-row sense, when its entries in reading order lie one after another in the block with no gaps and no jumps: the last stride is the size of an entry, and each earlier stride is the next times the length of that axis. A freshly made array is contiguous. `a.flags.c_contiguous` reports it.
 
@@ -170,10 +166,6 @@ parts:
           - 'Read from that byte of the block as many bytes as the dtype says one entry takes.'
           - 'Interpret those bytes as the dtype says: a whole number, or a decimal.'
         explanation: The first three steps are arithmetic on a handful of numbers and involve no memory at all. Only the fourth touches the block, and whether that read is fast or slow depends on whether the byte is already in the cache, which depends on what was read just before. The dtype is needed twice, for how many bytes to read and for what they mean.
-        hints:
-          - The address must be worked out before anything is read.
-          - The start comes before the strides are added.
-          - Bytes must be read before they can be interpreted.
   formal:
     - text: |
         **Strided view.** An array is a block of memory together with a start $o$, a shape $(n_0, \dots, n_{d-1})$ and strides $(s_0, \dots, s_{d-1})$ in bytes. Its entry at index $[i_0, \dots, i_{d-1}]$ is read from byte $o + \sum_k i_k s_k$ of the block.
@@ -199,9 +191,6 @@ parts:
         options: ["`(16, 4)`", "`(32, 8)`", "`(4, 16)`", "`(12, 4)`"]
         answer: 0
         explanation: One entry is 4 bytes, and a row of 4 entries is 16 bytes.
-        hints:
-          - The last stride is the size of one entry.
-          - The first stride is a whole row.
     - question:
         id: drill-three-axes
         type: choice
@@ -211,9 +200,6 @@ parts:
         options: ["`(96, 32, 8)`", "`(8, 32, 96)`", "`(24, 12, 4)`", "`(16, 24, 32)`"]
         answer: 0
         explanation: The last stride is one entry, 8. The middle is 4 entries, 32. The first is 3 times that, 96.
-        hints:
-          - Work from the last axis backwards.
-          - Each earlier stride is the next one times the length of the next axis.
     - question:
         id: drill-transpose
         type: choice
@@ -223,9 +209,6 @@ parts:
         options: ["`(32, 8)`", "`(8, 32)`", "`(24, 8)`", "`(8, 24)`"]
         answer: 1
         explanation: The transpose exchanges the strides and leaves the block alone.
-        hints:
-          - No numbers are moved.
-          - The two strides change places.
     - question:
         id: drill-step
         type: choice
@@ -235,9 +218,6 @@ parts:
         options: ["`(32, 8)`", "`(32, 16)`", "`(64, 8)`", "`(16, 8)`"]
         answer: 1
         explanation: Taking every second column doubles the stride along axis 1.
-        hints:
-          - Which axis has the step of 2?
-          - A step multiplies the stride of its axis.
     - question:
         id: drill-reverse
         type: choice
@@ -247,9 +227,6 @@ parts:
         options: ["`(-32, 8)`", "`(32, -8)`", "`(32, 8)`", "`(-8, -32)`"]
         answer: 0
         explanation: The rows are read backwards, so a step along axis 0 moves back one row.
-        hints:
-          - Which axis is reversed?
-          - Going backwards is a negative stride.
     - question:
         id: drill-row
         type: choice
@@ -259,9 +236,6 @@ parts:
         options: ["`(32,)`", "`(8,)`", "`(32, 8)`", "`(4,)`"]
         answer: 1
         explanation: A row is read one entry at a time.
-        hints:
-          - The whole number removed axis 0.
-          - How far apart are neighbouring entries of a row?
     - question:
         id: drill-column
         type: choice
@@ -271,9 +245,6 @@ parts:
         options: ["`(32,)`", "`(8,)`", "`(32, 8)`", "`(4,)`"]
         answer: 0
         explanation: Each entry of a column is one whole row past the last.
-        hints:
-          - The whole number removed axis 1.
-          - How far apart in the block are neighbouring entries of a column?
     - question:
         id: drill-byte
         type: numeric
@@ -282,9 +253,6 @@ parts:
           With start 0 and strides `(32, 8)`, at which byte of the block is the entry at index `[2, 1]`?
         answer: "72"
         explanation: 2 × 32 + 1 × 8.
-        hints:
-          - Multiply each index by the stride of its axis.
-          - Add the two products to the start.
     - question:
         id: drill-contiguous
         type: choice
@@ -294,9 +262,6 @@ parts:
         options: ["`a.T`", "`a[:, ::2]`", "`a[1:3]`", "`a[::-1]`"]
         answer: 2
         explanation: Two whole neighbouring rows are a solid stretch of the block, read straight through.
-        hints:
-          - Which one reads the block straight through with no gaps or jumps?
-          - Whole rows lie side by side.
     - question:
         id: drill-zero
         type: choice
@@ -306,9 +271,6 @@ parts:
         options: ["Twelve different numbers", "The same three numbers in every one of its four rows", "Four numbers repeated three times across", "Nothing, since a stride of 0 is an error"]
         answer: 1
         explanation: A step along axis 0 moves nowhere, so every row reads the same three entries.
-        hints:
-          - What does a step down the rows do to the place in the block?
-          - How many different places can the view reach?
     - question:
         id: drill-faster
         type: choice
@@ -318,9 +280,6 @@ parts:
         options: ["A row, since its entries lie side by side", "A column, since it is shorter", "They take the same time, since they have the same number of entries", "It depends on the values"]
         answer: 0
         explanation: Neighbouring entries of a row come into the cache together. Each entry of a column needs its own fetch.
-        hints:
-          - Which has the smaller stride?
-          - What does one fetch from main memory bring with it?
     - question:
         id: drill-windows-shape
         type: choice
@@ -330,9 +289,6 @@ parts:
         options: ["`(2, 3)`", "`(4, 3)`", "`(6, 3)`", "`(3, 4)`"]
         answer: 1
         explanation: A window of 3 can start at places 0, 1, 2 and 3.
-        hints:
-          - At which places can a window of 3 start?
-          - The last window must end at the last entry.
     - question:
         id: drill-windows-count
         type: numeric
@@ -341,9 +297,6 @@ parts:
           How many windows of length 10 are there in an array of length 100?
         answer: "91"
         explanation: A window can start at any place from 0 to 90, which is 100 − 10 + 1 places.
-        hints:
-          - What is the last place at which a window can start?
-          - Count the starting places, including place 0.
     - question:
         id: predict-strides
         type: predict
@@ -361,10 +314,6 @@ parts:
           (32, 16) (-32, 8)
           True False
         explanation: A row of four 8-byte entries is 32 bytes. The transpose exchanges the strides. A step of 2 doubles a stride and a reversal makes it negative. The fresh table is stored in its reading order and its transpose is not.
-        hints:
-          - The last stride of a fresh array is the size of one entry.
-          - The transpose exchanges the two strides.
-          - Is the transpose read straight through the block?
     - question:
         id: predict-windows
         type: predict
@@ -386,10 +335,6 @@ parts:
           (3, 3) True
           [3. 4. 5.]
         explanation: Each row is three neighbouring entries, starting one place later than the row above. Five entries hold three such windows. The nine entries shown are views of five numbers, and the mean of each row is the moving average.
-        hints:
-          - Each window starts one place after the last.
-          - Five entries, windows of three.
-          - The mean along axis 1 gives one number for each window.
   work:
     - text: Slower now. For each view, say its start and its strides before saying anything about its speed.
     - question:
@@ -478,10 +423,6 @@ parts:
             print("(96, 32, 8)")
         explanation: |
           Work from the last axis back. One step along the last axis moves one entry, so its stride is the size of an entry. One step along the axis before it moves past a whole run of the last axis, so its stride is the last stride times the last length. And so on outwards: each stride is the number of bytes in one whole item of everything inside it. The loop keeps that running product, records it **before** multiplying by the current length, and the list is reversed at the end because it was built from the back. For the table of the puzzle this gives 12 000 bytes for a step down a column against 4 for a step along a row, and that single pair of numbers is the explanation of the timings. This is the address arithmetic of an array, from your lessons on data structures, carried to any number of axes.
-        hints:
-          - What is the stride of the last axis?
-          - Each earlier stride is the next stride times the length of the next axis.
-          - Go through the shape backwards, keeping a running product, and reverse the list at the end.
     - question:
         id: write-moving
         type: code
@@ -564,10 +505,6 @@ parts:
             print("[3. 4. 5.]")
         explanation: |
           `sliding_window_view(x, k)` is a table with one window in each row: shape $(n - k + 1, k)$, with strides that move one entry along either axis, so no number is copied. The mean of each window is a reduction along the axis that runs **within** a window, axis 1, which disappears and leaves one number for each window. Along axis 0 the means would be taken across windows, giving $k$ numbers that mean nothing useful. A reshape into rows of $k$ gives windows that do not overlap, which is a different thing: it summarises the array in blocks, where a moving average follows it step by step. Smoothing a noisy training curve so that its trend can be seen is done with exactly this function.
-        hints:
-          - sliding_window_view(x, k) has one window in each row.
-          - Which axis runs along a window?
-          - Take the mean along that axis.
     - question:
         id: fix-keep
         type: code
@@ -645,10 +582,6 @@ parts:
             print(True)
         explanation: |
           `table[0]` is a view: a start and a stride over the block of the table. It shows four numbers and holds on to all of them, since Python keeps a block for as long as anything refers to it, and a view refers to it. `.copy()` gives the row a block of its own, 32 bytes here, and breaks the link. Slicing the view again makes another view of the same block. Copying the **whole** table and then taking a row of the copy is worse than the bug: the row is a view of a second full-sized block. The attribute `base` tells the two cases apart, being `None` exactly when an array owns its block. This is the commonest cause of a program that uses far more memory than its data seems to account for, since `nbytes` on a view reports only the entries it shows.
-        hints:
-          - Is table[0] a view or a copy?
-          - What keeps a block of memory from being thrown away?
-          - Which method gives an array a block of its own?
     - question:
         id: work-columns
         type: choice
@@ -663,10 +596,6 @@ parts:
         answer: 2
         explanation: |
           The Python work is the same in both loops, 3000 calls each, and no copy is made in either. The difference is inside NumPy's compiled loop, in how long the processor waits for each number to arrive. With a stride of 4 bytes, sixteen entries share each run of 64 bytes and the steady march lets the processor fetch ahead. With a stride of 12 000 bytes nothing is shared, and the table, at 36 megabytes, is far too large to sit in the cache. So the cost is not in the arithmetic at all. A count of operations assumes every operation costs the same, and reading memory does not: it depends on what was read just before.
-        hints:
-          - What are the strides of a row and of a column of this table?
-          - How many bytes does one fetch from main memory bring?
-          - How many entries of a row fit in that, and how many of a column?
     - question:
         id: work-stride
         type: numeric
@@ -676,10 +605,6 @@ parts:
         answer: "800"
         explanation: |
           In `a` one step down a column passes a whole row of 50 entries of 8 bytes, so the stride of axis 0 is 400. The slice takes every second row, which doubles it. The stride of axis 1 goes from 8 to 40 in the same way, and the view has shape `(50, 10)`. No entry has moved. The view is not stored in its reading order, since its neighbouring entries are 40 bytes apart and its neighbouring rows 800, so a heavy computation on it would be faster after `np.ascontiguousarray`.
-        hints:
-          - What is the stride along axis 0 of a itself?
-          - What does a step of 2 on that axis do to the stride?
-          - A row of a holds 50 entries of 8 bytes.
     - question:
         id: work-zero
         type: choice
@@ -694,10 +619,6 @@ parts:
         answer: 1
         explanation: |
           The place of `v[i, j]` is $0 \times i + 8 \times j$, which does not depend on $i$. A million rows are shown and three numbers exist. That is how broadcasting stretches without copying, as was claimed three lessons ago. It also means the rows are not independent: they are one row seen a million times. Writing through such a view would be so surprising that NumPy forbids it, and when a program truly needs a million separate rows it must ask for a copy, which takes the full 24 megabytes.
-        hints:
-          - Where in the block is v[i, j], by the stride formula?
-          - Does that place depend on i?
-          - How many different numbers can the view reach?
     - question:
         id: work-layout
         type: choice
@@ -712,10 +633,6 @@ parts:
         answer: 1
         explanation: |
           Lay data out so that what is used together lies together. The training loop uses one example's features together, and neighbouring examples together, so each example should be a solid run and each batch a solid run of those. A transpose is free to **make**, and that is exactly the trap: the transposed table is a view whose reading order jumps through the block, and every pass over it pays for the jumps. If the analysis at hand worked a feature at a time, over all examples, the other layout would be the right one. There is no best layout in general. There is the layout that matches the order in which the numbers will be read.
-        hints:
-          - Which numbers does one step of training read together?
-          - In which layout do those numbers lie side by side?
-          - Does a free transpose change where the numbers are in memory?
   connections:
     - text: |
         A square table was added up by rows and by columns, with the same nine million additions, and the columns took several times as long. A row is read one entry at a time. A column is read a whole row at a time, 12 000 bytes for each step. A processor fetches memory in runs of 64 bytes and fetches ahead of a steady march, so the row arrives nearly for nothing, and every entry of the column has to be sent for.

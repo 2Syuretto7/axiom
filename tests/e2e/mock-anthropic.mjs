@@ -3,6 +3,10 @@
  * It speaks just enough of the streaming Messages API for the SDK: every request is
  * answered with one short reply, and GET /last returns the request it was last sent.
  *
+ * The tutor's reply opens with the line Axiom reads and hides. A message that says
+ * "stuck" is answered as a hint on question 1; any other is answered as being about
+ * the lesson.
+ *
  * A request that asks for a fixed JSON shape is the review question writer or its
  * checker. The writer is given a new sum each time, with raw HTML in it to prove
  * it is shown as text. The checker agrees with the writer, except that the first
@@ -38,7 +42,11 @@ function structured(body) {
   };
 }
 
+const HINT = ['<turn about="unsol', 'ved" question="1" hint="yes">\n', "What do the pebbles ", "left over stand for?"];
 const REPLY = [
+  '<turn about="les',
+  'son" hint="no">',
+  "\n",
   "Think of the **pebbles** again. ",
   "Each sheep that comes home takes one away, so $12 - 3 = 9$.\n\n",
   "<b>What</b> do the pebbles left over stand for?",
@@ -75,7 +83,9 @@ http
     });
     send({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
     const json = structured(last.body);
-    for (const text of json ? [JSON.stringify(json)] : REPLY) {
+    const asked = last.body.messages.at(-1)?.content;
+    const stuck = typeof asked === "string" && /stuck/i.test(asked.split("</workspace>").at(-1));
+    for (const text of json ? [JSON.stringify(json)] : stuck ? HINT : REPLY) {
       send({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text } });
       await new Promise((done) => setTimeout(done, 30));
     }

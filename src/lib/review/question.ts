@@ -6,7 +6,7 @@ import type { Question } from "../lessons/schema";
 
 /**
  * A review question. It is written afresh for one learner and one review, and
- * is never shown again once answered. There are no hints: a review is one try.
+ * is never shown again once answered. A review is one try.
  */
 const base = { prompt: z.string().trim().min(1).max(4000), explanation: z.string().trim().min(1).max(4000) };
 const number = z.string().refine((text) => parseRational(text) !== null, "Not a number");
@@ -21,7 +21,7 @@ export const reviewQuestion = z.discriminatedUnion("type", [
 export type ReviewQuestion = z.infer<typeof reviewQuestion>;
 
 /** The same question in the shape lesson questions have, so the lesson grader can mark it. */
-const asLessonQuestion = (q: ReviewQuestion): Question => ({ ...q, id: "review", system: "s1", hints: ["-", "-"] }) as Question;
+const asLessonQuestion = (q: ReviewQuestion): Question => ({ ...q, id: "review", system: "s1" }) as Question;
 
 export const gradeReview = (q: ReviewQuestion, answer: unknown): Verdict => grade(asLessonQuestion(q), answer);
 

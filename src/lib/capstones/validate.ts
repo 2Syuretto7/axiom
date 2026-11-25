@@ -110,7 +110,6 @@ export async function validateCapstones(options: ValidateCapstonesOptions): Prom
           if (q.system === "s2") slow += 1;
           await checkText(at, q.prompt);
           await checkText(at, q.explanation);
-          for (const hint of q.hints) await checkText(at, hint);
           await checkQuestion(q, at, add, run, checkCode, checkText);
         }
       }

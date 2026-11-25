@@ -163,10 +163,6 @@ parts:
         answer: 1
         explanation: |
           Write the line inside the loops. For `"ij,ji->"` it is `out += M[i, j] * N[j, i]`, over two letters: 90 thousand steps. The product `M @ N` has three letters, 27 million steps, to fill a table of which only the diagonal is wanted. Every entry of `M` and of `N` is used by both, so nothing is skipped in the inputs. What is skipped is the computing of results nobody asked for. The pattern is the same as in the puzzle: with `@` you had to make the whole table and then select from it, and in einsum you describe only the entries you want.
-        hints:
-          - What is the formula for the entry of the product at [i, i]?
-          - What does the trace do with those entries?
-          - How many letters does each computation loop over?
     - text: |
         **Stacks.** Add a letter to stand for the stack and keep it after the arrow. For `S` of shape `(b, m, n)` and `T` of shape `(b, n, p)`,
 
@@ -200,10 +196,6 @@ parts:
           - 'Check that every letter dropped is one the formula sums over, and that axes sharing a letter have the same length.'
           - 'Call `np.einsum` with the string and the arrays in the same order as the groups.'
         explanation: The string is copied off the formula, input by input, so the formula comes first. The groups must exist before they can be joined, and the result letters are read off the left-hand side. The check comes before the call, since an expression with a wrong letter often still runs and returns something of a plausible shape. Here the result is `"bi,ij,bj->b"`, in which `i` and `j` are summed and `b` is kept.
-        hints:
-          - The string is read off the formula, so the formula comes first.
-          - The inputs are described before the result.
-          - Check before you call.
   formal:
     - text: |
         **Expression.** `np.einsum("g1,g2,...->r", A1, A2, ...)`, where each group $g_m$ has one letter for each axis of $A_m$, and $r$ lists letters that occur among the groups, each at most once.
@@ -229,9 +221,6 @@ parts:
         options: ["The matrix `A` times the vector `x`", "The transpose of `A`", "The dot product of two vectors", "The outer product"]
         answer: 0
         explanation: The line is `out[i] += A[i, j] * x[j]`, each row of the table against the vector.
-        hints:
-          - Which letter is shared and dropped?
-          - The result has one entry for each row of A.
     - question:
         id: drill-transpose
         type: choice
@@ -241,9 +230,6 @@ parts:
         options: ["The sum of all entries", "The transpose of `A`", "The diagonal of `A`", "`A` itself"]
         answer: 1
         explanation: Nothing is dropped, so nothing is summed. The entry at $[i, j]$ goes to $[j, i]$.
-        hints:
-          - Is any letter missing after the arrow?
-          - The two letters have changed places.
     - question:
         id: drill-dot
         type: choice
@@ -253,9 +239,6 @@ parts:
         options: ["The outer product", "The entry-by-entry product", "The dot product, a single number", "An error, since nothing follows the arrow"]
         answer: 2
         explanation: The shared letter walks both arrays together, and it is dropped, so the products are all added.
-        hints:
-          - No letter follows the arrow, so the result has no axes.
-          - Matching entries are multiplied and all are added.
     - question:
         id: drill-sum-shape
         type: choice
@@ -265,9 +248,6 @@ parts:
         options: ["`(2,)`", "`(3,)`", "`(2, 3)`", "`()`"]
         answer: 1
         explanation: The result has the one axis `j`, of length 3. The letter `i` was dropped, so the rows are added together.
-        hints:
-          - Which letter follows the arrow?
-          - What is the length of that axis of A?
     - question:
         id: drill-outer-shape
         type: choice
@@ -277,9 +257,6 @@ parts:
         options: ["`(3, 4)`", "`(4, 3)`", "`(7,)`", "`()`"]
         answer: 0
         explanation: Both letters are kept, in the order `i` then `j`, with lengths 3 and 4.
-        hints:
-          - Which letters follow the arrow, and in which order?
-          - Each letter brings its own length.
     - question:
         id: drill-summed
         type: choice
@@ -289,9 +266,6 @@ parts:
         options: ["`i`", "`j`", "`k`", "None of them"]
         answer: 1
         explanation: It appears before the arrow and not after it.
-        hints:
-          - Which letter is missing after the arrow?
-          - A dropped letter is summed.
     - question:
         id: drill-trace
         type: choice
@@ -301,9 +275,6 @@ parts:
         options: ["The sum of all entries", "The sum of the diagonal entries, the trace", "The diagonal as an array", "The determinant"]
         answer: 1
         explanation: One letter for both axes visits only the entries where the two indices are equal, and dropping it adds them.
-        hints:
-          - Both axes carry the same letter, so they are walked together.
-          - Which entries have the same row and column number?
     - question:
         id: drill-product-shape
         type: choice
@@ -313,9 +284,6 @@ parts:
         options: ["`(2, 4)`", "`(2, 3, 4)`", "`(3,)`", "`(4, 2)`"]
         answer: 0
         explanation: The result has axes `i` and `k`, of lengths 2 and 4.
-        hints:
-          - Which letters follow the arrow?
-          - Read their lengths off the inputs.
     - question:
         id: drill-dot-value
         type: numeric
@@ -324,9 +292,6 @@ parts:
           `u = np.array([1.0, 2.0, 3.0])` and `v = np.array([4.0, 5.0, 6.0])`. What is `np.einsum("i,i->", u, v)`?
         answer: "32"
         explanation: 1 × 4 + 2 × 5 + 3 × 6.
-        hints:
-          - Matching entries are multiplied.
-          - The three products are added.
     - question:
         id: drill-total
         type: numeric
@@ -335,9 +300,6 @@ parts:
           What is `np.einsum("ij->", np.ones((3, 4)))`?
         answer: "12"
         explanation: Both letters are dropped, so all twelve entries, each 1, are added.
-        hints:
-          - No letter follows the arrow.
-          - How many entries does the table have?
     - question:
         id: drill-rows
         type: choice
@@ -347,9 +309,6 @@ parts:
         options: ["The matrix product of `A` and `B`", "The dot product of each row of `A` with the matching row of `B`", "The dot product of each column of `A` with the matching column of `B`", "The entry-by-entry product"]
         answer: 1
         explanation: Matching entries are multiplied, and `j`, which runs along a row, is summed. One number is left for each row.
-        hints:
-          - Both inputs share both letters, so matching entries meet.
-          - Which letter is dropped, and along what does it run?
     - question:
         id: drill-stack
         type: choice
@@ -359,9 +318,6 @@ parts:
         options: ["`(10, 2, 4)`", "`(2, 4)`", "`(10, 10, 2, 4)`", "`(10, 2, 3, 4)`"]
         answer: 0
         explanation: The letters `b`, `i` and `k` are kept, with lengths 10, 2 and 4. It is ten matrix products.
-        hints:
-          - Which letters follow the arrow?
-          - The letter b is shared, so the two stacks are walked together.
     - question:
         id: drill-rows-against-rows
         type: choice
@@ -371,9 +327,6 @@ parts:
         options: ["`A @ B`", "`A @ B.T`", "`A.T @ B`", "`A * B`"]
         answer: 1
         explanation: The shared letter is the last axis of both, so rows of `A` meet rows of `B`. With `@` the second must be transposed for its rows to stand as columns.
-        hints:
-          - Which axis of B carries the shared letter?
-          - The matrix product needs the shared letter first in its second input.
     - question:
         id: drill-steps
         type: numeric
@@ -382,9 +335,6 @@ parts:
           `A` and `B` have shape `(5, 6)`. How many times does the line inside the loops of `"ij,ij->i"` run?
         answer: "30"
         explanation: There are two distinct letters, of lengths 5 and 6, and one loop for each.
-        hints:
-          - How many distinct letters are there?
-          - Multiply their lengths.
     - question:
         id: predict-basics
         type: predict
@@ -403,10 +353,6 @@ parts:
           [3. 5. 7.]
           [ 5. 50.]
         explanation: The rows of the table are 0, 1, 2 and 3, 4, 5. Against the vector they give 0 + 2 + 6 and 3 + 8 + 15. Dropping `i` adds the two rows. The last is each row dotted with itself, 0 + 1 + 4 and 9 + 16 + 25.
-        hints:
-          - The table has rows 0, 1, 2 and 3, 4, 5.
-          - In the second, which letter was dropped?
-          - In the third, each row meets itself.
     - question:
         id: predict-outer
         type: predict
@@ -427,10 +373,6 @@ parts:
           (3, 2)
           12.0 [0. 4. 8.]
         explanation: No letter is shared, so every entry of `u` meets every entry of `v`. The order of the letters after the arrow is the order of the axes, so `ji` gives the transposed shape. The diagonal of the square table holds 0, 4 and 8, kept as an array when the letter is kept and added when it is dropped.
-        hints:
-          - With no shared letter, every combination is taken.
-          - The letters after the arrow give the axes of the result in order.
-          - Which entries of the square table have equal row and column numbers?
   work:
     - text: Slower now. For each one, write the formula with its indices before you write the string.
     - question:
@@ -519,10 +461,6 @@ parts:
             print("16 3 18")
         explanation: |
           Read the string off the formula. The first factor is $x_{bi}$, so `bi`. The second is $A_{ij}$, so `ij`. The third is $x_{bj}$, the **same** row $b$ of `X` with a different index along it, so `bj`. The left-hand side has the single index $b$. So `"bi,ij,bj->b"`, with `X` passed twice. The letter `b` is shared by the first and third inputs, which is what makes each row meet itself and not every other row: with a different letter there, the third factor would be summed over all rows. Dropping `b` adds the answers for all rows into one number. Using `ii` for the matrix visits only its diagonal. This number, a vector on both sides of a matrix, is called a quadratic form. It measures a squared length in which the directions are weighted and mixed by $A$, and it is the exponent of the bell curve in many dimensions, which you will meet in the probability clusters.
-        hints:
-          - Each factor of the formula gives one group of letters, read straight off its indices.
-          - The same array is passed twice, with the same first letter and different second letters.
-          - Only the index on the left-hand side of the formula follows the arrow.
     - question:
         id: write-scores
         type: code
@@ -610,10 +548,6 @@ parts:
             print("(1, 3, 2)")
         explanation: |
           Name the axes for what they are. `Q` is `bqd` and `K` is `bkd`. A dot product runs over the features, so `d` is shared and dropped. Each query meets each key, so `q` and `k` are different letters and both are kept. And a query meets only the keys of its own example, so `b` is the **same** letter in both and is kept. `"bqd,bkd->bqk"`. Giving the keys their own batch letter would let every query see the keys of every example and add the results together, which still returns the right shape and is quite wrong. With `@` the same computation is `Q @ K.transpose(0, 2, 1)`, in which you must work out which axes to exchange. This array of scores is the first step of the mechanism called attention, on which the large language models are built: each position of a sequence asks a question, and the scores say how well every other position answers it.
-        hints:
-          - Give each axis a letter that says what it counts.
-          - Which letter does a dot product sum over?
-          - Which letter must be the same in both inputs so that examples are not mixed?
     - question:
         id: fix-trace
         type: code
@@ -693,10 +627,6 @@ parts:
             print(69.0)
         explanation: |
           Write the formula. The entry of the product at $[i, i]$ is $\sum_j A_{ij} B_{ji}$: row $i$ of $A$ against **column** $i$ of $B$. So the second input must be indexed `ji`, and adding over the diagonal drops both letters: `"ij,ji->"`. The expression in the program, `"ij,ij->"`, multiplies matching entries, 5 + 12 + 21 + 32, which is the sum you would get from $A$ and the **transpose** of $B$. For a symmetric $B$ the two agree, which is how a bug like this survives a careless test. One letter out of place, a result of the right shape, and no error. That is the price of a notation this compact, and the defence is the habit of this lesson: write the line that sits inside the loops, `out += A[i, j] * B[j, i]`, and read it against the formula.
-        hints:
-          - What is the formula for the entry of the product AB at [i, i]?
-          - In that formula, which index of B comes first?
-          - The order of the letters of the second group must match the order of the indices of B.
     - question:
         id: work-wasted
         type: choice
@@ -711,10 +641,6 @@ parts:
         answer: 1
         explanation: |
           Count the distinct letters. The first way ranges over a row of `X`, a row of `Y` and the features: three letters, 450 million steps. The third ranges over a row and the features: two letters, 300 thousand steps. The ratio is 1500, the number of rows, since each row was matched against all 1500 when it needed to meet only one. Picking out the diagonal is trivial, and the transpose is a view that costs nothing to make. The lesson is general: when you find yourself building a large table in order to keep a thin slice of it, there is a way of naming only the slice, and einsum will usually let you say it.
-        hints:
-          - What is the shape of X @ Y.T?
-          - How many of its entries are kept?
-          - Count the distinct letters of each expression and multiply their lengths.
     - question:
         id: work-count
         type: numeric
@@ -724,10 +650,6 @@ parts:
         answer: "6000000"
         explanation: |
           There is one loop for each distinct letter: `i` of length 100, `j` of length 200 and `k` of length 300. The line runs once for every combination, which is the product of the three lengths. The result holds only 100 × 300 entries, and each of those is a sum of 200 products. This is the same count you made for multiplying matrices by hand, read straight off the letters.
-        hints:
-          - How many distinct letters are there?
-          - Read the length of each letter off the shapes.
-          - Multiply the three lengths.
     - question:
         id: work-read
         type: choice
@@ -742,10 +664,6 @@ parts:
         answer: 1
         explanation: |
           The line inside the loops is `out[n] += P[n, c] * T[n, c]`. Both inputs share both letters, so matching entries meet, and `c` is dropped, so the products are added along each row. In each row of `T` every entry but one is 0, so the sum has a single surviving term, the entry of `P` in the correct column. You have computed this before as `P[np.arange(n), y]`, with the correct classes held as an array of positions. Here they are held as rows of 0s and a 1, and the dot product does the picking. The two are the same selection written in two ways, and you will see both in real code.
-        hints:
-          - Write the line that sits inside the loops.
-          - Which letter is dropped, and along what does it run?
-          - What does multiplying by a row with a single 1 do to a row of numbers?
     - question:
         id: work-three
         type: choice
@@ -760,10 +678,6 @@ parts:
         answer: 1
         explanation: |
           The count of work is the product of the lengths of the distinct letters, and here there are four. But the sum can be done in stages: first sum over `j` to make a table with letters `i` and `k`, then sum over `k`. Each stage has three letters. The mathematics is the same, since a product of sums can be regrouped, and the cost falls from $n^4$ to $2n^3$. einsum does not regroup unless asked, so with three or more inputs, ask. This is your first sight of a fact that runs deep in numerical computing: the same expression can be evaluated in orders that differ enormously in cost, and choosing the order is a problem in its own right.
-        hints:
-          - How many distinct letters does the expression have?
-          - How many letters does a single matrix product have?
-          - Compare 500 to the fourth power with twice 500 cubed.
   connections:
     - text: |
         Three ways of taking the dot product of matching rows agreed, and one took a thousand times as long as another. `X @ Y.T` formed every row against every row and kept one in fifteen hundred. `@` has one pattern, and "only the matching ones" is not it.

@@ -11,14 +11,14 @@ import { requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { capstoneId, capstoneQuestions } from "@/lib/capstones/schema";
 import { nextAfter, nextStep } from "@/lib/learning/next";
-import { completeUnit, completedCapstones, completedConcepts, hintLevels, snapshotsFor, solvedQuestions } from "@/lib/learning/service";
+import { completeUnit, completedCapstones, completedConcepts, snapshotsFor, solvedQuestions } from "@/lib/learning/service";
 import { content } from "@/lib/lessons/content";
 import { questionsOf } from "@/lib/lessons/load";
 import { tutorConnected } from "@/lib/tutor/config";
 import { tutorHistory } from "@/lib/tutor/service";
 import type { Db } from "@/lib/db";
 
-/** The tutor's conversation on this lesson so far, and how much of the month's budget is left. */
+/** The tutor's conversation on this lesson so far. */
 async function tutorSetup(db: Db, userId: string, conceptId: string) {
   return { messages: await tutorHistory(db, userId, conceptId), connected: tutorConnected() };
 }
@@ -75,9 +75,8 @@ async function Lesson() {
     const capstone = capstones.get(next.cluster)!;
     const cluster = graph.clusters.get(next.cluster)!;
     const id = capstoneId(cluster.id);
-    const [solved, hints, snapshots, tutor] = await Promise.all([
+    const [solved, snapshots, tutor] = await Promise.all([
       solvedQuestions(db, user.id, id),
-      hintLevels(db, user.id, id),
       snapshotsFor(db, user.id, `axiom-code:${id}`),
       tutorSetup(db, user.id, id),
     ]);
@@ -92,16 +91,15 @@ async function Lesson() {
         lesson={{ total: ids.length, solved: ids.filter((q) => solved.has(q)), complete: false }}
         tutor={tutor}
       >
-        <CapstoneView capstone={capstone} cluster={cluster} graph={graph} solved={solved} hintLevels={hints} />
+        <CapstoneView capstone={capstone} cluster={cluster} graph={graph} solved={solved} />
       </Workspace>
     );
   }
 
   const lesson = lessons.get(next.id)!;
   const concept = graph.concepts.get(next.id)!;
-  const [solved, hints, snapshots, tutor] = await Promise.all([
+  const [solved, snapshots, tutor] = await Promise.all([
     solvedQuestions(db, user.id, concept.id),
-    hintLevels(db, user.id, concept.id),
     snapshotsFor(db, user.id, `axiom-code:${concept.id}`),
     tutorSetup(db, user.id, concept.id),
   ]);
@@ -136,7 +134,6 @@ async function Lesson() {
         bridge={previous && bridgeText ? { from: previous, text: bridgeText } : null}
         capstone={closesCluster && !capstonesDone.has(concept.cluster) ? capstones.get(concept.cluster)?.title : null}
         solved={solved}
-        hintLevels={hints}
         recall={
           // The lesson does not wait for this: its three recall questions arrive in its Recall part when they are ready.
           <Suspense

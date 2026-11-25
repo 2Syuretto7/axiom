@@ -15,12 +15,8 @@ export const HISTORY_TURNS = 16;
 
 export const tutorModel = () => process.env.AXIOM_TUTOR_MODEL?.trim() || DEFAULT_MODEL;
 
-// Medium is the least the tutor thinks. Low effort is never used.
-const EFFORTS = ["medium", "high"] as const;
-export function tutorEffort(): (typeof EFFORTS)[number] {
-  const value = process.env.AXIOM_TUTOR_EFFORT?.trim() as (typeof EFFORTS)[number] | undefined;
-  return value && EFFORTS.includes(value) ? value : "medium";
-}
+/** The tutor always thinks at medium effort. It is fixed here and cannot be raised or lowered from the environment. */
+export const tutorEffort = () => "medium" as const;
 
 export const tutorConnected = () => Boolean(process.env.ANTHROPIC_API_KEY);
 

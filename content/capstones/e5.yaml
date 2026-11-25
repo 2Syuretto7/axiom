@@ -45,9 +45,6 @@ stages:
           answer: 0
           explanation: |
             The axis named is the one that disappears. `axis=0` runs down the rows, so the four flats are averaged away and one number remains for each of the two columns. The mean area and the mean age are what standardising needs. `axis=1` would average a flat's area with its age, which means nothing.
-          hints:
-            - Which axis has length 4, and which has length 2?
-            - A reduction removes the axis it is given.
       - question:
           id: standardise
           type: code
@@ -110,10 +107,6 @@ stages:
                     return X - X.mean(axis=0)
           explanation: |
             `X.mean(axis=0)` has shape `(d,)` and `X` has shape `(n, d)`. Broadcasting lines the shapes up from the right, so the `(d,)` array is stretched down all `n` rows, and each column has its own mean subtracted. The same happens with the division. `X - ...` builds a new array, so the caller's `X` is untouched. Writing `X -= ...` would have changed the caller's data behind their back, which is the kind of bug that is found weeks later.
-          hints:
-            - You need one mean and one standard deviation for each column. Which axis gives that?
-            - What shape is that array of means, and how does broadcasting line it up against X?
-            - Which form of subtraction makes a new array, and which changes the old one in place?
   - title: Every new flat against every known flat
     blocks:
       - text: |
@@ -134,9 +127,6 @@ stages:
           answer: 0
           explanation: |
             `Q[:, np.newaxis, :]` has shape `(2, 1, 2)` and `X[np.newaxis, :, :]` has shape `(1, 4, 2)`. Compared from the right: 2 and 2 match, 1 stretches to 4, and 2 against 1 stretches the 1 to 2. The result is `(2, 4, 2)`, with entry `[i, j, k]` equal to feature `k` of new flat `i` minus feature `k` of known flat `j`. Without the new axes the shapes `(2, 2)` and `(4, 2)` do not broadcast, because 2 and 4 are different and neither is 1.
-          hints:
-            - Write down the shape of each operand after its new axis is inserted.
-            - Broadcasting compares shapes from the right, and a length of 1 stretches to match.
       - question:
           id: distances
           type: code
@@ -203,10 +193,6 @@ stages:
                     return np.abs(gaps).sum(axis=2)
           explanation: |
             The subtraction builds all the differences at once, in an array of shape `(m, n, d)`. Squaring is done entry by entry. The sum is taken over the last axis, the features, which is the axis that must disappear to leave `(m, n)`. Then one square root for the whole array. Each step is one line of NumPy and runs in compiled code, and the only thinking required was about shapes.
-          hints:
-            - Give Q and X shapes that broadcast to (m, n, d), as in the question above.
-            - A Euclidean distance is the square root of a sum of squared differences. Over which axis is that sum?
-            - Check the shape of your result before checking its numbers.
       - question:
           id: argmin-trace
           type: predict
@@ -224,9 +210,6 @@ stages:
             (2, 3) (2,)
           explanation: |
             `argmin(axis=1)` looks along each row and reports the position of its smallest entry: position 1 in the first row and position 2 in the second. Those are the indices of the known flat nearest to each new flat. The axis that was reduced, of length 3, is gone.
-          hints:
-            - argmin returns a position, not a value.
-            - With axis=1 the search runs along each row.
   - title: From distances to weights, without nan
     blocks:
       - text: |
@@ -250,9 +233,6 @@ stages:
           answer: 0
           explanation: |
             $e^{-1000}$ is far smaller than the smallest positive float and $e^{1000}$ far larger than the largest. Yet the true weights are perfectly ordinary, about 0.73 for the larger score and 0.27 for the smaller in both cases, because only the differences between scores matter: multiplying top and bottom by $e^{-c}$ changes nothing. Choosing $c$ to be the row's maximum makes the largest exponential exactly 1, so nothing overflows and the sum cannot be 0. It is the same idea as the log-sum-exp trick.
-          hints:
-            - What does a float hold when the true value is too small to represent, and when it is too large?
-            - If the same number is subtracted from every score in a row, what happens to the top and the bottom of the fraction?
       - question:
           id: softmax
           type: code
@@ -322,10 +302,6 @@ stages:
                     return shifted / shifted.sum(axis=1, keepdims=True)
           explanation: |
             `scores.max(axis=1, keepdims=True)` has shape `(m, 1)`, so it broadcasts against the `(m, n)` scores and each row has its own maximum subtracted. Without `keepdims` the maxima would have shape `(m,)`, which lines up against the columns instead of the rows. After the shift every exponent is at most 0, the largest in each row is exactly 0, and so each row's sum is at least 1. Nothing can overflow, and the division can never be 0 by 0.
-          hints:
-            - Each row is treated on its own. Which axis do the maximum and the sum run along?
-            - A row maximum of shape (m,) will not broadcast against the rows of an (m, n) array. Which keyword keeps the reduced axis with length 1?
-            - Subtract before taking the exponential, not after.
   - title: The estimate
     blocks:
       - text: |
@@ -438,10 +414,6 @@ stages:
                     return (-distances(X, Q)) @ y
           explanation: |
             `predict` is one line because each piece returns exactly the shape the next piece needs: `distances` gives `(m, n)`, negating and `softmax` keep `(m, n)`, and `@ y` with `y` of shape `(n,)` gives `(m,)`. The distances are negated because softmax favours large scores and the predictor must favour small distances. Leaving out the minus sign still runs and still returns numbers of a plausible size, weighted towards the flats least like the new one. That is why the tests checked a case whose answer is known.
-          hints:
-            - Work out the shape after each step. What do you have after distances, and what must you have at the end?
-            - Softmax gives the largest weight to the largest score. Which flats should get the largest weight?
-            - A weighted average of y for every row of weights at once is a single product.
 review: |
   You have a predictor in a dozen lines, with no loop in it, and you can say what every axis of every array means:
 

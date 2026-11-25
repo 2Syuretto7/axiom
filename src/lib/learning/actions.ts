@@ -2,10 +2,10 @@
 
 import { getDb } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
-import { blockHtml, displayOrder, findQuestion, inlineHtml } from "@/lib/lessons/content";
+import { blockHtml, displayOrder, findQuestion } from "@/lib/lessons/content";
 import { grade } from "@/lib/lessons/grade";
 import { late, secondsFor } from "@/lib/lessons/timing";
-import { recordAttempt, revealNextHint, saveSnapshot } from "./service";
+import { recordAttempt, saveSnapshot } from "./service";
 import { masteryOf, weakCheck } from "./standing";
 import { clearTutorHistory } from "../tutor/service";
 
@@ -113,14 +113,6 @@ export async function timeUp(conceptId: string, questionId: string): Promise<voi
     { conceptId: unitId, questionId: question.id, system: question.system, correct: false, answer: { timedOut: true }, ms: seconds * 1000 },
     questions.map((q) => q.id),
   );
-}
-
-/** The next hint on a question's ladder. Hints never contain the answer. */
-export async function nextHint(conceptId: string, questionId: string): Promise<string[]> {
-  const user = await learner();
-  const { unitId, question } = findQuestion(clean(conceptId, 200), clean(questionId, 200));
-  const level = await revealNextHint(getDb(), user.id, unitId, question.id, question.hints.length);
-  return question.hints.slice(0, level).map(inlineHtml);
 }
 
 export async function saveCode(key: string, code: string): Promise<void> {

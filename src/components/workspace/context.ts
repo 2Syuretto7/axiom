@@ -18,6 +18,8 @@ export type WorkspaceApi = {
   finish: (mastery?: number) => void;
   /** Record the outcome of an answer so progress and the end of the lesson update. */
   settle: (questionId: string, result: AnswerResult) => void;
+  /** Note which question the learner is working on, so the tutor knows which one a message is likely to be about. */
+  attend: (questionId: string) => void;
   /** The code question whose answer is in the editor, if any. */
   active: string | null;
   open: (question: { id: string; number: number; starter: string }) => void;
