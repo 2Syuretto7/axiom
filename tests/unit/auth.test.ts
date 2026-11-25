@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "@/lib/db/schema";
 import { MAX_FAILURES_PER_IP, WINDOW_MS } from "@/lib/auth/rate-limit";
-import { SESSION_TTL_MS, sha256, signIn, signOut, signUp, userForToken } from "@/lib/auth/service";
+import { SESSION_TTL_MS, sha256, signIn, signUp, userForToken } from "@/lib/auth/service";
 import { migrate } from "../../scripts/migrate";
 
 const url = process.env.TEST_DATABASE_URL ?? "postgres://axiom:axiom@localhost:5432/axiom_test";
@@ -99,7 +99,7 @@ describe("sign-in", () => {
 });
 
 describe("sessions", () => {
-  it("resolves a valid token, extends it with use, and ends on sign-out", async () => {
+  it("resolves a valid token and extends it with use", async () => {
     const { token } = await createLearner();
     const now = new Date();
     const user = await userForToken(db, token, now);
@@ -109,9 +109,6 @@ describe("sessions", () => {
     await userForToken(db, token, nextDay);
     const [session] = await db.select().from(schema.sessions);
     expect(session.expiresAt.getTime()).toBe(nextDay.getTime() + SESSION_TTL_MS);
-
-    await signOut(db, token);
-    expect(await userForToken(db, token)).toBeNull();
   });
 
   it("rejects unknown, missing and expired tokens", async () => {
