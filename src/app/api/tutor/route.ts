@@ -2,7 +2,8 @@ import { after } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
-import { nextAfter } from "@/lib/learning/next";
+import { capstoneCluster, isCapstoneId } from "@/lib/capstones/schema";
+import { nextAfter, nextConcept } from "@/lib/learning/next";
 import { completedConcepts, hintLevels, solvedQuestions } from "@/lib/learning/service";
 import { content } from "@/lib/lessons/content";
 import { costMicroUsd, MAX_MESSAGE_CHARS, tutorConnected } from "@/lib/tutor/config";
@@ -34,25 +35,32 @@ export async function POST(request: Request) {
   if (!tutorConnected()) return refuse(503, "The tutor is not connected yet. It needs ANTHROPIC_API_KEY in this deployment.");
 
   const db = getDb();
-  const { graph, lessons } = content();
+  const { graph, lessons, capstones } = content();
   const { conceptId, message, questionId, code, output } = parsed.data;
   const lesson = lessons.get(conceptId) ?? null;
-  if (!lesson && conceptId !== "scratch") return refuse(404, "That lesson does not exist.");
+  const capstone = isCapstoneId(conceptId) ? (capstones.get(capstoneCluster(conceptId)) ?? null) : null;
+  const unit = lesson ?? capstone;
+  if (!unit && conceptId !== "scratch") return refuse(404, "That lesson does not exist.");
 
   const [completed, solved, history, effort, hints] = await Promise.all([
     completedConcepts(db, user.id),
-    lesson ? solvedQuestions(db, user.id, lesson.concept) : new Set<string>(),
+    unit ? solvedQuestions(db, user.id, conceptId) : new Set<string>(),
     tutorHistory(db, user.id, conceptId),
-    lesson ? questionEffort(db, user.id, lesson.concept) : undefined,
-    lesson ? hintLevels(db, user.id, lesson.concept) : undefined,
+    unit ? questionEffort(db, user.id, conceptId) : undefined,
+    unit ? hintLevels(db, user.id, conceptId) : undefined,
   ]);
   const system = systemPrompt({
     graph,
     completed: completed.filter((id) => id !== conceptId),
     lesson,
-    next: lesson ? nextAfter(graph, new Set(lessons.keys()), completed, lesson.concept) : null,
+    capstone,
+    next: lesson
+      ? nextAfter(graph, new Set(lessons.keys()), completed, lesson.concept)
+      : capstone
+        ? (nextConcept(graph, new Set(lessons.keys()), completed)?.id ?? null)
+        : null,
   });
-  const note = workspaceNote(lesson, { questionId, code, output, solved: [...solved], effort, hints });
+  const note = workspaceNote(unit, { questionId, code, output, solved: [...solved], effort, hints });
   await saveTutorMessage(db, user.id, conceptId, "user", message);
 
   const encoder = new TextEncoder();

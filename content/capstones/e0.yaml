@@ -1,0 +1,489 @@
+cluster: E0
+title: A marks ledger
+minutes: 60
+claim: You will have written a small program that takes a class's raw names and marks and produces a tidy report, one function at a time, and then joined those functions into one.
+brief: |
+  So far every program you wrote answered one question from one lesson. This is your first program with parts.
+
+  **The project.** A teacher has typed a class's test results in a hurry. Each result is a pair, a name and a mark out of 100, and the whole class is a list of such pairs:
+
+  ```python
+  records = [("  aSHA ", 72), ("ravi", 35), ("MEERA", 91)]
+  ```
+
+  The names are untidy. The teacher wants a report: one line for each learner with the name written properly, the mark and a grade, and a last line that sums up the class.
+
+  You will not write that in one go, and nobody does. You will write four small functions, each of which does one job and can be checked on its own, and in the last stage you will make them work together. Nothing here is new. Every stage uses what the lessons of this cluster taught, and the last stage uses nearly all of it at once.
+
+  Two pieces of advice. Each question opens with its own editor, so **keep your finished functions**: you will paste them into later stages. And when a check fails, do what the last lesson taught: read the message, try the smallest case that shows the problem, and trace it by hand before changing anything.
+starter: |
+  # Scratch space for the ledger. Try a function on a small case here.
+  records = [("  aSHA ", 72), ("ravi", 35), ("MEERA", 91)]
+  for name, mark in records:
+      print(name, mark)
+stages:
+  - title: From a mark to a grade
+    blocks:
+      - text: |
+          The grades are set by boundaries. A mark of 75 or more is an `"A"`. Otherwise 60 or more is a `"B"`. Otherwise 40 or more is a `"C"`. Anything lower is an `"F"`.
+      - question:
+          id: grade
+          type: code
+          mode: write
+          system: s2
+          concepts: [e0.booleans-and-conditionals, e0.functions]
+          prompt: |
+            Write `grade(mark)`. It takes a mark from 0 to 100 and **returns** the grade as a one-letter string.
+          starter: |
+            def grade(mark):
+                return ""
+          solution: |
+            def grade(mark):
+                if mark >= 75:
+                    return "A"
+                elif mark >= 60:
+                    return "B"
+                elif mark >= 40:
+                    return "C"
+                return "F"
+          tests: |
+            assert callable(grade), "define a function named grade"
+            assert grade(90) is not None, "grade must return the letter, not print it"
+            for _mark, _letter in [(90, "A"), (66, "B"), (50, "C"), (10, "F"), (100, "A"), (0, "F")]:
+                assert grade(_mark) == _letter, "a mark well inside a band gets the wrong grade: try " + str(_mark)
+            for _mark, _letter in [(75, "A"), (74, "B"), (60, "B"), (59, "C"), (40, "C"), (39, "F")]:
+                assert grade(_mark) == _letter, "a mark on or just below a boundary gets the wrong grade: try " + str(_mark)
+          wrong:
+            - |
+              def grade(mark):
+                  if mark > 75:
+                      return "A"
+                  elif mark > 60:
+                      return "B"
+                  elif mark > 40:
+                      return "C"
+                  return "F"
+            - |
+              def grade(mark):
+                  if mark >= 75:
+                      print("A")
+                  elif mark >= 60:
+                      print("B")
+                  elif mark >= 40:
+                      print("C")
+                  else:
+                      print("F")
+            - |
+              def grade(mark):
+                  if mark >= 40:
+                      return "C"
+                  elif mark >= 60:
+                      return "B"
+                  elif mark >= 75:
+                      return "A"
+                  return "F"
+          explanation: |
+            The chain is tried from the top and stops at the first true condition, so the highest boundary must come first. A mark of exactly 75 is an A, which is why the comparison is `>=` and not `>`. The function returns the letter so that other code can use it.
+          hints:
+            - Python tries the conditions of an if, elif chain in order and takes the first one that is true. Which boundary must be tested first?
+            - Check a mark that sits exactly on a boundary by hand. Does your comparison include it?
+            - The report will need the letter as a value. Is your function handing it back, or only showing it?
+  - title: A name written properly
+    blocks:
+      - text: |
+          The names arrive with stray spaces and in any mixture of capitals. Written properly, a name has no spaces around it, a capital first letter and small letters after it, so `"  aSHA "` becomes `"Asha"`.
+
+          First, a reminder of how strings behave.
+      - question:
+          id: strip-trace
+          type: predict
+          system: s1
+          concepts: [e0.strings]
+          prompt: What does this print?
+          code: |
+            name = "  ravi "
+            name.strip()
+            print(len(name))
+            name = name.strip()
+            print(len(name))
+          output: |
+            7
+            4
+          explanation: |
+            A string never changes in place. The second line makes a new, stripped string and throws it away. Only the fourth line, which stores the result back under the name, changes what `name` refers to.
+          hints:
+            - A string method returns a new string. What happens to that new string on the second line?
+            - Count every character between the quotes, spaces included.
+      - text: |
+          Somebody has already written `clean(name)`, and it does not work.
+      - question:
+          id: clean
+          type: code
+          mode: find-bug
+          system: s2
+          concepts: [e0.strings, e0.reading-errors-and-debugging, e0.functions]
+          prompt: |
+            `clean(name)` should return the name written properly. It raises no error, yet `clean("  aSHA ")` does not return `"Asha"`. Find the bug and fix it.
+          starter: |
+            def clean(name):
+                name.strip()
+                return name[0].upper() + name[1:].lower()
+          solution: |
+            def clean(name):
+                name = name.strip()
+                return name[0].upper() + name[1:].lower()
+          tests: |
+            assert clean("ravi") == "Ravi", "a tidy lower-case name should only gain its capital"
+            assert clean("MEERA") == "Meera", "letters after the first should become small"
+            assert clean("  aSHA ") == "Asha", "the spaces around the name are still affecting the result"
+            assert clean(" li") == "Li", "try a short name with a space in front"
+          wrong:
+            - |
+              def clean(name):
+                  name = name.strip()
+                  return name[0].upper() + name[1:]
+            - |
+              def clean(name):
+                  return name.strip().upper()
+            - |
+              def clean(name):
+                  name = name.strip()
+                  return name[0] + name[1:].lower()
+          explanation: |
+            This is a silent wrong answer, the hardest kind of bug, because nothing complains. `name.strip()` built a stripped string and discarded it, so `name[0]` was still a space. Storing the result with `name = name.strip()` fixes it. The quickest way to find it was a small case and a trace: print `name` after the second line and the spaces are still there.
+          hints:
+            - Trace the function by hand on the failing name. What exactly is name[0]?
+            - Print name just before the return line. Is it what the line above was meant to produce?
+            - Compare the second line with the predict question above.
+  - title: The class in three numbers
+    blocks:
+      - text: |
+          The last line of the report needs the lowest mark, the highest mark and the mean, which is the total of the marks divided by how many there are.
+
+          The marks are not in a list of their own. They are the second item of each pair in `records`, so they have to be collected first.
+      - question:
+          id: summary
+          type: code
+          mode: write
+          system: s2
+          concepts: [e0.loops, e0.lists-and-tuples, e0.functions, e0.expressions]
+          prompt: |
+            Write `summary(records)`. It takes a list of `(name, mark)` pairs with at least one pair in it and returns a tuple `(lowest, highest, mean)`.
+          starter: |
+            def summary(records):
+                return (0, 0, 0)
+          solution: |
+            def summary(records):
+                marks = []
+                for name, mark in records:
+                    marks.append(mark)
+                return (min(marks), max(marks), sum(marks) / len(marks))
+          tests: |
+            _result = summary([("a", 50), ("b", 70)])
+            assert _result is not None, "summary must return the tuple, not print it"
+            assert len(_result) == 3, "return three values: lowest, highest and mean"
+            assert _result[0] == 50 and _result[1] == 70, "lowest comes first and highest second"
+            assert _result[2] == 60, "the mean is the total divided by the count"
+            assert summary([("a", 50), ("b", 71)])[2] == 60.5, "the mean need not be a whole number: which division keeps the fraction?"
+            assert summary([("z", 88)]) == (88, 88, 88), "a class of one has the same lowest, highest and mean"
+            assert summary([("a", 91), ("b", 35), ("c", 72)])[:2] == (35, 91), "the pairs are not in order of mark"
+          wrong:
+            - |
+              def summary(records):
+                  marks = []
+                  for name, mark in records:
+                      marks.append(mark)
+                  return (min(marks), max(marks), sum(marks) // len(marks))
+            - |
+              def summary(records):
+                  marks = []
+                  for name, mark in records:
+                      marks.append(mark)
+                  return (marks[0], marks[len(marks) - 1], sum(marks) / len(marks))
+            - |
+              def summary(records):
+                  marks = []
+                  for name, mark in records:
+                      marks.append(mark)
+                  return (max(marks), min(marks), sum(marks) / len(marks))
+          explanation: |
+            The loop unpacks each pair into `name` and `mark` and collects the marks in a list. Once they are in a list, `min`, `max`, `sum` and `len` do the rest. The mean uses `/`, because `//` would throw the fractional part away.
+          hints:
+            - A for loop can unpack each pair into two names as it goes.
+            - Build a list that holds only the marks. Which built-in functions work on a list of numbers?
+            - Python has more than one kind of division. Which one keeps the part after the decimal point?
+  - title: How many of each grade
+    blocks:
+      - text: |
+          The teacher also wants to know how many learners got each grade. The natural shape for that is a dictionary from a grade to a count, such as `{"B": 2, "F": 1}`. A grade nobody got does not appear in it at all.
+
+          This is the first stage that needs an earlier one: it must grade each mark, and you have already written the function that does that.
+      - question:
+          id: tally
+          type: code
+          mode: write
+          system: s2
+          concepts: [e0.dictionaries-and-sets, e0.loops, e0.lists-and-tuples, e0.functions]
+          prompt: |
+            Paste your `grade` function from stage 1 where the comment says. Then write `tally(records)`, which returns a dictionary from each grade that occurs to the number of learners who got it.
+          starter: |
+            # Paste your grade function from stage 1 here.
+
+
+            def tally(records):
+                return {}
+          solution: |
+            def grade(mark):
+                if mark >= 75:
+                    return "A"
+                elif mark >= 60:
+                    return "B"
+                elif mark >= 40:
+                    return "C"
+                return "F"
+
+
+            def tally(records):
+                counts = {}
+                for name, mark in records:
+                    letter = grade(mark)
+                    counts[letter] = counts.get(letter, 0) + 1
+                return counts
+          tests: |
+            assert "grade" in globals() and callable(grade), "paste your grade function above tally"
+            assert tally([]) == {}, "an empty class has an empty tally"
+            assert tally([("a", 80)]) == {"A": 1}, "a class of one has one grade, counted once"
+            _counts = tally([("a", 72), ("b", 35), ("c", 91), ("d", 60)])
+            assert set(_counts.keys()) == {"A", "B", "F"}, "the keys should be exactly the grades that occur"
+            assert _counts["B"] == 2, "two learners share a grade here, so its count should have grown"
+            assert sum(_counts.values()) == 4, "every learner should be counted exactly once"
+          wrong:
+            - |
+              def grade(mark):
+                  if mark >= 75:
+                      return "A"
+                  elif mark >= 60:
+                      return "B"
+                  elif mark >= 40:
+                      return "C"
+                  return "F"
+
+
+              def tally(records):
+                  counts = {"A": 0, "B": 0, "C": 0, "F": 0}
+                  for name, mark in records:
+                      letter = grade(mark)
+                      counts[letter] = counts[letter] + 1
+                  return counts
+            - |
+              def grade(mark):
+                  if mark >= 75:
+                      return "A"
+                  elif mark >= 60:
+                      return "B"
+                  elif mark >= 40:
+                      return "C"
+                  return "F"
+
+
+              def tally(records):
+                  counts = {}
+                  for name, mark in records:
+                      counts[grade(mark)] = 1
+                  return counts
+            - |
+              def grade(mark):
+                  if mark >= 75:
+                      return "A"
+                  elif mark >= 60:
+                      return "B"
+                  elif mark >= 40:
+                      return "C"
+                  return "F"
+
+
+              def tally(records):
+                  counts = {}
+                  for name, mark in records:
+                      counts[mark] = counts.get(mark, 0) + 1
+                  return counts
+          explanation: |
+            This is the counting pattern from the dictionaries lesson, with one change: the key is not the item itself but what `grade` returns for it. `counts.get(letter, 0)` gives the count so far, or 0 the first time a grade is seen, so no key has to exist beforehand.
+          hints:
+            - You have counted with a dictionary before. What is being counted here, the marks or something worked out from each mark?
+            - The first time a grade is seen it has no entry yet. Which dictionary method lets you ask for a value with a fallback?
+            - Call grade inside the loop, once for each pair.
+  - title: The report
+    blocks:
+      - text: |
+          Now the whole thing. `report(records)` returns the report as a list of strings, one string for each line.
+
+          For `[("  aSHA ", 72), ("ravi", 35)]` the first line is `"Asha: 72 B"`: the cleaned name, a colon, a space, the mark, a space and the grade. There is one such line for each learner, in the order the records came in.
+
+          The last line has the form `"Lowest 35, highest 72, mean 53.5"`, with the mean rounded to one decimal place.
+
+          Every piece of that is something one of your functions already produces. This stage is about calling them in the right places, not about writing their insides again.
+      - question:
+          id: report
+          type: code
+          mode: write
+          system: s2
+          concepts: [e0.functions, e0.strings, e0.loops, e0.lists-and-tuples, e0.expressions]
+          prompt: |
+            Paste `clean`, `grade` and `summary` from the earlier stages where the comment says. Then write `report(records)`, which returns the list of lines described above.
+          starter: |
+            # Paste clean, grade and summary from the earlier stages here.
+
+
+            def report(records):
+                return []
+          solution: |
+            def clean(name):
+                name = name.strip()
+                return name[0].upper() + name[1:].lower()
+
+
+            def grade(mark):
+                if mark >= 75:
+                    return "A"
+                elif mark >= 60:
+                    return "B"
+                elif mark >= 40:
+                    return "C"
+                return "F"
+
+
+            def summary(records):
+                marks = []
+                for name, mark in records:
+                    marks.append(mark)
+                return (min(marks), max(marks), sum(marks) / len(marks))
+
+
+            def report(records):
+                lines = []
+                for name, mark in records:
+                    lines.append(f"{clean(name)}: {mark} {grade(mark)}")
+                lowest, highest, mean = summary(records)
+                lines.append(f"Lowest {lowest}, highest {highest}, mean {round(mean, 1)}")
+                return lines
+          tests: |
+            for _needed in ["clean", "grade", "summary"]:
+                assert _needed in globals(), "paste your " + _needed + " function above report"
+            _lines = report([("  aSHA ", 72), ("ravi", 35), ("MEERA", 91)])
+            assert _lines is not None, "report must return the list of lines, not print them"
+            assert len(_lines) == 4, "three learners need three lines, and then the summary line"
+            assert _lines[0] == "Asha: 72 B", "the first line is not right: compare it character by character with the example"
+            assert _lines[:3] == ["Asha: 72 B", "Ravi: 35 F", "Meera: 91 A"], "each learner's line needs the cleaned name, the mark and the grade, in the order of the records"
+            assert _lines[3] == "Lowest 35, highest 91, mean 66.0", "the summary line is not right: compare it character by character with the example"
+            _other = report([("li", 50), (" Om ", 61), ("ANU", 70)])
+            assert _other[3].startswith("Lowest 50, highest 70, mean "), "the summary line should use this class's own lowest and highest"
+            assert _other[3] == "Lowest 50, highest 70, mean 60.3", "round the mean to one decimal place"
+          wrong:
+            - |
+              def clean(name):
+                  name = name.strip()
+                  return name[0].upper() + name[1:].lower()
+
+
+              def grade(mark):
+                  if mark >= 75:
+                      return "A"
+                  elif mark >= 60:
+                      return "B"
+                  elif mark >= 40:
+                      return "C"
+                  return "F"
+
+
+              def summary(records):
+                  marks = []
+                  for name, mark in records:
+                      marks.append(mark)
+                  return (min(marks), max(marks), sum(marks) / len(marks))
+
+
+              def report(records):
+                  lines = []
+                  for name, mark in records:
+                      lines.append(f"{clean(name)}: {mark} {grade(mark)}")
+                  lowest, highest, mean = summary(records)
+                  lines.append(f"Lowest {lowest}, highest {highest}, mean {mean}")
+                  return lines
+            - |
+              def clean(name):
+                  name = name.strip()
+                  return name[0].upper() + name[1:].lower()
+
+
+              def grade(mark):
+                  if mark >= 75:
+                      return "A"
+                  elif mark >= 60:
+                      return "B"
+                  elif mark >= 40:
+                      return "C"
+                  return "F"
+
+
+              def summary(records):
+                  marks = []
+                  for name, mark in records:
+                      marks.append(mark)
+                  return (min(marks), max(marks), sum(marks) / len(marks))
+
+
+              def report(records):
+                  lines = []
+                  for name, mark in records:
+                      lines.append(f"{name}: {mark} {grade(mark)}")
+                  lowest, highest, mean = summary(records)
+                  lines.append(f"Lowest {lowest}, highest {highest}, mean {round(mean, 1)}")
+                  return lines
+            - |
+              def clean(name):
+                  name = name.strip()
+                  return name[0].upper() + name[1:].lower()
+
+
+              def grade(mark):
+                  if mark >= 75:
+                      return "A"
+                  elif mark >= 60:
+                      return "B"
+                  elif mark >= 40:
+                      return "C"
+                  return "F"
+
+
+              def summary(records):
+                  marks = []
+                  for name, mark in records:
+                      marks.append(mark)
+                  return (min(marks), max(marks), sum(marks) / len(marks))
+
+
+              def report(records):
+                  for name, mark in records:
+                      print(f"{clean(name)}: {mark} {grade(mark)}")
+                  lowest, highest, mean = summary(records)
+                  print(f"Lowest {lowest}, highest {highest}, mean {round(mean, 1)}")
+          explanation: |
+            `report` is short because the work is already done elsewhere. The loop builds one line for each pair by calling `clean` and `grade` inside an f-string. `summary` returns a tuple, which is unpacked into three names and placed in the last line, with `round(mean, 1)` trimming the mean. Each function does one job, was checked on its own, and is used here without anyone having to look inside it again. That is what functions are for.
+          hints:
+            - Start a list of lines, add one line for each learner in a loop, and add the summary line after the loop.
+            - An f-string can hold a function call between its braces.
+            - summary hands back three values in one tuple. How do you give each of them its own name?
+            - Which built-in function trims a number to a chosen number of decimal places?
+review: |
+  You have written a program with parts. Four functions each did one job, and a fifth joined them into something useful.
+
+  Look at where each piece came from:
+
+  - `grade` was a chain of conditions, from [[e0.booleans-and-conditionals]], wrapped in a function that returns a value, from [[e0.functions]].
+  - `clean` depended on knowing that a string never changes in place, from [[e0.strings]], and fixing it was a silent wrong answer found with a small case and a trace, from [[e0.reading-errors-and-debugging]].
+  - `summary` collected values with a loop, from [[e0.loops]], into a list, from [[e0.lists-and-tuples]], and chose the right division, from [[e0.expressions]].
+  - `tally` was the counting pattern from [[e0.dictionaries-and-sets]], with the key worked out by another function.
+  - `report` used all of it at once.
+
+  The important thing is the shape of the work, and it will not change as the programs grow. You never held the whole problem in your head. You cut it into pieces small enough to check, checked each piece, and then trusted the pieces. Every larger program later in this course, up to the ones that train models, is built the same way.

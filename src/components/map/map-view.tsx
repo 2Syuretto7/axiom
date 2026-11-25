@@ -87,6 +87,12 @@ export function MapView({ map }: { map: MapData }) {
               <span className="label">{STATE[lesson.state]}</span>
             </li>
           ))}
+          {selected.capstone ? (
+            <li data-state={selected.capstone.state} data-capstone>
+              <span>Mini-capstone: {selected.capstone.title}</span>
+              <span className="label">{STATE[selected.capstone.state]}</span>
+            </li>
+          ) : null}
         </ol>
       </section>
     </div>

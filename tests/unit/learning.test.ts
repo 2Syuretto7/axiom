@@ -4,6 +4,7 @@ import { Pool } from "pg";
 import * as schema from "@/lib/db/schema";
 import { signUp } from "@/lib/auth/service";
 import {
+  completedCapstones,
   completedConcepts,
   hintLevels,
   recordAttempt,
@@ -52,6 +53,18 @@ describe("recording learning", () => {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
     expect(await completedConcepts(db, userId)).toEqual(["m0.counting", "e0.printing", "m0.adding"]);
+  });
+
+  it("records a finished mini-capstone apart from the lessons, so it never becomes the lesson the next must build on", async () => {
+    for (const unit of ["m0.counting", "capstone.m0", "m0.adding"]) {
+      await attempt(unit, "a", true);
+      await attempt(unit, "b", true);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    await attempt("capstone.e0", "a", true);
+    expect(await completedConcepts(db, userId)).toEqual(["m0.counting", "m0.adding"]);
+    expect(await completedCapstones(db, userId)).toEqual(new Set(["M0"]));
+    expect(await solvedQuestions(db, userId, "capstone.e0")).toEqual(new Set(["a"]));
   });
 
   it("climbs the hint ladder one rung at a time and records hints against the attempt", async () => {

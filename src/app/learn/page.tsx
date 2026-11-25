@@ -1,12 +1,14 @@
 import "katex/dist/katex.min.css";
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { CapstoneView } from "@/components/lesson/capstone-view";
 import { LessonView } from "@/components/lesson/lesson-view";
 import { Workspace } from "@/components/workspace/workspace";
 import { requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
-import { nextAfter, nextConcept } from "@/lib/learning/next";
-import { completedConcepts, hintLevels, snapshotsFor, solvedQuestions } from "@/lib/learning/service";
+import { capstoneId, capstoneQuestions } from "@/lib/capstones/schema";
+import { nextAfter, nextStep } from "@/lib/learning/next";
+import { completedCapstones, completedConcepts, hintLevels, snapshotsFor, solvedQuestions } from "@/lib/learning/service";
 import { content } from "@/lib/lessons/content";
 import { questionsOf } from "@/lib/lessons/load";
 import { tutorConnected } from "@/lib/tutor/config";
@@ -31,16 +33,17 @@ print("1 + 2 + ... + 10 =", total)
 `;
 
 /**
- * Learn is the whole navigation: it works out the one lesson to do now.
- * That lesson always builds directly on the lesson just finished.
+ * Learn is the whole navigation: it works out the one thing to do now.
+ * That is a lesson that builds directly on the lesson just finished, or the
+ * mini-capstone that closes the cluster just finished.
  */
 async function Lesson() {
   const user = await requireUser();
   const db = getDb();
-  const { graph, lessons } = content();
+  const { graph, lessons, capstones } = content();
   const written = new Set(lessons.keys());
-  const completed = await completedConcepts(db, user.id);
-  const next = nextConcept(graph, written, completed);
+  const [completed, capstonesDone] = await Promise.all([completedConcepts(db, user.id), completedCapstones(db, user.id)]);
+  const next = nextStep(graph, written, new Set(capstones.keys()), completed, capstonesDone);
 
   if (!next) {
     const [snapshots, tutor] = await Promise.all([snapshotsFor(db, user.id, "axiom-code:scratch"), tutorSetup(db, user.id, "scratch")]);
@@ -63,6 +66,32 @@ async function Lesson() {
     );
   }
 
+  if (next.kind === "capstone") {
+    const capstone = capstones.get(next.cluster)!;
+    const cluster = graph.clusters.get(next.cluster)!;
+    const id = capstoneId(cluster.id);
+    const [solved, hints, snapshots, tutor] = await Promise.all([
+      solvedQuestions(db, user.id, id),
+      hintLevels(db, user.id, id),
+      snapshotsFor(db, user.id, `axiom-code:${id}`),
+      tutorSetup(db, user.id, id),
+    ]);
+    const ids = capstoneQuestions(capstone).map((q) => q.id);
+    return (
+      <Workspace
+        key={id}
+        id={id}
+        breadcrumb={[TRACKS[cluster.track], cluster.title, "Mini-capstone"]}
+        starterCode={capstone.starter ?? "# Scratch space. Try things here.\n"}
+        snapshots={snapshots}
+        lesson={{ total: ids.length, solved: ids.filter((q) => solved.has(q)), complete: false }}
+        tutor={tutor}
+      >
+        <CapstoneView capstone={capstone} cluster={cluster} graph={graph} solved={solved} hintLevels={hints} />
+      </Workspace>
+    );
+  }
+
   const lesson = lessons.get(next.id)!;
   const concept = graph.concepts.get(next.id)!;
   const [solved, hints, snapshots, tutor] = await Promise.all([
@@ -72,6 +101,8 @@ async function Lesson() {
     tutorSetup(db, user.id, concept.id),
   ]);
   const ids = questionsOf(lesson).map((q) => q.id);
+  // Finishing this lesson finishes its cluster, so the cluster's mini-capstone comes before the next lesson.
+  const closesCluster = graph.clusters.get(concept.cluster)!.concepts.every((id) => id === concept.id || completed.includes(id));
   return (
     <Workspace
       key={concept.id}
@@ -87,6 +118,7 @@ async function Lesson() {
         concept={concept}
         graph={graph}
         next={nextAfter(graph, written, completed, concept.id)}
+        capstone={closesCluster && !capstonesDone.has(concept.cluster) ? capstones.get(concept.cluster)?.title : null}
         solved={solved}
         hintLevels={hints}
       />

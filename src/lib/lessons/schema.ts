@@ -62,7 +62,7 @@ export type Question = z.infer<typeof question>;
 
 export const PARTS = ["recall", "puzzle", "intuition", "derivation", "formal", "drill", "work", "connections"] as const;
 
-const block = z.union([
+export const block = z.union([
   z.strictObject({ text: z.string().min(1) }),
   z.strictObject({ question }),
   z.strictObject({ figure: z.string().regex(/^[a-z-]+$/), props: z.record(z.string(), z.unknown()).optional() }),

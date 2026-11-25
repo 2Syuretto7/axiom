@@ -1,4 +1,5 @@
 import { and, asc, eq, isNotNull, like, sql } from "drizzle-orm";
+import { capstoneCluster, isCapstoneId } from "../capstones/schema";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema";
 
@@ -55,14 +56,23 @@ export async function solvedQuestions(db: Db, userId: string, conceptId: string)
   return new Set(rows.map((row) => row.id));
 }
 
-/** Completed concepts, oldest first. The last one is the lesson the next must build on. */
-export async function completedConcepts(db: Db, userId: string): Promise<string[]> {
+async function completedUnits(db: Db, userId: string): Promise<string[]> {
   const rows = await db
     .select({ id: lessonProgress.conceptId })
     .from(lessonProgress)
     .where(and(eq(lessonProgress.userId, userId), isNotNull(lessonProgress.completedAt)))
     .orderBy(asc(lessonProgress.completedAt), asc(lessonProgress.startedAt));
   return rows.map((row) => row.id);
+}
+
+/** Completed concepts, oldest first. The last one is the lesson the next must build on. */
+export async function completedConcepts(db: Db, userId: string): Promise<string[]> {
+  return (await completedUnits(db, userId)).filter((id) => !isCapstoneId(id));
+}
+
+/** The clusters whose mini-capstone is finished. They are kept apart from lessons so they never change which lesson comes next. */
+export async function completedCapstones(db: Db, userId: string): Promise<Set<string>> {
+  return new Set((await completedUnits(db, userId)).filter(isCapstoneId).map(capstoneCluster));
 }
 
 export async function hintLevels(db: Db, userId: string, conceptId: string): Promise<Map<string, number>> {

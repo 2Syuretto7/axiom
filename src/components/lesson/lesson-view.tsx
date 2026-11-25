@@ -23,6 +23,7 @@ export function LessonView({
   concept,
   graph,
   next,
+  capstone,
   solved,
   hintLevels,
 }: {
@@ -31,6 +32,8 @@ export function LessonView({
   graph: Graph;
   /** The lesson Learn gives after this one, worked out by the same rule Learn uses. */
   next: string | null;
+  /** The title of the mini-capstone Learn gives straight after this lesson, if this lesson closes a cluster that has one. */
+  capstone?: string | null;
   solved: Set<string>;
   hintLevels: Map<string, number>;
 }) {
@@ -66,9 +69,14 @@ export function LessonView({
         </section>
       ))}
 
-      {next ? (
+      {capstone ? (
         <p className="lesson-links lesson-next">
-          <span className="label">Next</span> {names(graph, [next])}
+          <span className="label">Next</span> Mini-capstone: {capstone}
+        </p>
+      ) : null}
+      {next ? (
+        <p className={capstone ? "lesson-links" : "lesson-links lesson-next"}>
+          <span className="label">{capstone ? "Then" : "Next"}</span> {names(graph, [next])}
         </p>
       ) : null}
       {later.length > 0 ? (

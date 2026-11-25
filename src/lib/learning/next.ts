@@ -50,3 +50,34 @@ export function teachingPath(graph: Graph, written: Set<string>): { path: string
   const stranded = [...written].filter((id) => graph.concepts.has(id) && !path.includes(id));
   return { path, broken: stranded.length ? `These lessons can never be reached: ${stranded.join(", ")}` : null };
 }
+
+export type Step = { kind: "lesson"; id: string; builds: boolean } | { kind: "capstone"; cluster: string };
+
+/**
+ * What Learn gives now: a lesson, or the mini-capstone that closes a cluster.
+ *
+ * A mini-capstone is due when every lesson of its cluster is finished and it is
+ * not. If the lesson just finished was the one that closed the cluster, its
+ * mini-capstone comes straight away, while the cluster is fresh. Mini-capstones
+ * of clusters finished earlier (written after the learner had moved on) never
+ * interrupt the chain of lessons: they wait until no lesson is open, and then
+ * come in the order their clusters were finished.
+ *
+ * `capstones` are the clusters that have a mini-capstone written, and
+ * `capstonesDone` the clusters whose mini-capstone the learner has finished.
+ */
+export function nextStep(graph: Graph, written: Set<string>, capstones: Set<string>, completed: string[], capstonesDone: Set<string>): Step | null {
+  const finishedAt = new Map(completed.map((id, i) => [id, i]));
+  const due = (cluster: string) =>
+    capstones.has(cluster) && !capstonesDone.has(cluster) && graph.clusters.get(cluster)!.concepts.every((id) => finishedAt.has(id));
+
+  const last = graph.concepts.get(completed.at(-1) ?? "");
+  if (last && due(last.cluster)) return { kind: "capstone", cluster: last.cluster };
+
+  const lesson = nextConcept(graph, written, completed);
+  if (lesson) return { kind: "lesson", ...lesson };
+
+  const closed = (cluster: string) => Math.max(...graph.clusters.get(cluster)!.concepts.map((id) => finishedAt.get(id)!));
+  const waiting = [...graph.clusters.keys()].filter(due).sort((a, b) => closed(a) - closed(b));
+  return waiting.length ? { kind: "capstone", cluster: waiting[0] } : null;
+}
