@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, isNotNull, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lte } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { isCapstoneId } from "../capstones/schema";
 import * as schema from "../db/schema";
@@ -43,30 +43,6 @@ export async function dueBy(db: Db, userId: string, at: Date) {
     .orderBy(asc(reviewStates.dueAt));
 }
 
-/** Whether the learner has begun a lesson or mini-capstone and not finished it. */
-export async function unitStarted(db: Db, userId: string, unitId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ id: lessonProgress.conceptId })
-    .from(lessonProgress)
-    .where(and(eq(lessonProgress.userId, userId), eq(lessonProgress.conceptId, unitId), isNull(lessonProgress.completedAt)));
-  return Boolean(row);
-}
-
-/** Reviews answered since the learner last finished a lesson or a mini-capstone. */
-export async function reviewsSinceLastUnit(db: Db, userId: string): Promise<number> {
-  const [last] = await db
-    .select({ at: sql<Date | null>`max(${lessonProgress.completedAt})` })
-    .from(lessonProgress)
-    .where(eq(lessonProgress.userId, userId));
-  const [row] = await db
-    .select({ count: sql<string>`count(*)` })
-    .from(reviewQuestions)
-    .where(
-      and(eq(reviewQuestions.userId, userId), last?.at ? gt(reviewQuestions.answeredAt, new Date(last.at)) : isNotNull(reviewQuestions.answeredAt)),
-    );
-  return Number(row.count);
-}
-
 export type StoredQuestion = { id: number; conceptId: string; question: ReviewQuestion };
 
 /** The question written for a lesson's next review and not yet answered, if there is one. */
@@ -76,6 +52,32 @@ export async function waitingQuestion(db: Db, userId: string, conceptId: string)
     .from(reviewQuestions)
     .where(and(eq(reviewQuestions.userId, userId), eq(reviewQuestions.conceptId, conceptId), isNull(reviewQuestions.answeredAt)));
   return row ? { ...row, question: reviewQuestion.parse(row.question) } : null;
+}
+
+/** Puts a waiting question in the Recall part of a lesson. It stays there, answered or not, on every later visit. */
+export async function showIn(db: Db, userId: string, questionId: number, lessonId: string) {
+  await db
+    .update(reviewQuestions)
+    .set({ shownIn: lessonId })
+    .where(and(eq(reviewQuestions.id, questionId), eq(reviewQuestions.userId, userId), isNull(reviewQuestions.answeredAt)));
+}
+
+export type ShownQuestion = StoredQuestion & { answered: boolean; correct: boolean | null };
+
+/** The fresh questions in a lesson's Recall part, in the order they were written. */
+export async function shownIn(db: Db, userId: string, lessonId: string): Promise<ShownQuestion[]> {
+  const rows = await db
+    .select()
+    .from(reviewQuestions)
+    .where(and(eq(reviewQuestions.userId, userId), eq(reviewQuestions.shownIn, lessonId)))
+    .orderBy(asc(reviewQuestions.id));
+  return rows.map((row) => ({
+    id: row.id,
+    conceptId: row.conceptId,
+    question: reviewQuestion.parse(row.question),
+    answered: row.answeredAt !== null,
+    correct: row.correct,
+  }));
 }
 
 /** Every review question ever written for a lesson, oldest first, with its fingerprint. */
@@ -117,6 +119,8 @@ export async function answerReview(db: Db, userId: string, questionId: number,
   read: (question: ReviewQuestion) => unknown,
   ms: number | null,
   now = new Date(),
+  /** Whether the question's time had run out. If so it is a miss, whatever was sent. */
+  isLate: (question: ReviewQuestion) => boolean = () => false,
 ): Promise<ReviewOutcome | null> {
   return db.transaction(async (tx) => {
     const [row] = await tx
@@ -126,10 +130,11 @@ export async function answerReview(db: Db, userId: string, questionId: number,
       .for("update");
     if (!row) return null;
     const question = reviewQuestion.parse(row.question);
-    const given = read(question);
-    const verdict = gradeReview(question, given);
+    const timedOut = isLate(question);
+    const given = timedOut ? { timedOut: true } : read(question);
+    const verdict = timedOut ? { correct: false } : gradeReview(question, given);
     // Something that is not an answer at all, such as letters where a number belongs, does not use up the one try.
-    if (!verdict.correct && verdict.note) return { correct: false, note: verdict.note, question, conceptId: row.conceptId, nextDueAt: now };
+    if (!timedOut && !verdict.correct && verdict.note) return { correct: false, note: verdict.note, question, conceptId: row.conceptId, nextDueAt: now };
 
     await tx
       .update(reviewQuestions)

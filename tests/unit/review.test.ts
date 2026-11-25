@@ -14,14 +14,13 @@ import {
   afterReview,
   firstMemory,
   intervalDays,
-  pickReview,
   recallChance,
   reviewQueue,
-  REVIEWS_BETWEEN_UNITS,
+  RECALLS_PER_LESSON,
   TARGET_RECALL,
   type Memory,
 } from "@/lib/review/schedule";
-import { answerReview, dueBy, keepQuestion, questionsWritten, rememberFinishedLessons, reviewsSinceLastUnit, unitStarted, waitingQuestion } from "@/lib/review/service";
+import { answerReview, dueBy, keepQuestion, questionsWritten, rememberFinishedLessons, showIn, shownIn, waitingQuestion } from "@/lib/review/service";
 import { migrate } from "../../scripts/migrate";
 
 const DAY = 86_400_000;
@@ -84,21 +83,14 @@ describe("the schedule", () => {
     expect(intervalDays(5000)).toBe(365);
   });
 
-  it("gives reviews only between units, a few at a time, most forgotten first", () => {
+  it("orders what is due with the most forgotten first, and leaves out what is not due yet", () => {
     const now = later(T0, 40);
     const fresh = { conceptId: "c.fresh", ...firstMemory(later(T0, 39)) };
     const stale = { conceptId: "a.stale", ...firstMemory(T0) };
     const staler = { conceptId: "b.staler", ...firstMemory(later(T0, -200)) };
-    const all = [fresh, stale, staler];
-    const between = { unitWaiting: true, unitStarted: false, reviewsSinceUnit: 0 };
-    expect(reviewQueue(all, now)).toEqual(["b.staler", "a.stale"]);
-    expect(pickReview(all, now, between)).toBe("b.staler");
-    expect(pickReview([fresh], now, between)).toBeNull();
-    // Never in the middle of a lesson.
-    expect(pickReview(all, now, { ...between, unitStarted: true })).toBeNull();
-    // A backlog does not block new material, but when nothing new is waiting every due review is given.
-    expect(pickReview(all, now, { ...between, reviewsSinceUnit: REVIEWS_BETWEEN_UNITS })).toBeNull();
-    expect(pickReview(all, now, { unitWaiting: false, unitStarted: false, reviewsSinceUnit: 50 })).toBe("b.staler");
+    expect(reviewQueue([fresh, stale, staler], now)).toEqual(["b.staler", "a.stale"]);
+    expect(reviewQueue([fresh], now)).toEqual([]);
+    expect(RECALLS_PER_LESSON).toBe(3);
   });
 });
 
@@ -253,20 +245,33 @@ describe("reviews in the database", () => {
     expect((await dueBy(db, userId, later(now, 10))).map((m) => m.conceptId)).toEqual(["m0.counting", "m0.adding"]);
   });
 
-  it("knows whether a unit has been started, and counts reviews since the last one was finished", async () => {
+  it("keeps a question in the lesson it was shown in, answered or not", async () => {
     await finish("m0.counting", 30);
-    await recordAttempt(db, userId, { conceptId: "m0.adding", questionId: "a", system: "s1", correct: false, answer: "x", ms: 1 }, ["a"]);
-    expect(await unitStarted(db, userId, "m0.adding")).toBe(true);
-    expect(await unitStarted(db, userId, "m0.counting")).toBe(false);
-    expect(await unitStarted(db, userId, "e0.printing")).toBe(false);
-
+    await finish("m0.adding", 30);
     await rememberFinishedLessons(db, userId);
-    expect(await reviewsSinceLastUnit(db, userId)).toBe(0);
-    const kept = await keepQuestion(db, userId, "m0.counting", write(numeric));
-    await answerReview(db, userId, kept!.id, () => "24", 900);
-    expect(await reviewsSinceLastUnit(db, userId)).toBe(1);
-    await finish("m0.adding", 0);
-    expect(await reviewsSinceLastUnit(db, userId)).toBe(0);
+    const first = await keepQuestion(db, userId, "m0.counting", write(numeric));
+    const second = await keepQuestion(db, userId, "m0.adding", write(choice));
+    expect(await shownIn(db, userId, "e0.printing")).toEqual([]);
+    await showIn(db, userId, first!.id, "e0.printing");
+    await showIn(db, userId, second!.id, "e0.printing");
+    expect((await shownIn(db, userId, "e0.printing")).map((row) => [row.conceptId, row.answered, row.correct])).toEqual([
+      ["m0.counting", false, null],
+      ["m0.adding", false, null],
+    ]);
+
+    await answerReview(db, userId, first!.id, () => "25", 900);
+    expect((await shownIn(db, userId, "e0.printing")).map((row) => [row.conceptId, row.answered, row.correct])).toEqual([
+      ["m0.counting", true, false],
+      ["m0.adding", false, null],
+    ]);
+    // A question left unanswered moves with its idea to the next lesson; an answered one stays where it was answered.
+    await showIn(db, userId, first!.id, "e0.variables");
+    await showIn(db, userId, second!.id, "e0.variables");
+    expect((await shownIn(db, userId, "e0.printing")).map((row) => row.conceptId)).toEqual(["m0.counting"]);
+    expect((await shownIn(db, userId, "e0.variables")).map((row) => row.conceptId)).toEqual(["m0.adding"]);
+    // Another learner's question cannot be placed.
+    await showIn(db, randomUUID(), second!.id, "e0.printing");
+    expect((await shownIn(db, userId, "e0.variables")).map((row) => row.conceptId)).toEqual(["m0.adding"]);
   });
 
   it("stores each question once, serves it once, and moves the next review", async () => {
@@ -290,6 +295,11 @@ describe("reviews in the database", () => {
     const [after] = await dueBy(db, userId, later(new Date(), 400));
     expect(after.stability).toBeGreaterThan(before.stability);
     expect(after.reps).toBe(1);
+
+    // An answer that arrives after the time is up is a miss, even if it is right.
+    const slow = await keepQuestion(db, userId, "m0.adding", write({ ...numeric, prompt: "Three hens and four hens. How many?", answer: "7" }));
+    expect(await answerReview(db, userId, slow!.id, () => "7", 90_000, new Date(), () => true)).toMatchObject({ correct: false, conceptId: "m0.adding" });
+    expect(await waitingQuestion(db, userId, "m0.adding")).toBeNull();
 
     // Answered once: it is gone for good, cannot be answered again, and can never be written again.
     expect(await waitingQuestion(db, userId, "m0.counting")).toBeNull();

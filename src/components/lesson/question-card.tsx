@@ -1,9 +1,11 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
-import { nextHint, submitAnswer } from "@/lib/learning/actions";
+import { useState, useTransition } from "react";
+import { nextHint, submitAnswer, timeUp } from "@/lib/learning/actions";
+import { clock, spoken } from "@/lib/lessons/timing";
 import type { QuestionView } from "@/lib/lessons/content";
 import { useWorkspace } from "../workspace/context";
+import { useCountdown } from "./countdown";
 
 const Html = ({ html, className }: { html: string; className?: string }) => (
   // Lesson text is written and reviewed in this repository; nothing a visitor types is ever rendered this way.
@@ -18,10 +20,13 @@ export function QuestionCard({ view }: { view: QuestionView }) {
   const [text, setText] = useState("");
   const [choice, setChoice] = useState<number | null>(null);
   const [order, setOrder] = useState(() => (view.items ?? []).map((_, i) => i));
-  const startedAt = useRef<number | null>(null);
-  const touch = () => {
-    startedAt.current ??= Date.now();
-  };
+  const [timedOut, setTimedOut] = useState(false);
+  // Only System One questions have a time limit. A System Two question is never timed, so no time is measured for it.
+  const timer = useCountdown(view.seconds, () => {
+    setTimedOut(true);
+    setFeedback(null);
+    void timeUp(ws.conceptId, view.id).catch(() => {});
+  });
 
   const verdict = ws.verdicts[view.id];
   const solved = view.solved || ws.solved.has(view.id);
@@ -30,11 +35,22 @@ export function QuestionCard({ view }: { view: QuestionView }) {
   const wrong = !solved && (view.type === "code" ? verdict?.correct === false : feedback !== null);
   const name = `Question ${view.number}`;
 
+  const timed = view.seconds !== undefined && !solved;
+  /** A timed question stays hidden until the learner starts its clock. */
+  const waiting = timed && !timer.running;
+  const begin = () => {
+    setTimedOut(false);
+    setFeedback(null);
+    timer.begin();
+    // A timed code question is answered in the editor, so starting it opens it there.
+    if (view.type === "code") ws.open({ id: view.id, number: view.number, starter: view.starter ?? "" });
+  };
+
   const submit = (answer: unknown) => {
-    touch();
     start(async () => {
       try {
-        const result = await submitAnswer(ws.conceptId, view.id, answer, Date.now() - startedAt.current!);
+        const result = await submitAnswer(ws.conceptId, view.id, answer, view.seconds === undefined ? 0 : timer.elapsed());
+        if (result.correct) timer.stop();
         ws.settle(view.id, result);
         setFeedback({ note: result.note, explanationHtml: result.explanationHtml });
       } catch {
@@ -50,7 +66,6 @@ export function QuestionCard({ view }: { view: QuestionView }) {
     });
 
   const move = (from: number, by: -1 | 1) => {
-    touch();
     setOrder((before) => {
       const next = [...before];
       [next[from], next[from + by]] = [next[from + by], next[from]];
@@ -66,13 +81,37 @@ export function QuestionCard({ view }: { view: QuestionView }) {
   );
 
   return (
-    <section className="q" aria-label={name} data-solved={solved} data-question={view.id} onFocusCapture={touch}>
+    <section className="q" aria-label={name} data-solved={solved} data-question={view.id} data-timed={view.seconds !== undefined}>
       <header className="q-head">
         <span className="label">
-          {name} · {view.system === "s1" ? "Quick" : "Think"}
+          {name} · {view.system === "s1" ? `Quick · Timed, ${spoken(view.seconds!)}` : "Think · Not timed"}
         </span>
         {solved ? <span className="label q-solved">Solved</span> : null}
+        {timed && timer.running ? (
+          <span className="label q-timer" role="timer" aria-label="Time left" data-low={timer.left <= 10}>
+            {clock(timer.left)}
+          </span>
+        ) : null}
       </header>
+      {waiting ? (
+        <div className="q-start">
+          {timedOut ? <p className="text-error">Time is up. It counts as a miss, and you can start again.</p> : null}
+          <p className="text-ink-secondary">
+            This is a quick question: answer from memory. It appears when you start, and you have {spoken(view.seconds!)}.
+          </p>
+          <button type="button" className="btn btn-primary btn-small" onClick={begin}>
+            {timedOut ? "Start again" : "Start"}
+          </button>
+        </div>
+      ) : (
+        renderBody()
+      )}
+    </section>
+  );
+
+  function renderBody() {
+    return (
+      <>
       <Html html={view.promptHtml} className="q-prompt" />
 
       {view.type === "numeric" ? (
@@ -109,7 +148,7 @@ export function QuestionCard({ view }: { view: QuestionView }) {
             <legend className="sr-only">Options for {name.toLowerCase()}</legend>
             {view.items!.map((html, i) => (
               <label key={i} className="q-option">
-                <input type="radio" name={`${view.id}-choice`} checked={choice === i} onChange={() => (touch(), setChoice(i))} />
+                <input type="radio" name={`${view.id}-choice`} checked={choice === i} onChange={() => setChoice(i)} />
                 <span dangerouslySetInnerHTML={{ __html: html }} />
               </label>
             ))}
@@ -226,8 +265,9 @@ export function QuestionCard({ view }: { view: QuestionView }) {
           ) : null}
         </div>
       ) : null}
-    </section>
-  );
+      </>
+    );
+  }
 }
 
 /** Progress through the questions of a lesson or a mini-capstone, and the way on once all are solved. */

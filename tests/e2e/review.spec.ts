@@ -18,121 +18,200 @@ async function sql<T extends Record<string, unknown>>(text: string, values: unkn
   }
 }
 
-const card = (page: Page) => page.getByRole("region", { name: "Review question" });
+const recall = (page: Page) => page.getByRole("region", { name: "Recall", exact: true });
+const spaced = (page: Page) => page.getByRole("group", { name: "Recall from earlier lessons" });
+const card = (page: Page, n: number) => page.getByRole("region", { name: `Fresh recall question ${n}`, exact: true });
 /** The number of sheep in the first field, which the stand-in model changes with every question it writes. */
-const sheep = async (page: Page) => Number((await card(page).locator(".q-prompt").innerText()).match(/has (\d+) sheep/)![1]);
+const begin = (page: Page, n: number) => card(page, n).getByRole("button", { name: "Start" }).click();
+const sheep = async (page: Page, n: number) => Number((await card(page, n).locator(".q-prompt").innerText()).match(/has (\d+) sheep/)![1]);
 
-async function answer(page: Page, value: string) {
-  await card(page).getByRole("textbox").fill(value);
-  await card(page).getByRole("button", { name: "Check" }).click();
+async function answer(page: Page, n: number, value: string) {
+  await card(page, n).getByRole("textbox").fill(value);
+  await card(page, n).getByRole("button", { name: "Check" }).click();
 }
 
-test("finished lessons come back when due, each time with a question never seen before", async ({ page, request }) => {
-  // Nothing is due straight after the lessons, so no review is given and no question is written.
+test("a lesson's Recall brings back the earlier ideas that are due, with questions never seen before", async ({ page, request }) => {
+  // Reopen the last lesson. The two before it were finished minutes ago, so nothing is due and no question is written.
+  await sql("delete from lesson_progress where concept_id in ('e0.printing', 'capstone.e0')");
+  await sql("delete from attempts where concept_id in ('e0.printing', 'capstone.e0')");
   await page.goto("/learn");
-  await expect(page.getByRole("heading", { level: 1, name: "You have finished every lesson written so far." })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Printing" })).toBeVisible();
+  await expect(recall(page)).toContainText("In Adding you added counts by hand.");
+  await expect(recall(page).getByRole("status")).toHaveCount(0);
+  await expect(spaced(page)).toHaveCount(0);
   expect(await sql("select 1 from review_questions")).toEqual([]);
-  expect((await sql("select 1 from review_states")).length).toBe(3);
+  expect((await sql("select 1 from review_states")).length).toBe(2);
 
-  // Five weeks pass.
+  // Five weeks pass before the learner opens the lesson again.
   await sql("update lesson_progress set completed_at = completed_at - interval '35 days', started_at = started_at - interval '35 days'");
   await sql("delete from review_states");
 
   await page.goto("/learn");
-  await expect(card(page)).toBeVisible({ timeout: 30_000 });
-  const title = await page.getByRole("heading", { level: 1 }).innerText();
-  expect(["Counting", "Adding", "Printing"]).toContain(title);
-  await expect(page.getByText(/^Review · (M0|E0) · /)).toBeVisible();
-  await expect(page.getByText("You last worked on this lesson 35 days ago.")).toBeVisible();
-  // The first question written failed its independent check, so it was thrown away and this is the second.
-  const first = await sheep(page);
-  expect(first).toBe(2);
-  // The question is the model's own text: mathematics is typeset, and raw HTML is shown as text, not run.
-  await expect(card(page).locator(".katex").first()).toBeVisible();
-  await expect(card(page).locator("b")).toHaveCount(0);
-  await expect(card(page)).toContainText("<b>How many</b>");
-  // The answer is not in the page before the question is answered.
-  expect(await page.content()).not.toContain("Count on from 10");
+  // There is no review screen: Learn gives the lesson, and the ideas that are due arrive inside its Recall part.
+  await expect(page.getByRole("heading", { level: 1, name: "Printing" })).toBeVisible();
+  await expect(spaced(page)).toBeVisible({ timeout: 30_000 });
+  await expect(recall(page).locator(spaced(page))).toBeVisible();
+  await expect(spaced(page)).toContainText("2 ideas from earlier lessons are due to be recalled.");
+  // What the lesson itself wrote for its Recall part is still there, before them.
+  await expect(recall(page)).toContainText("In Adding you added counts by hand.");
+  await expect(card(page, 1)).toBeVisible();
+  await expect(card(page, 2)).toBeVisible();
+  await expect(card(page, 3)).toHaveCount(0);
 
-  // What the model was sent: a lesson under review, and the same model and care as the tutor.
-  // (Questions for the other two lessons are written in the background, so the last request may be for any of them.)
+  // Recall is fast retrieval, so each is timed: hidden until started, then a countdown.
+  await expect(card(page, 1)).toContainText("Recall 1 · New question · One try · Timed, 1 min");
+  await expect(card(page, 1).locator(".q-prompt")).toHaveCount(0);
+  await expect(card(page, 1).getByRole("timer")).toHaveCount(0);
+  await begin(page, 1);
+  await expect(card(page, 1).getByRole("timer")).toHaveText(/^0:5\d|1:00$/);
+  await begin(page, 2);
+
+  // Three questions were written for two ideas: one failed its independent check and was thrown away.
+  const counts = [await sheep(page, 1), await sheep(page, 2)];
+  expect(new Set(counts).size).toBe(2);
+  expect(Math.max(...counts)).toBe(3);
+  // The questions are the model's own text: mathematics is typeset, and raw HTML is shown as text, not run.
+  await expect(card(page, 1).locator(".katex").first()).toBeVisible();
+  await expect(card(page, 1).locator("b")).toHaveCount(0);
+  await expect(card(page, 1)).toContainText("<b>How many</b>");
+  // Neither the answer nor the lesson an idea came from is in the page before it is answered.
+  expect(await page.content()).not.toContain("Count on from 10");
+  await expect(spaced(page)).not.toContainText("From ");
+
+  // What the model was sent: an earlier lesson, and the same model and care as the tutor.
   const sent = (await (await request.get(`${MOCK}/last`)).json()) as {
     body: { model: string; output_config: { effort: string; format: { type: string } }; system: { text: string; cache_control?: unknown }[] };
   };
   expect(sent.body.model).toBe("claude-opus-5-5");
   expect(sent.body.output_config.effort).toBe("medium");
   expect(sent.body.output_config.format.type).toBe("json_schema");
-  expect(sent.body.system[0].text).toMatch(/# The lesson under review\nLesson: (Counting|Adding|Printing)\n/);
+  expect(sent.body.system[0].text).toMatch(/# The lesson under review\nLesson: (Counting|Adding)\n/);
   expect(sent.body.system[0].cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
 
-  const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
+  const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).exclude(".cm-scroller").analyze();
   expect(results.violations.map((v) => `${v.id}: ${v.help} (${v.nodes[0]?.target})`)).toEqual([]);
-  await page.screenshot({ path: "test-results/screens/review-phone.png" });
 
-  // A reload shows the same waiting question; it is not written again.
+  // A reload shows the same questions; they are not written again.
   await page.reload();
-  expect(await sheep(page)).toBe(first);
+  await expect(spaced(page)).toBeVisible({ timeout: 30_000 });
+  await begin(page, 1);
+  await begin(page, 2);
+  expect([await sheep(page, 1), await sheep(page, 2)]).toEqual(counts);
+  expect((await sql("select 1 from review_questions")).length).toBe(2);
 
   // Something that is not a number does not use up the one try.
-  await answer(page, "twelve");
-  await expect(card(page)).toContainText("Enter a number");
-  await answer(page, String(first + 10));
-  await expect(card(page)).toContainText("Recalled");
-  await expect(card(page)).toContainText("Count on from 10");
-  await expect(card(page).getByRole("button", { name: "Check" })).toBeDisabled();
-  await expect(page.getByText(/This lesson comes back in \d+ days, with a different question\./)).toBeVisible();
+  await answer(page, 1, "twelve");
+  await expect(card(page, 1)).toContainText("Enter a number");
+  await answer(page, 1, String(counts[0] + 10));
+  await expect(card(page, 1)).toContainText("Recalled");
+  await expect(card(page, 1)).toContainText("Count on from 10");
+  await expect(card(page, 1)).toContainText(/From (Counting|Adding)\. It comes back in \d+ days, with a different question\./);
+  await expect(card(page, 1).getByRole("button", { name: "Check" })).toBeDisabled();
+  await expect(card(page, 1).getByRole("timer")).toHaveCount(0);
 
-  // The second lesson due: a different question, answered wrongly this time.
-  await page.getByRole("link", { name: "Continue" }).click();
-  await expect(card(page)).toBeVisible({ timeout: 30_000 });
-  const second = await sheep(page);
-  expect(second).not.toBe(first);
-  await answer(page, "1");
-  await expect(card(page)).toContainText("Missed");
-  await expect(card(page)).toContainText("Not this time. The answer is:");
-  await expect(card(page)).toContainText(`${second + 10} sheep`);
-  await expect(page.getByText(/This lesson comes back in [1-9] days?, with a different question\./)).toBeVisible();
-  await page.screenshot({ path: "test-results/screens/review-missed-phone.png" });
+  // The second is answered wrongly: the answer is shown, and the idea comes back within days.
+  await answer(page, 2, "1");
+  await expect(card(page, 2)).toContainText("Missed");
+  await expect(card(page, 2)).toContainText("Not this time. The answer is:");
+  await expect(card(page, 2)).toContainText(`${counts[1] + 10} sheep`);
+  await expect(card(page, 2)).toContainText(/It comes back in [1-9] days?, with a different question\./);
+  await spaced(page).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "test-results/screens/recall-spaced-laptop.png" });
 
-  // The third, and then nothing is due and Learn carries on as before.
-  await page.getByRole("link", { name: "Continue" }).click();
-  await expect(card(page)).toBeVisible({ timeout: 30_000 });
-  const third = await sheep(page);
-  await answer(page, String(third + 10));
-  await expect(card(page)).toContainText("Recalled");
-  await page.getByRole("link", { name: "Continue" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "You have finished every lesson written so far." })).toBeVisible();
+  // They do not count towards finishing the lesson, and they are still there, answered, on the next visit.
+  await expect(page.getByText("0 of 5 questions solved")).toBeVisible();
+  await page.reload();
+  await expect(card(page, 1)).toContainText("Recalled");
+  await expect(card(page, 2)).toContainText("Missed");
+  await expect(card(page, 2).getByRole("button", { name: "Check" })).toBeDisabled();
 
-  const asked = await sql<{ concept_id: string; correct: boolean; fingerprint: string }>("select concept_id, correct, fingerprint from review_questions order by id");
-  expect(asked.map((row) => row.correct)).toEqual([true, false, true]);
-  expect(new Set(asked.map((row) => row.concept_id)).size).toBe(3);
-  expect(new Set(asked.map((row) => row.fingerprint)).size).toBe(3);
+  const asked = await sql<{ concept_id: string; correct: boolean; shown_in: string }>("select concept_id, correct, shown_in from review_questions order by id");
+  expect(asked.map((row) => [row.correct, row.shown_in])).toEqual([
+    [true, "e0.printing"],
+    [false, "e0.printing"],
+  ]);
+  expect(new Set(asked.map((row) => row.concept_id))).toEqual(new Set(["m0.counting", "m0.adding"]));
   const states = await sql<{ concept_id: string; lapses: number; days: number }>(
     "select concept_id, lapses, extract(epoch from due_at - now()) / 86400 as days from review_states order by due_at",
   );
-  // The missed lesson is back within days; the recalled ones are weeks away.
+  // The missed idea is back within days; the recalled one is weeks away.
   expect(states[0]).toMatchObject({ concept_id: asked[1].concept_id, lapses: 1 });
   expect(Number(states[0].days)).toBeLessThan(7);
   expect(Number(states[1].days)).toBeGreaterThan(14);
 });
 
-test("the same lesson, due again, gets a question it has never had", async ({ page }) => {
-  const [{ concept_id: lesson }] = await sql<{ concept_id: string }>("select concept_id from review_states order by due_at limit 1");
-  const before = await sql<{ prompt: string }>("select question->>'prompt' as prompt from review_questions where concept_id = $1", [lesson]);
+test("an idea that is due again gets a question it has never had", async ({ page }) => {
+  // As though the two questions had been answered in an earlier lesson, and the missed idea has come due again.
+  const [{ concept_id: idea }] = await sql<{ concept_id: string }>("select concept_id from review_states order by due_at limit 1");
+  const before = await sql<{ prompt: string }>("select question->>'prompt' as prompt from review_questions where concept_id = $1", [idea]);
   expect(before).toHaveLength(1);
-  await sql("update review_states set due_at = now() - interval '1 hour', last_reviewed_at = last_reviewed_at - interval '6 days' where concept_id = $1", [lesson]);
+  await sql("update review_questions set shown_in = 'm0.adding'");
+  await sql("update review_states set due_at = now() - interval '1 hour', last_reviewed_at = last_reviewed_at - interval '6 days' where concept_id = $1", [idea]);
 
   await page.goto("/learn");
-  await expect(card(page)).toBeVisible({ timeout: 30_000 });
-  const prompt = await card(page).locator(".q-prompt").innerText();
-  const count = await sheep(page);
+  await expect(page.getByRole("heading", { level: 1, name: "Printing" })).toBeVisible();
+  await expect(spaced(page)).toBeVisible({ timeout: 30_000 });
+  await expect(spaced(page)).toContainText("One idea from an earlier lesson is due to be recalled.");
+  await expect(card(page, 2)).toHaveCount(0);
+  await begin(page, 1);
+  const count = await sheep(page, 1);
   expect(before[0].prompt).not.toContain(`has ${count} sheep`);
-  expect(prompt).toContain(`has ${count} sheep`);
-  await answer(page, String(count + 10));
-  await expect(card(page)).toContainText("Recalled");
+  await answer(page, 1, String(count + 10));
+  await expect(card(page, 1)).toContainText("Recalled");
 
-  const rows = await sql<{ answered: boolean }>("select answered_at is not null as answered from review_questions where concept_id = $1 order by id", [lesson]);
+  const rows = await sql<{ answered: boolean; fingerprint: string }>("select answered_at is not null as answered, fingerprint from review_questions where concept_id = $1 order by id", [idea]);
   expect(rows.map((row) => row.answered)).toEqual([true, true]);
-  await page.getByRole("link", { name: "Continue" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "You have finished every lesson written so far." })).toBeVisible();
+  expect(rows[0].fingerprint).not.toBe(rows[1].fingerprint);
+});
+
+test("System One questions are timed and System Two questions are not", async ({ page }) => {
+  await page.goto("/learn");
+  await expect(page.getByRole("heading", { level: 1, name: "Printing" })).toBeVisible();
+  const slow = page.getByRole("region", { name: "Question 1", exact: true });
+  const fast = page.getByRole("region", { name: "Question 2", exact: true });
+
+  // System Two: shown at once, no clock, and no time is stored for it.
+  await expect(slow).toContainText("Question 1 · Think · Not timed");
+  await expect(slow.locator(".q-prompt")).toBeVisible();
+  await expect(slow.getByRole("button", { name: "Start" })).toHaveCount(0);
+  await slow.getByRole("textbox").fill("nonsense");
+  await slow.getByRole("button", { name: "Check" }).click();
+  await expect(slow).toContainText("Not yet");
+  await expect(slow.getByRole("timer")).toHaveCount(0);
+
+  // System One: hidden until started, then a countdown. When it runs out the attempt is a miss and the question hides again.
+  await expect(fast).toContainText("Question 2 · Quick · Timed, 10 s");
+  await expect(fast.locator(".q-prompt")).toHaveCount(0);
+  await fast.getByRole("button", { name: "Start" }).click();
+  await expect(fast.locator(".q-prompt")).toBeVisible();
+  await expect(fast.getByRole("timer")).toHaveText(/^0:(10|0\d)$/);
+  await expect(fast).toContainText("Time is up.", { timeout: 15_000 });
+  await expect(fast.locator(".q-prompt")).toHaveCount(0);
+  await expect(fast.getByRole("timer")).toHaveCount(0);
+  await page.screenshot({ path: "test-results/screens/timed-out-laptop.png" });
+
+  // Started again and answered in time, it is solved and the clock goes away.
+  await fast.getByRole("button", { name: "Start again" }).click();
+  await fast.getByRole("textbox").fill("2");
+  await fast.getByRole("button", { name: "Check" }).click();
+  await expect(fast).toContainText("Solved");
+  await expect(fast.getByRole("timer")).toHaveCount(0);
+
+  const rows = await sql<{ question_id: string; correct: boolean; ms: number | null; answer: unknown }>(
+    "select question_id, correct, ms, answer from attempts where concept_id = 'e0.printing' order by id",
+  );
+  expect(rows.map((row) => [row.question_id, row.correct])).toEqual([
+    ["predict-sum", false],
+    ["predict-fast", false],
+    ["predict-fast", true],
+  ]);
+  expect(rows[0].ms).toBeNull();
+  expect(rows[1]).toMatchObject({ ms: 10_000, answer: { timedOut: true } });
+  expect(rows[2].ms).toBeGreaterThan(0);
+  expect(rows[2].ms).toBeLessThan(10_000);
+  // Across everything this learner has answered: every System One attempt has a time, and no System Two attempt has one.
+  const [timing] = await sql<{ s1_untimed: string; s2_timed: string }>(
+    "select count(*) filter (where system = 's1' and ms is null) as s1_untimed, count(*) filter (where system = 's2' and ms is not null) as s2_timed from attempts",
+  );
+  expect(timing).toEqual({ s1_untimed: "0", s2_timed: "0" });
 });

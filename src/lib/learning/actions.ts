@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
 import { blockHtml, displayOrder, findQuestion, inlineHtml } from "@/lib/lessons/content";
 import { grade } from "@/lib/lessons/grade";
+import { late, secondsFor } from "@/lib/lessons/timing";
 import { recordAttempt, revealNextHint, saveSnapshot } from "./service";
 import { clearTutorHistory } from "../tutor/service";
 
@@ -16,6 +17,10 @@ async function learner() {
 }
 
 const clean = (value: unknown, max: number) => String(value ?? "").slice(0, max);
+
+const TIME_UP = "Time was up before this answer arrived. Start the question again when you are ready.";
+/** Time is kept only for timed (System One) questions. For the rest it is neither measured nor stored. */
+const kept = (question: Parameters<typeof secondsFor>[0], ms: number) => (secondsFor(question) === null ? null : Number(ms) || 0);
 
 /** Grades a numeric, choice, predict or order answer on the server and records the attempt. */
 export async function submitAnswer(conceptId: string, questionId: string, answer: unknown, ms: number): Promise<AnswerResult> {
@@ -30,11 +35,12 @@ export async function submitAnswer(conceptId: string, questionId: string, answer
   else if (question.type === "order") given = Array.isArray(answer) ? answer.slice(0, 8).map((position) => order[Number(position)]) : undefined;
   else given = clean(answer, 4000);
 
-  const verdict = grade(question, given);
+  // A timed question answered after its time is up is not solved, whatever the answer.
+  const verdict = late(question, Number(ms)) ? { correct: false, note: TIME_UP } : grade(question, given);
   const { lessonComplete } = await recordAttempt(
     getDb(),
     user.id,
-    { conceptId: unitId, questionId: question.id, system: question.system, correct: verdict.correct, answer: given ?? null, ms },
+    { conceptId: unitId, questionId: question.id, system: question.system, correct: verdict.correct, answer: given ?? null, ms: kept(question, ms) },
     questions.map((q) => q.id),
   );
   return {
@@ -58,13 +64,29 @@ export async function reportCode(conceptId: string, questionId: string, passed: 
   const user = await learner();
   const { unitId, questions, question } = findQuestion(clean(conceptId, 200), clean(questionId, 200));
   if (question.type !== "code") throw new Error("Not a code question");
+  const tooLate = late(question, Number(ms));
+  const correct = passed === true && !tooLate;
   const { lessonComplete } = await recordAttempt(
     getDb(),
     user.id,
-    { conceptId: unitId, questionId: question.id, system: question.system, correct: passed === true, answer: clean(code, 50_000), ms },
+    { conceptId: unitId, questionId: question.id, system: question.system, correct, answer: clean(code, 50_000), ms: kept(question, ms) },
     questions.map((q) => q.id),
   );
-  return { correct: passed === true, explanationHtml: passed === true ? blockHtml(question.explanation) : undefined, lessonComplete };
+  return { correct, note: tooLate ? TIME_UP : undefined, explanationHtml: correct ? blockHtml(question.explanation) : undefined, lessonComplete };
+}
+
+/** Records that a timed question's time ran out before it was answered. */
+export async function timeUp(conceptId: string, questionId: string): Promise<void> {
+  const user = await learner();
+  const { unitId, questions, question } = findQuestion(clean(conceptId, 200), clean(questionId, 200));
+  const seconds = secondsFor(question);
+  if (seconds === null) return;
+  await recordAttempt(
+    getDb(),
+    user.id,
+    { conceptId: unitId, questionId: question.id, system: question.system, correct: false, answer: { timedOut: true }, ms: seconds * 1000 },
+    questions.map((q) => q.id),
+  );
 }
 
 /** The next hint on a question's ladder. Hints never contain the answer. */

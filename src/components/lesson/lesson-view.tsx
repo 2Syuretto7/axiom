@@ -26,6 +26,7 @@ export function LessonView({
   capstone,
   solved,
   hintLevels,
+  recall,
 }: {
   lesson: Lesson;
   concept: Concept;
@@ -36,6 +37,8 @@ export function LessonView({
   capstone?: string | null;
   solved: Set<string>;
   hintLevels: Map<string, number>;
+  /** Earlier ideas that spaced repetition says are due, shown at the end of the Recall part. */
+  recall?: React.ReactNode;
 }) {
   const later = lesson.leads.filter((id) => id !== next);
   const numbers = new Map(questionsOf(lesson).map((q, i) => [q.id, i + 1]));
@@ -66,6 +69,7 @@ export function LessonView({
             const q = block.question;
             return <QuestionCard key={q.id} view={questionView(lesson.concept, q, numbers.get(q.id)!, solved.has(q.id), hintLevels.get(q.id) ?? 0)} />;
           })}
+          {part === "recall" ? recall : null}
         </section>
       ))}
 

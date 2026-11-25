@@ -11,8 +11,11 @@
  * - difficulty: from 1 to 10. It rises when a review is missed and falls back
  *   slowly towards the middle. Hard lessons gain stability more slowly.
  *
- * A review is one question with one try, so there are two outcomes: recalled or
- * not. A lesson is due when its chance of recall has fallen to the target.
+ * An idea is recalled with one question and one try, so there are two outcomes:
+ * recalled or not. It is due when its chance of recall has fallen to the target.
+ *
+ * Nothing here is a screen of its own. The ideas that are due are recalled in
+ * the Recall part of whichever lesson the learner opens next.
  */
 
 const W = [0.4872, 1.4003, 3.7145, 13.8206, 5.1618, 1.2298, 0.8975, 0.031, 1.6474, 0.1367, 1.0461, 2.1072, 0.0793, 0.3246, 1.587, 0.2272, 2.8755];
@@ -25,8 +28,8 @@ const GOOD = 3;
 export const TARGET_RECALL = 0.9;
 export const MIN_INTERVAL_DAYS = 1;
 export const MAX_INTERVAL_DAYS = 365;
-/** At most this many reviews are given in a row between two lessons, so a backlog never blocks new material. */
-export const REVIEWS_BETWEEN_UNITS = 3;
+/** A lesson's Recall part brings back at most this many earlier ideas, so a backlog never crowds out the lesson. */
+export const RECALLS_PER_LESSON = 3;
 
 const DAY = 86_400_000;
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
@@ -91,21 +94,3 @@ export const reviewQueue = (memories: Due[], now: Date): string[] =>
     .filter((m) => m.dueAt.getTime() <= now.getTime())
     .sort((a, b) => chanceNow(a, now) - chanceNow(b, now) || a.conceptId.localeCompare(b.conceptId))
     .map((m) => m.conceptId);
-
-/**
- * The lesson to review now, or null if Learn should carry on with new material.
- *
- * Reviews are only given between units, never in the middle of a lesson or a
- * mini-capstone that has been started. While there is new material waiting, at
- * most REVIEWS_BETWEEN_UNITS reviews come in a row. Among the lessons that are
- * due, the one most likely to have been forgotten comes first.
- */
-export function pickReview(
-  memories: Due[],
-  now: Date,
-  place: { unitWaiting: boolean; unitStarted: boolean; reviewsSinceUnit: number },
-): string | null {
-  if (place.unitStarted) return null;
-  if (place.unitWaiting && place.reviewsSinceUnit >= REVIEWS_BETWEEN_UNITS) return null;
-  return reviewQueue(memories, now)[0] ?? null;
-}

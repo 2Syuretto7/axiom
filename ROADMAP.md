@@ -28,11 +28,11 @@ Built. A mini-capstone closes one cluster. It is one small project in stages tha
 
 Every written cluster now has one. From here on, every new cluster ships with its mini-capstone in the same batch as its lessons.
 
-## Reviews
+## Recall and timing
 
-Built. Every finished lesson comes back at growing gaps, set by the FSRS-4.5 memory model, and each review is one question the learner has never seen, written and independently checked for that review. Learn gives reviews between lessons. How it works is in the README.
+Built. The Recall part of every lesson brings back earlier ideas that are due, chosen by the FSRS-4.5 memory model, each with a question the learner has never seen, written and independently checked for that one occasion. System One questions are timed and System Two questions are not. How both work is in the README.
 
-Not built yet: the Map does not show how well each lesson is remembered, and mini-capstones are not reviewed.
+Not built yet: mastery that weighs speed, hints and recency, with a short consolidation set after a weak finish; and the Map does not show how well each lesson is remembered.
 
 ## Capstones
 

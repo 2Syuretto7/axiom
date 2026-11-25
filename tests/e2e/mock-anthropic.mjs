@@ -14,17 +14,18 @@ const port = Number(process.env.MOCK_ANTHROPIC_PORT ?? 3199);
 let last = null;
 let written = 0;
 let checks = 0;
-let answer = "";
 
 function structured(body) {
   const fields = body.output_config?.format?.schema?.properties;
   if (!fields) return null;
   if ("sound" in fields) {
+    // The checker solves the question it was sent, on its own.
     checks += 1;
+    const answer = String(Number(/has (\d+) sheep/.exec(body.messages.at(-1).content)[1]) + 10);
     return checks === 1 ? { sound: false, problem: "It can be read two ways.", answer } : { sound: true, problem: "", answer };
   }
   written += 1;
-  answer = String(written + 10);
+  const answer = String(written + 10);
   return {
     type: "numeric",
     prompt: `A shepherd has ${written} sheep in one field and $10$ in another. <b>How many</b> sheep is that altogether?`,
@@ -36,12 +37,6 @@ function structured(body) {
     explanation: `Count on from 10: $10 + ${written} = ${answer}$.`,
   };
 }
-
-const REPLY = [
-  "Think of the **pebbles** again. ",
-  "Each sheep that comes home takes one away, so $12 - 3 = 9$.\n\n",
-  "<b>What</b> do the pebbles left over stand for?",
-];
 
 http
   .createServer(async (request, response) => {

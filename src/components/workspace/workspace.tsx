@@ -184,6 +184,8 @@ export function Workspace({
         outcome = { correct: false, note };
       }
       const recorded = await reportCode(id, question.id, outcome.correct, submitted, Date.now() - openedAt.current);
+      // A timed question whose time was up is not solved, even if its checks pass.
+      if (outcome.correct && !recorded.correct) outcome = { correct: false, note: recorded.note };
       outcome.explanationHtml = recorded.explanationHtml;
       settle(question.id, recorded);
     } catch {
