@@ -1,0 +1,707 @@
+concept: m13.derivatives-with-respect-to-matrices
+minutes: 85
+claim: You can define the gradient of a scalar function of a matrix as the matrix of the same shape that pairs with a displacement through the sum of products of entries, find such gradients by expanding at a displaced matrix and rearranging the linear part with the trace, give the gradients of a bilinear form, of the loss of a linear layer for one example and for a batch, and of the squared Frobenius norm, and explain why the gradient of a layer's weights for one example is an outer product.
+recalls: [m13.derivatives-with-respect-to-vectors]
+uses: [m12.gradient, m12.partial-derivatives, m12.total-derivative-as-best-linear-approximation, m8.operator-and-frobenius-norms, m8.singular-value-decomposition, m6.inner-product-spaces, m5.transpose, m5.matrix-multiplication-as-composition, m5.rank, e6.tensor-valued-autograd, e6.gradient-checking, e5.einsum, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e0.functions, e0.loops]
+leads: [m13.the-method-of-differentials, m13.gradients-of-common-neural-network-layers]
+starter: |
+  # Scratch space. One linear layer, one example. Six weights, six slopes.
+  import numpy as np
+
+  W = np.array([[1.0, 0.0, 2.0], [-1.0, 1.0, 0.0]])
+  x = np.array([1.0, 2.0, 3.0])
+  t = np.array([5.0, 2.0])
+
+
+  def loss(W):
+      return 0.5 * float(((W @ x - t) ** 2).sum())
+
+
+  h = 1e-6
+  G = np.zeros((2, 3))
+  for i in range(2):
+      for j in range(3):
+          E = np.zeros((2, 3))
+          E[i, j] = h
+          G[i, j] = (loss(W + E) - loss(W - E)) / (2 * h)
+  print([[round(float(v), 4) for v in row] for row in G])
+parts:
+  recall:
+    - text: |
+        [[m13.derivatives-with-respect-to-vectors]] found gradients by expanding at $\mathbf{x} + \mathbf{h}$ and reading off the vector paired with $\mathbf{h}$. Today the variable is a matrix, and the same idea carries over once "paired with" has been given a meaning. Three quick pulls first.
+  puzzle:
+    - text: |
+        A linear layer turns an input $\mathbf{x}$ of length 3 into an output $W\mathbf{x}$ of length 2. The target is $\mathbf{t}$, and the loss is $\tfrac12\|W\mathbf{x} - \mathbf{t}\|^2$.
+
+        $$W = \begin{pmatrix} 1 & 0 & 2 \\ -1 & 1 & 0 \end{pmatrix}, \qquad \mathbf{x} = (1, 2, 3), \qquad \mathbf{t} = (5, 2).$$
+
+        The layer has six weights. The starter nudges each in turn and measures the slope of the loss, and lays the six slopes out in the shape of $W$.
+
+        ```
+        [[2.0, 4.0, 6.0], [-1.0, -2.0, -3.0]]
+        ```
+
+        Look at the table. The first row is $2 \times (1, 2, 3)$. The second row is $-1 \times (1, 2, 3)$. Every row is a multiple of the input $\mathbf{x}$. And the multipliers, $2$ and $-1$, are the errors of the layer: $W\mathbf{x} - \mathbf{t} = (7, 1) - (5, 2) = (2, -1)$.
+
+        Six independent weights, and their six slopes are made of only five numbers, arranged as a multiplication table.
+
+        **Why does the gradient with respect to a weight matrix have this form? And is there a way to derive it as directly as the gradients of the last lesson, without six separate partial derivatives?**
+  intuition:
+    - text: |
+        First the pattern itself, which can be understood entry by entry. The weight $W_{ij}$ does one thing only: it multiplies input $x_j$ and adds the result to output $i$. Nudging it by $\varepsilon$ moves output $i$ by $\varepsilon x_j$ and nothing else. The loss then changes by (sensitivity of the loss to output $i$) $\times\ \varepsilon x_j$. So
+
+        $$\frac{\partial L}{\partial W_{ij}} = (\text{error at output } i) \times (\text{input } j).$$
+
+        A table whose $(i, j)$ entry is $r_ix_j$ is the **outer product** $\mathbf{r}\mathbf{x}^\top$. That is the gradient: error times input.
+
+        Now the method. The gradient of a function of a vector was the vector $\mathbf{g}$ with $f(\mathbf{x} + \mathbf{h}) \approx f(\mathbf{x}) + \mathbf{g}^\top\mathbf{h}$, where $\mathbf{g}^\top\mathbf{h} = \sum g_ih_i$. For a matrix variable, displace by a matrix $H$ and ask for the matrix $G$ with
+
+        $$f(W + H) \approx f(W) + \sum_{i,j}G_{ij}H_{ij}.$$
+
+        $G_{ij}$ is then the slope with respect to $W_{ij}$, so $G$ is the table of slopes, in the shape of $W$. The sum of products of matching entries is the dot product of two matrices read as long lists. It has a compact form that makes it usable in calculations:
+
+        $$\sum_{i,j}G_{ij}H_{ij} = \operatorname{tr}(G^\top H).$$
+
+        So the recipe is the old one with one change: expand at $W + H$, keep the part linear in $H$, and rearrange it into $\operatorname{tr}(G^\top H)$. The rearranging is done with one property of the trace, that factors may be cycled: $\operatorname{tr}(ABC) = \operatorname{tr}(CAB)$.
+  derivation:
+    - text: |
+        **The inner product of matrices.** For $G, H \in \mathbb{R}^{m \times n}$,
+
+        $$\langle G, H\rangle = \sum_{i,j}G_{ij}H_{ij} = \operatorname{tr}(G^\top H).$$
+
+        This is the Frobenius inner product, and $\langle H, H\rangle = \|H\|_F^2$.
+
+        **The gradient.** For $f: \mathbb{R}^{m \times n} \to \mathbb{R}$, the gradient $\nabla_Wf$ is the $m \times n$ matrix with
+
+        $$f(W + H) = f(W) + \langle\nabla_Wf, H\rangle + o(\|H\|).$$
+
+        Its entries are $\partial f/\partial W_{ij}$. It has the shape of $W$, so that $W - \eta\nabla_Wf$ makes sense.
+
+        **Two facts about the trace.**
+
+        - A number is its own trace: $s = \operatorname{tr}(s)$.
+        - Cycling: $\operatorname{tr}(ABC) = \operatorname{tr}(BCA) = \operatorname{tr}(CAB)$, whenever the products are defined. Also $\operatorname{tr}(A) = \operatorname{tr}(A^\top)$.
+
+        **A bilinear form.** $f(W) = \mathbf{a}^\top W\mathbf{b}$. Then $f(W + H) = f(W) + \mathbf{a}^\top H\mathbf{b}$, which is already linear in $H$. Bring it to the standard form:
+
+        $$\mathbf{a}^\top H\mathbf{b} = \operatorname{tr}(\mathbf{a}^\top H\mathbf{b}) = \operatorname{tr}(\mathbf{b}\mathbf{a}^\top H) = \operatorname{tr}\big((\mathbf{a}\mathbf{b}^\top)^\top H\big).$$
+
+        So $\nabla_W(\mathbf{a}^\top W\mathbf{b}) = \mathbf{a}\mathbf{b}^\top$.
+
+        **The layer of the puzzle.** $f(W) = \tfrac12\|W\mathbf{x} - \mathbf{t}\|^2$. Write $\mathbf{r} = W\mathbf{x} - \mathbf{t}$. Displacing $W$ by $H$ displaces the residual by $H\mathbf{x}$:
+
+        $$\tfrac12\|\mathbf{r} + H\mathbf{x}\|^2 = \tfrac12\|\mathbf{r}\|^2 + \mathbf{r}^\top H\mathbf{x} + \tfrac12\|H\mathbf{x}\|^2.$$
+
+        The linear part is the bilinear form $\mathbf{r}^\top H\mathbf{x}$, so
+
+        $$\nabla_W\,\tfrac12\|W\mathbf{x} - \mathbf{t}\|^2 = \mathbf{r}\mathbf{x}^\top = (W\mathbf{x} - \mathbf{t})\,\mathbf{x}^\top.$$
+
+        **Any loss on a linear layer.** Let $f(W) = g(W\mathbf{x})$, and write $\boldsymbol\delta = \nabla g$ at $\mathbf{z} = W\mathbf{x}$. Displacing $W$ by $H$ displaces $\mathbf{z}$ by $H\mathbf{x}$ and changes $g$ by $\boldsymbol\delta^\top H\mathbf{x}$. Hence
+
+        $$\nabla_W\,g(W\mathbf{x}) = \boldsymbol\delta\,\mathbf{x}^\top, \qquad \nabla_{\mathbf{x}}\,g(W\mathbf{x}) = W^\top\boldsymbol\delta.$$
+
+        The same $\boldsymbol\delta$ gives both: an outer product with the input for the weights, and a product with $W^\top$ to pass the gradient further back. For one example the weight gradient always has rank 1.
+    - question:
+        id: derivation-bilinear
+        type: numeric
+        system: s2
+        prompt: |
+          $f(W) = \mathbf{a}^\top W\mathbf{b}$ with $\mathbf{a} = (1, 2)$ and $\mathbf{b} = (3, 0, 1)$. What is the entry in row 2, column 1 of $\nabla_Wf$?
+        answer: "6"
+        explanation: |
+          $\nabla_Wf = \mathbf{a}\mathbf{b}^\top = \begin{pmatrix} 3 & 0 & 1 \\ 6 & 0 & 2 \end{pmatrix}$, and the entry is $a_2b_1 = 6$. Directly: $f = \sum_{i,j}a_iW_{ij}b_j$, and the coefficient of $W_{21}$ is $a_2b_1$. The gradient does not depend on $W$ at all, because $f$ is linear in $W$. The order matters: $\mathbf{b}\mathbf{a}^\top$ would be $3 \times 2$, the wrong shape.
+    - text: |
+        **A batch.** Put $n$ examples as the rows of $X$, of shape $n \times d$, and let the weights be $W$, of shape $d \times k$, so that the outputs are the rows of $Z = XW$. For a loss $f(W) = g(XW)$ with $\Delta = \nabla_Zg$:
+
+        $$g(XW + XH) \approx g + \langle\Delta, XH\rangle = \operatorname{tr}(\Delta^\top XH) = \operatorname{tr}\big((X^\top\Delta)^\top H\big),$$
+
+        so
+
+        $$\nabla_W\,g(XW) = X^\top\Delta, \qquad \nabla_X\,g(XW) = \Delta W^\top.$$
+
+        The first is the sum over examples of (input)(error)$^\top$. For least squares, $g = \tfrac12\|XW - T\|_F^2$ and $\Delta = XW - T$.
+
+        **The general product rule.** For $f(W) = g(AWB)$ with $\Delta = \nabla g$:
+
+        $$\nabla_W\,g(AWB) = A^\top\Delta B^\top.$$
+
+        Whatever stands to the left of $W$ comes out transposed on the left, and whatever stands to the right comes out transposed on the right. Every formula above is a case of this one.
+
+        **More gradients.**
+
+        - $\|W\|_F^2 = \operatorname{tr}(W^\top W)$: the linear part of $\operatorname{tr}((W + H)^\top(W + H))$ is $2\operatorname{tr}(W^\top H)$, so the gradient is $2W$. Weight decay $\tfrac\mu2\|W\|_F^2$ adds $\mu W$ to the gradient.
+        - $\operatorname{tr}(A^\top W) = \langle A, W\rangle$: gradient $A$.
+        - $\operatorname{tr}(W^\top AW)$: gradient $(A + A^\top)W$.
+
+        **Shapes.** With $X$ of shape $n \times d$ and $\Delta$ of shape $n \times k$, the gradient for $W$ must be $d \times k$, and $X^\top\Delta$ is the only product of the two that has that shape. As before, the check fails silently when dimensions coincide.
+
+        **Why not flatten?** One could string the entries of $W$ into a vector and use the last lesson. For scalar functions that gives the same numbers, reshaped. But the derivative of a matrix-valued function of a matrix, such as $W \mapsto AWB$, would become an $mn \times mn$ Jacobian with a structure that is hard to see. Working with displacements $H$ and the pairing $\operatorname{tr}(G^\top H)$ never forms that object.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the derivation of the gradient, with respect to W, of half the squared length of W x minus t.
+        steps:
+          - 'Write the residual $\mathbf{r} = W\mathbf{x} - \mathbf{t}$, and displace $W$ by $H$, so that the residual becomes $\mathbf{r} + H\mathbf{x}$.'
+          - 'Expand $\tfrac12\|\mathbf{r} + H\mathbf{x}\|^2$ and keep the part linear in $H$, which is $\mathbf{r}^\top H\mathbf{x}$.'
+          - 'Write this number as its own trace, $\operatorname{tr}(\mathbf{r}^\top H\mathbf{x})$.'
+          - 'Cycle the factors to $\operatorname{tr}(\mathbf{x}\mathbf{r}^\top H) = \operatorname{tr}\big((\mathbf{r}\mathbf{x}^\top)^\top H\big)$.'
+          - 'Read off the gradient $\mathbf{r}\mathbf{x}^\top$.'
+        explanation: Expand, keep the linear part, and use the trace to move H to the end.
+  formal:
+    - text: |
+        **Frobenius inner product.** $\langle A, B\rangle = \operatorname{tr}(A^\top B) = \sum_{ij}A_{ij}B_{ij}$ on $\mathbb{R}^{m \times n}$.
+
+        **Gradient.** $\nabla_Wf \in \mathbb{R}^{m \times n}$ is the unique matrix with $f(W + H) = f(W) + \langle\nabla_Wf, H\rangle + o(\|H\|_F)$. $(\nabla_Wf)_{ij} = \partial f/\partial W_{ij}$.
+
+        **Trace.** $\operatorname{tr}(AB) = \operatorname{tr}(BA)$ for $A \in \mathbb{R}^{m \times n}$, $B \in \mathbb{R}^{n \times m}$. $\operatorname{tr}(A^\top) = \operatorname{tr}(A)$. $\langle A, BC\rangle = \langle B^\top A, C\rangle = \langle AC^\top, B\rangle$.
+
+        **Adjoints.** The map $H \mapsto AHB$ has adjoint $G \mapsto A^\top GB^\top$ for the Frobenius inner product: $\langle G, AHB\rangle = \langle A^\top GB^\top, H\rangle$. The chain rule for $f = g \circ \mathcal{L}$ with $\mathcal{L}$ linear is $\nabla f = \mathcal{L}^*\nabla g$.
+
+        **Table.**
+
+        | $f(W)$ | $\nabla_Wf$ |
+        |---|---|
+        | $\mathbf{a}^\top W\mathbf{b}$ | $\mathbf{a}\mathbf{b}^\top$ |
+        | $\operatorname{tr}(A^\top W)$ | $A$ |
+        | $\operatorname{tr}(AW)$ | $A^\top$ |
+        | $\lVert W\rVert_F^2$ | $2W$ |
+        | $\operatorname{tr}(W^\top AW)$ | $(A + A^\top)W$ |
+        | $\tfrac12\lVert W\mathbf{x} - \mathbf{t}\rVert^2$ | $(W\mathbf{x} - \mathbf{t})\mathbf{x}^\top$ |
+        | $\tfrac12\lVert XW - T\rVert_F^2$ | $X^\top(XW - T)$ |
+        | $g(AWB)$ | $A^\top(\nabla g)B^\top$ |
+        | $\mathbf{a}^\top W^\top W\mathbf{b}$ | $W(\mathbf{a}\mathbf{b}^\top + \mathbf{b}\mathbf{a}^\top)$ |
+
+        **Vectorisation.** With $\operatorname{vec}$ stacking columns: $\operatorname{vec}(AWB) = (B^\top \otimes A)\operatorname{vec}(W)$ and $\langle G, H\rangle = \operatorname{vec}(G)^\top\operatorname{vec}(H)$. The adjoint formula above is the transpose of the Kronecker product, $(B^\top \otimes A)^\top = B \otimes A^\top$, written without forming it.
+
+        **Rank.** For $f(W) = \sum_{i=1}^ng_i(W\mathbf{x}_i)$: $\nabla_Wf = \sum_i\boldsymbol\delta_i\mathbf{x}_i^\top$, of rank at most $n$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-shape
+        type: numeric
+        system: s1
+        prompt: |
+          $f$ takes a $4 \times 5$ matrix to a number. How many entries has its gradient?
+        answer: "20"
+        explanation: The gradient has the shape of the variable.
+    - question:
+        id: drill-entry
+        type: choice
+        system: s1
+        prompt: |
+          The $(i, j)$ entry of $\nabla_Wf$ is
+        options: ['$\partial f/\partial W_{ij}$', '$\partial f/\partial W_{ji}$', '$W_{ij}$', '$f(W_{ij})$']
+        answer: 0
+        explanation: The table of slopes, laid out like $W$.
+    - question:
+        id: drill-inner
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\langle A, B\rangle = \operatorname{tr}(A^\top B)$ for $A = \begin{pmatrix} 1 & 2 \\ 0 & 1 \end{pmatrix}$ and $B = \begin{pmatrix} 3 & 1 \\ 5 & 2 \end{pmatrix}$?
+        answer: "7"
+        explanation: The sum of products of matching entries, $3 + 2 + 0 + 2$.
+    - question:
+        id: drill-cycle
+        type: choice
+        system: s1
+        prompt: |
+          $\operatorname{tr}(ABC)$ always equals
+        options: ['$\operatorname{tr}(ACB)$', '$\operatorname{tr}(CAB)$', '$\operatorname{tr}(BAC)$', '$\operatorname{tr}(A)\operatorname{tr}(B)\operatorname{tr}(C)$']
+        answer: 1
+        explanation: Factors may be cycled, not swapped.
+    - question:
+        id: drill-bilinear
+        type: choice
+        system: s1
+        prompt: |
+          The gradient of $\mathbf{a}^\top W\mathbf{b}$ with respect to $W$ is
+        options: ['$\mathbf{a}\mathbf{b}^\top$', '$\mathbf{b}\mathbf{a}^\top$', '$\mathbf{a}^\top\mathbf{b}$', '$W$']
+        answer: 0
+        explanation: Entry $(i, j)$ is the coefficient $a_ib_j$ of $W_{ij}$.
+    - question:
+        id: drill-frobenius
+        type: choice
+        system: s1
+        prompt: |
+          The gradient of $\|W\|_F^2$ is
+        options: ['$W$', '$2W$', '$W^\top W$', '$2\|W\|_F$']
+        answer: 1
+        explanation: Each entry $w^2$ contributes $2w$.
+    - question:
+        id: drill-trace
+        type: choice
+        system: s1
+        prompt: |
+          The gradient of $\operatorname{tr}(A^\top W)$ with respect to $W$ is
+        options: ['$A$', '$A^\top$', '$W$', '$I$']
+        answer: 0
+        explanation: It is $\langle A, W\rangle$, linear in $W$ with coefficient table $A$.
+    - question:
+        id: drill-layer
+        type: choice
+        system: s1
+        prompt: |
+          For $f(W) = g(W\mathbf{x})$ with $\boldsymbol\delta = \nabla g$, the gradient with respect to $W$ is
+        options: ['$\mathbf{x}\boldsymbol\delta^\top$', '$\boldsymbol\delta\mathbf{x}^\top$', '$W^\top\boldsymbol\delta$', '$\boldsymbol\delta^\top\mathbf{x}$']
+        answer: 1
+        explanation: Error times input, in the shape of $W$.
+    - question:
+        id: drill-outer-entry
+        type: numeric
+        system: s1
+        prompt: |
+          The error at the outputs is $\boldsymbol\delta = (2, -1)$ and the input is $\mathbf{x} = (1, 2, 3)$. What is the slope of the loss with respect to $W_{23}$?
+        answer: "-3"
+        explanation: $\delta_2x_3 = -1 \times 3$.
+    - question:
+        id: drill-rank
+        type: numeric
+        system: s1
+        prompt: |
+          What is the rank of the gradient of a loss with respect to the weights of a linear layer, for a single example with nonzero error and nonzero input?
+        answer: "1"
+        explanation: It is an outer product of two vectors.
+    - question:
+        id: drill-batch
+        type: choice
+        system: s1
+        prompt: |
+          For $f(W) = g(XW)$ with $\Delta = \nabla g$, the gradient with respect to $W$ is
+        options: ['$X\Delta$', '$X^\top\Delta$', '$\Delta X^\top$', '$\Delta^\top X$']
+        answer: 1
+        explanation: What stands left of $W$ comes out transposed on the left.
+    - question:
+        id: drill-back
+        type: choice
+        system: s1
+        prompt: |
+          For $f(X) = g(XW)$ with $\Delta = \nabla g$, the gradient with respect to $X$ is
+        options: ['$W^\top\Delta$', '$\Delta W^\top$', '$\Delta W$', '$W\Delta$']
+        answer: 1
+        explanation: What stands right of $X$ comes out transposed on the right.
+    - question:
+        id: drill-decay
+        type: choice
+        system: s1
+        prompt: |
+          Adding $\tfrac\mu2\|W\|_F^2$ to a loss adds what to its gradient?
+        options: ['$\mu$', '$\mu W$', '$2\mu W$', '$\mu\|W\|_F$']
+        answer: 1
+        explanation: Half of $2\mu W$.
+    - question:
+        id: predict-outer
+        type: predict
+        system: s1
+        prompt: The layer of the puzzle, by the formula. What does this show?
+        code: |
+          import numpy as np
+
+          W = np.array([[1.0, 0.0, 2.0], [-1.0, 1.0, 0.0]])
+          x = np.array([1.0, 2.0, 3.0])
+          t = np.array([5.0, 2.0])
+          r = W @ x - t
+          G = np.outer(r, x)
+          print([float(v) for v in r])
+          print([[float(v) for v in row] for row in G])
+          print(int(np.linalg.matrix_rank(G)), [float(v) for v in W.T @ r])
+        output: |
+          [2.0, -1.0]
+          [[2.0, 4.0, 6.0], [-1.0, -2.0, -3.0]]
+          1 [3.0, -1.0, 4.0]
+        explanation: The gradient for the weights is the outer product of the error and the input, the table the starter measured, and it has rank 1. The same error multiplied by W transpose is the gradient with respect to the input.
+    - question:
+        id: predict-trace
+        type: predict
+        system: s1
+        prompt: The sum of products of matching entries, three ways. And the trace of a product in two orders. What does this show?
+        code: |
+          import numpy as np
+
+          G = np.array([[1.0, 2.0, 0.0], [0.0, 1.0, 3.0]])
+          H = np.array([[2.0, 1.0, 1.0], [4.0, 0.0, 2.0]])
+          print(float((G * H).sum()), float(np.trace(G.T @ H)), float(np.trace(G @ H.T)))
+          print((G.T @ H).shape, (G @ H.T).shape)
+        output: |
+          10.0 10.0 10.0
+          (3, 3) (2, 2)
+        explanation: The trace of G transpose H is the sum of products of matching entries. Cycling the factors gives a product of a different size with the same trace.
+  work:
+    - text: Slower now. The first task is one layer and one example.
+    - question:
+        id: write-layer
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `grad_layer(W, x, t)` for the loss $\tfrac12\|W\mathbf{x} - \mathbf{t}\|^2$. Return the pair `(grad_W, grad_x)`: the gradient with respect to the weights, in the shape of `W`, and the gradient with respect to the input, in the shape of `x`.
+        starter: |
+          import numpy as np
+
+
+          def grad_layer(W, x, t):
+              return W * 0.0, x * 0.0
+
+
+          W = np.array([[1.0, 0.0, 2.0], [-1.0, 1.0, 0.0]])
+          gW, gx = grad_layer(W, np.array([1.0, 2.0, 3.0]), np.array([5.0, 2.0]))
+          print([[float(v) for v in row] for row in gW])
+          print([float(v) for v in gx])
+        solution: |
+          import numpy as np
+
+
+          def grad_layer(W, x, t):
+              r = W @ x - t
+              return np.outer(r, x), W.T @ r
+
+
+          W = np.array([[1.0, 0.0, 2.0], [-1.0, 1.0, 0.0]])
+          gW, gx = grad_layer(W, np.array([1.0, 2.0, 3.0]), np.array([5.0, 2.0]))
+          print([[float(v) for v in row] for row in gW])
+          print([float(v) for v in gx])
+        tests: |
+          import numpy as _np
+          _W = _np.array([[1.0, 0.0, 2.0], [-1.0, 1.0, 0.0]])
+          _x = _np.array([1.0, 2.0, 3.0])
+          _t = _np.array([5.0, 2.0])
+          _out = grad_layer(_W, _x, _t)
+          assert isinstance(_out, tuple) and len(_out) == 2, "grad_layer should return the pair (grad_W, grad_x)"
+          _gW, _gx = _out
+          assert _np.shape(_gW) == (2, 3), "The gradient for the weights has the shape of W, 2 by 3"
+          assert _np.shape(_gx) == (3,), "The gradient for the input has the shape of x"
+          assert _np.allclose(_gW, [[2.0, 4.0, 6.0], [-1.0, -2.0, -3.0]]), "The gradient for the weights is the outer product of the error (2, -1) and the input (1, 2, 3)"
+          assert _np.allclose(_gx, [3.0, -1.0, 4.0]), "The gradient for the input is W^T times the error, (3, -1, 4)"
+          _rng = _np.random.default_rng(0)
+          _W2, _x2, _t2 = _rng.normal(size=(3, 3)), _rng.normal(size=3), _rng.normal(size=3)
+          _L = lambda W, x: 0.5 * float(((W @ x - _t2) ** 2).sum())
+          _num = _np.zeros((3, 3))
+          for _i in range(3):
+              for _j in range(3):
+                  _E = _np.zeros((3, 3))
+                  _E[_i, _j] = 1e-6
+                  _num[_i, _j] = (_L(_W2 + _E, _x2) - _L(_W2 - _E, _x2)) / 2e-6
+          _gW, _gx = grad_layer(_W2, _x2, _t2)
+          assert _np.allclose(_gW, _num, atol=1e-6), "For a random square layer the gradient for the weights should agree with central differences, entry by entry. Check the order of the outer product"
+          _numx = _np.array([(_L(_W2, _x2 + 1e-6 * _e) - _L(_W2, _x2 - 1e-6 * _e)) / 2e-6 for _e in _np.eye(3)])
+          assert _np.allclose(_gx, _numx, atol=1e-6), "For a random square layer the gradient for the input should agree with central differences"
+          assert output.strip() == "[[2.0, 4.0, 6.0], [-1.0, -2.0, -3.0]]\n[3.0, -1.0, 4.0]", "The program should print [[2.0, 4.0, 6.0], [-1.0, -2.0, -3.0]] and then [3.0, -1.0, 4.0]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def grad_layer(W, x, t):
+                r = W @ x - t
+                return np.outer(x, r).reshape(W.shape), W.T @ r
+
+
+            print("[[2.0, 4.0, 6.0], [-1.0, -2.0, -3.0]]\n[3.0, -1.0, 4.0]")
+          - |
+            import numpy as np
+
+
+            def grad_layer(W, x, t):
+                r = W @ x - t
+                return np.outer(r, x), W.T @ (W @ x)
+
+
+            print("[[2.0, 4.0, 6.0], [-1.0, -2.0, -3.0]]\n[3.0, -1.0, 4.0]")
+          - |
+            import numpy as np
+
+
+            def grad_layer(W, x, t):
+                r = W @ x
+                return np.outer(r, x), W.T @ r
+
+
+            print("[[2.0, 4.0, 6.0], [-1.0, -2.0, -3.0]]\n[3.0, -1.0, 4.0]")
+          - |
+            import numpy as np
+
+
+            def grad_layer(W, x, t):
+                r = W @ x - t
+                return np.outer(r, r) @ W, W.T @ r
+
+
+            print("[[2.0, 4.0, 6.0], [-1.0, -2.0, -3.0]]\n[3.0, -1.0, 4.0]")
+        explanation: |
+          One residual, used twice. `np.outer(r, x)` has entry $(i, j)$ equal to $r_ix_j$, the slope for $W_{ij}$. `W.T @ r` is the slope for each input.
+
+          The first wrong version computes the outer product in the wrong order and then forces it into the right shape with `reshape`. The shape check passes, and the numbers are scrambled. Reshaping to silence a shape error is the most reliable way to hide a wrong gradient.
+
+          This pair is the whole backward step of a linear layer: from the gradient at its output, produce the gradient for its own weights, and the gradient to hand to the layer before it.
+    - question:
+        id: write-batch
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          `X` holds `n` examples as rows, `W` has shape `d` by `k`, and the targets `T` have shape `n` by `k`. Write `grad_batch(X, W, T, mu)` returning the gradient with respect to `W` of $\tfrac12\|XW - T\|_F^2 + \tfrac\mu2\|W\|_F^2$.
+        starter: |
+          import numpy as np
+
+
+          def grad_batch(X, W, T, mu):
+              return W * 0.0
+
+
+          X = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+          W = np.array([[1.0, 2.0], [0.0, 1.0]])
+          T = np.array([[1.0, 1.0], [1.0, 0.0], [0.0, 3.0]])
+          print([[float(v) for v in row] for row in grad_batch(X, W, T, 0.0)])
+          print([[float(v) for v in row] for row in grad_batch(X, W, T, 0.5)])
+        solution: |
+          import numpy as np
+
+
+          def grad_batch(X, W, T, mu):
+              return X.T @ (X @ W - T) + mu * W
+
+
+          X = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+          W = np.array([[1.0, 2.0], [0.0, 1.0]])
+          T = np.array([[1.0, 1.0], [1.0, 0.0], [0.0, 3.0]])
+          print([[float(v) for v in row] for row in grad_batch(X, W, T, 0.0)])
+          print([[float(v) for v in row] for row in grad_batch(X, W, T, 0.5)])
+        tests: |
+          import numpy as _np
+          _X = _np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+          _W = _np.array([[1.0, 2.0], [0.0, 1.0]])
+          _T = _np.array([[1.0, 1.0], [1.0, 0.0], [0.0, 3.0]])
+          _G = grad_batch(_X, _W, _T, 0.0)
+          assert _np.shape(_G) == (2, 2), "The gradient has the shape of W"
+          assert _np.allclose(_G, [[1.0, 1.0], [0.0, 1.0]]), "Without weight decay the gradient is X^T (X W - T) = [[1, 1], [0, 1]]"
+          assert _np.allclose(grad_batch(_X, _W, _T, 0.5), [[1.5, 2.0], [0.0, 1.5]]), "With mu = 0.5 the gradient gains 0.5 W"
+          _rng = _np.random.default_rng(0)
+          _X2, _W2, _T2 = _rng.normal(size=(5, 3)), _rng.normal(size=(3, 2)), _rng.normal(size=(5, 2))
+          _L = lambda W: 0.5 * float(((_X2 @ W - _T2) ** 2).sum()) + 0.15 * float((W ** 2).sum())
+          _num = _np.zeros((3, 2))
+          for _i in range(3):
+              for _j in range(2):
+                  _E = _np.zeros((3, 2))
+                  _E[_i, _j] = 1e-6
+                  _num[_i, _j] = (_L(_W2 + _E) - _L(_W2 - _E)) / 2e-6
+          _G2 = grad_batch(_X2, _W2, _T2, 0.3)
+          assert _np.shape(_G2) == (3, 2) and _np.allclose(_G2, _num, atol=1e-6), "For random data with 5 examples, 3 features and 2 outputs, and mu = 0.3, the gradient should agree with central differences"
+          assert output.strip() == "[[1.0, 1.0], [0.0, 1.0]]\n[[1.5, 2.0], [0.0, 1.5]]", "The program should print [[1.0, 1.0], [0.0, 1.0]] and then [[1.5, 2.0], [0.0, 1.5]]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def grad_batch(X, W, T, mu):
+                return X.T @ (X @ W - T)
+
+
+            print("[[1.0, 1.0], [0.0, 1.0]]\n[[1.5, 2.0], [0.0, 1.5]]")
+          - |
+            import numpy as np
+
+
+            def grad_batch(X, W, T, mu):
+                return X.T @ (X @ W - T) + 2 * mu * W
+
+
+            print("[[1.0, 1.0], [0.0, 1.0]]\n[[1.5, 2.0], [0.0, 1.5]]")
+          - |
+            import numpy as np
+
+
+            def grad_batch(X, W, T, mu):
+                return X.T @ (X @ W - T) / len(X) + mu * W
+
+
+            print("[[1.0, 1.0], [0.0, 1.0]]\n[[1.5, 2.0], [0.0, 1.5]]")
+          - |
+            import numpy as np
+
+
+            def grad_batch(X, W, T, mu):
+                return X.T @ (X @ W) - T.T @ X + mu * W
+
+
+            print("[[1.0, 1.0], [0.0, 1.0]]\n[[1.5, 2.0], [0.0, 1.5]]")
+        explanation: |
+          The residual matrix $XW - T$ holds one row of errors per example. Multiplying by $X^\top$ on the left adds up, over the examples, the outer products of each input with its error. Weight decay adds $\mu W$.
+
+          The same answer comes from the general rule: in $g(XW)$ the matrix $X$ stands on the left of the variable, so it comes out as $X^\top$ on the left of $\nabla g$.
+
+          The third wrong version divides by the number of examples. That is the gradient of the **mean** loss, which is what most training code uses, so that the step size does not depend on the batch size. It is a different function from the one asked for. Whether a loss is a sum or a mean is the most common reason for a gradient to be off by a constant factor.
+    - question:
+        id: fix-order
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `grad_W(W, x, t)` should return the gradient of $\tfrac12\|W\mathbf{x} - \mathbf{t}\|^2$ with respect to `W`. The program prints the largest difference from central differences, which should be `0.0`. It is not. Fix `grad_W`.
+        starter: |
+          import numpy as np
+
+
+          def loss(W, x, t):
+              return 0.5 * float(((W @ x - t) ** 2).sum())
+
+
+          def grad_W(W, x, t):
+              r = W @ x - t
+              return np.outer(x, r)
+
+
+          W = np.array([[1.0, 2.0], [0.0, -1.0]])
+          x = np.array([1.0, 3.0])
+          t = np.array([2.0, 1.0])
+          h = 1e-6
+          measured = np.zeros((2, 2))
+          for i in range(2):
+              for j in range(2):
+                  E = np.zeros((2, 2))
+                  E[i, j] = h
+                  measured[i, j] = (loss(W + E, x, t) - loss(W - E, x, t)) / (2 * h)
+          print(round(float(np.abs(grad_W(W, x, t) - measured).max()), 4))
+        solution: |
+          import numpy as np
+
+
+          def loss(W, x, t):
+              return 0.5 * float(((W @ x - t) ** 2).sum())
+
+
+          def grad_W(W, x, t):
+              r = W @ x - t
+              return np.outer(r, x)
+
+
+          W = np.array([[1.0, 2.0], [0.0, -1.0]])
+          x = np.array([1.0, 3.0])
+          t = np.array([2.0, 1.0])
+          h = 1e-6
+          measured = np.zeros((2, 2))
+          for i in range(2):
+              for j in range(2):
+                  E = np.zeros((2, 2))
+                  E[i, j] = h
+                  measured[i, j] = (loss(W + E, x, t) - loss(W - E, x, t)) / (2 * h)
+          print(round(float(np.abs(grad_W(W, x, t) - measured).max()), 4))
+        tests: |
+          import numpy as _np
+          _W = _np.array([[1.0, 2.0], [0.0, -1.0]])
+          _x = _np.array([1.0, 3.0])
+          _t = _np.array([2.0, 1.0])
+          assert _np.allclose(grad_W(_W, _x, _t), [[5.0, 15.0], [-4.0, -12.0]]), "The error is W x - t = (5, -4), and the gradient is its outer product with x = (1, 3), with one row per output"
+          _W2 = _np.array([[1.0, 0.0, 2.0], [-1.0, 1.0, 0.0]])
+          _G = grad_W(_W2, _np.array([1.0, 2.0, 3.0]), _np.array([5.0, 2.0]))
+          assert _np.shape(_G) == (2, 3) and _np.allclose(_G, [[2.0, 4.0, 6.0], [-1.0, -2.0, -3.0]]), "For a 2 by 3 layer the gradient is 2 by 3: error (2, -1) times input (1, 2, 3)"
+          assert _np.allclose(grad_W(_np.eye(2), _np.array([1.0, 2.0]), _np.array([1.0, 2.0])), 0.0), "When the output equals the target the gradient is zero"
+          assert output.strip() == "0.0", "The program should print 0.0"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def loss(W, x, t):
+                return 0.5 * float(((W @ x - t) ** 2).sum())
+
+
+            def grad_W(W, x, t):
+                r = W @ x - t
+                return np.outer(x, r)
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def loss(W, x, t):
+                return 0.5 * float(((W @ x - t) ** 2).sum())
+
+
+            def grad_W(W, x, t):
+                r = W @ x - t
+                return np.outer(r, r)
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def loss(W, x, t):
+                return 0.5 * float(((W @ x - t) ** 2).sum())
+
+
+            def grad_W(W, x, t):
+                r = W @ x
+                return np.outer(r, x)
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def loss(W, x, t):
+                return 0.5 * float(((W @ x - t) ** 2).sum())
+
+
+            def grad_W(W, x, t):
+                r = W @ x - t
+                return np.outer(r, x) * 0.5
+
+
+            print("0.0")
+        explanation: |
+          $\mathbf{x}\mathbf{r}^\top$ is the transpose of the right answer $\mathbf{r}\mathbf{x}^\top$. Row $i$ of the gradient belongs to output $i$, so the error must index the rows and the input the columns.
+
+          For a layer with different numbers of inputs and outputs the wrong order has the wrong shape, and the update `W - rate * grad` fails at once. This layer is square, so the wrong order has the right shape, and training would proceed with a transposed gradient. A descent step along a transposed gradient is, in general, not a descent direction at all.
+
+          The check in the program is what found it: six lines that nudge every weight, written once and reused for every layer.
+    - question:
+        id: work-rank
+        type: choice
+        system: s2
+        prompt: |
+          A linear layer with a $512 \times 512$ weight matrix is trained on a batch of 8 examples. What can be said about the gradient of the loss with respect to its weights?
+        options:
+          - 'It is a full-rank $512 \times 512$ matrix.'
+          - 'It is a sum of 8 outer products, one per example, so it has rank at most 8. The update changes the weights only in an 8-dimensional family of directions.'
+          - 'It has rank exactly 512.'
+          - 'It is the zero matrix.'
+        answer: 1
+        explanation: |
+          $\nabla_W = \sum_i\boldsymbol\delta_i\mathbf{x}_i^\top$, and a sum of 8 matrices of rank 1 has rank at most 8. So of the 262 144 numbers in the gradient, only $8 \times (512 + 512)$ are independent. This is not an approximation: it holds for any loss, by the formula $\boldsymbol\delta\mathbf{x}^\top$. It is why the gradient of one example can be stored as two vectors, and one of the reasons low-rank updates to large weight matrices work as well as they do.
+    - question:
+        id: work-trace-gradient
+        type: numeric
+        system: s2
+        prompt: |
+          $f(W) = \operatorname{tr}(W^\top W)$ and $W = \begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix}$. What is the entry in row 2, column 1 of $\nabla_Wf$?
+        answer: "6"
+        explanation: |
+          $\operatorname{tr}(W^\top W) = \|W\|_F^2 = \sum w_{ij}^2$, and its gradient is $2W = \begin{pmatrix} 2 & 4 \\ 6 & 8 \end{pmatrix}$. The entry is $2 \times 3 = 6$. By the method: the linear part of $\operatorname{tr}((W + H)^\top(W + H))$ is $\operatorname{tr}(W^\top H) + \operatorname{tr}(H^\top W) = 2\operatorname{tr}(W^\top H)$, using that a matrix and its transpose have the same trace.
+    - question:
+        id: work-steepest
+        type: choice
+        system: s2
+        prompt: |
+          Among all displacements $H$ of the weights with $\|H\|_F = 1$, which one decreases the loss fastest, to first order?
+        options:
+          - 'Any $H$ of rank 1.'
+          - '$H = -\nabla_Wf/\|\nabla_Wf\|_F$. The first-order change is $\langle\nabla_Wf, H\rangle$, and by Cauchy-Schwarz for the Frobenius inner product it is at least $-\|\nabla_Wf\|_F$, with equality for that $H$.'
+          - '$H = -W/\|W\|_F$.'
+          - 'It cannot be determined without the Hessian.'
+        answer: 1
+        explanation: |
+          This is the steepest-descent argument of the gradient lesson, word for word, with the dot product replaced by $\langle G, H\rangle = \operatorname{tr}(G^\top H)$. Matrices of a given shape form an inner product space, and everything proved for inner product spaces applies. The answer does depend on the choice of norm: measuring $H$ by its spectral norm in place of the Frobenius norm gives a different steepest direction, built from the singular vectors of the gradient. Ordinary gradient descent is the Frobenius choice.
+  connections:
+    - text: |
+        Each weight $W_{ij}$ carries input $j$ to output $i$, so its slope is (error at output $i$) $\times$ (input $j$), and the gradient is the outer product $\boldsymbol\delta\mathbf{x}^\top$. That is why the table of six slopes was a multiplication table.
+
+        The gradient of a function of a matrix is the matrix $G$ of the same shape with $f(W + H) \approx f(W) + \operatorname{tr}(G^\top H)$. It is found by expanding at $W + H$ and cycling factors inside a trace until $H$ stands last. The general rule $\nabla_W\,g(AWB) = A^\top(\nabla g)B^\top$ covers a layer, a batch, and the gradient passed back to the input.
+
+        Each derivation today began by writing out $f(W + H)$ in full and discarding the terms of higher order by hand. For a product of several factors, or an inverse, or a determinant, that expansion becomes long. The work can be organised: give the small displacement a name, $dW$, and learn a handful of rules for how it passes through sums, products and functions. Then a derivative is computed in a few lines of algebra and the gradient is read off at the end: [[m13.the-method-of-differentials]].
