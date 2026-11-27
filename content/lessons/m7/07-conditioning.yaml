@@ -1,0 +1,696 @@
+concept: m7.conditioning
+minutes: 85
+claim: You can recognise a linear system whose answer is hypersensitive to its data, measure that sensitivity by the condition number as the ratio of the greatest to the least stretch of the matrix, bound the relative error of the solution by the condition number times the relative error of the data, explain why the determinant and the size of the residual do not measure it, show that the normal equations square the condition number while QR does not, and reduce the condition number of a fitting problem by centring and scaling its columns.
+recalls: [m7.pseudo-inverse]
+uses: [m7.least-squares-and-the-normal-equations, m7.gram-schmidt-and-qr, m7.orthonormal-bases, m5.determinant, m5.identity-and-inverse, m5.elimination-and-linear-systems, m5.rank, m4.norms-and-distance, m4.linear-independence, e5.numerical-error-analysis-in-practice, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e5.axis-operations-and-reductions, e0.functions]
+leads: [m8.singular-value-decomposition, m8.operator-and-frobenius-norms, m8.eigenvalues-and-eigenvectors, m9.conditioning-and-perturbation-bounds, m9.householder-qr, l2.ridge-and-lasso, l2.linear-regression-in-closed-form-and-as-geometry]
+starter: |
+  # Scratch space. One system, solved twice. The second right-hand side
+  # differs from the first by 0.0002 in one entry.
+  import numpy as np
+
+  A = np.array([[1.0, 1.0], [1.0, 1.0001]])
+  print([round(float(v), 4) for v in np.linalg.solve(A, np.array([2.0, 2.0001]))])
+  print([round(float(v), 4) for v in np.linalg.solve(A, np.array([2.0, 2.0003]))])
+parts:
+  recall:
+    - text: |
+        [[m7.pseudo-inverse]] closed the exact theory: every matrix has a best answer for every right-hand side. It ended on a warning about matrices that are almost singular. Today measures "almost". Three quick pulls first.
+  puzzle:
+    - text: |
+        Two equations in two unknowns:
+
+        $$x_1 + x_2 = 2, \qquad x_1 + 1.0001\,x_2 = 2.0001.$$
+
+        The solution is $(1, 1)$. Now suppose the last number was measured, and the instrument is good to four decimal places. It might equally have read 2.0003. The starter solves both.
+
+        ```
+        [1.0, 1.0]
+        [-1.0, 3.0]
+        ```
+
+        The data changed by one part in ten thousand. The answer changed completely: one unknown went from 1 to $-1$, the other from 1 to 3.
+
+        Nothing has gone wrong in the arithmetic. The matrix is invertible, the solver is accurate, and both answers are the exact solutions of the systems they were given. Check the second answer against the **first** system: $-1 + 3 = 2$, and $-1 + 3.0003 = 2.0003$, which misses 2.0001 by 0.0002. A vector that is wrong by 2 in each entry satisfies the equations to within two parts in ten thousand.
+
+        **What property of this matrix makes its solutions so sensitive, and can it be measured by one number before any system is solved? And which of the methods of this cluster make the sensitivity worse?**
+  intuition:
+    - text: |
+        Draw the two equations as lines in the plane. The first has slope $-1$. The second has slope $-1/1.0001$. They are almost parallel, and they cross at $(1, 1)$. Slide the second line upwards by a hair. Because the lines meet at such a shallow angle, the crossing point runs a long way along the first line before the two meet again.
+
+        In the language of this cluster, look at the **columns**: $(1, 1)$ and $(1, 1.0001)$. They point in almost the same direction. The right-hand side $(2, 2.0001)$ is close to both. It can be built as one of each. It can **nearly** be built as minus one of the first and three of the second, or as a hundred of one and minus ninety-eight of the other, since the two columns almost cancel in every such combination. A tiny change in the target is enough to tip the exact recipe from one of these to another.
+
+        Put a third way, as a map. The matrix stretches some directions much more than others. Here the direction $(1, 1)$ is stretched to about twice its length, while the direction $(1, -1)$ is sent to $(0, -0.0001)$ and shrunk by a factor of about fourteen thousand. Solving the system runs the map backwards, and backwards, the shrunken direction is **magnified** by fourteen thousand. Any error in the data that lies along it comes back enormous.
+
+        This is a property of the **problem**, not of the method used to solve it. No algorithm can recover an answer that the data does not determine. The most that can be asked is that the algorithm not make matters worse. One of the algorithms of this cluster does.
+  derivation:
+    - text: |
+        **Stretch.** For a matrix $A$ with independent columns, compare the length of $A\mathbf{x}$ with that of $\mathbf{x}$ over all directions. Write
+
+        $$\sigma_{\max} = \max_{\lVert\mathbf{x}\rVert = 1}\lVert A\mathbf{x}\rVert, \qquad \sigma_{\min} = \min_{\lVert\mathbf{x}\rVert = 1}\lVert A\mathbf{x}\rVert$$
+
+        for the greatest and least stretch. Independent columns mean that no direction is sent to zero, so $\sigma_{\min} > 0$. The **condition number** is their ratio:
+
+        $$\kappa(A) = \frac{\sigma_{\max}}{\sigma_{\min}}.$$
+
+        It is at least 1. It is exactly 1 when every direction is stretched equally, as by a matrix with orthonormal columns, which stretches nothing. It grows without bound as the columns approach dependence and $\sigma_{\min}$ approaches zero. For the puzzle's matrix it is about 40 000.
+
+        **The bound.** Let $A\mathbf{x} = \mathbf{b}$ with $A$ square and invertible, and let the data change to $\mathbf{b} + \delta\mathbf{b}$, so that the solution changes to $\mathbf{x} + \delta\mathbf{x}$ with $A\,\delta\mathbf{x} = \delta\mathbf{b}$. Two inequalities, one from each extreme of stretch:
+
+        $$\lVert\mathbf{b}\rVert = \lVert A\mathbf{x}\rVert \le \sigma_{\max}\lVert\mathbf{x}\rVert, \qquad \lVert\delta\mathbf{b}\rVert = \lVert A\,\delta\mathbf{x}\rVert \ge \sigma_{\min}\lVert\delta\mathbf{x}\rVert.$$
+
+        The first says $\mathbf{x}$ cannot be too short for the $\mathbf{b}$ it produces. The second says $\delta\mathbf{x}$ cannot be too long for the $\delta\mathbf{b}$ it produces. Divide the second by the first:
+
+        $$\frac{\lVert\delta\mathbf{x}\rVert}{\lVert\mathbf{x}\rVert} \le \kappa(A)\,\frac{\lVert\delta\mathbf{b}\rVert}{\lVert\mathbf{b}\rVert}.$$
+
+        **The relative error of the answer is at most the condition number times the relative error of the data.** The worst case happens when $\mathbf{x}$ lies along the most stretched direction and the error along the least. In the puzzle the data moved by $0.0002/2.83$, about 7 parts in 100 000, and the answer by $2.83/1.41$, a factor of 2: an amplification of 28 000, within the bound of 40 000.
+
+        A rule of thumb follows. A condition number of $10^k$ can cost $k$ decimal digits. Floating-point numbers carry about 16. Even with perfect data, rounding inside the computation acts like an error in the sixteenth digit of $\mathbf{b}$, so a system with $\kappa = 10^{10}$ returns about 6 trustworthy digits, and one with $\kappa = 10^{16}$ returns none.
+    - question:
+        id: derivation-diagonal
+        type: numeric
+        system: s2
+        prompt: |
+          $A = \begin{pmatrix} 100 & 0 \\ 0 & 1 \end{pmatrix}$. What is its condition number?
+        answer: "100"
+        explanation: |
+          A unit vector $(c, s)$ is sent to $(100c, s)$, whose length is greatest, 100, along the first axis and least, 1, along the second. So $\kappa = 100/1$. The worst case of the bound is easy to exhibit here: for $\mathbf{b} = (100, 0)$ the solution is $(1, 0)$, and an error $\delta\mathbf{b} = (0, 0.01)$, one part in ten thousand of $\mathbf{b}$, changes the solution by $(0, 0.01)$, one part in a hundred of $\mathbf{x}$. That is an amplification of exactly 100. With $\mathbf{b} = (0, 1)$ and the error along the first axis, the same matrix **shrinks** the relative error by 100. The condition number is the worst case.
+    - text: |
+        **Two things that do not measure it.**
+
+        *The determinant.* It is tempting to say that a matrix is nearly singular when its determinant is nearly zero. The matrix $0.001\,I$ in two dimensions has determinant $10^{-6}$ and condition number 1: it shrinks every direction equally, and solving with it is as safe as dividing by 0.001. The puzzle's matrix has a determinant a hundred times larger, $10^{-4}$, and a condition number of 40 000. The determinant measures volume, which changes when the whole matrix is rescaled. Conditioning is about the **ratio** of stretches, which does not: $\kappa(cA) = \kappa(A)$.
+
+        *The residual.* The puzzle's wrong answer, $(-1, 3)$, misses the original equations by 0.0002. A small residual says that $A\mathbf{x}$ is near $\mathbf{b}$. It says that $\mathbf{x}$ is near the true solution only when the condition number is small. Checking a solution by substituting it back is necessary and, for an ill-conditioned system, far from sufficient.
+
+        **The normal equations square it.** For any $\mathbf{x}$, $\mathbf{x}^\top A^\top A\,\mathbf{x} = \lVert A\mathbf{x}\rVert^2$. The matrix $A^\top A$ stretches by the **squares** of the stretches of $A$, a fact the next cluster makes precise, and so
+
+        $$\kappa(A^\top A) = \kappa(A)^2.$$
+
+        For the line fit, $\kappa(X) = 3.76$ and $\kappa(X^\top X) = 14.13$, which is harmless. For a design matrix with $\kappa = 10^7$, forming $A^\top A$ produces a system with $\kappa = 10^{14}$, and solving it leaves two digits out of sixteen. The damage is done at the moment $A^\top A$ is formed: information held in the small differences between nearly parallel columns is rounded away in computing their dot products, and nothing done afterwards can bring it back.
+
+        **QR does not.** With $A = QR$, lengths are untouched by $Q$: $\lVert A\mathbf{x}\rVert = \lVert QR\mathbf{x}\rVert = \lVert R\mathbf{x}\rVert$. So $R$ stretches exactly as $A$ does and $\kappa(R) = \kappa(A)$. Solving $R\hat{\mathbf{x}} = Q^\top\mathbf{b}$ meets the condition number of the problem and no worse. This is why least squares routines use an orthogonal factorisation and not the normal equations, and why the normal equations, which are the right way to **understand** least squares, are the wrong way to compute it once the columns are nearly dependent.
+
+        **Where ill-conditioning comes from, and what to do.** In fitting, the usual causes are features that nearly repeat one another. The commonest case involves the column of ones. Fit a line against the years 2000 to 2005: the column of years is almost a multiple of the column of ones, since its entries differ by a few parts in a thousand, and $\kappa$ is about 2.3 million. Subtract the mean year first, and the two columns are orthogonal, with $\kappa = 1.71$. Powers are worse: with a column of squared years added, $\kappa$ is about $6 \times 10^{12}$.
+
+        The remedies, in order of preference: **centre** each feature, which Gram-Schmidt showed makes it orthogonal to the column of ones. **Scale** the features to comparable sizes. Remove or combine features that duplicate each other. Solve by QR or a library least squares routine. And when near-dependence is in the nature of the data, add a small penalty on the size of the coefficients, the ridge of the last lesson, which lifts $\sigma_{\min}$ away from zero.
+
+        **And descent.** The bowl $\lVert A\mathbf{x} - \mathbf{b}\rVert^2$ is steepest along the most stretched direction and shallowest along the least, with curvatures in the ratio $\kappa(A)^2$. The learning rate must be small enough for the steep direction, and progress along the shallow one is then slower by that ratio. The long, slow tail of the training runs in the autograd cluster was a condition number at work.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the steps for fitting a polynomial trend to data recorded against calendar years, so that the result can be trusted.
+        steps:
+          - 'Subtract the mean year from the years, and divide by their spread if the range is wide.'
+          - 'Build the design matrix from powers of the centred, scaled values.'
+          - 'Compute its condition number and confirm that it is modest.'
+          - 'Solve the least squares problem by QR or a library routine, not by forming $A^\top A$.'
+          - 'Substitute back, and judge the residual in the light of the condition number.'
+        explanation: Centring and scaling come first because they change the problem itself and not only the method. Checking the condition number before solving tells you how many digits of the answer to believe, and a small residual afterwards means something only when that number is small.
+  formal:
+    - text: |
+        Let $A \in \mathbb{R}^{m \times n}$ have linearly independent columns.
+
+        **Condition number.** With $\sigma_{\max} = \max_{\lVert\mathbf{x}\rVert = 1}\lVert A\mathbf{x}\rVert$ and $\sigma_{\min} = \min_{\lVert\mathbf{x}\rVert = 1}\lVert A\mathbf{x}\rVert$,
+
+        $$\kappa(A) = \frac{\sigma_{\max}}{\sigma_{\min}} \ge 1.$$
+
+        If the columns of $A$ are dependent, $\sigma_{\min} = 0$ and $\kappa(A)$ is taken to be infinite. For square invertible $A$, $\sigma_{\min} = 1/\max_{\lVert\mathbf{y}\rVert = 1}\lVert A^{-1}\mathbf{y}\rVert$, so $\kappa(A)$ is the greatest stretch of $A$ times the greatest stretch of $A^{-1}$.
+
+        **Perturbation bound.** If $A$ is square and invertible, $A\mathbf{x} = \mathbf{b} \ne \mathbf{0}$ and $A(\mathbf{x} + \delta\mathbf{x}) = \mathbf{b} + \delta\mathbf{b}$, then
+
+        $$\frac{\lVert\delta\mathbf{x}\rVert}{\lVert\mathbf{x}\rVert} \le \kappa(A)\,\frac{\lVert\delta\mathbf{b}\rVert}{\lVert\mathbf{b}\rVert},$$
+
+        and for every $A$ there are $\mathbf{b}$ and $\delta\mathbf{b}$ for which equality holds.
+
+        **Properties.** $\kappa(cA) = \kappa(A)$ for $c \ne 0$. $\kappa(Q) = 1$ if $Q$ has orthonormal columns. $\kappa(QA) = \kappa(A)$ for orthogonal $Q$. If $A = QR$, then $\kappa(R) = \kappa(A)$. $\kappa(A^\top A) = \kappa(A)^2$. $\kappa(A^{-1}) = \kappa(A)$ for square invertible $A$.
+
+        **Diagonal matrices.** For a diagonal matrix with non-zero diagonal entries, $\kappa$ is the largest absolute value on the diagonal divided by the smallest.
+
+        **Digits.** In floating-point arithmetic with unit round-off $u$, a stable method returns a solution with relative error of order $\kappa(A)\,u$. Solving least squares by the normal equations gives an error of order $\kappa(A)^2u$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-definition
+        type: choice
+        system: s1
+        prompt: |
+          The condition number of $A$ is
+        options: ['its determinant', 'its greatest stretch divided by its least stretch', 'its rank', 'the length of its longest column']
+        answer: 1
+        explanation: $\sigma_{\max}/\sigma_{\min}$.
+    - question:
+        id: drill-least
+        type: numeric
+        system: s1
+        prompt: |
+          What is the smallest value a condition number can take?
+        answer: "1"
+        explanation: The greatest stretch is at least the least stretch.
+    - question:
+        id: drill-identity
+        type: numeric
+        system: s1
+        prompt: |
+          What is the condition number of $0.001\,I$?
+        answer: "1"
+        explanation: Every direction is shrunk equally.
+    - question:
+        id: drill-orthogonal
+        type: numeric
+        system: s1
+        prompt: |
+          What is the condition number of a matrix with orthonormal columns?
+        answer: "1"
+        explanation: It preserves every length.
+    - question:
+        id: drill-diagonal
+        type: numeric
+        system: s1
+        prompt: |
+          What is the condition number of the diagonal matrix with diagonal entries 8, 4 and 2?
+        answer: "4"
+        explanation: Largest over smallest, $8/2$.
+    - question:
+        id: drill-scale
+        type: choice
+        system: s1
+        prompt: |
+          $\kappa(A) = 50$. What is $\kappa(10A)$?
+        options: ['500', '50', '5', '5000']
+        answer: 1
+        explanation: Both stretches are multiplied by 10.
+    - question:
+        id: drill-bound
+        type: choice
+        system: s1
+        prompt: |
+          The data of a system with $\kappa = 1000$ has a relative error of $10^{-6}$. The relative error of the solution is at most
+        options: ['$10^{-9}$', '$10^{-3}$', '$10^{-6}$', '$1$']
+        answer: 1
+        explanation: $1000 \times 10^{-6}$.
+    - question:
+        id: drill-squared
+        type: choice
+        system: s1
+        prompt: |
+          $\kappa(A) = 1000$. What is $\kappa(A^\top A)$?
+        options: ['1000', '1 000 000', '2000', '31.6']
+        answer: 1
+        explanation: The normal equations square the condition number.
+    - question:
+        id: drill-qr
+        type: choice
+        system: s1
+        prompt: |
+          $A = QR$ and $\kappa(A) = 1000$. What is $\kappa(R)$?
+        options: ['1', '1000', '1 000 000', '31.6']
+        answer: 1
+        explanation: $Q$ preserves lengths, so $R$ stretches as $A$ does.
+    - question:
+        id: drill-dependent
+        type: choice
+        system: s1
+        prompt: |
+          As the columns of a matrix approach dependence, its condition number
+        options: ['tends to 0', 'tends to 1', 'grows without bound', 'stays the same']
+        answer: 2
+        explanation: The least stretch tends to zero.
+    - question:
+        id: drill-determinant
+        type: choice
+        system: s1
+        prompt: |
+          Does a determinant close to zero show that a matrix is ill-conditioned?
+        options: ['Yes, always', 'No. Rescaling changes the determinant and not the condition number', 'Only for 2 by 2 matrices', 'Yes, if it is positive']
+        answer: 1
+        explanation: $0.001\,I$ has a tiny determinant and a condition number of 1.
+    - question:
+        id: drill-residual
+        type: choice
+        system: s1
+        prompt: |
+          A computed solution of an ill-conditioned system has a very small residual. Is it close to the true solution?
+        options: ['Yes', 'Not necessarily', 'Only if the determinant is large', 'Never']
+        answer: 1
+        explanation: Directions that the matrix shrinks can hide large errors behind small residuals.
+    - question:
+        id: drill-centre
+        type: choice
+        system: s1
+        prompt: |
+          A line is fitted against the years 2000 to 2005. What reduces the condition number of the design matrix most?
+        options: ['Using more decimal places', 'Subtracting the mean year from the years', 'Multiplying the heights by 1000', 'Solving twice']
+        answer: 1
+        explanation: Centring makes the column orthogonal to the column of ones.
+    - question:
+        id: predict-years
+        type: predict
+        system: s1
+        prompt: The condition number of the design matrix for a line against six years, before and after centring. What does this show?
+        code: |
+          import numpy as np
+
+          t = np.array([2000.0, 2001.0, 2002.0, 2003.0, 2004.0, 2005.0])
+          A = np.stack([np.ones(6), t], axis=1)
+          C = np.stack([np.ones(6), t - t.mean()], axis=1)
+          print(round(float(np.linalg.cond(A)), -3))
+          print(round(float(np.linalg.cond(C)), 4))
+        output: |
+          2348000.0
+          1.7078
+        explanation: With raw years the two columns are nearly parallel and the condition number is over two million. Centring leaves the same column space, hence the same fitted line, with a condition number under 2. The problem did not change. The description of it did.
+    - question:
+        id: predict-squared
+        type: predict
+        system: s1
+        prompt: Condition numbers for the line fit, its normal equations, and its QR factors. What does this show?
+        code: |
+          import numpy as np
+
+          X = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+          Q, R = np.linalg.qr(X)
+          k = float(np.linalg.cond(X))
+          print(round(k, 4), round(float(np.linalg.cond(X.T @ X)), 4), round(k ** 2, 4))
+          print(round(float(np.linalg.cond(Q)), 4), round(float(np.linalg.cond(R)), 4))
+        output: |
+          3.7589 14.1292 14.1292
+          1.0 3.7589
+        explanation: The matrix of the normal equations has the square of the condition number of X. The orthonormal factor Q has condition number 1, and R carries the whole of the condition number of X, unsquared.
+  work:
+    - text: Slower now. Each of these measures something about a computation instead of only performing it.
+    - question:
+        id: write-amplification
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `amplification(A, b, db)`. `A` is square and invertible, and `b` and `db` are vectors. Solve the system with right-hand side `b`, and again with `b + db`. Return, as a float, the relative change in the solution divided by the relative change in the data:
+
+          $$\frac{\lVert\delta\mathbf{x}\rVert / \lVert\mathbf{x}\rVert}{\lVert\delta\mathbf{b}\rVert / \lVert\mathbf{b}\rVert}.$$
+
+          The program prints it for the puzzle, beside the condition number.
+        starter: |
+          import numpy as np
+
+
+          def amplification(A, b, db):
+              return 0.0
+
+
+          A = np.array([[1.0, 1.0], [1.0, 1.0001]])
+          amp = amplification(A, np.array([2.0, 2.0001]), np.array([0.0, 0.0002]))
+          print(round(amp, -2), round(float(np.linalg.cond(A)), -2))
+        solution: |
+          import numpy as np
+
+
+          def amplification(A, b, db):
+              x = np.linalg.solve(A, b)
+              dx = np.linalg.solve(A, b + db) - x
+              change_x = np.linalg.norm(dx) / np.linalg.norm(x)
+              change_b = np.linalg.norm(db) / np.linalg.norm(b)
+              return float(change_x / change_b)
+
+
+          A = np.array([[1.0, 1.0], [1.0, 1.0001]])
+          amp = amplification(A, np.array([2.0, 2.0001]), np.array([0.0, 0.0002]))
+          print(round(amp, -2), round(float(np.linalg.cond(A)), -2))
+        tests: |
+          import numpy as _np
+          _D = _np.array([[100.0, 0.0], [0.0, 1.0]])
+          _a = amplification(_D, _np.array([100.0, 0.0]), _np.array([0.0, 0.01]))
+          assert isinstance(_a, float), "amplification should return a float"
+          assert abs(_a - 100.0) < 1e-6, "For the diagonal matrix with entries 100 and 1, b = (100, 0) and db = (0, 0.01), the amplification is 100: the relative change in x, 0.01, over the relative change in b, 0.0001"
+          assert abs(amplification(_D, _np.array([0.0, 1.0]), _np.array([1.0, 0.0])) - 0.01) < 1e-9, "For the same matrix with b = (0, 1) and db = (1, 0) the amplification is 0.01: the error lies along the direction the matrix stretches most"
+          assert abs(amplification(5 * _np.eye(2), _np.array([1.0, 2.0]), _np.array([0.1, 0.0])) - 1.0) < 1e-9, "For a multiple of the identity the amplification is 1 whatever b and db are"
+          _Q = _np.array([[0.6, -0.8], [0.8, 0.6]])
+          assert abs(amplification(_Q, _np.array([1.0, 2.0]), _np.array([0.3, -0.1])) - 1.0) < 1e-9, "For an orthogonal matrix the amplification is 1"
+          _A = _np.array([[1.0, 1.0], [1.0, 1.0001]])
+          _b = _np.array([2.0, 2.0001])
+          _keep = _b.copy()
+          _a = amplification(_A, _b, _np.array([0.0, 0.0002]))
+          assert _np.array_equal(_b, _keep), "b should be left as it was"
+          assert 28000 < _a < 28600, "For the puzzle the amplification is about 28 285"
+          _M = _np.random.default_rng(0).normal(size=(4, 4))
+          for _i in range(5):
+              _b = _np.random.default_rng(_i + 1).normal(size=4)
+              _d = 1e-6 * _np.random.default_rng(_i + 10).normal(size=4)
+              assert amplification(_M, _b, _d) <= float(_np.linalg.cond(_M)) * (1 + 1e-6), "The amplification should never exceed the condition number"
+          assert output.strip() == "28300.0 40000.0", "The program should print 28300.0 40000.0"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def amplification(A, b, db):
+                x = np.linalg.solve(A, b)
+                dx = np.linalg.solve(A, b + db) - x
+                return float(np.linalg.norm(dx) / np.linalg.norm(db))
+
+
+            print("28300.0 40000.0")
+          - |
+            import numpy as np
+
+
+            def amplification(A, b, db):
+                x = np.linalg.solve(A, b)
+                dx = np.linalg.solve(A, b + db) - x
+                change_x = np.linalg.norm(dx) / np.linalg.norm(x)
+                change_b = np.linalg.norm(db) / np.linalg.norm(b)
+                return float(change_b / change_x)
+
+
+            print("28300.0 40000.0")
+          - |
+            import numpy as np
+
+
+            def amplification(A, b, db):
+                x = np.linalg.solve(A, b)
+                dx = np.linalg.solve(A, b + db)
+                change_x = np.linalg.norm(dx) / np.linalg.norm(x)
+                change_b = np.linalg.norm(db) / np.linalg.norm(b)
+                return float(change_x / change_b)
+
+
+            print("28300.0 40000.0")
+          - |
+            import numpy as np
+
+
+            def amplification(A, b, db):
+                return float(np.linalg.cond(A))
+
+
+            print("28300.0 40000.0")
+        explanation: |
+          Solve twice, subtract, and compare relative sizes. The division by $\lVert\mathbf{x}\rVert$ and $\lVert\mathbf{b}\rVert$ matters: an absolute comparison, as in the first wrong version, measures the stretch of the inverse along one direction and changes when the matrix is rescaled.
+
+          The function measures what happens for **one** $\mathbf{b}$ and one error. The condition number is the largest value it can return over all of them. For the diagonal matrix the two tests show both extremes, 100 and 0.01. Returning the condition number itself, the last wrong version, reports the worst case as though it were every case.
+
+          For the puzzle the answer is about 28 300 against a bound of 40 000. Real errors rarely fall exactly along the worst direction, and they rarely miss it by much either.
+    - question:
+        id: write-lstsq-qr
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `lstsq_qr(A, b)`, returning the least squares solution for an array `A` with independent columns by way of `np.linalg.qr`: factor `A`, then solve $R\,\hat{\mathbf{x}} = Q^\top\mathbf{b}$ with `np.linalg.solve`. Do not form `A.T @ A`.
+
+          The program runs it on a matrix whose two columns differ by parts in ten million, with a right-hand side made from the coefficients $(1, 2)$, and prints whether the answer is within a millionth of them. Solving the same problem by the normal equations is out by about 0.06.
+        starter: |
+          import numpy as np
+
+
+          def lstsq_qr(A, b):
+              return np.zeros(A.shape[1])
+
+
+          e = 1e-7
+          A = np.array([[1.0, 1.0], [1.0, 1.0 + e], [1.0, 1.0 + 2 * e]])
+          b = A @ np.array([1.0, 2.0])
+          x = lstsq_qr(A, b)
+          print(float(np.abs(x - np.array([1.0, 2.0])).max()) < 1e-6)
+        solution: |
+          import numpy as np
+
+
+          def lstsq_qr(A, b):
+              Q, R = np.linalg.qr(A)
+              return np.linalg.solve(R, Q.T @ b)
+
+
+          e = 1e-7
+          A = np.array([[1.0, 1.0], [1.0, 1.0 + e], [1.0, 1.0 + 2 * e]])
+          b = A @ np.array([1.0, 2.0])
+          x = lstsq_qr(A, b)
+          print(float(np.abs(x - np.array([1.0, 2.0])).max()) < 1e-6)
+        tests: |
+          import numpy as _np
+          _X = _np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+          _y = _np.array([1.0, 3.0, 4.0, 6.0])
+          _w = lstsq_qr(_X, _y)
+          assert _np.shape(_w) == (2,), "The solution has one entry for each column of A"
+          assert _np.allclose(_w, [1.1, 1.6]), "For the line fit the solution is intercept 1.1 and slope 1.6: solve R x = Q.T @ b"
+          _B = _np.random.default_rng(0).normal(size=(8, 3))
+          _c = _np.random.default_rng(1).normal(size=8)
+          assert _np.allclose(_B.T @ (_B @ lstsq_qr(_B, _c) - _c), 0), "For a random 8 by 3 problem the residual should be orthogonal to the columns"
+          _e = 1e-7
+          _A = _np.array([[1.0, 1.0], [1.0, 1.0 + _e], [1.0, 1.0 + 2 * _e]])
+          _t = _np.array([1.0, 2.0])
+          try:
+              _x = lstsq_qr(_A, _A @ _t)
+          except _np.linalg.LinAlgError:
+              assert False, "For nearly parallel columns the solver reported a singular matrix: A.T @ A has lost the difference between the columns, so factor A itself"
+          assert float(_np.abs(_x - _t).max()) < 1e-6, "For columns that differ by parts in ten million the answer should be within a millionth of (1, 2): the normal equations square the condition number, so factor A with np.linalg.qr and solve with R"
+          _e = 1e-6
+          _A = _np.array([[1.0, 1.0], [1.0, 1.0 + _e], [1.0, 1.0 + 2 * _e], [1.0, 1.0 + 3 * _e]])
+          _t = _np.array([-3.0, 5.0])
+          try:
+              _x = lstsq_qr(_A, _A @ _t)
+          except _np.linalg.LinAlgError:
+              assert False, "For nearly parallel columns the solver reported a singular matrix: factor A itself"
+          assert float(_np.abs(_x - _t).max()) < 1e-7, "For four rows with columns differing by parts in a million the answer should be within a ten-millionth of (-3, 5)"
+          assert output.strip() == "True", "The program should print True"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def lstsq_qr(A, b):
+                return np.linalg.solve(A.T @ A, A.T @ b)
+
+
+            print("True")
+          - |
+            import numpy as np
+
+
+            def lstsq_qr(A, b):
+                Q, R = np.linalg.qr(A)
+                return Q.T @ b
+
+
+            print("True")
+          - |
+            import numpy as np
+
+
+            def lstsq_qr(A, b):
+                Q, R = np.linalg.qr(A)
+                return np.linalg.solve(R.T @ R, A.T @ b)
+
+
+            print("True")
+          - |
+            import numpy as np
+
+
+            def lstsq_qr(A, b):
+                Q, R = np.linalg.qr(A)
+                return np.linalg.solve(R.T, Q.T @ b)
+
+
+            print("True")
+        explanation: |
+          Two lines, the same two as in the lesson on Gram-Schmidt, where they were a convenience. Here they are a necessity. The matrix has a condition number of about 24 million. The normal equations square that to about $6 \times 10^{14}$, and with 16 digits to spend, one or two are left: each coefficient comes back wrong by about 0.06. QR works with the unsquared number and keeps about nine digits.
+
+          The third wrong version is the instructive one. It computes a QR factorisation and then solves $R^\top R\,\mathbf{x} = A^\top\mathbf{b}$. Since $A^\top A = R^\top R$, that is the normal equations again, reached by a longer road, and it is just as inaccurate. The benefit of QR does not come from having computed the factors. It comes from never multiplying the matrix by its own transpose.
+
+          Notice what the test had to do to find the difference: it compared with a known true answer. On the line fit both methods agree to fifteen digits, and a test suite of well-conditioned examples would pass either.
+    - question:
+        id: fix-uncentred
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `trend(years, y, at)` fits a parabola to yearly measurements and returns its value in the year `at`. The data in the program follows $3 + 0.5u + 0.25u^2$ exactly, with $u$ the number of years since 2000, so the value in 2006 is exactly 15. The function returns about 14.998, wrong in the fourth significant digit although every number given to it is exact. On another machine it may stop with a singular matrix error instead. Fix it so that it is accurate to a millionth. One line needs to change, and the solver may stay as it is.
+        starter: |
+          import numpy as np
+
+
+          def trend(years, y, at):
+              shift = 0.0
+              t = years - shift
+              A = np.stack([np.ones(len(t)), t, t ** 2], axis=1)
+              c = np.linalg.solve(A.T @ A, A.T @ y)
+              s = at - shift
+              return float(c[0] + c[1] * s + c[2] * s ** 2)
+
+
+          years = np.array([2000.0, 2001.0, 2002.0, 2003.0, 2004.0, 2005.0])
+          u = years - 2000
+          y = 3 + 0.5 * u + 0.25 * u ** 2
+          print(round(trend(years, y, 2006.0), 6))
+        solution: |
+          import numpy as np
+
+
+          def trend(years, y, at):
+              shift = float(years.mean())
+              t = years - shift
+              A = np.stack([np.ones(len(t)), t, t ** 2], axis=1)
+              c = np.linalg.solve(A.T @ A, A.T @ y)
+              s = at - shift
+              return float(c[0] + c[1] * s + c[2] * s ** 2)
+
+
+          years = np.array([2000.0, 2001.0, 2002.0, 2003.0, 2004.0, 2005.0])
+          u = years - 2000
+          y = 3 + 0.5 * u + 0.25 * u ** 2
+          print(round(trend(years, y, 2006.0), 6))
+        tests: |
+          import numpy as _np
+          _years = _np.array([2000.0, 2001.0, 2002.0, 2003.0, 2004.0, 2005.0])
+          _u = _years - 2000
+          _y = 3 + 0.5 * _u + 0.25 * _u ** 2
+          _keep = _years.copy()
+          try:
+              _v = trend(_years, _y, 2006.0)
+          except _np.linalg.LinAlgError:
+              assert False, "The solver reported a singular matrix: with raw years the three columns are nearly parallel. Subtract the mean year before building the design matrix"
+          assert _np.array_equal(_years, _keep), "years should be left as it was"
+          assert isinstance(_v, float), "trend should return a float"
+          assert abs(_v - 15.0) < 1e-6, "For data that follows 3 + 0.5 u + 0.25 u squared exactly, the value in 2006 is 15 to within a millionth: the design matrix built from raw years is too ill-conditioned. Subtract the mean year"
+          try:
+              _v = trend(_years, _y, 2010.0)
+          except _np.linalg.LinAlgError:
+              assert False, "The solver reported a singular matrix: subtract the mean year before building the design matrix"
+          assert abs(_v - 33.0) < 1e-6, "For the same data the value in 2010 is 3 + 5 + 25 = 33 to within a millionth"
+          _z = _np.array([3.1, 3.6, 5.2, 6.6, 9.1, 11.8])
+          try:
+              _v = trend(_years, _z, 2006.0)
+          except _np.linalg.LinAlgError:
+              assert False, "The solver reported a singular matrix: subtract the mean year before building the design matrix"
+          assert abs(_v - 15.14) < 1e-6, "For the measurements 3.1, 3.6, 5.2, 6.6, 9.1, 11.8 the fitted value in 2006 is 15.14"
+          _s = _np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
+          assert abs(trend(_s, _np.array([7.5, 3.5, 1.0, 2.5, 10.5]), 3.0) - 20.5) < 1e-9, "For inputs already centred the result should be unchanged: 1 + 0.5 x + 2 x squared at x = 3 is 20.5"
+          assert output.strip() == "15.0", "The program should print 15.0"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def trend(years, y, at):
+                shift = 0.0
+                t = years - shift
+                A = np.stack([np.ones(len(t)), t, t ** 2], axis=1)
+                c = np.linalg.solve(A.T @ A, A.T @ y)
+                s = at - shift
+                return float(c[0] + c[1] * s + c[2] * s ** 2)
+
+
+            print("15.0")
+          - |
+            import numpy as np
+
+
+            def trend(years, y, at):
+                shift = float(years.mean())
+                t = years - shift
+                A = np.stack([np.ones(len(t)), t, t ** 2], axis=1)
+                c = np.linalg.solve(A.T @ A, A.T @ y)
+                s = at
+                return float(c[0] + c[1] * s + c[2] * s ** 2)
+
+
+            print("15.0")
+          - |
+            import numpy as np
+
+
+            def trend(years, y, at):
+                shift = 1.0
+                t = years - shift
+                A = np.stack([np.ones(len(t)), t, t ** 2], axis=1)
+                c = np.linalg.solve(A.T @ A, A.T @ y)
+                s = at - shift
+                return float(c[0] + c[1] * s + c[2] * s ** 2)
+
+
+            print("15.0")
+          - |
+            import numpy as np
+
+
+            def trend(years, y, at):
+                shift = 0.0
+                t = years - shift
+                A = np.stack([np.ones(len(t)), t, t ** 2], axis=1)
+                c = np.linalg.solve(A.T @ A + 1e-3 * np.eye(3), A.T @ y)
+                s = at - shift
+                return float(c[0] + c[1] * s + c[2] * s ** 2)
+
+
+            print("15.0")
+        explanation: |
+          With `shift = 0.0` the design matrix has columns of ones, of numbers near 2000, and of numbers near 4 000 000. Over six years the second column varies by a quarter of a per cent, and all three are nearly parallel. Its condition number is about $6 \times 10^{12}$, and the normal equations square that to beyond anything 16 digits can hold. The computed coefficients are huge numbers that almost cancel, and the cancellation is not exact.
+
+          Setting the shift to the mean year moves the origin to the middle of the data. The columns become ones, $(-2.5, \dots, 2.5)$ and their squares, with a condition number of about 6. The same normal equations then give fifteen correct digits. The parabola is the same curve as before, written about a different origin. That is why the function evaluates it at `at - shift`: a model fitted to shifted inputs has to be given shifted inputs, which is what the second wrong version forgets.
+
+          Changing the solver to QR would also help, and is what a library routine does. But it would leave a condition number of $10^{12}$, with four digits of safety, where centring leaves a condition number of 6. **Fix the problem before fixing the method.**
+
+          The last wrong version adds a ridge to make the matrix safely invertible. It runs without error on every machine, and returns the answer to a different question.
+    - question:
+        id: work-residual
+        type: choice
+        system: s2
+        prompt: |
+          For the puzzle's system with right-hand side $(2, 2.0001)$, a program returns $(-1, 3)$. Substituting back gives $(2, 2.0003)$, a residual of size 0.0002. A colleague says the answer is verified to four decimal places. Is that right?
+        options:
+          - 'Yes. A residual of 0.0002 means the answer is correct to about 0.0002.'
+          - 'No. The residual measures the error after the matrix has been applied to it. This matrix shrinks the direction $(1, -1)$ by a factor of about fourteen thousand, so an error of 2 in each entry along that direction appears in the residual as 0.0002. The true answer is $(1, 1)$.'
+          - 'No, because the residual should be exactly zero.'
+          - 'Yes, since the matrix is invertible.'
+        answer: 1
+        explanation: |
+          If $\hat{\mathbf{x}} = \mathbf{x} + \mathbf{e}$, the residual is $A\mathbf{e}$, and $\lVert A\mathbf{e}\rVert$ can be as small as $\sigma_{\min}\lVert\mathbf{e}\rVert$. A small residual bounds the error only through $\lVert\mathbf{e}\rVert \le \lVert A\mathbf{e}\rVert/\sigma_{\min}$, and here $\sigma_{\min}$ is about 0.00005. In a fitting problem the same fact reads: two very different sets of coefficients can predict the training data almost equally well. When that happens, the predictions may be trusted on similar data and the individual coefficients may not be interpreted at all.
+    - question:
+        id: work-digits
+        type: numeric
+        system: s2
+        prompt: |
+          A design matrix has condition number $10^5$. Arithmetic carries 16 decimal digits. About how many correct digits can be expected in the coefficients if the least squares problem is solved by the normal equations?
+        answer: "6"
+        explanation: |
+          The normal equations have condition number $(10^5)^2 = 10^{10}$, which can cost 10 of the 16 digits, leaving about 6. Solving by QR meets a condition number of $10^5$ and leaves about 11. Five digits are lost to the choice of method alone. At a condition number of $10^8$, which is not unusual for a polynomial of moderate degree on uncentred data, the normal equations leave nothing and QR still leaves eight.
+    - question:
+        id: work-determinant
+        type: choice
+        system: s2
+        prompt: |
+          A 100 by 100 matrix is $0.1\,I$. Its determinant is $10^{-100}$. A program tests for near-singularity by comparing the determinant with $10^{-12}$, and rejects the matrix. What should it have done?
+        options:
+          - 'Used a smaller threshold, such as $10^{-200}$.'
+          - 'Computed the condition number, which is 1. The matrix is as well-conditioned as a matrix can be, and solving with it is multiplication by 10. The determinant is the product of the stretches and collapses towards zero or overflows with the dimension, whatever their ratio. No threshold on it is meaningful.'
+          - 'Rejected it, since the determinant is essentially zero.'
+          - 'Multiplied the matrix by itself first.'
+        answer: 1
+        explanation: |
+          The determinant answers a yes-or-no question exactly: zero or not. It does not measure distance from singularity, because it changes by $c^n$ when the matrix is multiplied by $c$, while the difficulty of solving does not change at all. The lesson on the determinant warned against testing invertibility in floating point by comparing a determinant with zero. The condition number is the quantity that warning was pointing at.
+    - question:
+        id: work-units
+        type: choice
+        system: s2
+        prompt: |
+          A model has two features: a length in kilometres, with values around 1, and the same kind of quantity for another part in millimetres, with values around 1 000 000. The features are unrelated to each other. Is the design matrix well-conditioned?
+        options:
+          - 'Yes, since the columns are not nearly parallel.'
+          - 'No. Even orthogonal columns give a large condition number if their lengths differ greatly: the matrix stretches one coordinate direction a million times more than the other. Rescaling each column to a comparable size, for example to unit standard deviation, removes this, and changes nothing about the fitted values.'
+          - 'It cannot be known without the data.'
+          - 'Yes, since larger numbers are more precise.'
+        answer: 1
+        explanation: |
+          For a matrix with orthogonal columns the stretches are the column lengths, so the condition number is the ratio of the longest to the shortest. Ill-conditioning has two sources, columns that are nearly parallel and columns of very different size, and standardising the features deals with the second as centring deals with the commonest case of the first. It also matters for gradient descent, where a badly scaled feature forces a small learning rate on every weight. Rescaling a column changes its coefficient by the inverse factor and leaves the column space, and so every prediction, as it was.
+  connections:
+    - text: |
+        One part in ten thousand of change in the data moved the solution from $(1, 1)$ to $(-1, 3)$, because the two columns of the matrix were nearly parallel and the matrix stretched one direction forty thousand times more than another. The **condition number**, greatest stretch over least, measures this, and bounds the relative error of a solution by $\kappa$ times the relative error of the data. Neither the determinant nor a small residual does.
+
+        Of this cluster's two ways to solve least squares, the normal equations work with $\kappa(A)^2$ and QR with $\kappa(A)$. Before choosing between them, improve the problem: centre the features, scale them, and drop the ones that repeat each other.
+
+        That completes the cluster. A subspace and its orthogonal complement split every vector in two. An orthonormal basis makes the split a matter of dot products, and Gram-Schmidt builds one. The split is a projection, the projection solves least squares, the pseudo-inverse extends it to every matrix, and the condition number says how far to trust the result.
+
+        One thing was left without proof today: the greatest and least stretch of a matrix were asserted to exist and were never computed by hand. They are the largest and smallest of a list of numbers, one for each dimension, that describe a matrix completely: along certain orthogonal directions it simply stretches, by those amounts. Finding the directions and the amounts is the work of the spectral cluster, and it ends in the factorisation that makes the pseudo-inverse, the condition number and the best low-rank approximation all visible at once: [[m8.singular-value-decomposition]].
