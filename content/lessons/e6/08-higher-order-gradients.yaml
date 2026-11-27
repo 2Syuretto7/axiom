@@ -1,0 +1,1571 @@
+concept: e6.higher-order-gradients
+minutes: 80
+claim: You can explain why a gradient stored as a plain number cannot be differentiated, rebuild the backward pass out of the engine's own operations so that every gradient is a node with a history, take second and third derivatives by running that backward pass on its own result, compute a Hessian-vector product with two backward passes and no Hessian, and recognise the bug in which a pull uses a bare number and silently cuts the second derivative off.
+recalls: [e6.modules-parameters-and-optimisers]
+uses: [e6.topological-ordering-of-the-graph, e6.reverse-mode-on-scalars, e6.scalar-computational-graph, e6.gradient-checking, m12.hessian-and-symmetry-of-mixed-partials, m12.gradient, m12.directional-derivative, m10.second-derivative-and-curvature, m10.differentiation-rules, m10.maxima-and-minima, e0.dictionaries-and-sets, e1.special-methods-and-operator-overloading, e1.classes-and-objects, e0.functions, e0.loops]
+leads: [e6.memory-planning-and-in-place-operations, e6.training-an-mlp-on-your-own-engine, e7.autograd-in-pytorch, e7.custom-autograd-functions-and-extensions]
+starter: |
+  # Scratch space. The scalar engine from the lesson on topological ordering.
+  # It finds the slope of the cube at 5. What kind of thing is that slope?
+  class Value:
+      def __init__(self, data, parents=()):
+          self.data = data
+          self.parents = parents
+          self.grad = 0.0
+
+      def __mul__(self, other):
+          return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+  def topological(node):
+      order = []
+      seen = set()
+
+      def visit(v):
+          if v in seen:
+              return
+          seen.add(v)
+          for parent, local in v.parents:
+              visit(parent)
+          order.append(v)
+
+      visit(node)
+      return order
+
+
+  def backward(node):
+      node.grad = 1.0
+      for v in topological(node)[::-1]:
+          for parent, local in v.parents:
+              parent.grad += v.grad * local
+
+
+  x = Value(5.0)
+  y = x * x * x
+  backward(y)
+  print(y.data, x.grad, type(x.grad).__name__)
+parts:
+  recall:
+    - text: |
+        [[e6.modules-parameters-and-optimisers]] wrapped the engine in layers and an optimiser and left the engine alone. Today goes back inside it, to the one line of the backward pass, and changes what a gradient is. Three quick pulls first.
+  puzzle:
+    - text: |
+        The starter is the scalar engine from early in this cluster. It builds $y = x^3$ at $x = 5$ and runs the backward pass.
+
+        Run it.
+
+        ```
+        125.0 75.0 float
+        ```
+
+        The slope is 75, which is $3x^2$ at 5, and it is correct.
+
+        Now suppose you want the **second** derivative, the curvature. For $x^3$ it is $6x$, which is 30 at $x = 5$. Curvature is what tells a minimum from a maximum, what Newton's method divides by, and what the Hessian of the last cluster is made of. The engine found the first derivative by recording how $y$ was computed and walking back along the record. The second derivative is the derivative of the first. So do the same again: walk back from `x.grad`.
+
+        You cannot. `x.grad` is a `float`. It is the number 75.0, with no parents and no record of where it came from. The engine computed $3x^2$ at 5 and kept only the answer. The expression, which is what would have to be differentiated, was never written down anywhere.
+
+        You could nudge $x$ and measure how the gradient changes, as in the lesson on gradient checking. That gives a rough number at two backward passes for every input.
+
+        **The backward pass is itself a computation: a run of multiplications and additions. The engine exists to record computations. Why was this one not recorded, and what would have to change for it to be?**
+  intuition:
+    - text: |
+        Look at the line that does the work in the old backward pass:
+
+        ```python
+        parent.grad += v.grad * local
+        ```
+
+        `v.grad` is a float. `local` is a float, saved during the forward pass: for a product it was `other.data`. The `*` and the `+=` are Python's arithmetic on floats, which leaves no trace. That is the whole reason. **The forward pass was written with the engine's operations, which record. The backward pass was written with bare numbers, which do not.**
+
+        So write the backward pass with the engine's operations.
+
+        - A gradient becomes a `Value`, not a float.
+        - A local derivative becomes a `Value` too. For the product $c = a \times b$, the derivative with respect to $a$ is not the number `b.data`. It is **`b` itself**, the node.
+        - The multiplication and the addition in that line become the engine's `__mul__` and `__add__`.
+
+        Nothing else changes, and the consequence is large. When the backward pass now multiplies an incoming gradient by `b`, that product is a new node whose parents are the gradient and `b`. The gradient of $x$ comes out as the tip of a graph that reaches back to $x$. It has a `data`, which is the 75.0 of before. And it has a history, so it can be handed to the same backward pass again.
+
+        For $y = x^3$:
+
+        | pass | result | its value at $x = 5$ | nodes in its graph |
+        | --- | --- | --- | --- |
+        | forward | $y = x^3$ | 125 | 3 |
+        | backward from $y$ | $y' = 3x^2$ | 75 | 9 |
+        | backward from $y'$ | $y'' = 6x$ | 30 | 17 |
+        | backward from $y''$ | $y''' = 6$ | 6 | |
+
+        The engine never learns the rule "the derivative of $x^3$ is $3x^2$". It only ever knows that the local derivatives of a product are its two operands. Applied to the graph of the forward pass, that knowledge builds the graph of the first derivative. Applied to that, it builds the second. **Differentiation is a transformation of graphs into graphs, and it can be applied to its own output.**
+  derivation:
+    - text: |
+        **The engine, rebuilt.** As with tensors, each parent comes with a **pull**: a function from the gradient of the result to this parent's share. The only difference from before is that the pull receives a `Value` and returns a `Value`, built with recorded operations.
+
+        ```python
+        class Value:
+            def __init__(self, data, parents=()):
+                self.data = data
+                self.parents = parents
+
+            def __add__(self, other):
+                return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+            def __sub__(self, other):
+                return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+            def __mul__(self, other):
+                return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+        ```
+
+        Read the pull of the product: `lambda g: g * other`. That `*` is `Value.__mul__`. It makes a node, and that node has pulls of its own. This is where the second derivative comes from.
+
+        **The backward pass, as a function.** Since gradients are now nodes of a graph and there may be several graphs, a `grad` slot on each value would get crowded. Keep the gradients of one backward pass in a dictionary, and return the ones asked for.
+
+        ```python
+        def gradient(node, inputs):
+            grads = {node: Value(1.0)}
+            for v in topological(node)[::-1]:
+                for parent, pull in v.parents:
+                    share = pull(grads[v])
+                    grads[parent] = grads[parent] + share if parent in grads else share
+            return [grads[x] if x in grads else Value(0.0) for x in inputs]
+        ```
+
+        It is the backward pass of the lesson on topological ordering, line for line. The output's gradient is 1. Nodes are taken in reverse topological order, so each has its full gradient before it shares it out. Shares arriving at the same parent are added, and that `+` is recorded as well. An input the output never used gets 0. A side benefit of the dictionary is that nothing is left behind to be cleared.
+
+        **Derivatives of derivatives.**
+
+        ```python
+        x = Value(5.0)
+        y = x * x * x
+        d1 = gradient(y, [x])[0]
+        d2 = gradient(d1, [x])[0]
+        d3 = gradient(d2, [x])[0]
+        print(d1.data, d2.data, d3.data)
+        ```
+
+        That prints `75.0 30.0 6.0`. `d1` is a `Value`, and `gradient` neither knows nor cares that it was produced by a backward pass.
+
+        **What it costs.** A backward pass does a fixed, small amount of work for each node of the graph it walks, and so the graph it builds is a small multiple of that size. Here 3 nodes became 9 and then 17. Each further derivative costs a few times the one before, which is affordable for the second and steep by the fourth. And the graph of the first derivative keeps the whole forward graph alive, since its nodes are the forward nodes' children.
+    - question:
+        id: derivation-step
+        type: choice
+        system: s2
+        prompt: |
+          In the rebuilt engine someone writes the pull of the product as `lambda g: g * Value(other.data)`, wrapping the operand's number in a fresh `Value`. For $y = x^3$ at $x = 5$, what do `gradient(y, [x])` and then the gradient of that give?
+        options:
+          - 'An error in the first pass, since `Value(other.data)` is not in the graph.'
+          - 'The first derivative is 75, which is correct. The second comes out as 0. The fresh value has the right number and no parents, so the first derivative''s graph is built from constants and never reaches back to $x$.'
+          - 'Both are correct. Wrapping the number changes nothing.'
+          - 'The first derivative is 0.'
+        answer: 1
+        explanation: |
+          The first derivative only needs the numbers, and the numbers are right. The second needs to know that the 25 which multiplied the incoming gradient was $x \times x$, and so depends on $x$. A fresh `Value` holding 25 has forgotten that. The backward pass from the first derivative then finds no path to $x$ and reports 0, without complaint. Cutting a value off from its history like this is called **detaching** it. It is sometimes done on purpose. Done by accident inside a pull, it is the characteristic bug of higher-order gradients: every first-order test passes.
+    - text: |
+        **Several inputs: the Hessian.** For $f(a, b) = a^2 b + b^3$ at $(2, 3)$, `gradient(f, [a, b])` returns two nodes, with values $(2ab, \; a^2 + 3b^2) = (12, 31)$. Each can be differentiated again with respect to both inputs. Those four numbers are the Hessian of the last cluster:
+
+        $$H = \begin{pmatrix} 2b & 2a \\ 2a & 6b \end{pmatrix} = \begin{pmatrix} 6 & 4 \\ 4 & 18 \end{pmatrix}.$$
+
+        One row of the Hessian is one backward pass, from one entry of the gradient. For $n$ inputs that is $n$ passes and $n^2$ numbers. A model with a million weights has a Hessian with a million million entries. Nobody computes it.
+
+        **The Hessian-vector product.** What is wanted is almost never $H$ itself but $H$ applied to some vector $\mathbf{v}$: how the gradient changes when the inputs move along $\mathbf{v}$. That can be had without $H$. Take the gradient $\mathbf{g}$ as nodes. Form the single number
+
+        $$s = \mathbf{g} \cdot \mathbf{v} = g_1 v_1 + \dots + g_n v_n,$$
+
+        with the $v_i$ as constants. Then
+
+        $$\frac{\partial s}{\partial x_j} = \sum_i \frac{\partial g_i}{\partial x_j} v_i = \sum_i H_{ij} v_i = (H\mathbf{v})_j,$$
+
+        using the symmetry of $H$. **The gradient of $\mathbf{g} \cdot \mathbf{v}$ is $H\mathbf{v}$.** Two backward passes, whatever $n$ is.
+
+        ```python
+        def hvp(node, inputs, v):
+            grads = gradient(node, inputs)
+            s = Value(0.0)
+            for g, vi in zip(grads, v):
+                s = s + g * Value(vi)
+            return [h.data for h in gradient(s, inputs)]
+        ```
+
+        For the example with $\mathbf{v} = (1, 2)$ this returns $(14, 40)$, which is $(6 + 8, \; 4 + 36)$. With $\mathbf{v} = (1, 0)$ it returns the first column of $H$, so the whole Hessian is still available, a column at a time, when $n$ is small.
+
+        **Differentiating through an update.** In the last lesson the optimiser wrote to the data outside the graph, on purpose. Do the update inside the graph, with a gradient that is a node, and the step itself can be differentiated. Take $L(w) = w^2$ at $w = 3$ and a learning rate $\eta = 0.1$ that is a `Value`:
+
+        ```python
+        w, lr = Value(3.0), Value(0.1)
+        g = gradient(w * w, [w])[0]
+        w1 = w - lr * g
+        L1 = w1 * w1
+        print(w1.data, L1.data, gradient(L1, [lr])[0].data)
+        ```
+
+        The step lands at 2.4, where the loss is 5.76, and the last number, $-28.8$, is the derivative of **the loss after the step** with respect to the learning rate. It says that a larger rate would have left the loss lower, and by how much. Tuning a learning rate by gradient descent, and learning starting weights from which one step goes a long way, are both built on this.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the steps of computing a Hessian-vector product $H\mathbf{v}$ with the rebuilt engine.
+        steps:
+          - 'Run the forward pass, building the graph of $f$.'
+          - 'Run a backward pass from $f$ to get the gradient entries as nodes.'
+          - 'Multiply each gradient entry by its entry of $\mathbf{v}$, taken as a constant, and add the products into one node $s$.'
+          - 'Run a backward pass from $s$.'
+          - 'Read off the numbers of the gradients of $s$ with respect to the inputs.'
+        explanation: The first backward pass must produce nodes, since the second walks through them. Weighting by v before the second pass is what turns n separate rows of the Hessian into the one combination that is wanted.
+  formal:
+    - text: |
+        **Differentiable backward pass.** An engine in which each pull maps a node (the gradient of a result) to a node (an operand's share), using only recorded operations. For such an engine, $\texttt{gradient}(y, x)$ is a node of a graph containing $x$, and $\texttt{gradient}(\texttt{gradient}(y, x), x)$ has the value $\dfrac{d^2 y}{dx^2}$.
+
+        **Pulls.** For $c = a + b$: $g \mapsto g$ for each. For $c = a - b$: $g \mapsto g$ and $g \mapsto -g$. For $c = a \times b$: $g \mapsto g \times b$ and $g \mapsto g \times a$, with $a$ and $b$ the nodes.
+
+        **Detaching.** Replacing a node by a parentless node of equal value. Derivatives through a detached node are zero.
+
+        **Hessian-vector product.** For $f : \mathbb{R}^n \to \mathbb{R}$ twice continuously differentiable and a constant $\mathbf{v} \in \mathbb{R}^n$,
+
+        $$H(\mathbf{x})\,\mathbf{v} = \nabla_{\mathbf{x}} \big( \nabla f(\mathbf{x}) \cdot \mathbf{v} \big).$$
+
+        Its cost is a constant multiple of the cost of evaluating $f$, independent of $n$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-why-float
+        type: choice
+        system: s1
+        prompt: |
+          Why could the old engine's `x.grad` not be differentiated?
+        options: ['It was too small', 'It was a plain float with no record of how it was computed', 'The backward pass is not a computation', 'Second derivatives do not exist for products']
+        answer: 1
+        explanation: The backward pass used Python's arithmetic on bare numbers, which records nothing.
+    - question:
+        id: drill-change
+        type: choice
+        system: s1
+        prompt: |
+          What is the one change that makes the backward pass differentiable?
+        options: ['Running it twice', 'Carrying it out with the engine''s own recorded operations, on nodes', 'Using a smaller step', 'Storing gradients in a list']
+        answer: 1
+        explanation: Then the gradient is the tip of a graph, like any other result.
+    - question:
+        id: drill-local
+        type: choice
+        system: s1
+        prompt: |
+          For $c = a \times b$ in the rebuilt engine, what does the pull for $a$ multiply the incoming gradient by?
+        options: ['The number `b.data`', 'The node `b`', 'The node `a`', 'A fresh `Value(b.data)`']
+        answer: 1
+        explanation: The node, so that the share remembers that it depends on b.
+    - question:
+        id: drill-second
+        type: numeric
+        system: s1
+        prompt: |
+          What is the second derivative of $x^3$ at $x = 5$?
+        answer: "30"
+        explanation: Six times x.
+    - question:
+        id: drill-third
+        type: numeric
+        system: s1
+        prompt: |
+          What is the third derivative of $x^3$ at $x = 5$?
+        answer: "6"
+        explanation: The derivative of 6x, the same everywhere.
+    - question:
+        id: drill-fourth
+        type: numeric
+        system: s1
+        prompt: |
+          What is the fourth derivative of $x^3$?
+        answer: "0"
+        explanation: The third derivative is a constant.
+    - question:
+        id: drill-type
+        type: choice
+        system: s1
+        prompt: |
+          What does `gradient(y, [x])` return in the rebuilt engine?
+        options: ['A float', 'A list holding one `Value`', 'A dictionary of floats', 'Nothing: it fills in `x.grad`']
+        answer: 1
+        explanation: One node for each input asked for, each with a number and a history.
+    - question:
+        id: drill-detach
+        type: choice
+        system: s1
+        prompt: |
+          What is the derivative of a detached value with respect to the input it was computed from?
+        options: ['The same as before detaching', 'Zero', 'One', 'Undefined, and an error is raised']
+        answer: 1
+        explanation: It has no parents, so no path leads back to the input.
+    - question:
+        id: drill-rows
+        type: numeric
+        system: s1
+        prompt: |
+          A function has 1,000 inputs. How many backward passes from entries of the gradient are needed to get its full Hessian, one row at a time?
+        answer: "1000"
+        explanation: One for each entry of the gradient.
+    - question:
+        id: drill-hvp-passes
+        type: numeric
+        system: s1
+        prompt: |
+          A function has 1,000 inputs. How many backward passes does one Hessian-vector product need?
+        answer: "2"
+        explanation: One for the gradient and one from its dot product with the vector.
+    - question:
+        id: drill-hv
+        type: choice
+        system: s1
+        prompt: |
+          $H = \begin{pmatrix} 6 & 4 \\ 4 & 18 \end{pmatrix}$ and $\mathbf{v} = (1, 2)$. What is $H\mathbf{v}$?
+        options: ['$(14, 40)$', '$(10, 22)$', '$(6, 36)$', '$(14, 22)$']
+        answer: 0
+        explanation: Six plus 8, and 4 plus 36.
+    - question:
+        id: drill-column
+        type: choice
+        system: s1
+        prompt: |
+          Which vector $\mathbf{v}$ makes $H\mathbf{v}$ the second column of $H$?
+        options: ['$(1, 1)$', '$(0, 1)$', '$(1, 0)$', '$(2, 2)$']
+        answer: 1
+        explanation: A unit vector picks out one column.
+    - question:
+        id: predict-chain
+        type: predict
+        system: s1
+        prompt: The rebuilt engine, and `gradient` applied to its own result three times over, for $x^4$ at $x = 2$. What does this show?
+        code: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, pull in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          def gradient(node, inputs):
+              grads = {node: Value(1.0)}
+              for v in topological(node)[::-1]:
+                  for parent, pull in v.parents:
+                      share = pull(grads[v])
+                      grads[parent] = grads[parent] + share if parent in grads else share
+              return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+          x = Value(2.0)
+          d = x * x * x * x
+          for k in range(4):
+              print(d.data)
+              d = gradient(d, [x])[0]
+        output: |
+          16.0
+          32.0
+          48.0
+          48.0
+        explanation: The lines are the value of x to the fourth, then of 4x cubed, 12x squared and 24x, all at 2. The last two agree only because 12 times 4 equals 24 times 2. The loop hands each derivative straight back to `gradient`, which treats it as it would any other node.
+    - question:
+        id: predict-detach
+        type: predict
+        system: s1
+        prompt: The same engine with one change, in the pull of the product. The cube at 5. What does this show?
+        code: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, (
+                      (self, lambda g: g * Value(other.data)),
+                      (other, lambda g: g * Value(self.data)),
+                  ))
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, pull in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          def gradient(node, inputs):
+              grads = {node: Value(1.0)}
+              for v in topological(node)[::-1]:
+                  for parent, pull in v.parents:
+                      share = pull(grads[v])
+                      grads[parent] = grads[parent] + share if parent in grads else share
+              return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+          x = Value(5.0)
+          y = x * x * x
+          d1 = gradient(y, [x])[0]
+          d2 = gradient(d1, [x])[0]
+          print(d1.data, d2.data)
+        output: |
+          75.0 0.0
+        explanation: The pulls multiply by fresh values that hold the right numbers and have no parents. The first derivative is right. Its graph is made of constants, so the second pass finds no path back to x and returns 0 where 30 was due.
+  work:
+    - text: Slower now. Every program here differentiates twice, and the second time is the one that shows whether the first was built properly.
+    - question:
+        id: write-gradient
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          The class and `topological` are given. Write `gradient(node, inputs)`. It returns a list with one `Value` for each value in the list `inputs`: the derivative of `node` with respect to it, built with recorded operations so that it can be differentiated again. An input that `node` does not depend on gets `Value(0.0)`.
+
+          Keep the gradients in a dictionary keyed by node. The gradient of `node` itself is `Value(1.0)`.
+        starter: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, pull in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          def gradient(node, inputs):
+              # Replace the next line with your own.
+              return [Value(0.0) for x in inputs]
+
+
+          x = Value(5.0)
+          y = x * x * x
+          d1 = gradient(y, [x])[0]
+          d2 = gradient(d1, [x])[0]
+          d3 = gradient(d2, [x])[0]
+          print(d1.data, d2.data, d3.data)
+        solution: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, pull in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          def gradient(node, inputs):
+              grads = {node: Value(1.0)}
+              for v in topological(node)[::-1]:
+                  for parent, pull in v.parents:
+                      share = pull(grads[v])
+                      grads[parent] = grads[parent] + share if parent in grads else share
+              return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+          x = Value(5.0)
+          y = x * x * x
+          d1 = gradient(y, [x])[0]
+          d2 = gradient(d1, [x])[0]
+          d3 = gradient(d2, [x])[0]
+          print(d1.data, d2.data, d3.data)
+        tests: |
+          _a = Value(2.0); _b = Value(3.0); _c = Value(7.0)
+          _f = _a * _a * _b + _b * _b * _b
+          _g = gradient(_f, [_a, _b, _c])
+          assert len(_g) == 3, "gradient should return one entry for each input"
+          assert all(isinstance(_v, Value) for _v in _g), "Each gradient should be a Value, so that it can be differentiated again"
+          assert _g[0].data == 12.0 and _g[1].data == 31.0, "For a squared times b plus b cubed at (2, 3) the gradient is (12, 31): add the shares that reach the same node, and take nodes in reverse topological order"
+          assert _g[2].data == 0.0, "An input the result does not depend on should get a gradient of 0"
+          _h = gradient(_g[0], [_a, _b])
+          assert _h[0].data == 6.0 and _h[1].data == 4.0, "Differentiating the first gradient entry again should give the Hessian row (6, 4): pass each pull the gradient node itself, not a copy of its number"
+          _h = gradient(_g[1], [_a, _b])
+          assert _h[0].data == 4.0 and _h[1].data == 18.0, "Differentiating the second gradient entry again should give the Hessian row (4, 18)"
+          _p = Value(3.0); _q = Value(4.0)
+          _r = (_p - _q) * (_p - _q) * _q
+          _gr = gradient(_r, [_p, _q])
+          assert _gr[0].data == -8.0 and _gr[1].data == 9.0, "For (p - q) squared times q at (3, 4) the gradient is (-8, 9)"
+          _s = Value(2.0)
+          _t = _s * _s
+          _u = _t * _t + _t
+          assert gradient(_u, [_s])[0].data == 36.0, "For t squared plus t with t = s squared, at s = 2, the derivative is 36: t must have its whole gradient before it shares it out"
+          assert gradient(_s, [_s])[0].data == 1.0, "The gradient of a node with respect to itself is 1"
+          assert output.strip() == "75.0 30.0 6.0", "The program should print 75.0 30.0 6.0"
+        wrong:
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def gradient(node, inputs):
+                grads = {node: Value(1.0)}
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        grads[parent] = pull(grads[v])
+                return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+            print("75.0 30.0 6.0")
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def gradient(node, inputs):
+                grads = {node: Value(1.0)}
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        share = pull(Value(grads[v].data))
+                        grads[parent] = grads[parent] + share if parent in grads else share
+                return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+            print("75.0 30.0 6.0")
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def gradient(node, inputs):
+                grads = {node: Value(1.0)}
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        share = pull(grads[v])
+                        grads[parent] = Value(grads[parent].data + share.data) if parent in grads else share
+                return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+            print("75.0 30.0 6.0")
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def gradient(node, inputs):
+                grads = {node: Value(1.0)}
+
+                def walk(v):
+                    for parent, pull in v.parents:
+                        share = pull(grads[v])
+                        grads[parent] = grads[parent] + share if parent in grads else share
+                        walk(parent)
+
+                walk(node)
+                return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+            print("75.0 30.0 6.0")
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def gradient(node, inputs):
+                grads = {node: Value(1.0)}
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        share = pull(grads[v])
+                        grads[parent] = grads[parent] + share if parent in grads else share
+                return [grads[x].data if x in grads else 0.0 for x in inputs]
+
+
+            print("75.0 30.0 6.0")
+        explanation: |
+          It is the backward pass you already know with the bookkeeping moved into a dictionary. Seed the output with 1, go through the nodes in reverse topological order, and for each parent call the pull on the node's gradient and add the share to whatever the parent has so far.
+
+          What makes it differentiable is what is **not** done. The gradient handed to a pull is the node `grads[v]`, never `Value(grads[v].data)`. Shares are added with the engine's `+`, never by adding their numbers and wrapping the total. Either shortcut gives correct first derivatives and a second derivative that is partly or wholly missing, because somewhere a node has been swapped for a parentless copy.
+
+          Overwriting a parent's gradient in place of adding loses every path but the last. Walking depth-first from the output, without the topological order, lets a node pass on its gradient before all of it has arrived, and passes it on again each time more arrives. Returning numbers leaves nothing to differentiate.
+    - question:
+        id: write-hvp
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          The engine and `gradient` are given. Write `hvp(node, inputs, v)`. `inputs` is a list of the `Value`s that `node` was computed from and `v` is a list of floats of the same length. Return a list of floats: the Hessian of `node` with respect to `inputs`, applied to `v`.
+
+          Use two calls of `gradient`, however many inputs there are.
+        starter: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, pull in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          def gradient(node, inputs):
+              grads = {node: Value(1.0)}
+              for v in topological(node)[::-1]:
+                  for parent, pull in v.parents:
+                      share = pull(grads[v])
+                      grads[parent] = grads[parent] + share if parent in grads else share
+              return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+          def hvp(node, inputs, v):
+              # Replace the next line with your own.
+              return [0.0 for x in inputs]
+
+
+          a = Value(2.0)
+          b = Value(3.0)
+          f = a * a * b + b * b * b
+          print(hvp(f, [a, b], [1.0, 2.0]))
+        solution: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, pull in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          def gradient(node, inputs):
+              grads = {node: Value(1.0)}
+              for v in topological(node)[::-1]:
+                  for parent, pull in v.parents:
+                      share = pull(grads[v])
+                      grads[parent] = grads[parent] + share if parent in grads else share
+              return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+          def hvp(node, inputs, v):
+              grads = gradient(node, inputs)
+              s = Value(0.0)
+              for g, vi in zip(grads, v):
+                  s = s + g * Value(vi)
+              return [h.data for h in gradient(s, inputs)]
+
+
+          a = Value(2.0)
+          b = Value(3.0)
+          f = a * a * b + b * b * b
+          print(hvp(f, [a, b], [1.0, 2.0]))
+        tests: |
+          _a = Value(2.0); _b = Value(3.0)
+          _f = _a * _a * _b + _b * _b * _b
+          _calls = [0]
+          _real = gradient
+          def gradient(node, inputs):
+              _calls[0] += 1
+              return _real(node, inputs)
+          _out = hvp(_f, [_a, _b], [1.0, 0.0])
+          assert _calls[0] == 2, "Use exactly two calls of gradient: one for the gradient, one from its dot product with v"
+          assert len(_out) == 2 and all(isinstance(_t, float) for _t in _out), "hvp should return a list of floats, one for each input"
+          assert _out == [6.0, 4.0], "With v = (1, 0) the product is the first column of the Hessian, (6, 4)"
+          assert hvp(_f, [_a, _b], [0.0, 1.0]) == [4.0, 18.0], "With v = (0, 1) the product is the second column of the Hessian, (4, 18)"
+          assert hvp(_f, [_a, _b], [1.0, 2.0]) == [14.0, 40.0], "With v = (1, 2) the product is (14, 40): weight each gradient entry by its entry of v before the second pass"
+          _p = Value(3.0); _q = Value(4.0)
+          _r = (_p - _q) * (_p - _q) * _q
+          assert hvp(_r, [_p, _q], [2.0, -1.0]) == [26.0, -32.0], "For (p - q) squared times q at (3, 4) with v = (2, -1) the product is (26, -32)"
+          assert hvp(_p * _q, [_p, _q], [5.0, 7.0]) == [7.0, 5.0], "For the product p times q the Hessian swaps the two entries of v"
+          assert output.strip() == "[14.0, 40.0]", "The program should print [14.0, 40.0]"
+        wrong:
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def gradient(node, inputs):
+                grads = {node: Value(1.0)}
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        share = pull(grads[v])
+                        grads[parent] = grads[parent] + share if parent in grads else share
+                return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+            def hvp(node, inputs, v):
+                grads = gradient(node, inputs)
+                s = Value(0.0)
+                for g, vi in zip(grads, v):
+                    s = s + g
+                return [h.data for h in gradient(s, inputs)]
+
+
+            print("[14.0, 40.0]")
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def gradient(node, inputs):
+                grads = {node: Value(1.0)}
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        share = pull(grads[v])
+                        grads[parent] = grads[parent] + share if parent in grads else share
+                return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+            def hvp(node, inputs, v):
+                grads = gradient(node, inputs)
+                s = Value(0.0)
+                for g, vi in zip(grads, v):
+                    s = s + Value(g.data * vi)
+                return [h.data for h in gradient(s, inputs)]
+
+
+            print("[14.0, 40.0]")
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def gradient(node, inputs):
+                grads = {node: Value(1.0)}
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        share = pull(grads[v])
+                        grads[parent] = grads[parent] + share if parent in grads else share
+                return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+            def hvp(node, inputs, v):
+                grads = gradient(node, inputs)
+                return [gradient(g, [x])[0].data * vi for g, x, vi in zip(grads, inputs, v)]
+
+
+            print("[14.0, 40.0]")
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def gradient(node, inputs):
+                grads = {node: Value(1.0)}
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        share = pull(grads[v])
+                        grads[parent] = grads[parent] + share if parent in grads else share
+                return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+            def hvp(node, inputs, v):
+                grads = gradient(node, inputs)
+                s = Value(0.0)
+                for g, vi in zip(grads, v):
+                    s = s + g * Value(vi)
+                return [h.data * vi for h, vi in zip(gradient(s, inputs), v)]
+
+
+            print("[14.0, 40.0]")
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def gradient(node, inputs):
+                grads = {node: Value(1.0)}
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        share = pull(grads[v])
+                        grads[parent] = grads[parent] + share if parent in grads else share
+                return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+            def hvp(node, inputs, v):
+                grads = gradient(node, inputs)
+                out = [0.0 for x in inputs]
+                for g, vi in zip(grads, v):
+                    row = gradient(g, inputs)
+                    out = [o + r.data * vi for o, r in zip(out, row)]
+                return out
+
+
+            print("[14.0, 40.0]")
+        explanation: |
+          Take the gradient as nodes, form $s = \sum_i g_i v_i$ with each $v_i$ wrapped as a constant, and take the gradient of $s$. The first pass produces nodes, the weighted sum is built with recorded operations, and the second pass reads the answer off.
+
+          Summing the gradient entries without the weights computes $H$ applied to the vector of all ones. Multiplying the **numbers** `g.data * vi` gives the right value of $s$ on a node with no history, and every entry of the answer is 0. Differentiating each gradient entry with respect to its own input uses only the diagonal of the Hessian. The last wrong version is correct arithmetic and the wrong algorithm: it differentiates every gradient entry separately, one pass for each input, building the whole Hessian a row at a time to use it once. For two inputs nobody would notice. For a million it would never finish, and avoiding it is the point of the product.
+    - question:
+        id: fix-tanh
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          A `tanh` has been added to the rebuilt engine. Its first derivative is correct: at $z = 0.5$ it gives 0.7864, which is $1 - \tanh^2 z$. Its second derivative should be $-2 \tanh z \, (1 - \tanh^2 z)$, about $-0.7269$, and comes out as 0.0. Fix `tanh`.
+
+          A pull may refer to the result node itself.
+        starter: |
+          import math
+
+
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+              def tanh(self):
+                  t = math.tanh(self.data)
+                  return Value(t, ((self, lambda g: g * Value(1 - t * t)),))
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, pull in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          def gradient(node, inputs):
+              grads = {node: Value(1.0)}
+              for v in topological(node)[::-1]:
+                  for parent, pull in v.parents:
+                      share = pull(grads[v])
+                      grads[parent] = grads[parent] + share if parent in grads else share
+              return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+          z = Value(0.5)
+          d1 = gradient(z.tanh(), [z])[0]
+          d2 = gradient(d1, [z])[0]
+          print(round(d1.data, 4), round(d2.data, 4))
+        solution: |
+          import math
+
+
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+              def tanh(self):
+                  out = Value(math.tanh(self.data))
+                  out.parents = ((self, lambda g: g * (Value(1.0) - out * out)),)
+                  return out
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, pull in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          def gradient(node, inputs):
+              grads = {node: Value(1.0)}
+              for v in topological(node)[::-1]:
+                  for parent, pull in v.parents:
+                      share = pull(grads[v])
+                      grads[parent] = grads[parent] + share if parent in grads else share
+              return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+          z = Value(0.5)
+          d1 = gradient(z.tanh(), [z])[0]
+          d2 = gradient(d1, [z])[0]
+          print(round(d1.data, 4), round(d2.data, 4))
+        tests: |
+          import math as _math
+          for _z0 in [0.5, -1.2, 2.0]:
+              _z = Value(_z0)
+              _y = _z.tanh()
+              _t = _math.tanh(_z0)
+              assert abs(_y.data - _t) < 1e-12, "tanh should still compute the hyperbolic tangent"
+              _d1 = gradient(_y, [_z])[0]
+              assert abs(_d1.data - (1 - _t * _t)) < 1e-12, "The first derivative of tanh is 1 minus tanh squared"
+              _d2 = gradient(_d1, [_z])[0]
+              assert abs(_d2.data - (-2 * _t * (1 - _t * _t))) < 1e-12, "The second derivative of tanh is -2 tanh (1 - tanh squared): the pull must be built from the result node, not from a bare number"
+              _d3 = gradient(_d2, [_z])[0]
+              assert abs(_d3.data - (-2 * (1 - _t * _t) * (1 - 3 * _t * _t))) < 1e-9, "The third derivative should come out right as well"
+          _w = Value(0.3); _x = Value(2.0)
+          _n = (_w * _x).tanh()
+          _g = gradient(_n, [_w])[0]
+          _u = _math.tanh(0.6)
+          assert abs(gradient(_g, [_w])[0].data - (-2 * _u * (1 - _u * _u) * 4.0)) < 1e-12, "For tanh(w x) the second derivative in w is -2 tanh (1 - tanh squared) x squared"
+          assert output.strip() == "0.7864 -0.7269", "The program should print 0.7864 -0.7269"
+        wrong:
+          - |
+            import math
+
+
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+                def tanh(self):
+                    t = math.tanh(self.data)
+                    return Value(t, ((self, lambda g: g * Value(1 - t * t)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def gradient(node, inputs):
+                grads = {node: Value(1.0)}
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        share = pull(grads[v])
+                        grads[parent] = grads[parent] + share if parent in grads else share
+                return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+            import math
+            print("0.7864 -0.7269")
+          - |
+            import math
+
+
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+                def tanh(self):
+                    out = Value(math.tanh(self.data))
+                    out.parents = ((self, lambda g: g * (Value(1.0) - Value(out.data) * Value(out.data))),)
+                    return out
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def gradient(node, inputs):
+                grads = {node: Value(1.0)}
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        share = pull(grads[v])
+                        grads[parent] = grads[parent] + share if parent in grads else share
+                return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+            import math
+            print("0.7864 -0.7269")
+          - |
+            import math
+
+
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+                def tanh(self):
+                    out = Value(math.tanh(self.data))
+                    out.parents = ((self, lambda g: g * (Value(1.0) - out)),)
+                    return out
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def gradient(node, inputs):
+                grads = {node: Value(1.0)}
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        share = pull(grads[v])
+                        grads[parent] = grads[parent] + share if parent in grads else share
+                return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+            import math
+            print("0.7864 -0.7269")
+          - |
+            import math
+
+
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, lambda g: g), (other, lambda g: g * Value(-1.0))))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, lambda g: g * other), (other, lambda g: g * self)))
+
+                def tanh(self):
+                    out = Value(math.tanh(self.data))
+                    out.parents = ((self, lambda g: g * (Value(1.0) - out * self)),)
+                    return out
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def gradient(node, inputs):
+                grads = {node: Value(1.0)}
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        share = pull(grads[v])
+                        grads[parent] = grads[parent] + share if parent in grads else share
+                return [grads[x] if x in grads else Value(0.0) for x in inputs]
+
+
+            import math
+            print("0.7864 -0.7269")
+        explanation: |
+          The pull multiplied the incoming gradient by `Value(1 - t * t)`, where `t` is a float. The number is right, which is why the first derivative is right. But $1 - \tanh^2 z$ depends on $z$, and a fresh `Value` made from a float does not know that. The first derivative's graph ended in a constant, and its derivative was 0.
+
+          The local derivative has to be **built out of nodes**. The neatest node to build it from is the result itself: $\tanh' = 1 - \tanh^2$, so the pull is `g * (Value(1.0) - out * out)` with `out` the node that `tanh` returns. The node must exist before its pull can mention it, so it is created first and given its parents on the next line. Now the first derivative contains `out * out`, which leads back through `out` to `z`, and can be differentiated as often as you like.
+
+          Wrapping `out.data` in fresh values is the same bug written more elaborately.
+
+          **The rule for writing a pull in a twice-differentiable engine: every quantity in it that depends on the operands must be a node, reached by recorded operations. A bare number in a pull is a claim that the local derivative is a constant.** For addition that claim is true. For almost everything else it is false, and only a second-derivative test will catch it.
+    - question:
+        id: work-newton
+        type: numeric
+        system: s2
+        prompt: |
+          Newton's method for a minimum of $f$ replaces $x$ by $x - f'(x) / f''(x)$. For $f(x) = x^3 - 12x$ at $x = 3$, the engine returns `d1.data` and `d2.data` from two calls of `gradient`. What is the next $x$, to three decimal places?
+        answer: "2.167"
+        tolerance: "0.001"
+        explanation: |
+          $f'(x) = 3x^2 - 12$, which is 15 at 3, and $f''(x) = 6x$, which is 18. The step is $3 - 15/18 = 2.1667$. The minimum is at $x = 2$, where $f' = 0$ and $f'' = 12 > 0$, so one step has covered five sixths of the distance. Gradient descent needs a learning rate chosen by hand. Newton's method takes its step length from the curvature, and a twice-differentiable engine supplies that curvature for nothing more than a second call.
+    - question:
+        id: work-check
+        type: choice
+        system: s2
+        prompt: |
+          How would you test that an engine's second derivatives are right, using only tools from this cluster?
+        options:
+          - 'Check that the loss falls when training with them.'
+          - 'Treat the first derivative, as computed by the engine, as a function of the input, and gradient-check it: nudge the input each way, run forward and backward at each, take the central difference of the two first derivatives, and compare with the engine''s second derivative by relative error.'
+          - 'Compare the second derivative with the first.'
+          - 'Second derivatives cannot be tested numerically.'
+        answer: 1
+        explanation: |
+          A second derivative is the first derivative of a function, and that function is "the engine's first derivative". The gradient check of two lessons ago applies to it unchanged. The first derivatives are exact to rounding, so the central difference of them is as accurate as any other, good to nine digits or so. A detached pull, which gives a second derivative of 0 where $-0.73$ was due, has a relative error of 1 and fails at once. Differencing the function twice would also give a second derivative, but with far more rounding error, so difference the gradient.
+    - question:
+        id: work-size
+        type: choice
+        system: s2
+        prompt: |
+          A model has a million weights. Which of these can be computed in about the time of a few gradient evaluations?
+        options:
+          - 'The full Hessian.'
+          - 'The inverse of the Hessian.'
+          - 'The product of the Hessian with one given vector.'
+          - 'All the eigenvalues of the Hessian.'
+        answer: 2
+        explanation: |
+          The Hessian has $10^{12}$ entries, which could not even be stored, and each of the first, second and fourth options needs all of them. A Hessian-vector product is two backward passes: the gradient as nodes, then the gradient of its dot product with the vector. Methods that want curvature at this scale are designed around that fact. They never ask for $H$, only for $H\mathbf{v}$ for a handful of well-chosen vectors, from which the largest curvature, or an approximate Newton step, can be worked out.
+    - question:
+        id: work-through-step
+        type: numeric
+        system: s2
+        prompt: |
+          $L(w) = w^2$, $w = 3$, and a gradient step with learning rate $\eta$ is done **inside the graph**: $w_1 = w - \eta \, L'(w)$. With $\eta = 0.1$ the loss after the step is $L(w_1) = 5.76$. What is the derivative of $L(w_1)$ with respect to $w$, the starting point?
+        answer: "3.84"
+        tolerance: "0.001"
+        explanation: |
+          $w_1 = w - \eta \cdot 2w = (1 - 2\eta)\,w = 0.8w$, so $L(w_1) = 0.64 w^2$ and its derivative is $1.28 w = 3.84$. The engine reaches the same number by the chain rule: $2 w_1 = 4.8$ flows back into $w_1$, and from there into $w$ along two paths, directly with factor 1, and through the gradient $L'(w) = 2w$ with factor $-\eta \times 2 = -0.2$. The second path exists only because the gradient is a node. With a detached gradient the engine would answer 4.8, treating the step as a shift by a constant. That difference, between differentiating through the gradient and treating it as fixed, is a choice that some learning methods make deliberately, to save the cost of the second-order path.
+  connections:
+    - text: |
+        The old engine's gradient of $x^3$ at 5 was the float 75.0, and a float has no history. The backward pass had been carried out in bare arithmetic, so the engine, whose whole purpose is to record computations, had not recorded its own.
+
+        The remedy is to write the backward pass **with the engine's operations**. Gradients are nodes, local derivatives are nodes, and pulls combine them with recorded multiplications and additions. Then a gradient is the tip of a graph, and the backward pass can be run from it: `gradient(gradient(y, [x])[0], [x])` is the second derivative. Differentiation takes a graph to a graph and can be fed its own output.
+
+        From that follow the **Hessian**, a row for each backward pass from a gradient entry; the **Hessian-vector product**, $\nabla(\nabla f \cdot \mathbf{v})$, in two passes for any number of inputs; and derivatives **through an update step**. The standing danger is **detaching** by accident: a pull that uses a bare number is right at first order and silently zero at second.
+
+        All of this was bought with memory. The graph of a first derivative keeps the forward graph alive, and its own nodes besides. Even in an ordinary backward pass, every pull holds on to the arrays it will need, for as long as the graph exists. What an engine keeps, when it may let go, and what goes wrong when an array it was keeping is changed underneath it, is the next lesson: [[e6.memory-planning-and-in-place-operations]].
