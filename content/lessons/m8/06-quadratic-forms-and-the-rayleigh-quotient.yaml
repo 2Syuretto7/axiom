@@ -1,0 +1,624 @@
+concept: m8.quadratic-forms-and-the-rayleigh-quotient
+minutes: 85
+claim: You can write a quadratic form as x transpose A x with a symmetric matrix and read the matrix off the formula, rotate to principal axes in which the form has no cross terms, describe its level curves from the eigenvalues, define the Rayleigh quotient, prove that it lies between the smallest and largest eigenvalue with equality at the eigenvectors, and use that to find the direction of greatest variance or greatest stretch.
+recalls: [m8.positive-definite-matrices-and-cholesky]
+uses: [m8.spectral-theorem, m8.eigenvalues-and-eigenvectors, m8.characteristic-polynomial, m6.inner-product-spaces, m6.cauchy-schwarz-and-the-triangle-inequality, m7.orthonormal-bases, m7.conditioning, m4.norms-and-distance, m5.transpose, e5.linear-algebra-routines, e5.axis-operations-and-reductions, e5.random-number-generation, e0.functions]
+leads: [m8.courant-fischer-min-max-theorem, m8.singular-value-decomposition, m8.pca-as-svd, m8.operator-and-frobenius-norms]
+starter: |
+  # Scratch space. A hundred thousand random directions x. For each one,
+  # the number (x . A x) / (x . x). What are the smallest and the largest seen?
+  import numpy as np
+
+  A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+  X = np.random.default_rng(0).normal(size=(100000, 3))
+  r = ((X @ A) * X).sum(axis=1) / (X * X).sum(axis=1)
+  print(round(float(r.min()), 2), round(float(r.max()), 2))
+  print([round(float(v), 2) for v in np.linalg.eigvalsh(A)])
+parts:
+  recall:
+    - text: |
+        [[m8.positive-definite-matrices-and-cholesky]] was about the **sign** of $\mathbf{x}^\top A\mathbf{x}$. Today is about its size, and about the directions in which it is largest and smallest. Three quick pulls first.
+  puzzle:
+    - text: |
+        Take a symmetric matrix $A$ and a vector $\mathbf{x}$, and form the number
+
+        $$\frac{\mathbf{x} \cdot A\mathbf{x}}{\mathbf{x} \cdot \mathbf{x}}.$$
+
+        The starter computes it for a hundred thousand random vectors and prints the smallest and the largest value found. Below that it prints the eigenvalues of $A$.
+
+        ```
+        1.0 4.0
+        [1.0, 2.0, 4.0]
+        ```
+
+        The values never drop below the smallest eigenvalue, never rise above the largest, and come as close to both as the sampling allows.
+
+        A random vector is almost never an eigenvector. Yet the eigenvalues fence this number in.
+
+        **Why is this quotient trapped between the smallest and the largest eigenvalue? And which vectors reach the ends?**
+  intuition:
+    - text: |
+        The spectral theorem says a symmetric matrix stretches along perpendicular axes. Describe $\mathbf{x}$ by its coordinates $y_1, \dots, y_n$ along the orthonormal eigenvectors. Then $A\mathbf{x}$ has coordinates $\lambda_1y_1, \dots, \lambda_ny_n$, and
+
+        $$\mathbf{x} \cdot A\mathbf{x} = \lambda_1y_1^2 + \dots + \lambda_ny_n^2, \qquad \mathbf{x} \cdot \mathbf{x} = y_1^2 + \dots + y_n^2.$$
+
+        So the quotient is
+
+        $$\frac{\lambda_1y_1^2 + \dots + \lambda_ny_n^2}{y_1^2 + \dots + y_n^2},$$
+
+        a **weighted average of the eigenvalues**. The weight of $\lambda_i$ is the share of $\mathbf{x}$'s squared length that lies along the $i$th eigenvector.
+
+        An average cannot fall outside the range of the things averaged. It equals the largest only when all the weight is on the largest, which is when $\mathbf{x}$ **is** an eigenvector for the largest eigenvalue.
+
+        The quotient is called the **Rayleigh quotient**. It answers the question "by what factor does $A$ scale $\mathbf{x}$, on average over its components?" For an eigenvector the answer is the eigenvalue exactly. For any other vector it is a blend. This changes what an eigenvalue is: the largest eigenvalue of a symmetric matrix is the **maximum** of a function, and the eigenvector is where the maximum is attained. Eigenvalues become answers to optimisation problems.
+  derivation:
+    - text: |
+        **Quadratic forms.** A **quadratic form** in $n$ variables is a polynomial in which every term has degree 2, such as
+
+        $$q(x, y) = 3x^2 + 4xy + 6y^2.$$
+
+        Every quadratic form is $q(\mathbf{x}) = \mathbf{x}^\top A\mathbf{x}$ for exactly one **symmetric** matrix $A$: the coefficient of $x_i^2$ goes on the diagonal, and the coefficient of $x_ix_j$ is split equally between the entries $(i, j)$ and $(j, i)$.
+
+        $$3x^2 + 4xy + 6y^2 = \begin{pmatrix} x & y \end{pmatrix}\begin{pmatrix} 3 & 2 \\ 2 & 6 \end{pmatrix}\begin{pmatrix} x \\ y \end{pmatrix}.$$
+
+        A non-symmetric $B$ also defines a form $\mathbf{x}^\top B\mathbf{x}$, but it is the same form as that of its symmetric part $\tfrac12(B + B^\top)$. Nothing is lost by assuming symmetry.
+
+        **Principal axes.** Let $A = Q\Lambda Q^\top$ and put $\mathbf{y} = Q^\top\mathbf{x}$, the coordinates of $\mathbf{x}$ along the eigenvectors. Then
+
+        $$\mathbf{x}^\top A\mathbf{x} = \mathbf{y}^\top\Lambda\mathbf{y} = \lambda_1y_1^2 + \dots + \lambda_ny_n^2.$$
+
+        In the rotated coordinates the cross terms are gone. The eigenvectors are the **principal axes** of the form.
+
+        *Example.* $\begin{pmatrix} 3 & 2 \\ 2 & 6 \end{pmatrix}$ has trace 9 and determinant 14, so eigenvalues 2 and 7, with eigenvectors $(2, -1)$ and $(1, 2)$. In coordinates along those, $q = 2y_1^2 + 7y_2^2$.
+
+        **Level curves.** The set $\mathbf{x}^\top A\mathbf{x} = 1$ is $\lambda_1y_1^2 + \lambda_2y_2^2 = 1$.
+
+        - Both eigenvalues positive: an ellipse, with semi-axes $1/\sqrt{\lambda_1}$ and $1/\sqrt{\lambda_2}$ along the eigenvectors. The **long** axis belongs to the **small** eigenvalue: where the form grows slowly, one must go far to reach 1.
+        - Opposite signs: a hyperbola.
+
+        The graph of $q$ is a bowl in the first case and a saddle in the second, as the last lesson said.
+    - question:
+        id: derivation-max
+        type: numeric
+        system: s2
+        prompt: |
+          What is the largest value of $3x^2 + 4xy + 6y^2$ over all points with $x^2 + y^2 = 1$?
+        answer: "7"
+        explanation: |
+          The form is $\mathbf{x}^\top A\mathbf{x}$ with $A = \begin{pmatrix} 3 & 2 \\ 2 & 6 \end{pmatrix}$, whose eigenvalues are 2 and 7. On the unit circle the form equals $2y_1^2 + 7y_2^2$ with $y_1^2 + y_2^2 = 1$, which is largest, 7, when all the weight is on the second axis: at $\mathbf{x} = \pm(1, 2)/\sqrt5$. The smallest value is 2, at $\pm(2, -1)/\sqrt5$. A problem that calculus would handle with a constraint and a multiplier is settled by two eigenvalues.
+    - text: |
+        **The Rayleigh quotient.** For symmetric $A$ and $\mathbf{x} \ne \mathbf{0}$,
+
+        $$R_A(\mathbf{x}) = \frac{\mathbf{x}^\top A\mathbf{x}}{\mathbf{x}^\top\mathbf{x}}.$$
+
+        It does not change when $\mathbf{x}$ is rescaled, so it depends only on the direction of $\mathbf{x}$, and it equals $\mathbf{x}^\top A\mathbf{x}$ on unit vectors.
+
+        **Theorem.** Let the eigenvalues of $A$ be $\lambda_{\min} \le \dots \le \lambda_{\max}$. Then for every $\mathbf{x} \ne \mathbf{0}$,
+
+        $$\lambda_{\min} \le R_A(\mathbf{x}) \le \lambda_{\max},$$
+
+        with equality on the right exactly for eigenvectors of $\lambda_{\max}$, and on the left exactly for eigenvectors of $\lambda_{\min}$. So
+
+        $$\lambda_{\max} = \max_{\mathbf{x} \ne \mathbf{0}} R_A(\mathbf{x}) = \max_{\|\mathbf{x}\| = 1}\mathbf{x}^\top A\mathbf{x}, \qquad \lambda_{\min} = \min_{\mathbf{x} \ne \mathbf{0}} R_A(\mathbf{x}).$$
+
+        *Proof.* In eigenvector coordinates, with weights $w_i = y_i^2/\sum_j y_j^2$, which are non-negative and add up to 1,
+
+        $$R_A(\mathbf{x}) = \sum_i w_i\lambda_i \le \sum_i w_i\lambda_{\max} = \lambda_{\max}.$$
+
+        Equality needs $w_i = 0$ whenever $\lambda_i < \lambda_{\max}$: $\mathbf{x}$ lies in the eigenspace of $\lambda_{\max}$. The lower bound is the same argument. $\blacksquare$
+
+        If $\mathbf{x}$ is any eigenvector, $R_A(\mathbf{x})$ is its eigenvalue. The eigenvectors are exactly the points where the gradient of $R_A$ vanishes.
+
+        **Three uses.**
+
+        *Greatest variance.* For centred data with covariance matrix $C$, the variance of the data along a unit direction $\mathbf{u}$ is $\mathbf{u}^\top C\mathbf{u}$. So the direction of greatest variance is the top eigenvector of $C$, and the variance there is $\lambda_{\max}$.
+
+        *Greatest stretch.* For any matrix $M$, $\dfrac{\|M\mathbf{x}\|^2}{\|\mathbf{x}\|^2} = \dfrac{\mathbf{x}^\top M^\top M\mathbf{x}}{\mathbf{x}^\top\mathbf{x}}$ is the Rayleigh quotient of the symmetric matrix $M^\top M$. So the largest factor by which $M$ can stretch a vector is $\sqrt{\lambda_{\max}(M^\top M)}$, and the smallest is $\sqrt{\lambda_{\min}(M^\top M)}$. Those are the two numbers whose ratio is the condition number.
+
+        *Estimating an eigenvalue.* Given an approximate eigenvector $\mathbf{x}$, $R_A(\mathbf{x})$ is the best guess for its eigenvalue, and the guess is much better than the vector: an error of size $\varepsilon$ in the direction gives an error of size about $\varepsilon^2$ in the quotient.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the proof that the Rayleigh quotient of a symmetric matrix never exceeds its largest eigenvalue.
+        steps:
+          - 'Write $\mathbf{x}$ in coordinates $y_i$ along orthonormal eigenvectors.'
+          - 'The numerator becomes $\sum_i \lambda_iy_i^2$ and the denominator $\sum_i y_i^2$.'
+          - 'So the quotient is a weighted average of the eigenvalues, with weights that are not negative and add up to 1.'
+          - 'Replace every eigenvalue by the largest one, which can only increase the average.'
+          - 'The average of a constant is that constant, so the quotient is at most $\lambda_{\max}$.'
+        explanation: The spectral theorem turns the quotient into an average, and an average is at most its largest term.
+  formal:
+    - text: |
+        **Quadratic form.** A function $q: \mathbb{R}^n \to \mathbb{R}$ of the form $q(\mathbf{x}) = \mathbf{x}^\top A\mathbf{x}$. The symmetric matrix representing $q$ is unique: $a_{ij} = \tfrac12\left(q(\mathbf{e}_i + \mathbf{e}_j) - q(\mathbf{e}_i) - q(\mathbf{e}_j)\right)$. For any $B$, $\mathbf{x}^\top B\mathbf{x} = \mathbf{x}^\top\tfrac12(B + B^\top)\mathbf{x}$.
+
+        **Change of variables.** With $\mathbf{x} = P\mathbf{y}$, $q$ is represented by $P^\top AP$. This is **congruence**, not similarity. The two coincide when $P$ is orthogonal.
+
+        **Principal axes theorem.** There is an orthogonal change of variables $\mathbf{x} = Q\mathbf{y}$ with $q = \sum_i \lambda_iy_i^2$, where the $\lambda_i$ are the eigenvalues of $A$.
+
+        **Inertia.** Under any invertible change of variables that brings $q$ to a sum of squares with coefficients, the numbers of positive, negative and zero coefficients are always the same (Sylvester's law of inertia).
+
+        **Rayleigh quotient.** $R_A(\mathbf{x}) = \dfrac{\mathbf{x}^\top A\mathbf{x}}{\mathbf{x}^\top\mathbf{x}}$ for symmetric $A$, $\mathbf{x} \ne \mathbf{0}$. $R_A(c\mathbf{x}) = R_A(\mathbf{x})$.
+
+        **Rayleigh-Ritz.** $\lambda_{\min}(A) = \min_{\mathbf{x} \ne \mathbf{0}} R_A(\mathbf{x})$ and $\lambda_{\max}(A) = \max_{\mathbf{x} \ne \mathbf{0}} R_A(\mathbf{x})$, attained exactly on the corresponding eigenspaces. Hence $\lambda_{\min}\|\mathbf{x}\|^2 \le \mathbf{x}^\top A\mathbf{x} \le \lambda_{\max}\|\mathbf{x}\|^2$.
+
+        **Stationary points.** $\nabla R_A(\mathbf{x}) = \dfrac{2}{\mathbf{x}^\top\mathbf{x}}\left(A\mathbf{x} - R_A(\mathbf{x})\mathbf{x}\right)$, which vanishes if and only if $\mathbf{x}$ is an eigenvector.
+
+        **Diagonal entries.** $a_{ii} = R_A(\mathbf{e}_i)$, so every diagonal entry of a symmetric matrix lies between $\lambda_{\min}$ and $\lambda_{\max}$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-matrix
+        type: choice
+        system: s1
+        prompt: |
+          The symmetric matrix of $x^2 + 6xy + 5y^2$ is
+        options: ['$\begin{pmatrix} 1 & 6 \\ 6 & 5 \end{pmatrix}$', '$\begin{pmatrix} 1 & 3 \\ 3 & 5 \end{pmatrix}$', '$\begin{pmatrix} 1 & 6 \\ 0 & 5 \end{pmatrix}$', '$\begin{pmatrix} 5 & 3 \\ 3 & 1 \end{pmatrix}$']
+        answer: 1
+        explanation: The cross coefficient is split in half between the two off-diagonal entries.
+    - question:
+        id: drill-form
+        type: choice
+        system: s1
+        prompt: |
+          For $A = \begin{pmatrix} 2 & -1 \\ -1 & 4 \end{pmatrix}$, the form $\mathbf{x}^\top A\mathbf{x}$ is
+        options: ['$2x^2 - xy + 4y^2$', '$2x^2 - 2xy + 4y^2$', '$2x^2 + 4y^2$', '$2x^2 - 2xy - 4y^2$']
+        answer: 1
+        explanation: The two off-diagonal entries both contribute to the $xy$ term.
+    - question:
+        id: drill-principal
+        type: choice
+        system: s1
+        prompt: |
+          In coordinates along orthonormal eigenvectors, the form $\mathbf{x}^\top A\mathbf{x}$ becomes
+        options: ['$\sum_i y_i^2$', '$\sum_i \lambda_iy_i^2$', '$\sum_i \lambda_iy_i$', '$\prod_i \lambda_iy_i$']
+        answer: 1
+        explanation: No cross terms, and the eigenvalues as coefficients.
+    - question:
+        id: drill-rayleigh
+        type: choice
+        system: s1
+        prompt: |
+          The Rayleigh quotient of $A$ at $\mathbf{x}$ is
+        options: ['$\mathbf{x}^\top A\mathbf{x}$', '$\dfrac{\mathbf{x}^\top A\mathbf{x}}{\mathbf{x}^\top\mathbf{x}}$', '$\dfrac{\|A\mathbf{x}\|}{\|\mathbf{x}\|}$', '$\mathbf{x}^\top\mathbf{x}$']
+        answer: 1
+        explanation: The quadratic form divided by the squared length.
+    - question:
+        id: drill-at-eigenvector
+        type: numeric
+        system: s1
+        prompt: |
+          $A\mathbf{v} = 6\mathbf{v}$. What is the Rayleigh quotient of $A$ at $\mathbf{v}$?
+        answer: "6"
+        explanation: $\mathbf{v} \cdot 6\mathbf{v}$ divided by $\mathbf{v} \cdot \mathbf{v}$.
+    - question:
+        id: drill-scale
+        type: choice
+        system: s1
+        prompt: |
+          Replacing $\mathbf{x}$ by $10\mathbf{x}$ multiplies the Rayleigh quotient by
+        options: ['100', '1', '10', '0.1']
+        answer: 1
+        explanation: Numerator and denominator both gain a factor 100.
+    - question:
+        id: drill-max
+        type: numeric
+        system: s1
+        prompt: |
+          A symmetric matrix has eigenvalues $-2, 1, 5$. What is the largest value of its Rayleigh quotient?
+        answer: "5"
+        explanation: The largest eigenvalue.
+    - question:
+        id: drill-min
+        type: numeric
+        system: s1
+        prompt: |
+          With the same eigenvalues $-2, 1, 5$, what is the smallest value of $\mathbf{x}^\top A\mathbf{x}$ over unit vectors $\mathbf{x}$?
+        answer: "-2"
+        explanation: The smallest eigenvalue, at its eigenvector.
+    - question:
+        id: drill-where
+        type: choice
+        system: s1
+        prompt: |
+          The Rayleigh quotient of a symmetric matrix reaches its maximum at
+        options: ['the vector of ones', 'an eigenvector of the largest eigenvalue', 'an eigenvector of the smallest eigenvalue', 'the first standard basis vector']
+        answer: 1
+        explanation: All the weight on the largest eigenvalue.
+    - question:
+        id: drill-average
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has orthonormal eigenvectors $\mathbf{q}_1, \mathbf{q}_2$ with eigenvalues 2 and 10. What is the Rayleigh quotient at $\mathbf{q}_1 + \mathbf{q}_2$?
+        answer: "6"
+        explanation: Equal weights, so the plain average of 2 and 10.
+    - question:
+        id: drill-ellipse
+        type: choice
+        system: s1
+        prompt: |
+          For positive definite $A$, the longest axis of the ellipse $\mathbf{x}^\top A\mathbf{x} = 1$ lies along the eigenvector of
+        options: ['the largest eigenvalue', 'the smallest eigenvalue', 'the eigenvalue 1', 'neither, since the axes are equal']
+        answer: 1
+        explanation: Semi-axes are $1/\sqrt{\lambda_i}$. A small eigenvalue gives a long axis.
+    - question:
+        id: drill-semi-axis
+        type: numeric
+        system: s1
+        prompt: |
+          An eigenvalue of positive definite $A$ is 4. How long is the corresponding semi-axis of the ellipse $\mathbf{x}^\top A\mathbf{x} = 1$?
+        answer: "0.5"
+        explanation: $1/\sqrt4$.
+    - question:
+        id: drill-diagonal
+        type: choice
+        system: s1
+        prompt: |
+          A symmetric matrix has eigenvalues 1 and 9. Its top-left entry
+        options: ['must be 1 or 9', 'lies between 1 and 9', 'can be any number', 'must be 5']
+        answer: 1
+        explanation: It is the Rayleigh quotient at $\mathbf{e}_1$.
+    - question:
+        id: predict-quotients
+        type: predict
+        system: s1
+        prompt: The Rayleigh quotient of one matrix at four vectors. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[2.0, 1.0], [1.0, 2.0]])
+          for x in ([1.0, 1.0], [1.0, -1.0], [1.0, 0.0], [30.0, 0.0]):
+              x = np.array(x)
+              print(round(float(x @ A @ x) / float(x @ x), 4))
+        output: |
+          3.0
+          1.0
+          2.0
+          2.0
+        explanation: At the eigenvectors (1, 1) and (1, -1) the quotient is the eigenvalue, 3 and 1. At (1, 0), which is an equal mixture of the two, it is their average. Rescaling the vector changes nothing.
+    - question:
+        id: predict-symmetric-part
+        type: predict
+        system: s1
+        prompt: A matrix that is not symmetric, and its symmetric part. What does this show?
+        code: |
+          import numpy as np
+
+          B = np.array([[2.0, 3.0], [-1.0, 2.0]])
+          S = (B + B.T) / 2
+          x = np.array([1.0, 2.0])
+          print(S.tolist())
+          print(float(x @ B @ x), float(x @ S @ x))
+        output: |
+          [[2.0, 1.0], [1.0, 2.0]]
+          14.0 14.0
+        explanation: The quadratic form of a matrix is the quadratic form of its symmetric part. The antisymmetric part contributes nothing, because its terms cancel in pairs.
+  work:
+    - text: Slower now. Each task treats an eigenvalue as the answer to a maximisation.
+    - question:
+        id: write-rayleigh
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `rayleigh(A, x)`, the Rayleigh quotient as a float. Then write `extremes(A)` for a symmetric matrix: return the pair `(smallest, largest)` of values the quotient can take, using `np.linalg.eigvalsh`.
+        starter: |
+          import numpy as np
+
+
+          def rayleigh(A, x):
+              return 0.0
+
+
+          def extremes(A):
+              return 0.0, 0.0
+
+
+          A = np.array([[3.0, 2.0], [2.0, 6.0]])
+          print(round(rayleigh(A, np.array([1.0, 2.0])), 4), round(rayleigh(A, np.array([1.0, 0.0])), 4))
+          print([round(v, 4) for v in extremes(A)])
+        solution: |
+          import numpy as np
+
+
+          def rayleigh(A, x):
+              return float(x @ A @ x) / float(x @ x)
+
+
+          def extremes(A):
+              values = np.linalg.eigvalsh(A)
+              return float(values[0]), float(values[-1])
+
+
+          A = np.array([[3.0, 2.0], [2.0, 6.0]])
+          print(round(rayleigh(A, np.array([1.0, 2.0])), 4), round(rayleigh(A, np.array([1.0, 0.0])), 4))
+          print([round(v, 4) for v in extremes(A)])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[3.0, 2.0], [2.0, 6.0]])
+          assert abs(rayleigh(_A, _np.array([1.0, 2.0])) - 7.0) < 1e-9, "(1, 2) is an eigenvector of [[3, 2], [2, 6]] with eigenvalue 7, so the quotient there is 7"
+          assert abs(rayleigh(_A, _np.array([2.0, -1.0])) - 2.0) < 1e-9, "(2, -1) is an eigenvector with eigenvalue 2"
+          assert abs(rayleigh(_A, _np.array([1.0, 0.0])) - 3.0) < 1e-9, "At (1, 0) the quotient is the top-left entry, 3"
+          assert abs(rayleigh(_A, _np.array([5.0, 10.0])) - 7.0) < 1e-9, "Rescaling the vector should not change the quotient: divide by x . x"
+          _lo, _hi = extremes(_A)
+          assert abs(_lo - 2.0) < 1e-9 and abs(_hi - 7.0) < 1e-9, "The quotient of [[3, 2], [2, 6]] ranges from 2 to 7, its eigenvalues"
+          _M = _np.random.default_rng(0).normal(size=(5, 5)); _S = _M + _M.T
+          _lo, _hi = extremes(_S)
+          _r = _np.random.default_rng(1)
+          assert all(_lo - 1e-9 <= rayleigh(_S, _r.normal(size=5)) <= _hi + 1e-9 for _ in range(300)), "For a random symmetric matrix every quotient should lie between the two extremes"
+          assert _lo < 0 < _hi, "This random symmetric matrix is indefinite, so the smallest value is negative and the largest positive: return (smallest, largest) in that order"
+          assert output.strip() == "7.0 3.0\n[2.0, 7.0]", "The program should print 7.0 3.0 and then [2.0, 7.0]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def rayleigh(A, x):
+                return float(x @ A @ x)
+
+
+            def extremes(A):
+                values = np.linalg.eigvalsh(A)
+                return float(values[0]), float(values[-1])
+
+
+            print("7.0 3.0\n[2.0, 7.0]")
+          - |
+            import numpy as np
+
+
+            def rayleigh(A, x):
+                return float(np.linalg.norm(A @ x)) / float(np.linalg.norm(x))
+
+
+            def extremes(A):
+                values = np.linalg.eigvalsh(A)
+                return float(values[0]), float(values[-1])
+
+
+            print("7.0 3.0\n[2.0, 7.0]")
+          - |
+            import numpy as np
+
+
+            def rayleigh(A, x):
+                return float(x @ A @ x) / float(x @ x)
+
+
+            def extremes(A):
+                values = np.linalg.eigvalsh(A)
+                return float(values[-1]), float(values[0])
+
+
+            print("7.0 3.0\n[2.0, 7.0]")
+          - |
+            import numpy as np
+
+
+            def rayleigh(A, x):
+                return float(x @ A @ x) / float(x @ x)
+
+
+            def extremes(A):
+                return float(A.min()), float(A.max())
+
+
+            print("7.0 3.0\n[2.0, 7.0]")
+        explanation: |
+          The quotient is one line, and its range is the interval from the smallest eigenvalue to the largest, which `eigvalsh` returns first and last.
+
+          The second wrong version computes $\|A\mathbf{x}\|/\|\mathbf{x}\|$, the stretch. At an eigenvector it gives $|\lambda|$, so it agrees with the Rayleigh quotient there when the eigenvalue is positive. Away from eigenvectors the two differ: at $(1, 0)$ the stretch is $\sqrt{13} \approx 3.6$ and the quotient is 3. The stretch is the Rayleigh quotient of $A^\top A$, under a square root.
+
+          The entries of a matrix do not bound its quadratic form. The matrix here has entries from 2 to 6 and a quotient that reaches 7.
+    - question:
+        id: write-axes
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `axes(A)` for a positive definite matrix. Return the pair `(lengths, Q)`: `lengths` is the array of semi-axis lengths $1/\sqrt{\lambda_i}$ of the ellipsoid $\mathbf{x}^\top A\mathbf{x} = 1$, **longest first**, and column `i` of `Q` is the unit direction of the axis with length `lengths[i]`. `np.linalg.eigh` returns eigenvalues in increasing order, which is the order wanted.
+        starter: |
+          import numpy as np
+
+
+          def axes(A):
+              return np.ones(len(A)), np.eye(len(A))
+
+
+          lengths, Q = axes(np.array([[3.0, 2.0], [2.0, 6.0]]))
+          print([round(float(v), 4) for v in lengths])
+          print([round(abs(float(v)), 4) for v in Q[:, 0]])
+        solution: |
+          import numpy as np
+
+
+          def axes(A):
+              values, Q = np.linalg.eigh(A)
+              return 1.0 / np.sqrt(values), Q
+
+
+          lengths, Q = axes(np.array([[3.0, 2.0], [2.0, 6.0]]))
+          print([round(float(v), 4) for v in lengths])
+          print([round(abs(float(v)), 4) for v in Q[:, 0]])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[3.0, 2.0], [2.0, 6.0]])
+          _out = axes(_A)
+          assert isinstance(_out, tuple) and len(_out) == 2, "axes should return the pair (lengths, Q)"
+          _l, _Q = _out
+          assert _np.allclose(_l, [1 / 2 ** 0.5, 1 / 7 ** 0.5]), "The eigenvalues are 2 and 7, so the semi-axes are 1/sqrt 2 and 1/sqrt 7, longest first"
+          assert _np.allclose(_np.abs(_Q[:, 0]), _np.array([2.0, 1.0]) / 5 ** 0.5), "The long axis lies along the eigenvector (2, -1) of the small eigenvalue 2"
+          assert all(abs(float((_l[i] * _Q[:, i]) @ _A @ (_l[i] * _Q[:, i])) - 1.0) < 1e-9 for i in range(2)), "The end point of each semi-axis, lengths[i] times column i of Q, should lie on the ellipse x.T A x = 1"
+          _l3, _Q3 = axes(_np.diag([4.0, 1.0, 25.0]))
+          assert _np.allclose(_l3, [1.0, 0.5, 0.2]), "For diag(4, 1, 25) the semi-axes are 1, 0.5 and 0.2, longest first"
+          assert _np.allclose(_np.abs(_Q3[:, 0]), [0.0, 1.0, 0.0]), "For diag(4, 1, 25) the longest axis is along the second coordinate, where the eigenvalue is smallest"
+          assert _np.allclose(_Q3.T @ _Q3, _np.eye(3)), "The axis directions should be orthonormal"
+          _B = _np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          _l4, _Q4 = axes(_B)
+          assert all(abs(float((_l4[i] * _Q4[:, i]) @ _B @ (_l4[i] * _Q4[:, i])) - 1.0) < 1e-9 for i in range(3)), "For a 3 by 3 matrix too, lengths[i] times column i of Q should lie on the ellipsoid: the directions are the columns of the matrix eigh returns"
+          assert output.strip() == "[0.7071, 0.378]\n[0.8944, 0.4472]", "The program should print [0.7071, 0.378] and then [0.8944, 0.4472]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def axes(A):
+                values, Q = np.linalg.eigh(A)
+                return np.sqrt(values), Q
+
+
+            print("[0.7071, 0.378]\n[0.8944, 0.4472]")
+          - |
+            import numpy as np
+
+
+            def axes(A):
+                values, Q = np.linalg.eigh(A)
+                return 1.0 / values, Q
+
+
+            print("[0.7071, 0.378]\n[0.8944, 0.4472]")
+          - |
+            import numpy as np
+
+
+            def axes(A):
+                values, Q = np.linalg.eigh(A)
+                return (1.0 / np.sqrt(values))[::-1], Q
+
+
+            print("[0.7071, 0.378]\n[0.8944, 0.4472]")
+          - |
+            import numpy as np
+
+
+            def axes(A):
+                values, Q = np.linalg.eigh(A)
+                return 1.0 / np.sqrt(values), Q.T
+
+
+            print("[0.7071, 0.378]\n[0.8944, 0.4472]")
+        explanation: |
+          Along the eigenvector $\mathbf{q}_i$ the form is $\lambda_it^2$ at the point $t\mathbf{q}_i$, and it reaches 1 at $t = 1/\sqrt{\lambda_i}$. Increasing eigenvalues give decreasing lengths, so the order `eigh` returns is already longest first.
+
+          This picture is how a loss surface is read. Near a minimum the loss is approximately a quadratic form with the Hessian as its matrix, and its level sets are these ellipsoids. A long, thin ellipsoid means eigenvalues of very different sizes, a large condition number, and a gradient that points across the valley and not along it. The ratio of the longest to the shortest semi-axis is the square root of the condition number.
+
+          For a Gaussian distribution the same picture appears with $A = C^{-1}$: the contours of equal density are ellipsoids whose semi-axes are proportional to $\sqrt{\lambda_i(C)}$, the standard deviations along the eigenvectors of the covariance.
+    - question:
+        id: fix-unit
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `variance_along(C, u)` should return the variance of data with covariance matrix `C` along the **direction** of `u`, whatever the length of `u`. Along $(1, 1)$ the answer for the matrix in the program is $5.5$. It prints `11.0`. Fix it.
+        starter: |
+          import numpy as np
+
+
+          def variance_along(C, u):
+              return float(u @ C @ u)
+
+
+          C = np.array([[4.0, 2.0], [2.0, 3.0]])
+          print(round(variance_along(C, np.array([1.0, 1.0])), 4))
+        solution: |
+          import numpy as np
+
+
+          def variance_along(C, u):
+              return float(u @ C @ u) / float(u @ u)
+
+
+          C = np.array([[4.0, 2.0], [2.0, 3.0]])
+          print(round(variance_along(C, np.array([1.0, 1.0])), 4))
+        tests: |
+          import numpy as _np
+          _C = _np.array([[4.0, 2.0], [2.0, 3.0]])
+          assert abs(variance_along(_C, _np.array([1.0, 1.0])) - 5.5) < 1e-9, "Along the direction (1, 1) the variance is (4 + 2 + 2 + 3)/2 = 5.5: the formula u.T C u assumes a unit vector, so divide by u . u"
+          assert abs(variance_along(_C, _np.array([1.0, 0.0])) - 4.0) < 1e-9, "Along the first axis the variance is the first diagonal entry, 4"
+          assert abs(variance_along(_C, _np.array([0.0, -2.0])) - 3.0) < 1e-9, "Along the second axis the variance is 3, whatever the length or sign of u"
+          assert abs(variance_along(_C, _np.array([3.0, 3.0])) - 5.5) < 1e-9, "(3, 3) is the same direction as (1, 1)"
+          _hi = float(_np.linalg.eigvalsh(_C)[-1])
+          _r = _np.random.default_rng(0)
+          assert all(variance_along(_C, _r.normal(size=2) * 10) <= _hi + 1e-9 for _ in range(200)), "No direction can have more variance than the largest eigenvalue of C"
+          assert output.strip() == "5.5", "The program should print 5.5"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def variance_along(C, u):
+                return float(u @ C @ u)
+
+
+            print("5.5")
+          - |
+            import numpy as np
+
+
+            def variance_along(C, u):
+                return float(u @ C @ u) / float(np.linalg.norm(u))
+
+
+            print("5.5")
+          - |
+            import numpy as np
+
+
+            def variance_along(C, u):
+                return float(np.linalg.norm(C @ u)) / float(np.linalg.norm(u))
+
+
+            print("5.5")
+        explanation: |
+          $\mathbf{u}^\top C\mathbf{u}$ is the variance of the projection onto $\mathbf{u}$ only when $\mathbf{u}$ has length 1. For a general $\mathbf{u}$ it is the variance of $\mathbf{u} \cdot \mathbf{x}$, which grows with the square of the length of $\mathbf{u}$. Dividing by $\mathbf{u} \cdot \mathbf{u}$ makes the function depend on the direction alone, and it becomes the Rayleigh quotient of $C$.
+
+          Left uncorrected, the bug would make "the direction of greatest variance" meaningless: any direction can be made to look better by using a longer vector. A maximisation over directions always needs the constraint $\|\mathbf{u}\| = 1$ or, equivalently, the quotient.
+
+          With the fix, the largest value over all directions is the largest eigenvalue of $C$, about $5.56$ here, a little more than the $5.5$ found along $(1, 1)$.
+    - question:
+        id: work-weights
+        type: numeric
+        system: s2
+        prompt: |
+          A symmetric matrix has eigenvalues 1 and 5 with orthonormal eigenvectors $\mathbf{q}_1, \mathbf{q}_2$. What is its Rayleigh quotient at $\mathbf{x} = \mathbf{q}_1 + 3\mathbf{q}_2$?
+        answer: "4.6"
+        explanation: |
+          The weights are $1^2/(1 + 9) = 0.1$ and $3^2/(1 + 9) = 0.9$, so the quotient is $0.1 \cdot 1 + 0.9 \cdot 5 = 4.6$. The vector is mostly along $\mathbf{q}_2$, and the quotient is close to 5. Notice how close: the direction is off by the ratio $1 : 3$, and the quotient is off by only $0.4$ out of 5. Errors in the direction enter squared, which is why the Rayleigh quotient is so good an estimate of an eigenvalue.
+    - question:
+        id: work-stretch
+        type: choice
+        system: s2
+        prompt: |
+          $M$ is any real matrix, not necessarily square or symmetric. Why is the largest value of $\|M\mathbf{x}\|/\|\mathbf{x}\|$ equal to $\sqrt{\lambda_{\max}(M^\top M)}$?
+        options:
+          - 'Because $M$ has the same eigenvalues as $M^\top M$.'
+          - '$\|M\mathbf{x}\|^2 = (M\mathbf{x})^\top(M\mathbf{x}) = \mathbf{x}^\top M^\top M\mathbf{x}$, so the squared stretch is the Rayleigh quotient of the symmetric matrix $M^\top M$, whose maximum is its largest eigenvalue.'
+          - 'Because $M^\top M$ is orthogonal.'
+          - 'It is not. The largest stretch is the largest eigenvalue of $M$.'
+        answer: 1
+        explanation: |
+          $M$ itself may have no real eigenvalues, or not even be square, and still it has a largest stretch. The symmetric matrix $M^\top M$ carries that information, and it is positive semidefinite, so the square root makes sense. The numbers $\sqrt{\lambda_i(M^\top M)}$ are called the singular values of $M$. The largest is the operator norm, and the ratio of the largest to the smallest is the condition number from the orthogonality cluster. They get their own decomposition two lessons from now.
+    - question:
+        id: work-level
+        type: choice
+        system: s2
+        prompt: |
+          Near its minimum a loss is $\tfrac12\mathbf{h}^\top H\mathbf{h}$ with $H$ having eigenvalues $0.01$ and $100$. What do its level curves look like, and what does that mean for gradient descent?
+        options:
+          - 'Circles. Gradient descent goes straight to the minimum.'
+          - 'Ellipses a hundred times longer than they are wide, since the semi-axes are proportional to $1/\sqrt{0.01} = 10$ and $1/\sqrt{100} = 0.1$. The gradient points mostly across the narrow direction, so the step size must be small enough for the steep direction, and progress along the flat one is then very slow.'
+          - 'Hyperbolas, since the eigenvalues differ.'
+          - 'Ellipses ten thousand times longer than wide.'
+        answer: 1
+        explanation: |
+          The ratio of the semi-axes is $\sqrt{100/0.01} = 100$, the square root of the condition number $10^4$. From the lesson on eigenvectors, a step size $\eta$ multiplies the error along each eigenvector by $1 - \eta\lambda_i$. Stability in the steep direction needs $\eta < 2/100$, and then the flat direction shrinks by $1 - 0.02 \cdot 0.01$ a step, almost not at all. Momentum, preconditioning and adaptive step sizes are all attempts to make these ellipses rounder.
+  connections:
+    - text: |
+        A hundred thousand random vectors could not push the **Rayleigh quotient** $\dfrac{\mathbf{x}^\top A\mathbf{x}}{\mathbf{x}^\top\mathbf{x}}$ outside the interval from 1 to 4, because in eigenvector coordinates it is a weighted average of the eigenvalues. Its maximum is the largest eigenvalue, attained at that eigenvector, and its minimum the smallest.
+
+        A **quadratic form** $\mathbf{x}^\top A\mathbf{x}$ has a unique symmetric matrix, and in its principal axes it is $\sum\lambda_iy_i^2$. Its level sets are ellipsoids with semi-axes $1/\sqrt{\lambda_i}$ when $A$ is positive definite. The direction of greatest variance of data and the direction of greatest stretch of a matrix are both maximisers of a Rayleigh quotient.
+
+        So the largest and the smallest eigenvalue are a maximum and a minimum. What about the ones in between? The second largest eigenvalue is also the answer to an optimisation problem, a slightly subtler one in which a maximum and a minimum are nested, and that description yields facts about eigenvalues that no formula for them could: how they move when a matrix is perturbed, and how the eigenvalues of a part of a matrix sit among those of the whole. [[m8.courant-fischer-min-max-theorem]].
