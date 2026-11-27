@@ -1,0 +1,1628 @@
+concept: e6.memory-planning-and-in-place-operations
+minutes: 80
+claim: You can say which arrays a recorded graph keeps alive and for how long, work out the memory a forward pass holds from its shapes, list for each operation what its pull truly needs, free a graph as the backward pass consumes it, explain how changing an array in place can corrupt a gradient without any error, guard saved values with a version counter so that the corruption is reported, and tell a safe in-place operation from an unsafe one.
+recalls: [e6.higher-order-gradients]
+uses: [e6.modules-parameters-and-optimisers, e6.tensor-valued-autograd, e6.broadcasting-in-the-backward-pass, e6.topological-ordering-of-the-graph, e6.reverse-mode-on-scalars, e5.reshaping-views-and-copies, e5.indexing-and-slicing, e5.arrays-dtype-and-shape, e5.strides-and-memory-layout, e3.amortised-analysis, e1.exceptions, e1.special-methods-and-operator-overloading, e1.classes-and-objects, e0.functions, e0.loops]
+leads: [e6.training-an-mlp-on-your-own-engine, e7.autograd-in-pytorch, e7.tensors-and-devices, e7.debugging-shapes-and-nans, e7.anatomy-of-a-training-loop]
+starter: |
+  # Scratch space. One buffer holds the current batch of data. The loss of
+  # batch 1 is computed, the next batch is loaded, and then the backward pass
+  # for batch 1 is run. What is the gradient of w?
+  import numpy as np
+
+
+  class Tensor:
+      def __init__(self, data, parents=()):
+          self.data = np.array(data) * 1.0
+          self.parents = parents
+          self.grad = np.zeros(self.data.shape)
+
+      def __add__(self, other):
+          return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+      def __mul__(self, other):
+          return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+      def sum(self):
+          return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+  def topological(node):
+      order = []
+      seen = set()
+
+      def visit(v):
+          if v in seen:
+              return
+          seen.add(v)
+          for parent, pull in v.parents:
+              visit(parent)
+          order.append(v)
+
+      visit(node)
+      return order
+
+
+  def backward(node):
+      node.grad = np.ones(node.data.shape)
+      for v in topological(node)[::-1]:
+          for parent, pull in v.parents:
+              parent.grad = parent.grad + pull(v.grad)
+
+
+  batch1 = [1.0, 2.0, 3.0]
+  batch2 = [10.0, 20.0, 30.0]
+
+  x = Tensor(batch1)
+  w = Tensor([0.5, 0.5, 0.5])
+  L = (x * w).sum()
+  print(float(L.data))
+
+  x.data[:] = batch2
+  backward(L)
+  print(w.grad.tolist())
+parts:
+  recall:
+    - text: |
+        [[e6.higher-order-gradients]] ended on a cost: a gradient that is a graph keeps the forward graph alive beneath it. Today is about what any graph keeps alive, what that costs, and what happens when something it was keeping is changed. Three quick pulls first.
+  puzzle:
+    - text: |
+        The starter computes $L = \sum_i x_i w_i$ for a batch of data $x = (1, 2, 3)$ and weights of 0.5. The gradient of $L$ with respect to $w$ is $x$ itself: $(1, 2, 3)$.
+
+        Between the forward pass and the backward pass there is one extra line. To save an allocation, the program loads the next batch into the array it already has: `x.data[:] = batch2`. The loss of batch 1 has been computed and printed by then. The line changes no tensor that the loss is waiting on.
+
+        Run it.
+
+        ```
+        3.0
+        [10.0, 20.0, 30.0]
+        ```
+
+        The loss is right: $0.5 + 1 + 1.5 = 3$. The gradient is $(10, 20, 30)$. That is not the gradient of the loss that was printed. It is the data of a batch that the loss never saw.
+
+        No operation in the engine is wrong, and the gradient would pass a gradient check if you ran one before that line. The forward pass finished correctly. The damage was done afterwards, to something the backward pass had not yet read.
+
+        **What, exactly, does a graph hold on to between the forward pass and the backward pass? How much memory is that? And how could an engine notice that something it was holding has been changed?**
+  intuition:
+    - text: |
+        Look at the pull that the product recorded for $w$:
+
+        ```python
+        (other, lambda g: g * self.data)
+        ```
+
+        It does not contain the numbers $(1, 2, 3)$. It contains `self`, a reference to the tensor `x`, and it will read `self.data` when it is called, during the backward pass. Recording a graph does not copy values. It keeps **references** to the tensors, and trusts that their arrays will still hold the same numbers when the pulls come to run.
+
+        Two consequences follow, and they are the two halves of this lesson.
+
+        **A graph is a memory debt.** As long as the loss node exists, it refers to its parents through its pulls, they refer to theirs, and so on down to the leaves. Python frees an object only when nothing refers to it. So every intermediate array of the forward pass stays in memory until the graph is let go. A plain function would have dropped each intermediate as soon as the next was computed. This is the price of reverse mode that the second lesson of this cluster named: the trail must be kept until it has been walked backwards.
+
+        **A graph is fragile.** Anything that writes into one of those arrays between the forward and the backward pass changes what the pulls will read. Operations that write into an existing array are called **in-place** operations: `x += 1`, `x[:] = values`, `x *= 2`. They are attractive for the very reason above, since they need no new memory. And they are dangerous for the same reason. `x = x + 1` makes a new array and leaves the old one, which the graph still refers to, untouched. `x += 1` overwrites it.
+
+        The puzzle's line was an in-place write to an array that a pull was still going to read. Python has no way to object. The engine could, if it kept track.
+  derivation:
+    - text: |
+        **How much a graph holds.** An array of $n$ numbers in 64-bit floats takes $8n$ bytes. Take one layer of a network, $H = \tanh(XW + \mathbf{b})$, on a batch of 1,024 rows with 512 units in and out. The engine performs three operations and each makes a new array of $1024 \times 512$ numbers:
+
+        | step | result | bytes |
+        | --- | --- | --- |
+        | `X @ W` | $Z_1$ | 4,194,304 |
+        | `Z1 + b` | $Z_2$ | 4,194,304 |
+        | `Z2.tanh()` | $H$ | 4,194,304 |
+
+        About 12.6 million bytes for one layer, all of it held until the backward pass is over. The weight $W$ is $512 \times 512$, about 2.1 million bytes. **The values computed along the way outweigh the parameters, and they grow with the batch size and with the depth.** When a training run fails for lack of memory, this is nearly always what has run out, and halving the batch halves it.
+
+        **What a pull truly needs.** Not every result has to be kept. Go through the pulls:
+
+        | operation | its pulls read |
+        | --- | --- |
+        | $C = A + B$, $C = A - B$ | only the shapes of $A$ and $B$ |
+        | $C = A * B$ | the values of $A$ and of $B$ |
+        | $C = A @ B$ | the values of $A$ and of $B$ |
+        | $C = \tanh A$ | the values of $C$, the result |
+        | $s = \operatorname{sum}(A)$ | only the shape of $A$ |
+
+        In the layer above, $Z_1$ is an operand of an addition, which reads only its shape. $Z_2$ is the operand of $\tanh$, whose pull reads its **result** and not its operand. So neither $Z_1$ nor $Z_2$ is ever read by the backward pass. Only $H$ is, by its own pull and by the next layer's product. Two of the three arrays are dead weight.
+
+        An engine avoids keeping them by making each pull capture **only what it reads**. Compare two ways of writing the pull of a sum:
+
+        ```python
+        lambda g: g * np.ones(self.data.shape)      # holds on to self, array and all
+
+        shape = self.data.shape
+        lambda g: g * np.ones(shape)                # holds on to a tuple of two integers
+        ```
+
+        The first keeps the whole tensor alive in order to ask its shape later. The second asks now. Deciding, operation by operation, what must be saved for the backward pass and what may be dropped or overwritten is **memory planning**. With it, the bias can be added to $Z_1$ in place and $\tanh$ taken in place on top, and the layer holds one array where it held three.
+
+        **Letting go.** When is the graph freed? When nothing refers to it. In a training loop the name `L` is bound to a new loss each step, and the old graph is released at that moment. Two habits defeat this. Appending `L` to a list, to plot the loss later, keeps every graph of the run alive: append `float(L.data)`. And holding the old `L` while the next forward pass runs means that two graphs exist at once at the peak.
+
+        The engine can do better than wait. Once a node has handed its shares to its parents during the backward pass, its pulls will never be called again. Setting `v.parents = ()` at that point drops the node's references, and its operands can be freed while the backward pass is still running, layer by layer from the output down.
+
+        ```python
+        def backward(node):
+            node.grad = np.ones(node.data.shape)
+            for v in topological(node)[::-1]:
+                for parent, pull in v.parents:
+                    parent.grad = parent.grad + pull(v.grad)
+                v.parents = ()
+        ```
+
+        The graph is consumed by its own backward pass. A second backward pass from the same loss then finds no parents and does nothing. Frameworks do the same and raise an error on the second attempt, unless asked to retain the graph, which is what the higher-order gradients of the last lesson require.
+    - question:
+        id: derivation-keep
+        type: choice
+        system: s2
+        prompt: |
+          In $H = \tanh(XW + \mathbf{b})$, computed as `Z1 = X @ W`, `Z2 = Z1 + b`, `H = Z2.tanh()`, which of these arrays could be overwritten after the forward pass without changing any gradient?
+        options:
+          - '$X$, because it is data and not a parameter.'
+          - '$Z_1$ and $Z_2$. The addition''s pulls read only shapes, and the pull of $\tanh$ reads its result $H$ and not its operand $Z_2$.'
+          - '$H$, because it is the output.'
+          - '$W$, because its gradient does not depend on its own value.'
+        answer: 1
+        explanation: |
+          $X$ is read by the product's pull for $W$, which is $X^\top G$: that is the puzzle. $W$ is read by the product's pull for $X$, which is $G W^\top$, and that matters whenever $X$ is itself the output of an earlier layer. $H$ is read by the pull of $\tanh$, as $1 - H^2$. That leaves $Z_1$, which only the addition uses, and $Z_2$, which only $\tanh$ uses as an operand. Neither value appears in any pull.
+    - text: |
+        **Catching an unsafe write.** The engine cannot stop Python from writing into an array. It can make its own in-place operations leave a mark. Give every tensor a **version**, a counter that starts at 0 and goes up by one each time the tensor is changed in place:
+
+        ```python
+        def add_(self, other):
+            self.data += other.data
+            self.version += 1
+            return self
+        ```
+
+        The trailing underscore is the usual sign of an operation that changes its tensor. Now a pull that will need a tensor's values notes the version at the time of the forward pass, and checks it when it comes to read:
+
+        ```python
+        def guard(t):
+            version = t.version
+
+            def read():
+                if t.version != version:
+                    raise RuntimeError("a value needed by the backward pass was changed in place")
+                return t.data
+
+            return read
+        ```
+
+        `guard(t)` is called during the forward pass and returns a function. Calling that function later gives `t.data` if the tensor is as it was, and raises if it has been changed since. The product uses it for both operands:
+
+        ```python
+        def __mul__(self, other):
+            a, b = guard(self), guard(other)
+            return Tensor(self.data * other.data, ((self, lambda g: g * b()), (other, lambda g: g * a())))
+        ```
+
+        An addition takes no guard, because its pulls read no values. So changing a tensor in place is **allowed** when only additions have used it and **reported** when a product has. The check costs one integer for each saved value. It turns the worst kind of bug, a wrong number with no error, into the best kind, an error at the line that tried to use the stale value.
+
+        **Safe and unsafe.** An in-place write is safe when no pull that is still to run will read the old values.
+
+        - The optimiser's update after the backward pass: safe. The graph has been walked. `p.data -= lr * p.grad` writes where `p.data = p.data - lr * p.grad` allocates a new array at every step.
+        - Adding into the result of a product, before a $\tanh$: safe, by the table above.
+        - Overwriting an operand of a product, or the result of a $\tanh$, before the backward pass: unsafe.
+        - Writing through a **view**, a slice or a reshape that shares memory with a tensor's array: as unsafe as writing to the array itself, and harder to see.
+
+        **One more alias.** The backward pass has had a small oddity since the lesson on tensors: it writes `parent.grad = parent.grad + share`, never `parent.grad += share`. The pulls of an addition return `g`, the very array that is the child's gradient. If a parent's gradient were ever that same array, adding into it in place would change the child's gradient too, and every other parent's that shared it. Making a new array each time is the price of never having to ask who else is holding this one.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order what happens when a version counter catches an unsafe in-place write.
+        steps:
+          - 'The forward pass computes a product, and its pulls note the current versions of both operands.'
+          - 'An in-place operation changes one operand and raises its version by one.'
+          - 'The backward pass reaches the product and calls the pull that needs that operand.'
+          - 'The pull compares the noted version with the current one, finds them different, and raises an error.'
+        explanation: The version is noted when the value is saved and checked when it is used. The write itself is not an error, since nothing may ever need the old value. The error comes only if a pull tries to read it.
+  formal:
+    - text: |
+        **Retention.** A node holds references to its parents through its pulls. Every array reachable from a node in this way is kept in memory for as long as the node is referred to.
+
+        **Memory of a graph.** The sum of the sizes in bytes of the arrays of its distinct nodes. An array of shape $(d_1, \dots, d_k)$ and item size $s$ occupies $s \, d_1 \cdots d_k$ bytes.
+
+        **Saved values.** For each operation, the set of arrays its pulls read. Sums, differences and reductions save shapes only. Products, of either kind, save both operands. Entry-wise functions whose derivative can be written in terms of the result, such as $\tanh$, save the result.
+
+        **In-place operation.** One that writes its result into the memory of an existing array. It is safe if no pull yet to be called reads the overwritten values.
+
+        **Version counter.** An integer on each tensor, incremented by every in-place operation on it. A pull records the version of each value it saves and raises an error if the version has changed when the value is read.
+
+        **Freeing.** After a node's shares have been distributed in a backward pass its pulls may be discarded. A graph freed in this way supports one backward pass.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-reference
+        type: choice
+        system: s1
+        prompt: |
+          What does a recorded pull keep of an operand whose values it will need?
+        options: ['A copy of the values', 'A reference to the tensor', 'Only its shape', 'Nothing']
+        answer: 1
+        explanation: It reads the array when the backward pass calls it, not before.
+    - question:
+        id: drill-direction
+        type: choice
+        system: s1
+        prompt: |
+          In the graph, which way do the references point?
+        options: ['From each node to its parents', 'From each node to its children', 'Both ways', 'From the leaves to the loss']
+        answer: 0
+        explanation: A result knows its operands. An operand does not know what was computed from it.
+    - question:
+        id: drill-alive
+        type: choice
+        system: s1
+        prompt: |
+          What keeps the whole graph of a forward pass in memory?
+        options: ['The parameters', 'Any reference to the loss node', 'The optimiser', 'The learning rate']
+        answer: 1
+        explanation: The loss refers to its parents, they to theirs, down to the leaves.
+    - question:
+        id: drill-bytes
+        type: numeric
+        system: s1
+        prompt: |
+          How many bytes does an array of shape `(1000, 500)` of 64-bit floats occupy?
+        answer: "4000000"
+        explanation: Half a million numbers at 8 bytes each.
+    - question:
+        id: drill-inplace
+        type: choice
+        system: s1
+        prompt: |
+          Which of these changes an existing NumPy array `x` in place?
+        options: ['`x = x + 1`', '`x += 1`', '`y = x * 2`', '`x = np.zeros(3)`']
+        answer: 1
+        explanation: The others make a new array and bind a name to it.
+    - question:
+        id: drill-add-needs
+        type: choice
+        system: s1
+        prompt: |
+          What do the pulls of $C = A + B$ read during the backward pass?
+        options: ['The values of $A$ and $B$', 'The values of $C$', 'Only shapes', 'The values of $A$ only']
+        answer: 2
+        explanation: Each operand's share is the incoming gradient, summed down to the operand's shape.
+    - question:
+        id: drill-mul-needs
+        type: choice
+        system: s1
+        prompt: |
+          What do the pulls of $C = A * B$ read?
+        options: ['The values of both operands', 'The values of $C$', 'Only shapes', 'Nothing']
+        answer: 0
+        explanation: The share of A is the gradient times B, and the share of B is the gradient times A.
+    - question:
+        id: drill-tanh-needs
+        type: choice
+        system: s1
+        prompt: |
+          What does the pull of $C = \tanh A$ read?
+        options: ['The values of $A$', 'The values of $C$', 'Only the shape of $A$', 'Both $A$ and $C$']
+        answer: 1
+        explanation: The local derivative is 1 minus C squared.
+    - question:
+        id: drill-version
+        type: choice
+        system: s1
+        prompt: |
+          What is a tensor's version counter for?
+        options: ['Counting backward passes', 'Detecting that the tensor was changed in place after a pull saved it', 'Numbering the layers', 'Counting how many nodes use the tensor']
+        answer: 1
+        explanation: The pull notes the version when it saves and compares when it reads.
+    - question:
+        id: drill-version-count
+        type: numeric
+        system: s1
+        prompt: |
+          A new tensor has `add_` called on it three times. What is its version?
+        answer: "3"
+        explanation: It starts at 0 and each in-place operation adds one.
+    - question:
+        id: drill-second-backward
+        type: choice
+        system: s1
+        prompt: |
+          A backward pass sets `v.parents = ()` on each node after its shares are handed out. What does a second backward pass from the same loss do to the leaves' gradients?
+        options: ['Doubles them', 'Nothing', 'Sets them to zero', 'Raises a `RuntimeError` in this engine']
+        answer: 1
+        explanation: The loss has no parents left, so no shares are handed out.
+    - question:
+        id: drill-history
+        type: choice
+        system: s1
+        prompt: |
+          A loop does `history.append(L)` at each step to plot the loss later. What does this do to memory?
+        options: ['Nothing of note: one number is stored at each step', 'Every step''s whole graph stays alive', 'It frees the graph sooner', 'It halves the memory in use']
+        answer: 1
+        explanation: The list refers to each loss node, and each loss node to its graph. Store the float.
+    - question:
+        id: predict-rebind
+        type: predict
+        system: s1
+        prompt: A new array against an in-place write, each with a second name on the original. What does this show?
+        code: |
+          import numpy as np
+
+          a = np.zeros(2)
+          b = a
+          a = a + 1
+          print(b.tolist())
+
+          c = np.zeros(2)
+          d = c
+          c += 1
+          print(d.tolist())
+        output: |
+          [0.0, 0.0]
+          [1.0, 1.0]
+        explanation: "`a = a + 1` builds a new array and moves the name `a` to it, so `b` still sees the old zeros. `c += 1` writes into the one array that both `c` and `d` name. A pull holding `d` would read changed values."
+    - question:
+        id: predict-closure
+        type: predict
+        system: s1
+        prompt: A pull that refers to an array, and a copy taken at the same moment. Then the array is changed in place. What does this show?
+        code: |
+          import numpy as np
+
+          x = np.array([1.0, 2.0, 3.0])
+          pull = lambda g: g * x
+          saved = x.copy()
+          x += 10
+          print(pull(np.ones(3)).tolist())
+          print(saved.tolist())
+        output: |
+          [11.0, 12.0, 13.0]
+          [1.0, 2.0, 3.0]
+        explanation: The function looks at `x` when it is called, and by then `x` holds the new numbers. The copy is a separate array and kept the old ones. An engine that copied every saved value would be safe and would double its memory.
+  work:
+    - text: Slower now. Each of these is about an array and who else is holding it.
+    - question:
+        id: write-free
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          The tensor class and `topological` are given. Write two functions.
+
+          `graph_bytes(node)` returns the total number of bytes of the `data` arrays of all the distinct tensors in the graph of `node`, the node itself included. A tensor used twice is counted once.
+
+          `backward(node)` is the usual backward pass, and it frees as it goes: once a tensor has handed its shares to its parents, set its `parents` to the empty tuple `()`.
+        starter: |
+          import numpy as np
+
+
+          class Tensor:
+              def __init__(self, data, parents=()):
+                  self.data = np.array(data) * 1.0
+                  self.parents = parents
+                  self.grad = np.zeros(self.data.shape)
+
+              def __add__(self, other):
+                  return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+              def __mul__(self, other):
+                  return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+              def sum(self):
+                  return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, pull in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          def graph_bytes(node):
+              # Replace the next line with your own.
+              return 0
+
+
+          def backward(node):
+              node.grad = np.ones(node.data.shape)
+              # Add the rest.
+
+
+          x = Tensor([1.0, 2.0, 3.0])
+          w = Tensor([0.5, 0.5, 0.5])
+          L = (x * w).sum()
+          before = graph_bytes(L)
+          backward(L)
+          print(before, graph_bytes(L), w.grad.tolist())
+        solution: |
+          import numpy as np
+
+
+          class Tensor:
+              def __init__(self, data, parents=()):
+                  self.data = np.array(data) * 1.0
+                  self.parents = parents
+                  self.grad = np.zeros(self.data.shape)
+
+              def __add__(self, other):
+                  return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+              def __mul__(self, other):
+                  return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+              def sum(self):
+                  return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, pull in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          def graph_bytes(node):
+              return sum(v.data.nbytes for v in topological(node))
+
+
+          def backward(node):
+              node.grad = np.ones(node.data.shape)
+              for v in topological(node)[::-1]:
+                  for parent, pull in v.parents:
+                      parent.grad = parent.grad + pull(v.grad)
+                  v.parents = ()
+
+
+          x = Tensor([1.0, 2.0, 3.0])
+          w = Tensor([0.5, 0.5, 0.5])
+          L = (x * w).sum()
+          before = graph_bytes(L)
+          backward(L)
+          print(before, graph_bytes(L), w.grad.tolist())
+        tests: |
+          import numpy as _np
+          _a = Tensor(_np.ones((4, 5)))
+          _b = Tensor(_np.full((4, 5), 2.0))
+          _s = _a + _b
+          _t = _s * _s
+          _u = (_t + _a).sum()
+          assert graph_bytes(_a) == 160, "A tensor of shape (4, 5) alone holds 160 bytes"
+          assert graph_bytes(_u) == 5 * 160 + 8, "This graph has five arrays of 160 bytes and one of 8: count each distinct tensor once, however often it is used"
+          _nodes = topological(_u)
+          backward(_u)
+          assert _np.allclose(_a.grad, 7.0) and _np.allclose(_b.grad, 6.0), "The gradients should still be right: for (a + b) squared plus a, at a = 1 and b = 2, they are 7 and 6. Hand out a tensor's shares before clearing its parents"
+          assert all(v.parents == () for v in _nodes), "After the backward pass every tensor's parents should be the empty tuple"
+          assert graph_bytes(_u) == 8, "After the backward pass the loss should hold on to nothing but its own array"
+          backward(_u)
+          assert _np.allclose(_a.grad, 7.0) and _np.allclose(_b.grad, 6.0), "A second backward pass on a freed graph should hand out nothing"
+          assert output.strip() == "80 8 [1.0, 2.0, 3.0]", "The program should print 80 8 [1.0, 2.0, 3.0]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def graph_bytes(node):
+                return node.data.nbytes + sum(graph_bytes(parent) for parent, pull in node.parents)
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+                    v.parents = ()
+
+
+            print("80 8 [1.0, 2.0, 3.0]")
+          - |
+            import numpy as np
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def graph_bytes(node):
+                return sum(v.data.size for v in topological(node))
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+                    v.parents = ()
+
+
+            print("80 8 [1.0, 2.0, 3.0]")
+          - |
+            import numpy as np
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def graph_bytes(node):
+                return sum(v.data.nbytes for v in topological(node))
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+
+
+            print("80 8 [1.0, 2.0, 3.0]")
+          - |
+            import numpy as np
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def graph_bytes(node):
+                return sum(v.data.nbytes for v in topological(node))
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    v.parents = ()
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+
+
+            print("80 8 [1.0, 2.0, 3.0]")
+          - |
+            import numpy as np
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def graph_bytes(node):
+                return sum(v.data.nbytes for v in topological(node))
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+                node.parents = ()
+
+
+            print("80 8 [1.0, 2.0, 3.0]")
+        explanation: |
+          `topological` already lists each distinct tensor once, so the memory of a graph is one sum over that list. The backward pass needs one added line, placed after the inner loop: when a tensor's shares have gone out, its pulls are finished with.
+
+          The list of tensors is made once, before any parents are cleared, so clearing as you go does not disturb the walk. Clearing before the inner loop throws the pulls away unused, and every gradient stays at zero. Clearing only the loss's parents cuts the graph loose at the top, which frees it just as well if nothing else refers to the tensors inside, and leaves them intact if anything does.
+
+          The recursive `graph_bytes` counts a tensor once for every path that leads to it, the same over-counting that made the first lesson's path sum expensive.
+
+          The program prints 80 bytes before and 8 after. Four arrays were being held for the sake of one number.
+    - question:
+        id: write-version
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Tensors have a `version`, which starts at 0. Write two things.
+
+          The method `add_(self, other)` adds `other.data` into `self.data` **in place**, raises `self.version` by one, and returns `self`.
+
+          The function `guard(t)` notes the tensor's current version and returns a function of no arguments. That function returns `t.data` if the version is unchanged, and otherwise raises `RuntimeError("a value needed by the backward pass was changed in place")`.
+
+          The product already uses `guard` for both of its operands.
+        starter: |
+          import numpy as np
+
+
+          def guard(t):
+              # Replace the next line with your own.
+              return lambda: t.data
+
+
+          class Tensor:
+              def __init__(self, data, parents=()):
+                  self.data = np.array(data) * 1.0
+                  self.parents = parents
+                  self.grad = np.zeros(self.data.shape)
+                  self.version = 0
+
+              def __add__(self, other):
+                  return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+              def __mul__(self, other):
+                  a, b = guard(self), guard(other)
+                  return Tensor(self.data * other.data, ((self, lambda g: g * b()), (other, lambda g: g * a())))
+
+              def sum(self):
+                  shape = self.data.shape
+                  return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(shape)),))
+
+              def add_(self, other):
+                  # Replace the next line with your own.
+                  return self
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, pull in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          def backward(node):
+              node.grad = np.ones(node.data.shape)
+              for v in topological(node)[::-1]:
+                  for parent, pull in v.parents:
+                      parent.grad = parent.grad + pull(v.grad)
+
+
+          x = Tensor([1.0, 2.0, 3.0])
+          w = Tensor([0.5, 0.5, 0.5])
+          L = (x * w).sum()
+          x.add_(Tensor([9.0, 18.0, 27.0]))
+          try:
+              backward(L)
+              print(w.grad.tolist())
+          except RuntimeError as error:
+              print("caught:", error)
+        solution: |
+          import numpy as np
+
+
+          def guard(t):
+              version = t.version
+
+              def read():
+                  if t.version != version:
+                      raise RuntimeError("a value needed by the backward pass was changed in place")
+                  return t.data
+
+              return read
+
+
+          class Tensor:
+              def __init__(self, data, parents=()):
+                  self.data = np.array(data) * 1.0
+                  self.parents = parents
+                  self.grad = np.zeros(self.data.shape)
+                  self.version = 0
+
+              def __add__(self, other):
+                  return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+              def __mul__(self, other):
+                  a, b = guard(self), guard(other)
+                  return Tensor(self.data * other.data, ((self, lambda g: g * b()), (other, lambda g: g * a())))
+
+              def sum(self):
+                  shape = self.data.shape
+                  return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(shape)),))
+
+              def add_(self, other):
+                  self.data += other.data
+                  self.version += 1
+                  return self
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, pull in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          def backward(node):
+              node.grad = np.ones(node.data.shape)
+              for v in topological(node)[::-1]:
+                  for parent, pull in v.parents:
+                      parent.grad = parent.grad + pull(v.grad)
+
+
+          x = Tensor([1.0, 2.0, 3.0])
+          w = Tensor([0.5, 0.5, 0.5])
+          L = (x * w).sum()
+          x.add_(Tensor([9.0, 18.0, 27.0]))
+          try:
+              backward(L)
+              print(w.grad.tolist())
+          except RuntimeError as error:
+              print("caught:", error)
+        tests: |
+          import numpy as _np
+          _t = Tensor([1.0, 2.0])
+          _arr = _t.data
+          _r = _t.add_(Tensor([10.0, 20.0]))
+          assert _r is _t, "add_ should return the tensor itself"
+          assert _t.data is _arr, "add_ should write into the existing array, not make a new one"
+          assert _arr.tolist() == [11.0, 22.0], "add_ should add the other tensor's data into this one's"
+          assert _t.version == 1, "add_ should raise the version by one"
+          _t.add_(Tensor([1.0, 1.0]))
+          assert _t.version == 2, "Each in-place operation should raise the version by one"
+          _read = guard(_t)
+          _got = None
+          try:
+              _got = _read()
+          except RuntimeError:
+              pass
+          assert _got is _t.data, "The function that guard returns should give the tensor's data while the version is unchanged since guard was called"
+          _t.add_(Tensor([1.0, 1.0]))
+          _raised = False
+          try:
+              _read()
+          except RuntimeError:
+              _raised = True
+          assert _raised, "After an in-place change, the function that guard returned should raise a RuntimeError"
+          _fresh = True
+          try:
+              guard(_t)()
+          except RuntimeError:
+              _fresh = False
+          assert _fresh, "A guard made after the change should read without complaint: note the version when guard is called"
+          _a = Tensor([1.0, 2.0]); _b = Tensor([3.0, 4.0])
+          _L = (_a * _b).sum()
+          backward(_L)
+          assert _a.grad.tolist() == [3.0, 4.0] and _b.grad.tolist() == [1.0, 2.0], "With no in-place change the backward pass should work as before"
+          _a = Tensor([1.0, 2.0]); _b = Tensor([3.0, 4.0])
+          _c = _a + _b
+          _L = (_c * _c).sum()
+          _a.add_(Tensor([5.0, 5.0]))
+          backward(_L)
+          assert _a.grad.tolist() == [8.0, 12.0], "Changing a tensor that only an addition has used is safe, and should not raise"
+          _a = Tensor([1.0, 2.0]); _b = Tensor([3.0, 4.0])
+          _L = (_a * _b).sum()
+          _b.add_(Tensor([1.0, 1.0]))
+          _raised = False
+          try:
+              backward(_L)
+          except RuntimeError:
+              _raised = True
+          assert _raised, "Changing an operand of a product in place before the backward pass should raise a RuntimeError"
+          assert output.strip() == "caught: a value needed by the backward pass was changed in place", "The program should print caught: a value needed by the backward pass was changed in place"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def guard(t):
+                version = t.version
+
+                def read():
+                    if t.version != version:
+                        raise RuntimeError("a value needed by the backward pass was changed in place")
+                    return t.data
+
+                return read
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+                    self.version = 0
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __mul__(self, other):
+                    a, b = guard(self), guard(other)
+                    return Tensor(self.data * other.data, ((self, lambda g: g * b()), (other, lambda g: g * a())))
+
+                def sum(self):
+                    shape = self.data.shape
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(shape)),))
+
+                def add_(self, other):
+                    self.data = self.data + other.data
+                    self.version += 1
+                    return self
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+
+
+            import numpy as np
+            print("caught: a value needed by the backward pass was changed in place")
+          - |
+            import numpy as np
+
+
+            def guard(t):
+                version = t.version
+
+                def read():
+                    if t.version != version:
+                        raise RuntimeError("a value needed by the backward pass was changed in place")
+                    return t.data
+
+                return read
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+                    self.version = 0
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __mul__(self, other):
+                    a, b = guard(self), guard(other)
+                    return Tensor(self.data * other.data, ((self, lambda g: g * b()), (other, lambda g: g * a())))
+
+                def sum(self):
+                    shape = self.data.shape
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(shape)),))
+
+                def add_(self, other):
+                    self.data += other.data
+                    return self
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+
+
+            import numpy as np
+            print("caught: a value needed by the backward pass was changed in place")
+          - |
+            import numpy as np
+
+
+            def guard(t):
+                def read():
+                    version = t.version
+                    if t.version != version:
+                        raise RuntimeError("a value needed by the backward pass was changed in place")
+                    return t.data
+
+                return read
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+                    self.version = 0
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __mul__(self, other):
+                    a, b = guard(self), guard(other)
+                    return Tensor(self.data * other.data, ((self, lambda g: g * b()), (other, lambda g: g * a())))
+
+                def sum(self):
+                    shape = self.data.shape
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(shape)),))
+
+                def add_(self, other):
+                    self.data += other.data
+                    self.version += 1
+                    return self
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+
+
+            import numpy as np
+            print("caught: a value needed by the backward pass was changed in place")
+          - |
+            import numpy as np
+
+
+            def guard(t):
+                def read():
+                    if t.version != 0:
+                        raise RuntimeError("a value needed by the backward pass was changed in place")
+                    return t.data
+
+                return read
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+                    self.version = 0
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __mul__(self, other):
+                    a, b = guard(self), guard(other)
+                    return Tensor(self.data * other.data, ((self, lambda g: g * b()), (other, lambda g: g * a())))
+
+                def sum(self):
+                    shape = self.data.shape
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(shape)),))
+
+                def add_(self, other):
+                    self.data += other.data
+                    self.version += 1
+                    return self
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+
+
+            import numpy as np
+            print("caught: a value needed by the backward pass was changed in place")
+        explanation: |
+          `add_` is three lines: `+=` on the array, which NumPy performs in place, one more on the version, and `return self`. `guard` reads the version into a local name **when it is called**, during the forward pass, and the function it returns compares that with the version it finds later.
+
+          The program is the puzzle again with the write done through `add_`. Where the puzzle printed a wrong gradient, this raises, and the message says what happened.
+
+          `self.data = self.data + other.data` is not in place. It makes a new array, and the old one, which the graph still holds, keeps its values. That happens to make the gradient right, and it bumps a version that then raises a false alarm. An `add_` that forgets the version disarms every guard. A guard that reads the version inside `read` compares the current version with itself. One that compares with 0 raises for any tensor that was ever changed, including one changed long before the product was computed.
+
+          The guard knows only about changes made through the engine's own operations. A write straight into `x.data` goes past it, which is one reason frameworks discourage reaching for the raw array.
+    - question:
+        id: fix-alias
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          To avoid allocating an array of zeros for every tensor, this engine starts each gradient at `None` and has the backward pass take the first share as it comes, adding later shares in place.
+
+          For $L = \sum \big((a + b) + a\big)$ the gradient of $a$ should be all 2 and the gradient of $b$ all 1. This prints 2 for both. Fix `backward`. Gradients should still start at `None`.
+        starter: |
+          import numpy as np
+
+
+          class Tensor:
+              def __init__(self, data, parents=()):
+                  self.data = np.array(data) * 1.0
+                  self.parents = parents
+                  self.grad = None
+
+              def __add__(self, other):
+                  return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+              def __mul__(self, other):
+                  return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+              def sum(self):
+                  return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, pull in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          def backward(node):
+              node.grad = np.ones(node.data.shape)
+              for v in topological(node)[::-1]:
+                  for parent, pull in v.parents:
+                      share = pull(v.grad)
+                      if parent.grad is None:
+                          parent.grad = share
+                      else:
+                          parent.grad += share
+
+
+          a = Tensor([1.0, 2.0])
+          b = Tensor([3.0, 4.0])
+          L = ((a + b) + a).sum()
+          backward(L)
+          print(a.grad.tolist(), b.grad.tolist())
+        solution: |
+          import numpy as np
+
+
+          class Tensor:
+              def __init__(self, data, parents=()):
+                  self.data = np.array(data) * 1.0
+                  self.parents = parents
+                  self.grad = None
+
+              def __add__(self, other):
+                  return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+              def __mul__(self, other):
+                  return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+              def sum(self):
+                  return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, pull in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          def backward(node):
+              node.grad = np.ones(node.data.shape)
+              for v in topological(node)[::-1]:
+                  for parent, pull in v.parents:
+                      share = pull(v.grad)
+                      if parent.grad is None:
+                          parent.grad = share
+                      else:
+                          parent.grad = parent.grad + share
+
+
+          a = Tensor([1.0, 2.0])
+          b = Tensor([3.0, 4.0])
+          L = ((a + b) + a).sum()
+          backward(L)
+          print(a.grad.tolist(), b.grad.tolist())
+        tests: |
+          import numpy as _np
+          _a = Tensor([1.0, 2.0]); _b = Tensor([3.0, 4.0])
+          assert _a.grad is None, "Gradients should still start at None"
+          _L = ((_a + _b) + _a).sum()
+          backward(_L)
+          assert _a.grad.tolist() == [2.0, 2.0], "The gradient of a should be all 2"
+          assert _b.grad.tolist() == [1.0, 1.0], "The gradient of b should be all 1: a share added in place must not change an array that another tensor's gradient shares"
+          _a = Tensor([1.0, 2.0]); _b = Tensor([3.0, 4.0]); _c = Tensor([5.0, 6.0])
+          _s = _a + _b
+          _L = (_s * _c + _a + _b).sum()
+          backward(_L)
+          assert _a.grad.tolist() == [6.0, 7.0] and _b.grad.tolist() == [6.0, 7.0] and _c.grad.tolist() == [4.0, 6.0], "For (a + b) c + a + b the gradients of a and b are c + 1 and that of c is a + b"
+          assert _s.grad.tolist() == [5.0, 6.0], "The gradient of an interior tensor should not be changed after it has been handed on"
+          _p = Tensor([2.0, 3.0])
+          _L = (_p * _p).sum()
+          backward(_L)
+          assert _p.grad.tolist() == [4.0, 6.0], "For the sum of squares the gradient is twice the input"
+          _q = Tensor([1.0, 1.0])
+          _m = _q + _q
+          _L = _m.sum()
+          backward(_L)
+          assert _q.grad.tolist() == [2.0, 2.0] and _m.grad.tolist() == [1.0, 1.0], "For q + q the gradient of q is 2 and the gradient of the sum's operand stays at 1"
+          assert output.strip() == "[2.0, 2.0] [1.0, 1.0]", "The program should print [2.0, 2.0] [1.0, 1.0]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = None
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        share = pull(v.grad)
+                        if parent.grad is None:
+                            parent.grad = share
+                        else:
+                            parent.grad += share
+
+
+            print("[2.0, 2.0] [1.0, 1.0]")
+          - |
+            import numpy as np
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = None
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        share = pull(v.grad)
+                        if parent.grad is None:
+                            parent.grad = share
+                        else:
+                            parent.grad = share
+
+
+            print("[2.0, 2.0] [1.0, 1.0]")
+          - |
+            import numpy as np
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = None
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        share = pull(v.grad)
+                        if parent.grad is None:
+                            parent.grad = share
+                        else:
+                            share += parent.grad
+                            parent.grad = share
+
+
+            print("[2.0, 2.0] [1.0, 1.0]")
+          - |
+            import numpy as np
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = None
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        share = pull(v.grad)
+                        if parent.grad is None:
+                            parent.grad = share
+                        else:
+                            parent.grad *= 0
+                            parent.grad += share + share
+
+
+            print("[2.0, 2.0] [1.0, 1.0]")
+        explanation: |
+          The pull of an addition returns `g`, the very array it was given. So when the backward pass reaches the outer sum, whose gradient is one array of ones, it gives that **same array** to both operands as their first share: the gradient of $a + b$ and the gradient of $a$ are now two names for one piece of memory, which is also the outer sum's own gradient.
+
+          Next the inner sum hands its gradient on. Its share for $a$ arrives where $a$ already has a gradient, so it is added in place. That write doubles the array, which is the inner sum's gradient too. The share then computed for $b$ is read from the doubled array, and $b$ receives 2.
+
+          `parent.grad = parent.grad + share` builds a new array for the total and leaves alone whatever the old one was shared with. Taking a copy of the first share, `share.copy()`, cures it as well, at the cost of the allocation the trick was meant to save.
+
+          **An in-place write is safe only if you know every name the array has.** A pull that returns its argument is an optimisation, and so is adding in place, and each is correct alone. The bug was in the two together. That is the usual shape of an aliasing bug, and it is why this cluster's backward pass has never used `+=`.
+    - question:
+        id: work-plan
+        type: numeric
+        system: s2
+        prompt: |
+          A network has 4 layers, each $H = \tanh(XW + \mathbf{b})$ computed as three operations with a new array for each result. Every layer is 256 units wide and the batch has 1,000 rows, in 64-bit floats. An engine with memory planning keeps, for each layer, only the one result that a pull will read. How many bytes of results does planning save over keeping all of them?
+        answer: "16384000"
+        explanation: |
+          One result is $1000 \times 256 \times 8 = 2{,}048{,}000$ bytes. Without planning each layer holds three, $Z_1$, $Z_2$ and $H$, so 12 arrays, 24,576,000 bytes. With planning each layer holds only $H$, the result of $\tanh$, which its own pull reads and which the next layer's product reads as an operand: 4 arrays, 8,192,000 bytes. The saving is 8 arrays, 16,384,000 bytes, two thirds of the total. The input batch and the weights are held either way.
+    - question:
+        id: work-safe
+        type: choice
+        system: s2
+        prompt: |
+          Which of these in-place writes, made after a forward pass and **before** its backward pass, changes a gradient?
+        options:
+          - 'Writing into $Z_1 = XW$, whose only use was as an operand of `Z1 + b`.'
+          - 'Writing into $H = \tanh(Z_2)$.'
+          - 'Writing into an array that no tensor of the graph refers to.'
+          - 'Writing into $Z_2 = Z_1 + \mathbf{b}$, whose only use was as the operand of $\tanh$.'
+        answer: 1
+        explanation: |
+          The pull of $\tanh$ computes $G \times (1 - H^2)$ from its result, so overwriting $H$ changes the local derivative that the backward pass will use. If a further layer took $H$ as an operand of a product, that pull would read the wrong values as well. $Z_1$ and $Z_2$ are read by no pull, as in the derivation: an addition needs shapes and $\tanh$ needs its result. This is why a framework can compute a function such as $\tanh$ or $\max(z, 0)$ in place on top of its operand, and why it refuses when the operand is something a product had saved.
+    - question:
+        id: work-history
+        type: choice
+        system: s2
+        prompt: |
+          A training loop runs for 10,000 steps and its memory use climbs steadily until it fails. Each step builds a graph holding 50 megabytes. The loop contains `losses.append(L)` for plotting. What is wrong, and what is the fix?
+        options:
+          - 'The optimiser is leaking velocities. Use momentum 0.'
+          - 'The list holds a reference to every loss node, and each loss node holds its whole graph through its parents. Nothing is ever freed. Append `float(L.data)`, a plain number with no parents.'
+          - 'The gradients are not being cleared. Call `zero_grad`.'
+          - 'NumPy does not free arrays. Nothing can be done.'
+        answer: 1
+        explanation: |
+          References run from results to operands, so one reference to the loss is a reference to everything beneath it. After 200 steps the list is keeping 10 gigabytes alive, in order to remember 200 numbers. Converting to a float takes the number and lets go of the node. The same leak appears in subtler forms: a running total kept as `total = total + L`, built with tensor operations, is a node whose graph contains every loss so far. A backward pass that clears parents as it goes makes the engine forgiving here, since the freed graphs hold nothing, but the habit to form is: **what leaves the training step should be a number, not a node.**
+    - question:
+        id: work-retain
+        type: choice
+        system: s2
+        prompt: |
+          An engine frees each node's pulls during the backward pass. Which task from this cluster does that break, so that an option to retain the graph is needed?
+        options:
+          - 'An ordinary training step.'
+          - 'Gradient checking with central differences.'
+          - 'Taking a second derivative: the first derivative is a graph built on the forward graph''s nodes, and a backward pass through it must call pulls that the first pass would have thrown away.'
+          - 'Momentum.'
+        answer: 2
+        explanation: |
+          A training step runs one backward pass and discards the graph, so freeing is pure gain. Gradient checking calls the function afresh for every nudge, building new graphs. A second derivative is different in kind. The first backward pass produces nodes whose parents include nodes of the forward graph, and the second backward pass walks through all of them. So the first pass must leave the forward graph whole. That is the memory cost flagged at the end of the last lesson, and the reason frameworks free by default and keep only on request.
+  connections:
+    - text: |
+        The gradient came out as $(10, 20, 30)$, the data of a batch that the loss never saw. The forward pass had recorded a **reference** to the array of $x$, and one line later the array was overwritten in place.
+
+        A graph keeps alive every array its pulls can reach, until nothing refers to its tip. That memory is usually larger than the parameters, and it scales with batch size and depth. **Memory planning** asks of each operation what its pulls actually read: shapes for sums, both operands for products, the result for $\tanh$. What no pull reads need not be kept, and the graph can be **freed as the backward pass consumes it**.
+
+        An **in-place** write saves an allocation and is safe exactly when no pending pull reads the old values. A **version counter** lets the engine enforce that for its own operations, turning a silently wrong gradient into an error. And two names for one array, an **alias**, can make even a harmless-looking `+=` corrupt a gradient.
+
+        The engine is finished. It records scalars and tensors, orders the graph, handles broadcasting, checks itself numerically, organises parameters, differentiates its own gradients and looks after its memory. Nothing in it is taken on trust. The last lesson of the cluster puts all of it to work on a problem that a single layer cannot solve: [[e6.training-an-mlp-on-your-own-engine]].
