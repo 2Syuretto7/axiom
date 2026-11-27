@@ -1,0 +1,641 @@
+concept: m8.eigenvalues-and-eigenvectors
+minutes: 90
+claim: You can say what an eigenvector and an eigenvalue of a linear map are, check a claimed pair, find the eigenvectors that belong to a known eigenvalue as a kernel, read off the eigenvectors of reflections, projections, shears and rotations from their geometry, predict what repeated application of a map does by splitting a vector into eigenvectors, and explain why eigenvectors for different eigenvalues are independent.
+recalls: [m6.adjoints-orthogonal-and-unitary-maps, m7.conditioning]
+uses: [m6.matrix-of-a-linear-map-and-similarity, m6.linear-maps-kernel-and-image, m6.rank-nullity-theorem, m5.determinant, m5.column-space-and-null-space, m5.identity-and-inverse, m5.change-of-basis, m4.linear-independence, m1.complex-numbers, e5.linear-algebra-routines, e5.axis-operations-and-reductions, e5.vectorisation, e0.functions, e0.loops]
+leads: [m8.characteristic-polynomial, m8.diagonalisation, m8.spectral-theorem, m8.perron-frobenius-and-power-iteration]
+starter: |
+  # Scratch space. Each year 10% of city dwellers move to the suburbs
+  # and 20% of suburb dwellers move to the city. x holds the two shares.
+  import numpy as np
+
+  A = np.array([[0.9, 0.2], [0.1, 0.8]])
+  for start in ([1.0, 0.0], [0.0, 1.0]):
+      x = np.array(start)
+      for _ in range(50):
+          x = A @ x
+      print([round(float(c), 4) for c in x])
+parts:
+  recall:
+    - text: |
+        [[m6.adjoints-orthogonal-and-unitary-maps]] ended with a question about the reflection that became $\operatorname{diag}(1, -1)$ in the right basis: how does one find such a basis for a given map? And [[m7.conditioning]] measured a matrix by how much it stretches different directions. Both lead to the same idea. Three quick pulls first.
+  puzzle:
+    - text: |
+        Each year a tenth of the people in a city move out to its suburbs, and a fifth of the people in the suburbs move in. If $\mathbf{x}$ holds the share of the population in each place, next year's shares are $A\mathbf{x}$ with
+
+        $$A = \begin{pmatrix} 0.9 & 0.2 \\ 0.1 & 0.8 \end{pmatrix}.$$
+
+        The starter runs fifty years, once starting with everybody in the city and once with everybody in the suburbs.
+
+        ```
+        [0.6667, 0.3333]
+        [0.6667, 0.3333]
+        ```
+
+        Opposite starting points, and the same end: two thirds in the city, one third in the suburbs. Check that this split does not move at all: $0.9 \cdot \tfrac23 + 0.2 \cdot \tfrac13 = \tfrac23$.
+
+        **Why does the map forget where it started? What is special about the direction $(2, 1)$, and where did the rest of each starting vector go?**
+  intuition:
+    - text: |
+        A matrix usually turns a vector as well as stretching it. $A$ sends $(1, 0)$ to $(0.9, 0.1)$, which points somewhere else.
+
+        But a few directions are not turned. $A$ sends $(2, 1)$ to $(2, 1)$, exactly. And it sends $(1, -1)$ to $(0.7, -0.7)$, the same direction, shrunk to seven tenths. Along these two lines the map does nothing but scale.
+
+        A nonzero vector that a map only scales is an **eigenvector** of the map, and the scale factor is its **eigenvalue**. Here the eigenvalues are $1$ and $0.7$.
+
+        Now the puzzle dissolves. Any starting vector is a combination of $(2, 1)$ and $(1, -1)$, since they are a basis of the plane. Apply $A$ fifty times. The part along $(2, 1)$ is multiplied by $1$ each time and stays. The part along $(1, -1)$ is multiplied by $0.7$ each time, and $0.7^{50}$ is about $0.00000002$. What remains is the part along $(2, 1)$.
+
+        In the basis of eigenvectors the matrix is $\operatorname{diag}(1, 0.7)$, and a diagonal matrix has no secrets. Eigenvectors are the answer to "in which basis is this map simple?", and eigenvalues are what the map looks like there.
+  derivation:
+    - text: |
+        **Definition.** Let $T: V \to V$ be linear. A scalar $\lambda$ is an **eigenvalue** of $T$ if there is a **nonzero** $\mathbf{v}$ with
+
+        $$T\mathbf{v} = \lambda\mathbf{v}.$$
+
+        Such a $\mathbf{v}$ is an **eigenvector** for $\lambda$. The zero vector is excluded, since $T\mathbf{0} = \lambda\mathbf{0}$ for every $\lambda$ and would make the definition empty. The eigenvalue may be zero: an eigenvector for $0$ is a nonzero vector of the kernel.
+
+        For a matrix: $A\mathbf{v} = \lambda\mathbf{v}$. The definition mentions no basis, so eigenvalues belong to the map. Similar matrices have the same eigenvalues, and if $B = P^{-1}AP$ and $A\mathbf{v} = \lambda\mathbf{v}$, then $P^{-1}\mathbf{v}$ is an eigenvector of $B$: the same vector in the other coordinates.
+
+        **Eigenspaces.** Rewrite $A\mathbf{v} = \lambda\mathbf{v}$ as $(A - \lambda I)\mathbf{v} = \mathbf{0}$. The eigenvectors for $\lambda$, together with $\mathbf{0}$, are
+
+        $$E_\lambda = \ker(A - \lambda I),$$
+
+        a subspace, the **eigenspace** of $\lambda$. Any nonzero multiple of an eigenvector is an eigenvector, so what matters is the line, or the larger subspace, and never one particular vector.
+
+        So $\lambda$ is an eigenvalue exactly when $A - \lambda I$ has a nonzero kernel, that is, when it is **not invertible**: $\det(A - \lambda I) = 0$. The next lesson turns that equation into a method. Today the eigenvalues will be given, or visible.
+
+        *Finding eigenvectors for a known eigenvalue.* For the puzzle and $\lambda = 0.7$:
+
+        $$A - 0.7I = \begin{pmatrix} 0.2 & 0.2 \\ 0.1 & 0.1 \end{pmatrix},$$
+
+        whose kernel is the line $x + y = 0$, spanned by $(1, -1)$.
+
+        **Examples from geometry.**
+
+        - *Reflection in a line.* Vectors on the mirror are kept, $\lambda = 1$. Vectors perpendicular to it are reversed, $\lambda = -1$.
+        - *Orthogonal projection onto a plane in space.* The plane is the eigenspace for $1$, of dimension 2. The normal line is the eigenspace for $0$.
+        - *Scaling by 3.* Every nonzero vector is an eigenvector, for $\lambda = 3$.
+        - *The shear $\begin{pmatrix} 1 & 1 \\ 0 & 1 \end{pmatrix}$.* Only the horizontal axis is kept in place. One eigenvalue, $1$, with a one-dimensional eigenspace. There is no basis of eigenvectors.
+        - *Rotation by a quarter turn.* Every direction is turned. No real eigenvectors at all.
+        - *A diagonal matrix.* The standard basis vectors are eigenvectors and the diagonal entries are the eigenvalues.
+    - question:
+        id: derivation-eigenvalue
+        type: numeric
+        system: s2
+        prompt: |
+          $\mathbf{v} = (1, 1)$ is an eigenvector of $A = \begin{pmatrix} 2 & 1 \\ 1 & 2 \end{pmatrix}$. What is its eigenvalue?
+        answer: "3"
+        explanation: |
+          $A\mathbf{v} = (2 + 1, 1 + 2) = (3, 3) = 3\mathbf{v}$. To find the eigenvalue of a known eigenvector, apply the matrix and compare. The other eigenvector is $(1, -1)$, with $A(1, -1) = (1, -1)$, eigenvalue 1. A matrix whose rows all add up to the same number $s$ always has the vector of ones as an eigenvector with eigenvalue $s$.
+    - text: |
+        **Powers.** If $A\mathbf{v} = \lambda\mathbf{v}$ then $A^2\mathbf{v} = A(\lambda\mathbf{v}) = \lambda^2\mathbf{v}$, and in general
+
+        $$A^k\mathbf{v} = \lambda^k\mathbf{v}.$$
+
+        If $\mathbf{x} = c_1\mathbf{v}_1 + \dots + c_n\mathbf{v}_n$ is a combination of eigenvectors, then by linearity
+
+        $$A^k\mathbf{x} = c_1\lambda_1^k\mathbf{v}_1 + \dots + c_n\lambda_n^k\mathbf{v}_n.$$
+
+        Each component evolves on its own, as a geometric sequence. Components with $|\lambda| < 1$ die away, those with $|\lambda| > 1$ grow, and in the long run the eigenvalue of largest absolute value dominates.
+
+        *The puzzle.* $(1, 0) = \tfrac13(2, 1) + \tfrac13(1, -1)$, so $A^k(1, 0) = \tfrac13(2, 1) + \tfrac13 \cdot 0.7^k\,(1, -1) \to (\tfrac23, \tfrac13)$. The start $(0, 1) = \tfrac13(2, 1) - \tfrac23(1, -1)$ has the same first coefficient, and the same limit.
+
+        **Other matrices built from $A$.** With $A\mathbf{v} = \lambda\mathbf{v}$: $(A + cI)\mathbf{v} = (\lambda + c)\mathbf{v}$, and if $A$ is invertible then $\lambda \ne 0$ and $A^{-1}\mathbf{v} = \lambda^{-1}\mathbf{v}$. The eigenvectors stay and the eigenvalues follow the formula.
+
+        **Theorem.** Eigenvectors belonging to distinct eigenvalues are linearly independent.
+
+        *Proof for two.* Let $A\mathbf{v}_1 = \lambda_1\mathbf{v}_1$, $A\mathbf{v}_2 = \lambda_2\mathbf{v}_2$ with $\lambda_1 \ne \lambda_2$, and suppose $c_1\mathbf{v}_1 + c_2\mathbf{v}_2 = \mathbf{0}$. Apply $A$: $c_1\lambda_1\mathbf{v}_1 + c_2\lambda_2\mathbf{v}_2 = \mathbf{0}$. Subtract $\lambda_2$ times the first equation: $c_1(\lambda_1 - \lambda_2)\mathbf{v}_1 = \mathbf{0}$. Since $\lambda_1 \ne \lambda_2$ and $\mathbf{v}_1 \ne \mathbf{0}$, $c_1 = 0$, and then $c_2 = 0$. The general case repeats the step by induction. $\blacksquare$
+
+        So an $n \times n$ matrix has at most $n$ eigenvalues, and if it has $n$ different ones, their eigenvectors form a basis.
+
+        **Complex eigenvalues.** The quarter turn $\begin{pmatrix} 0 & -1 \\ 1 & 0 \end{pmatrix}$ has no real eigenvector, but over $\mathbb{C}$ it has $(1, -i)$ with eigenvalue $i$, and $(1, i)$ with eigenvalue $-i$. Over the complex numbers every square matrix has at least one eigenvalue. That is the reason the last cluster took care to allow complex scalars.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the steps for predicting what many applications of a matrix do to a vector x, when a basis of eigenvectors is known.
+        steps:
+          - 'Write $\mathbf{x}$ as a combination of the eigenvectors, by solving a linear system.'
+          - 'Multiply each coefficient by its eigenvalue raised to the power $k$.'
+          - 'Recombine the eigenvectors with the new coefficients to get $A^k\mathbf{x}$.'
+          - 'For large $k$, discard the terms whose eigenvalue is smaller in absolute value than the largest.'
+          - 'What remains is a multiple of the dominant eigenvector.'
+        explanation: Decompose, scale each part independently, recombine. In the long run only the dominant part is visible.
+  formal:
+    - text: |
+        Let $V$ be a vector space over $F$ and $T \in \mathcal{L}(V, V)$.
+
+        **Eigenvalue, eigenvector.** $\lambda \in F$ is an eigenvalue of $T$ if $T\mathbf{v} = \lambda\mathbf{v}$ for some $\mathbf{v} \ne \mathbf{0}$, which is then an eigenvector. The set of eigenvalues is the **spectrum** of $T$.
+
+        **Eigenspace.** $E_\lambda = \ker(T - \lambda I)$. Its dimension is the **geometric multiplicity** of $\lambda$.
+
+        **Equivalences**, for finite-dimensional $V$: $\lambda$ is an eigenvalue $\iff$ $T - \lambda I$ is not injective $\iff$ $T - \lambda I$ is not invertible $\iff$ $\det(A - \lambda I) = 0$ for a matrix $A$ of $T$.
+
+        **Invariance.** If $B = P^{-1}AP$, then $A$ and $B$ have the same eigenvalues with the same geometric multiplicities, and $\mathbf{v} \mapsto P^{-1}\mathbf{v}$ carries $E_\lambda(A)$ onto $E_\lambda(B)$.
+
+        **Functions of a matrix.** If $A\mathbf{v} = \lambda\mathbf{v}$ then $p(A)\mathbf{v} = p(\lambda)\mathbf{v}$ for every polynomial $p$, and $A^{-1}\mathbf{v} = \lambda^{-1}\mathbf{v}$ when $A$ is invertible. $A$ is invertible if and only if 0 is not an eigenvalue.
+
+        **Independence.** Eigenvectors for pairwise distinct eigenvalues are linearly independent. Hence the sum of distinct eigenspaces is direct, and $T$ has at most $\dim V$ eigenvalues.
+
+        **Existence.** Over $\mathbb{C}$, every linear map on a nonzero finite-dimensional space has an eigenvalue. Over $\mathbb{R}$ this can fail.
+
+        **Triangular matrices.** The eigenvalues of a triangular matrix are its diagonal entries.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-definition
+        type: choice
+        system: s1
+        prompt: |
+          $\mathbf{v}$ is an eigenvector of $A$ when $\mathbf{v} \ne \mathbf{0}$ and
+        options: ['$A\mathbf{v} = \mathbf{0}$', '$A\mathbf{v} = \lambda\mathbf{v}$ for some scalar $\lambda$', '$A\mathbf{v} = \mathbf{v} + \lambda$', '$\mathbf{v}$ is a column of $A$']
+        answer: 1
+        explanation: The map only scales it.
+    - question:
+        id: drill-zero
+        type: choice
+        system: s1
+        prompt: |
+          Which of these can never be an eigenvector?
+        options: ['A vector of the kernel', 'The zero vector', 'A vector with negative entries', 'A unit vector']
+        answer: 1
+        explanation: It is excluded by definition. The eigenvalue may be zero, the eigenvector may not.
+    - question:
+        id: drill-check
+        type: numeric
+        system: s1
+        prompt: |
+          $A = \begin{pmatrix} 4 & 0 \\ 0 & 7 \end{pmatrix}$. What is the eigenvalue of the eigenvector $(0, 1)$?
+        answer: "7"
+        explanation: A diagonal matrix scales each axis by its diagonal entry.
+    - question:
+        id: drill-multiple
+        type: choice
+        system: s1
+        prompt: |
+          $\mathbf{v}$ is an eigenvector of $A$ with eigenvalue 5. Then $-2\mathbf{v}$ is
+        options: ['an eigenvector with eigenvalue $-10$', 'an eigenvector with eigenvalue 5', 'not an eigenvector', 'an eigenvector with eigenvalue $-2$']
+        answer: 1
+        explanation: $A(-2\mathbf{v}) = -2 \cdot 5\mathbf{v} = 5(-2\mathbf{v})$. Rescaling keeps the eigenvalue.
+    - question:
+        id: drill-eigenspace
+        type: choice
+        system: s1
+        prompt: |
+          The eigenspace of $\lambda$ is the kernel of
+        options: ['$A$', '$A - \lambda I$', '$A + \lambda I$', '$\lambda A$']
+        answer: 1
+        explanation: $A\mathbf{v} = \lambda\mathbf{v}$ rearranged.
+    - question:
+        id: drill-kernel
+        type: choice
+        system: s1
+        prompt: |
+          A nonzero vector in the kernel of $A$ is an eigenvector with eigenvalue
+        options: ['1', '0', '$-1$', 'none']
+        answer: 1
+        explanation: $A\mathbf{v} = \mathbf{0} = 0\mathbf{v}$.
+    - question:
+        id: drill-reflection
+        type: choice
+        system: s1
+        prompt: |
+          The eigenvalues of a reflection of the plane in a line are
+        options: ['$0$ and $1$', '$1$ and $-1$', '$1$ and $1$', 'none']
+        answer: 1
+        explanation: The mirror is kept and the perpendicular reversed.
+    - question:
+        id: drill-projection
+        type: choice
+        system: s1
+        prompt: |
+          The eigenvalues of an orthogonal projection onto a line in the plane are
+        options: ['$0$ and $1$', '$1$ and $-1$', '$0$ and $0$', '$2$ and $1$']
+        answer: 0
+        explanation: Vectors on the line are kept and vectors perpendicular to it are sent to zero.
+    - question:
+        id: drill-rotation
+        type: choice
+        system: s1
+        prompt: |
+          A rotation of the plane by a quarter turn has
+        options: ['two real eigenvectors', 'no real eigenvectors', 'every vector as an eigenvector', 'the eigenvalue 1']
+        answer: 1
+        explanation: Every direction is turned. Its eigenvalues are the complex numbers $i$ and $-i$.
+    - question:
+        id: drill-power
+        type: numeric
+        system: s1
+        prompt: |
+          $A\mathbf{v} = 2\mathbf{v}$. Then $A^5\mathbf{v} = c\,\mathbf{v}$ for which $c$?
+        answer: "32"
+        explanation: $2^5$.
+    - question:
+        id: drill-shift
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has the eigenvalue 4. Which eigenvalue does $A - 3I$ have for the same eigenvector?
+        answer: "1"
+        explanation: $(A - 3I)\mathbf{v} = 4\mathbf{v} - 3\mathbf{v}$.
+    - question:
+        id: drill-inverse
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ is invertible with the eigenvalue 4. Which eigenvalue does $A^{-1}$ have for the same eigenvector?
+        answer: "0.25"
+        explanation: Undoing a scaling by 4 is a scaling by a quarter.
+    - question:
+        id: drill-independent
+        type: choice
+        system: s1
+        prompt: |
+          Eigenvectors that belong to different eigenvalues are always
+        options: ['orthogonal', 'linearly independent', 'of the same length', 'parallel']
+        answer: 1
+        explanation: Orthogonality needs more, as a later lesson shows. Independence is automatic.
+    - question:
+        id: predict-check
+        type: predict
+        system: s1
+        prompt: The matrix of the puzzle, applied to three vectors. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[0.9, 0.2], [0.1, 0.8]])
+          for v in ([2.0, 1.0], [1.0, -1.0], [1.0, 0.0]):
+              print([round(float(c), 4) for c in A @ np.array(v)])
+        output: |
+          [2.0, 1.0]
+          [0.7, -0.7]
+          [0.9, 0.1]
+        explanation: (2, 1) comes back unchanged, eigenvalue 1. (1, -1) comes back multiplied by 0.7. (1, 0) is turned, so it is not an eigenvector.
+    - question:
+        id: predict-eigvals
+        type: predict
+        system: s1
+        prompt: NumPy's eigenvalues of a matrix, of its square and of its inverse. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[2.0, 1.0], [1.0, 2.0]])
+          for M in (A, A @ A, np.linalg.inv(A)):
+              values = np.sort(np.linalg.eigvals(M).real)
+              print([round(float(c), 4) for c in values])
+        output: |
+          [1.0, 3.0]
+          [1.0, 9.0]
+          [0.3333, 1.0]
+        explanation: The eigenvalues of the square are the squares, and those of the inverse are the reciprocals, with the same eigenvectors. `eigvals` may return complex numbers even when the imaginary parts are zero, and `.real` drops them.
+  work:
+    - text: Slower now. In each task, an eigenvector is something the matrix can only scale.
+    - question:
+        id: write-check
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `eigenvalue_of(A, v)`. If the array `v` is an eigenvector of the square matrix `A`, return its eigenvalue as a float. If it is not, including when `v` is the zero vector, return `None`. A good candidate for the eigenvalue of any nonzero `v` is $\dfrac{\mathbf{v} \cdot A\mathbf{v}}{\mathbf{v} \cdot \mathbf{v}}$. Compare with `np.allclose`.
+        starter: |
+          import numpy as np
+
+
+          def eigenvalue_of(A, v):
+              return None
+
+
+          A = np.array([[0.9, 0.2], [0.1, 0.8]])
+          print(eigenvalue_of(A, np.array([2.0, 1.0])), eigenvalue_of(A, np.array([3.0, -3.0])), eigenvalue_of(A, np.array([1.0, 0.0])))
+        solution: |
+          import numpy as np
+
+
+          def eigenvalue_of(A, v):
+              if not np.any(v != 0):
+                  return None
+              lam = float(v @ A @ v) / float(v @ v)
+              if np.allclose(A @ v, lam * v):
+                  return round(lam, 10)
+              return None
+
+
+          A = np.array([[0.9, 0.2], [0.1, 0.8]])
+          print(eigenvalue_of(A, np.array([2.0, 1.0])), eigenvalue_of(A, np.array([3.0, -3.0])), eigenvalue_of(A, np.array([1.0, 0.0])))
+        tests: |
+          import numpy as _np
+          _A = _np.array([[0.9, 0.2], [0.1, 0.8]])
+          _r = eigenvalue_of(_A, _np.array([2.0, 1.0]))
+          assert _r is not None and abs(_r - 1.0) < 1e-8, "(2, 1) is an eigenvector of the puzzle's matrix with eigenvalue 1"
+          _r = eigenvalue_of(_A, _np.array([3.0, -3.0]))
+          assert _r is not None and abs(_r - 0.7) < 1e-8, "(3, -3) is an eigenvector with eigenvalue 0.7"
+          assert eigenvalue_of(_A, _np.array([1.0, 0.0])) is None, "(1, 0) is turned by the matrix, so it is not an eigenvector"
+          assert eigenvalue_of(_A, _np.array([0.0, 0.0])) is None, "The zero vector is never an eigenvector"
+          _P = _np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]])
+          _r = eigenvalue_of(_P, _np.array([0.0, 0.0, 5.0]))
+          assert _r is not None and abs(_r) < 1e-8, "A nonzero vector of the kernel is an eigenvector with eigenvalue 0, which is not the same as None"
+          _r = eigenvalue_of(_np.array([[0.0, 1.0], [1.0, 0.0]]), _np.array([1.0, -1.0]))
+          assert _r is not None and abs(_r + 1.0) < 1e-8, "Swapping coordinates reverses (1, -1): eigenvalue -1"
+          assert eigenvalue_of(_np.array([[0.0, -1.0], [1.0, 0.0]]), _np.array([1.0, 0.0])) is None, "A quarter turn has no real eigenvectors"
+          _r = eigenvalue_of(_np.array([[4.0, 0.0], [0.0, 7.0]]), _np.array([0.0, 1.0]))
+          assert _r is not None and abs(_r - 7.0) < 1e-8, "(0, 1) is an eigenvector of diag(4, 7) with eigenvalue 7, although its first entry is zero"
+          assert output.strip() == "1.0 0.7 None", "The program should print 1.0 0.7 None"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def eigenvalue_of(A, v):
+                if not np.any(v != 0):
+                    return None
+                return round(float(v @ A @ v) / float(v @ v), 10)
+
+
+            print("1.0 0.7 None")
+          - |
+            import numpy as np
+
+
+            def eigenvalue_of(A, v):
+                lam = float(v @ A @ v) / float(v @ v + 1e-300)
+                if np.allclose(A @ v, lam * v):
+                    return round(lam, 10)
+                return None
+
+
+            print("1.0 0.7 None")
+          - |
+            import numpy as np
+
+
+            def eigenvalue_of(A, v):
+                if not np.any(v != 0):
+                    return None
+                lam = float(v @ A @ v) / float(v @ v)
+                if lam != 0 and np.allclose(A @ v, lam * v):
+                    return round(lam, 10)
+                return None
+
+
+            print("1.0 0.7 None")
+          - |
+            import numpy as np
+
+
+            def eigenvalue_of(A, v):
+                if not np.any(v != 0):
+                    return None
+                lam = float((A @ v)[0]) / float(v[0]) if v[0] != 0 else 0.0
+                if np.allclose(A @ v, lam * v):
+                    return round(lam, 10)
+                return None
+
+
+            print("1.0 0.7 None")
+        explanation: |
+          The definition has two parts and the function checks both: the vector is not zero, and the matrix sends it to a multiple of itself.
+
+          The quotient $\dfrac{\mathbf{v} \cdot A\mathbf{v}}{\mathbf{v} \cdot \mathbf{v}}$ is the coefficient of the projection of $A\mathbf{v}$ onto $\mathbf{v}$. If $A\mathbf{v}$ is a multiple of $\mathbf{v}$ at all, it is that multiple. The first wrong version returns the quotient without checking, and so reports an "eigenvalue" for every vector. This quotient has a name, the Rayleigh quotient, and a lesson of its own later in the cluster.
+
+          Zero is a legitimate eigenvalue and `None` is not a number, so the two must be kept apart. The third wrong version confuses them. The last divides first entries and fails for eigenvectors whose first entry is zero.
+    - question:
+        id: write-evolve
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `evolve(A, x, k)`: the vector $A^k\mathbf{x}$, computed without repeated multiplication. Use `values, vectors = np.linalg.eig(A)`, which returns the eigenvalues and a matrix whose **columns** are eigenvectors. Express `x` in the eigenvectors with `np.linalg.solve`, multiply each coefficient by its eigenvalue to the power `k`, and recombine. Return the `.real` part of the result, since NumPy may work in complex numbers. You may assume the eigenvectors form a basis.
+        starter: |
+          import numpy as np
+
+
+          def evolve(A, x, k):
+              return x * 1.0
+
+
+          A = np.array([[0.9, 0.2], [0.1, 0.8]])
+          print([round(float(c), 4) for c in evolve(A, np.array([1.0, 0.0]), 3)])
+          print([round(float(c), 4) for c in evolve(A, np.array([1.0, 0.0]), 1000)])
+        solution: |
+          import numpy as np
+
+
+          def evolve(A, x, k):
+              values, vectors = np.linalg.eig(A)
+              c = np.linalg.solve(vectors, x)
+              return (vectors @ (values ** k * c)).real
+
+
+          A = np.array([[0.9, 0.2], [0.1, 0.8]])
+          print([round(float(c), 4) for c in evolve(A, np.array([1.0, 0.0]), 3)])
+          print([round(float(c), 4) for c in evolve(A, np.array([1.0, 0.0]), 1000)])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[0.9, 0.2], [0.1, 0.8]])
+          _x = _np.array([1.0, 0.0])
+          assert _np.allclose(evolve(_A, _x, 0), _x), "Zero steps should return x itself"
+          assert _np.allclose(evolve(_A, _x, 1), _A @ _x), "One step should equal A @ x"
+          assert _np.allclose(evolve(_A, _x, 3), _A @ _A @ _A @ _x), "Three steps should equal A @ A @ A @ x, which is (0.781, 0.219)"
+          assert _np.allclose(evolve(_A, _np.array([0.0, 1.0]), 1000), [2 / 3, 1 / 3]), "After many steps every starting split tends to (2/3, 1/3)"
+          _B = _np.array([[2.0, 1.0], [1.0, 2.0]])
+          assert _np.allclose(evolve(_B, _np.array([1.0, 0.0]), 5), [122.0, 121.0]), "For [[2, 1], [1, 2]] the fifth power applied to (1, 0) is (122, 121)"
+          _C = _np.array([[1.0, 2.0, 0.0], [0.0, 3.0, 0.0], [1.0, 0.0, 2.0]])
+          _y = _np.array([1.0, -1.0, 2.0])
+          assert _np.allclose(evolve(_C, _y, 4), _C @ _C @ _C @ _C @ _y), "The result should match repeated multiplication for a 3 by 3 matrix with eigenvalues 1, 2, 3"
+          assert output.strip() == "[0.781, 0.219]\n[0.6667, 0.3333]", "The program should print [0.781, 0.219] and then [0.6667, 0.3333]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def evolve(A, x, k):
+                values, vectors = np.linalg.eig(A)
+                c = np.linalg.solve(vectors, x)
+                return (vectors @ (values * k * c)).real
+
+
+            print("[0.781, 0.219]\n[0.6667, 0.3333]")
+          - |
+            import numpy as np
+
+
+            def evolve(A, x, k):
+                values, vectors = np.linalg.eig(A)
+                return (vectors @ (values ** k * x)).real
+
+
+            print("[0.781, 0.219]\n[0.6667, 0.3333]")
+          - |
+            import numpy as np
+
+
+            def evolve(A, x, k):
+                values, vectors = np.linalg.eig(A)
+                c = np.linalg.solve(vectors.T, x)
+                return (vectors.T @ (values ** k * c)).real
+
+
+            print("[0.781, 0.219]\n[0.6667, 0.3333]")
+          - |
+            import numpy as np
+
+
+            def evolve(A, x, k):
+                values, vectors = np.linalg.eig(A)
+                c = np.linalg.solve(vectors, x)
+                return (values ** k * c).real
+
+
+            print("[0.781, 0.219]\n[0.6667, 0.3333]")
+        explanation: |
+          Three lines, one for each step of the recipe: coordinates in the eigenvector basis, scale each by $\lambda^k$, back to standard coordinates. The cost does not depend on $k$. A thousand years of migration take the same work as three.
+
+          The second wrong version skips the change of coordinates and scales the entries of $\mathbf{x}$ itself, which would be right only if the standard basis vectors were the eigenvectors. The third uses the rows of the matrix NumPy returns as if they were the eigenvectors. They are the columns.
+
+          This is the function `power_in_basis` from the lesson on similarity, with the missing ingredient supplied: the basis in which the map is diagonal is the basis of eigenvectors.
+    - question:
+        id: fix-columns
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `steady_state(A)` should return the eigenvector of the largest eigenvalue, scaled so that its entries add up to 1. For the migration matrix that is $(\tfrac23, \tfrac13)$. It prints something else. Fix it.
+        starter: |
+          import numpy as np
+
+
+          def steady_state(A):
+              values, vectors = np.linalg.eig(A)
+              i = int(np.argmax(values.real))
+              v = vectors[i].real
+              return v / v.sum()
+
+
+          A = np.array([[0.9, 0.2], [0.1, 0.8]])
+          print([round(float(c), 4) for c in steady_state(A)])
+        solution: |
+          import numpy as np
+
+
+          def steady_state(A):
+              values, vectors = np.linalg.eig(A)
+              i = int(np.argmax(values.real))
+              v = vectors[:, i].real
+              return v / v.sum()
+
+
+          A = np.array([[0.9, 0.2], [0.1, 0.8]])
+          print([round(float(c), 4) for c in steady_state(A)])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[0.9, 0.2], [0.1, 0.8]])
+          _s = steady_state(_A)
+          assert _np.shape(_s) == (2,), "The steady state has one share for each place"
+          assert _np.allclose(_s, [2 / 3, 1 / 3]), "The eigenvector for eigenvalue 1 is a multiple of (2, 1), which scaled to sum 1 is (2/3, 1/3). The eigenvectors are the columns of the matrix that eig returns"
+          assert _np.allclose(_A @ _s, _s), "The steady state should not move when the matrix is applied"
+          _B = _np.array([[0.5, 0.25, 0.0], [0.5, 0.5, 0.5], [0.0, 0.25, 0.5]])
+          _t = steady_state(_B)
+          assert _np.allclose(_t, [0.25, 0.5, 0.25]), "For the three-state chain the steady state is (0.25, 0.5, 0.25)"
+          _C = _np.array([[0.2, 0.7], [0.8, 0.3]])
+          assert _np.allclose(steady_state(_C), [7 / 15, 8 / 15]), "For [[0.2, 0.7], [0.8, 0.3]] the steady state is (7/15, 8/15)"
+          assert output.strip() == "[0.6667, 0.3333]", "The program should print [0.6667, 0.3333]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def steady_state(A):
+                values, vectors = np.linalg.eig(A)
+                i = int(np.argmax(values.real))
+                v = vectors[i].real
+                return v / v.sum()
+
+
+            print("[0.6667, 0.3333]")
+          - |
+            import numpy as np
+
+
+            def steady_state(A):
+                values, vectors = np.linalg.eig(A)
+                i = int(np.argmin(values.real))
+                v = vectors[:, i].real
+                return v / v.sum()
+
+
+            print("[0.6667, 0.3333]")
+          - |
+            import numpy as np
+
+
+            def steady_state(A):
+                values, vectors = np.linalg.eig(A)
+                i = int(np.argmax(values.real))
+                v = vectors[:, i].real
+                return v
+
+
+            print("[0.6667, 0.3333]")
+          - |
+            import numpy as np
+
+
+            def steady_state(A):
+                values, vectors = np.linalg.eig(A.T)
+                i = int(np.argmax(values.real))
+                v = vectors[:, i].real
+                return v / v.sum()
+
+
+            print("[0.6667, 0.3333]")
+        explanation: |
+          `np.linalg.eig` returns the eigenvectors as the **columns** of its second result, so that `A @ vectors` equals `vectors * values`. `vectors[i]` is row `i`, which mixes one entry from each eigenvector and is an eigenvector of nothing.
+
+          Two further habits are in the function. NumPy promises no order for the eigenvalues, so the wanted one is located with `argmax` and never assumed to be first. And an eigenvector is only determined up to scale, and NumPy returns one of length 1, possibly with negative entries. Dividing by the sum fixes the scale that this problem cares about.
+
+          The steady state of a process that reshuffles a population each step is an eigenvector for eigenvalue 1. The last lesson of the cluster shows why such a process always has one, and why iterating finds it.
+    - question:
+        id: work-rotation
+        type: choice
+        system: s2
+        prompt: |
+          Why does a rotation of the plane by $40°$ have no real eigenvector, while every rotation of three-dimensional space about an axis has one?
+        options:
+          - 'Rotations never have eigenvectors in any dimension.'
+          - 'In the plane every nonzero vector is turned by $40°$, so none is sent to a multiple of itself. In space the vectors along the axis are not moved at all: they are eigenvectors with eigenvalue 1.'
+          - 'Because $3 \times 3$ matrices are always symmetric.'
+          - 'The plane rotation has the eigenvalue $\cos 40°$.'
+        answer: 1
+        explanation: |
+          The axis of a rotation in space is its eigenspace for the eigenvalue 1, and finding the axis of a given rotation matrix means solving $(R - I)\mathbf{v} = \mathbf{0}$. In the plane the eigenvalues of a rotation by $\theta$ are the complex numbers $\cos\theta \pm i\sin\theta$, of absolute value 1, which records that lengths are preserved while no real direction is. Real eigenvectors appear only for $\theta = 0$ and a half turn.
+    - question:
+        id: work-gradient-descent
+        type: numeric
+        system: s2
+        prompt: |
+          Gradient descent on a quadratic loss moves the error $\mathbf{e}$ by $\mathbf{e} \mapsto (I - \eta H)\mathbf{e}$ each step. $H$ has an eigenvector with eigenvalue 4, and the step size is $\eta = 0.1$. By what factor is the component of the error along that eigenvector multiplied at each step?
+        answer: "0.6"
+        explanation: |
+          If $H\mathbf{v} = 4\mathbf{v}$ then $(I - 0.1H)\mathbf{v} = (1 - 0.4)\mathbf{v}$. Along an eigenvector with eigenvalue $0.1$ the factor would be $0.99$: that component barely shrinks. And with eigenvalue 25 the factor is $-1.5$, so that component grows and the method diverges. Each eigen-direction of $H$ converges at its own rate, set by its eigenvalue. That one calculation is behind the choice of step sizes, the trouble with ill-conditioned losses, and most of what optimisers do about it.
+    - question:
+        id: work-independent
+        type: choice
+        system: s2
+        prompt: |
+          A $3 \times 3$ matrix is claimed to have the four different eigenvalues $1, 2, 3, 4$. Why is that impossible?
+        options:
+          - 'Eigenvalues of a $3 \times 3$ matrix must add up to 3.'
+          - 'Eigenvectors for different eigenvalues are linearly independent, so four different eigenvalues would give four independent vectors in a space of dimension 3.'
+          - 'Because the eigenvalues must be at most 3.'
+          - 'It is possible.'
+        answer: 1
+        explanation: |
+          Independence caps the number of distinct eigenvalues at the dimension. When the cap is reached, the $n$ eigenvectors are $n$ independent vectors in dimension $n$ and so a basis, and the map is diagonal in it. When there are fewer distinct eigenvalues, a basis of eigenvectors may or may not exist, as the scaling by 3 and the shear show: each has a single eigenvalue, and the first has plenty of eigenvectors while the second has too few.
+  connections:
+    - text: |
+        Fifty years of migration forgot the starting point because the starting vector was a combination of two **eigenvectors**, directions the map only scales. The part along $(2, 1)$, with **eigenvalue** 1, stayed. The part along $(1, -1)$, with eigenvalue $0.7$, was multiplied by $0.7$ fifty times and vanished.
+
+        The eigenvectors for $\lambda$ are the nonzero vectors of $\ker(A - \lambda I)$. On an eigenvector, powers, shifts and inverses of the matrix act as the same operations on the eigenvalue. Eigenvectors for different eigenvalues are independent, so there are at most $n$ eigenvalues. Some real matrices have none over the reals, and every matrix has one over the complex numbers.
+
+        Throughout this lesson the eigenvalues were handed over or were visible in the geometry. For a matrix met without warning, they have to be found. The condition is that $A - \lambda I$ fails to be invertible, and the determinant turns that condition into a polynomial equation in $\lambda$, whose roots are the eigenvalues and whose coefficients include two old friends, the trace and the determinant: [[m8.characteristic-polynomial]].
