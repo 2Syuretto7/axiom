@@ -1,0 +1,682 @@
+concept: m6.matrix-of-a-linear-map-and-similarity
+minutes: 90
+claim: You can write down the matrix of a linear map with respect to chosen bases by recording the coordinates of the images of the basis vectors, use it to compute the map on coordinates, show that composition of maps becomes multiplication of matrices, derive how the matrix of a map from a space to itself changes when the basis changes, say what it means for two matrices to be similar, and name quantities such as rank, trace and determinant that all matrices of one map share.
+recalls: [m6.rank-nullity-theorem]
+uses: [m6.linear-maps-kernel-and-image, m6.subspaces-sums-and-direct-sums, m6.fields-and-the-vector-space-axioms, m5.change-of-basis, m5.matrices-as-linear-maps, m5.matrix-multiplication-as-composition, m5.identity-and-inverse, m5.determinant, m5.rank, m5.basis-and-dimension, m4.projection-onto-a-vector, m1.polynomials, m10.differentiation-rules, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e5.indexing-and-slicing, e0.functions, e0.loops]
+leads: [m6.dual-spaces-and-the-transpose, m6.adjoints-orthogonal-and-unitary-maps, m8.eigenvalues-and-eigenvectors, m8.diagonalisation, m8.characteristic-polynomial]
+starter: |
+  # Scratch space. A is a reflection of the plane, in the standard basis.
+  # P holds a different basis as its columns: (2, 1) and (-1, 2).
+  # What does the same reflection look like in that basis?
+  import numpy as np
+
+  A = np.array([[0.6, 0.8], [0.8, -0.6]])
+  P = np.array([[2.0, -1.0], [1.0, 2.0]])
+  B = np.linalg.solve(P, A @ P)
+  print([[round(float(v), 4) + 0.0 for v in row] for row in B])
+parts:
+  recall:
+    - text: |
+        [[m6.rank-nullity-theorem]] handed two maps between spaces of polynomials to NumPy as matrices, and admitted that a basis had been chosen silently along the way. Today makes that choice explicit and studies what it changes. Three quick pulls first.
+  puzzle:
+    - text: |
+        The matrix
+
+        $$A = \begin{pmatrix} 0.6 & 0.8 \\ 0.8 & -0.6 \end{pmatrix}$$
+
+        is a reflection of the plane. Looking at its entries, it is hard to say across which line. The starter describes the same reflection in another basis, made of the vectors $(2, 1)$ and $(-1, 2)$.
+
+        ```
+        [[1.0, 0.0], [0.0, -1.0]]
+        ```
+
+        In that basis the matrix is as simple as a matrix can be. It says: the first basis vector is left alone, and the second is reversed. So the mirror is the line through $(2, 1)$, and the direction $(-1, 2)$, at right angles to it, is flipped.
+
+        Nothing about the reflection changed between the two matrices. The plane is the same, the mirror is the same, and every vector is sent to the same place as before. Only the description changed, and with it every entry.
+
+        **If one map has many matrices, one for each basis, how are they related to each other? And which properties of a matrix are properties of the map, and which are accidents of the basis?**
+  intuition:
+    - text: |
+        A linear map is fixed by what it does to a basis. A matrix is a table recording exactly that. To build it, two choices are needed: a basis of the space the map starts from, to list the inputs, and a basis of the space it lands in, to write the outputs down as numbers. Then
+
+        > **column $j$ of the matrix holds the coordinates of the image of the $j$th basis vector.**
+
+        In $\mathbb{R}^n$ with the standard bases this is what a matrix always was: its columns are where $\mathbf{e}_1, \dots, \mathbf{e}_n$ go. For other spaces, or other bases, the same recipe applies, with "coordinates" meaning coordinates in the chosen basis.
+
+        Change the bases and the table changes, though the map does not. A person is one person in a passport photograph and in an X-ray. To convert between two descriptions of a map from a space to itself, you need a dictionary between the two bases: the matrix $P$ whose columns are the new basis vectors written in the old basis. With it, the new description is
+
+        $$B = P^{-1}AP.$$
+
+        Read from right to left, as matrices act. A vector arrives in new coordinates. $P$ translates it into old coordinates. $A$ applies the map there. $P^{-1}$ translates the result back. Two matrices related in this way are called **similar**, and that means precisely that they are the same map, described twice.
+
+        The practical point is in the puzzle. Some bases suit a map far better than others. In the right one, a reflection is a diagonal matrix with entries $1$ and $-1$. Finding the basis that suits a given map is the whole programme of the next cluster.
+  derivation:
+    - text: |
+        **The matrix of a map.** Let $T: V \to W$ be linear, $\mathcal{B} = (\mathbf{b}_1, \dots, \mathbf{b}_n)$ a basis of $V$ and $\mathcal{C} = (\mathbf{c}_1, \dots, \mathbf{c}_m)$ a basis of $W$. Write each $T(\mathbf{b}_j)$ in the basis $\mathcal{C}$:
+
+        $$T(\mathbf{b}_j) = a_{1j}\mathbf{c}_1 + \dots + a_{mj}\mathbf{c}_m.$$
+
+        The $m \times n$ matrix $A = (a_{ij})$ is the matrix of $T$ with respect to $\mathcal{B}$ and $\mathcal{C}$. If $\mathbf{v}$ has coordinates $\mathbf{x}$ in $\mathcal{B}$, then $T(\mathbf{v})$ has coordinates $A\mathbf{x}$ in $\mathcal{C}$. The map acts on vectors, and the matrix does the same job on coordinates.
+
+        *Example: differentiation $D: P_2 \to P_2$, with the basis $1, x, x^2$ on both sides.* $D(1) = 0$, $D(x) = 1$, $D(x^2) = 2x$. In coordinates these are $(0, 0, 0)$, $(1, 0, 0)$ and $(0, 2, 0)$. So
+
+        $$A = \begin{pmatrix} 0 & 1 & 0 \\ 0 & 0 & 2 \\ 0 & 0 & 0 \end{pmatrix}.$$
+
+        To differentiate $3 + 5x - 4x^2$, multiply: $A(3, 5, -4) = (5, -8, 0)$, which is $5 - 8x$.
+
+        **Composition is multiplication.** If $S: W \to U$ has matrix $B$ and $T: V \to W$ has matrix $A$, with the same basis of $W$ used for both, then $S \circ T$ has matrix $BA$. This is why matrix multiplication is defined as it is. For instance $A^2$ above is the matrix of the second derivative, and $A^3 = 0$ because the third derivative of a quadratic vanishes.
+
+        **The same map in another basis.** Take a second basis of $P_2$: $1$, $1 + x$, $1 + x + x^2$. Compute the images and write them in the **new** basis:
+
+        - $D(1) = 0$.
+        - $D(1 + x) = 1$, which is the first new basis vector.
+        - $D(1 + x + x^2) = 1 + 2x = 2(1 + x) - 1$, which is $-1$ of the first and $2$ of the second.
+
+        $$B = \begin{pmatrix} 0 & 1 & -1 \\ 0 & 0 & 2 \\ 0 & 0 & 0 \end{pmatrix}.$$
+
+        **The rule.** Let $P$ be the matrix whose columns are the new basis vectors in old coordinates. Here
+
+        $$P = \begin{pmatrix} 1 & 1 & 1 \\ 0 & 1 & 1 \\ 0 & 0 & 1 \end{pmatrix}.$$
+
+        If $\mathbf{y}$ are the new coordinates of a vector, its old coordinates are $P\mathbf{y}$. The map takes old coordinates $P\mathbf{y}$ to old coordinates $AP\mathbf{y}$, and the new coordinates of that are $P^{-1}AP\mathbf{y}$. So
+
+        $$B = P^{-1}AP,$$
+
+        and one can check that this gives the matrix found by hand.
+
+        **Similarity.** Square matrices $A$ and $B$ are **similar** if $B = P^{-1}AP$ for some invertible $P$. Similarity is an equivalence relation, and each class is one linear map seen in all possible bases.
+    - question:
+        id: derivation-entry
+        type: numeric
+        system: s2
+        prompt: |
+          Use the basis $1,\ x,\ \tfrac12x^2$ of $P_2$ on both sides. In the matrix of differentiation with respect to this basis, what is the entry in row 2, column 3?
+        answer: "1"
+        explanation: |
+          Column 3 holds the coordinates of the image of the third basis vector: $D(\tfrac12x^2) = x$, which is the second basis vector, so the column is $(0, 1, 0)$. The whole matrix has ones just above the diagonal and zeros elsewhere. Rescaling one basis vector has turned the entry 2 into a 1. Entries of a matrix are facts about the map **and** the basis together.
+    - text: |
+        **What does not change.** A property that all similar matrices share belongs to the map. Such properties are called **invariants**.
+
+        *Rank.* $P$ and $P^{-1}$ are isomorphisms, so they preserve dimensions of images. The rank of the matrix is the dimension of the image of the map, whatever the basis.
+
+        *Determinant.* $\det(P^{-1}AP) = \det(P^{-1})\det(A)\det(P) = \det A$. The factor by which a map scales volume does not depend on how the map is written down.
+
+        *Trace.* The trace is the sum of the diagonal entries. For any two square matrices of the same size, $\operatorname{tr}(XY) = \operatorname{tr}(YX)$: both are the sum of all products $x_{ij}y_{ji}$. Hence $\operatorname{tr}(P^{-1}AP) = \operatorname{tr}(APP^{-1}) = \operatorname{tr}A$.
+
+        For the reflection of the puzzle: both matrices have trace 0, determinant $-1$ and rank 2. For differentiation: both have trace 0, determinant 0 and rank 2.
+
+        *Not invariant:* individual entries, symmetry, the number of zeros, whether the matrix is diagonal.
+
+        **Sharing invariants is not enough.** The matrices $I = \begin{pmatrix} 1 & 0 \\ 0 & 1 \end{pmatrix}$ and $J = \begin{pmatrix} 1 & 1 \\ 0 & 1 \end{pmatrix}$ have the same rank, trace and determinant. They are not similar: $P^{-1}IP = I$ for every $P$, so the identity matrix is similar only to itself. The identity map is the identity in every basis, and $J$ is a shear, which moves things.
+
+        **Maps between different spaces.** When $T: V \to W$ and the bases of $V$ and $W$ can be chosen separately, the rule is $B = Q^{-1}AP$ with two independent dictionaries. That is far more freedom, and the proof of rank-nullity shows how much: bases can be chosen so that the matrix has ones in the first $r$ diagonal places and zeros everywhere else, where $r$ is the rank. Up to choice of bases, a linear map between two spaces is described by its rank alone. A map from a space **to itself** must use one basis for both input and output, and then far more than the rank survives.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order what the product P inverse times A times P does to the new coordinates of a vector, where the columns of P are the new basis vectors in old coordinates.
+        steps:
+          - 'Start with the coordinates of the vector in the new basis.'
+          - 'Multiply by $P$ to get its coordinates in the old basis.'
+          - 'Multiply by $A$ to apply the map, in old coordinates.'
+          - 'Multiply by $P^{-1}$ to convert the result to new coordinates.'
+          - 'The result is the coordinates of the image in the new basis.'
+        explanation: Matrices act from right to left. The product translates, applies, and translates back, which is why the new matrix is P inverse A P and not P A P inverse.
+  formal:
+    - text: |
+        Let $V, W$ be finite-dimensional with bases $\mathcal{B} = (\mathbf{b}_j)$ and $\mathcal{C} = (\mathbf{c}_i)$, and write $[\mathbf{v}]_\mathcal{B}$ for the coordinate vector of $\mathbf{v}$.
+
+        **Matrix of a map.** $[T]_{\mathcal{C}\mathcal{B}}$ is the matrix whose $j$th column is $[T(\mathbf{b}_j)]_\mathcal{C}$. It is the unique matrix with $[T(\mathbf{v})]_\mathcal{C} = [T]_{\mathcal{C}\mathcal{B}}[\mathbf{v}]_\mathcal{B}$ for all $\mathbf{v}$. The assignment $T \mapsto [T]_{\mathcal{C}\mathcal{B}}$ is an isomorphism from $\mathcal{L}(V, W)$ to $F^{m \times n}$.
+
+        **Composition.** $[S \circ T]_{\mathcal{D}\mathcal{B}} = [S]_{\mathcal{D}\mathcal{C}}[T]_{\mathcal{C}\mathcal{B}}$. $T$ is invertible if and only if its matrix is, and then $[T^{-1}] = [T]^{-1}$.
+
+        **Change of basis.** For $T: V \to V$ with matrix $A$ in basis $\mathcal{B}$ and matrix $B$ in basis $\mathcal{B}'$, let $P$ have as columns the vectors of $\mathcal{B}'$ in $\mathcal{B}$-coordinates. Then $[\mathbf{v}]_\mathcal{B} = P[\mathbf{v}]_{\mathcal{B}'}$ and $B = P^{-1}AP$.
+
+        **Similarity.** $A \sim B$ if $B = P^{-1}AP$ for some invertible $P$. It is an equivalence relation. Two matrices are similar if and only if they represent the same linear map $V \to V$ in two bases.
+
+        **Invariants.** Similar matrices have the same rank, determinant and trace, and $A$ is invertible if and only if $B$ is. If $A \sim B$ then $A^k \sim B^k$ with the same $P$.
+
+        **Trace.** $\operatorname{tr}(XY) = \operatorname{tr}(YX)$ whenever both products are defined.
+
+        **Equivalence.** For $T: V \to W$, changing both bases gives $B = Q^{-1}AP$. Two $m \times n$ matrices are related in this way if and only if they have the same rank.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-column
+        type: choice
+        system: s1
+        prompt: |
+          Column $j$ of the matrix of a linear map holds
+        options: ['the $j$th basis vector', 'the coordinates of the image of the $j$th basis vector', 'the $j$th coordinate of every image', 'the kernel']
+        answer: 1
+        explanation: The table records where each basis vector goes.
+    - question:
+        id: drill-shape
+        type: choice
+        system: s1
+        prompt: |
+          $T$ goes from a space of dimension 4 to a space of dimension 3. What shape is its matrix?
+        options: ['4 by 3', '3 by 4', '4 by 4', '3 by 3']
+        answer: 1
+        explanation: One column for each input basis vector, one row for each output coordinate.
+    - question:
+        id: drill-derivative-column
+        type: choice
+        system: s1
+        prompt: |
+          In the basis $1, x, x^2$, what is the column of differentiation for the basis vector $x^2$?
+        options: ['$(0, 0, 2)$', '$(0, 2, 0)$', '$(2, 0, 0)$', '$(0, 0, 0)$']
+        answer: 1
+        explanation: $D(x^2) = 2x$, which is 2 of the second basis vector.
+    - question:
+        id: drill-compose
+        type: choice
+        system: s1
+        prompt: |
+          $S$ has matrix $B$ and $T$ has matrix $A$. The matrix of "first $T$, then $S$" is
+        options: ['$AB$', '$BA$', '$A + B$', '$B^{-1}A$']
+        answer: 1
+        explanation: The map applied first stands on the right.
+    - question:
+        id: drill-rule
+        type: choice
+        system: s1
+        prompt: |
+          The columns of $P$ are the new basis vectors in old coordinates. The matrix of the map in the new basis is
+        options: ['$PAP^{-1}$', '$P^{-1}AP$', '$PA$', '$P^\top AP$']
+        answer: 1
+        explanation: Translate to old, apply, translate back.
+    - question:
+        id: drill-coords
+        type: choice
+        system: s1
+        prompt: |
+          With the same $P$, a vector has new coordinates $\mathbf{y}$. Its old coordinates are
+        options: ['$P^{-1}\mathbf{y}$', '$P\mathbf{y}$', '$\mathbf{y}$', '$P^\top\mathbf{y}$']
+        answer: 1
+        explanation: A combination of the new basis vectors with weights $\mathbf{y}$.
+    - question:
+        id: drill-similar
+        type: choice
+        system: s1
+        prompt: |
+          Two matrices are similar when
+        options: ['they have the same entries in a different order', 'they represent the same map from a space to itself in two bases', 'they have the same shape', 'one is the transpose of the other']
+        answer: 1
+        explanation: $B = P^{-1}AP$.
+    - question:
+        id: drill-trace
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has trace 7. What is the trace of $P^{-1}AP$?
+        answer: "7"
+        explanation: Trace is invariant under similarity.
+    - question:
+        id: drill-det
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has determinant $-3$. What is the determinant of $P^{-1}AP$?
+        answer: "-3"
+        explanation: The determinants of $P$ and $P^{-1}$ cancel.
+    - question:
+        id: drill-identity
+        type: choice
+        system: s1
+        prompt: |
+          Which matrices are similar to the identity matrix?
+        options: ['All invertible matrices', 'Only the identity itself', 'All matrices with determinant 1', 'All diagonal matrices']
+        answer: 1
+        explanation: $P^{-1}IP = I$ for every $P$.
+    - question:
+        id: drill-entry
+        type: choice
+        system: s1
+        prompt: |
+          Which of these is **not** shared by all matrices of one map?
+        options: ['Rank', 'The entry in the top-left corner', 'Determinant', 'Trace']
+        answer: 1
+        explanation: Entries depend on the basis.
+    - question:
+        id: drill-reflection
+        type: choice
+        system: s1
+        prompt: |
+          In a basis made of a vector along the mirror and a vector perpendicular to it, a reflection of the plane has the matrix
+        options: ['$\begin{pmatrix} 0 & 1 \\ 1 & 0 \end{pmatrix}$', '$\begin{pmatrix} 1 & 0 \\ 0 & -1 \end{pmatrix}$', '$\begin{pmatrix} -1 & 0 \\ 0 & -1 \end{pmatrix}$', '$\begin{pmatrix} 1 & 0 \\ 0 & 1 \end{pmatrix}$']
+        answer: 1
+        explanation: The first vector is kept and the second reversed.
+    - question:
+        id: predict-invariants
+        type: predict
+        system: s1
+        prompt: A matrix, and the same map in another basis. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[2.0, 1.0], [0.0, 3.0]])
+          P = np.array([[1.0, 1.0], [1.0, 2.0]])
+          B = np.linalg.solve(P, A @ P)
+          print([[round(float(v), 4) + 0.0 for v in row] for row in B])
+          print(round(float(np.trace(A)), 4), round(float(np.trace(B)), 4))
+          print(round(float(np.linalg.det(A)), 4), round(float(np.linalg.det(B)), 4))
+        output: |
+          [[3.0, 2.0], [0.0, 2.0]]
+          5.0 5.0
+          6.0 6.0
+        explanation: Every entry on and above the diagonal changed, while the trace stayed 5 and the determinant stayed 6. `np.linalg.solve(P, A @ P)` computes P inverse times A P without forming the inverse.
+    - question:
+        id: predict-powers
+        type: predict
+        system: s1
+        prompt: The matrix of differentiation on quadratics, and its powers. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]])
+          p = np.array([3.0, 5.0, -4.0])
+          print((A @ p).tolist(), (A @ A @ p).tolist(), (A @ A @ A @ p).tolist())
+          print(int(np.linalg.matrix_rank(A)), int(np.linalg.matrix_rank(A @ A)))
+        output: |
+          [5.0, -8.0, 0.0] [-8.0, 0.0, 0.0] [0.0, 0.0, 0.0]
+          2 1
+        explanation: Multiplying the coordinates of 3 + 5x - 4x^2 by the matrix differentiates it. The square of the matrix is the second derivative and the cube is the third, which kills every quadratic. Composition of maps is multiplication of their matrices.
+  work:
+    - text: Slower now. The whole lesson is a matter of which translation goes on which side.
+    - question:
+        id: write-matrix-of
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `matrix_of(T, n)`. `T` is a function that takes an array of length `n` and returns an array, and it is linear. Return the matrix of `T` in the standard bases: column `j` is `T` applied to the `j`th standard basis vector. `np.eye(n)[j]` is that vector, and `np.stack(columns, axis=1)` assembles the columns.
+
+          The program applies it to differentiation on coefficient arrays of length 4.
+        starter: |
+          import numpy as np
+
+
+          def matrix_of(T, n):
+              return np.zeros((n, n))
+
+
+          def derivative(p):
+              return np.array([k * p[k] for k in range(1, len(p))])
+
+
+          print(matrix_of(derivative, 4).tolist())
+        solution: |
+          import numpy as np
+
+
+          def matrix_of(T, n):
+              return np.stack([T(np.eye(n)[j]) for j in range(n)], axis=1)
+
+
+          def derivative(p):
+              return np.array([k * p[k] for k in range(1, len(p))])
+
+
+          print(matrix_of(derivative, 4).tolist())
+        tests: |
+          import numpy as _np
+
+          def _d(p):
+              return _np.array([k * p[k] for k in range(1, len(p))])
+
+          _M = matrix_of(_d, 4)
+          assert _np.shape(_M) == (3, 4), "Differentiation takes four coefficients to three, so its matrix is 3 by 4: one column for each input basis vector"
+          assert _np.allclose(_M, [[0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 2.0, 0.0], [0.0, 0.0, 0.0, 3.0]]), "The matrix of differentiation on cubics has 1, 2, 3 just right of the diagonal: column j is the derivative of the jth power"
+          _A = _np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+          assert _np.allclose(matrix_of(lambda x: _A @ x, 2), _A), "For the map x -> A x the matrix should be A itself"
+          assert _np.allclose(matrix_of(lambda x: x[::-1] * 1.0, 3), [[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]]), "Reversing three entries has ones on the anti-diagonal"
+          assert _np.allclose(matrix_of(lambda x: _np.array([x.sum()]), 4), [[1.0, 1.0, 1.0, 1.0]]), "Summing four entries is the 1 by 4 matrix of ones"
+          _B = _np.random.default_rng(0).normal(size=(4, 5))
+          _x = _np.random.default_rng(1).normal(size=5)
+          assert _np.allclose(matrix_of(lambda x: _B @ x, 5) @ _x, _B @ _x), "The matrix times a vector should agree with the map applied to it"
+          assert output.strip() == "[[0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 2.0, 0.0], [0.0, 0.0, 0.0, 3.0]]", "The program should print the 3 by 4 matrix of differentiation"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def matrix_of(T, n):
+                return np.stack([T(np.eye(n)[j]) for j in range(n)], axis=0)
+
+
+            def derivative(p):
+                return np.array([k * p[k] for k in range(1, len(p))])
+
+
+            print("[[0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 2.0, 0.0], [0.0, 0.0, 0.0, 3.0]]")
+          - |
+            import numpy as np
+
+
+            def matrix_of(T, n):
+                return np.stack([T(np.ones(n)) for j in range(n)], axis=1)
+
+
+            def derivative(p):
+                return np.array([k * p[k] for k in range(1, len(p))])
+
+
+            print("[[0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 2.0, 0.0], [0.0, 0.0, 0.0, 3.0]]")
+          - |
+            import numpy as np
+
+
+            def matrix_of(T, n):
+                return np.stack([T(np.eye(n)[j]) for j in range(n - 1)], axis=1)
+
+
+            def derivative(p):
+                return np.array([k * p[k] for k in range(1, len(p))])
+
+
+            print("[[0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 2.0, 0.0], [0.0, 0.0, 0.0, 3.0]]")
+          - |
+            import numpy as np
+
+
+            def matrix_of(T, n):
+                return np.eye(n)
+
+
+            def derivative(p):
+                return np.array([k * p[k] for k in range(1, len(p))])
+
+
+            print("[[0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 2.0, 0.0], [0.0, 0.0, 0.0, 3.0]]")
+        explanation: |
+          One line: apply the map to each basis vector and stand the results side by side. This turns any linear function into its matrix by asking it $n$ questions.
+
+          Stacking along axis 0 puts the images in rows and returns the transpose. Feeding the vector of ones every time asks the same question $n$ times.
+
+          The recipe is useful well beyond polynomials. A piece of code that is known to be linear, but whose matrix nobody wrote down, such as a filter or the linear part of a network layer, can be turned into an explicit matrix this way, and then its rank, kernel and conditioning can be examined.
+    - question:
+        id: write-change-basis
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `coordinates(P, v)`: the columns of `P` are the vectors of a basis, and `v` is a vector in standard coordinates. Return its coordinates in that basis. Then write `in_basis(A, P)`: `A` is the matrix of a map in the standard basis. Return its matrix in the basis given by the columns of `P`. Use `np.linalg.solve` for both and do not form an inverse.
+        starter: |
+          import numpy as np
+
+
+          def coordinates(P, v):
+              return v * 1.0
+
+
+          def in_basis(A, P):
+              return A * 1.0
+
+
+          A = np.array([[0.6, 0.8], [0.8, -0.6]])
+          P = np.array([[2.0, -1.0], [1.0, 2.0]])
+          print([round(float(c), 4) + 0.0 for c in coordinates(P, np.array([3.0, 4.0]))])
+          print([[round(float(c), 4) + 0.0 for c in row] for row in in_basis(A, P)])
+        solution: |
+          import numpy as np
+
+
+          def coordinates(P, v):
+              return np.linalg.solve(P, v)
+
+
+          def in_basis(A, P):
+              return np.linalg.solve(P, A @ P)
+
+
+          A = np.array([[0.6, 0.8], [0.8, -0.6]])
+          P = np.array([[2.0, -1.0], [1.0, 2.0]])
+          print([round(float(c), 4) + 0.0 for c in coordinates(P, np.array([3.0, 4.0]))])
+          print([[round(float(c), 4) + 0.0 for c in row] for row in in_basis(A, P)])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[0.6, 0.8], [0.8, -0.6]])
+          _P = _np.array([[2.0, -1.0], [1.0, 2.0]])
+          _c = coordinates(_P, _np.array([3.0, 4.0]))
+          assert _np.shape(_c) == (2,), "The coordinates are one number for each basis vector"
+          assert _np.allclose(_c, [2.0, 1.0]), "(3, 4) is 2 times (2, 1) plus 1 times (-1, 2), so its coordinates are (2, 1): solve P y = v"
+          assert _np.allclose(coordinates(_P, _np.array([2.0, 1.0])), [1.0, 0.0]), "The first basis vector has coordinates (1, 0)"
+          assert _np.allclose(coordinates(_np.eye(3), _np.array([4.0, 5.0, 6.0])), [4.0, 5.0, 6.0]), "In the standard basis a vector is its own coordinates"
+          _B = in_basis(_A, _P)
+          assert _np.shape(_B) == (2, 2), "The matrix in the new basis has the shape of A"
+          assert _np.allclose(_B, [[1.0, 0.0], [0.0, -1.0]]), "In the basis (2, 1), (-1, 2) the reflection is the diagonal matrix with entries 1 and -1: P inverse times A times P"
+          _D = _np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]])
+          _Q = _np.array([[1.0, 1.0, 1.0], [0.0, 1.0, 1.0], [0.0, 0.0, 1.0]])
+          assert _np.allclose(in_basis(_D, _Q), [[0.0, 1.0, -1.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]]), "Differentiation in the basis 1, 1 + x, 1 + x + x^2 has rows (0, 1, -1), (0, 0, 2), (0, 0, 0)"
+          _M = _np.random.default_rng(0).normal(size=(4, 4))
+          _R = _np.random.default_rng(1).normal(size=(4, 4))
+          _v = _np.random.default_rng(2).normal(size=4)
+          assert _np.allclose(in_basis(_M, _R) @ coordinates(_R, _v), coordinates(_R, _M @ _v)), "Applying the new matrix to new coordinates should give the new coordinates of the image"
+          assert abs(float(_np.trace(in_basis(_M, _R)) - _np.trace(_M))) < 1e-9, "The trace should be the same in both bases"
+          assert output.strip() == "[2.0, 1.0]\n[[1.0, 0.0], [0.0, -1.0]]", "The program should print [2.0, 1.0] and then [[1.0, 0.0], [0.0, -1.0]]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def coordinates(P, v):
+                return P @ v
+
+
+            def in_basis(A, P):
+                return np.linalg.solve(P, A @ P)
+
+
+            print("[2.0, 1.0]\n[[1.0, 0.0], [0.0, -1.0]]")
+          - |
+            import numpy as np
+
+
+            def coordinates(P, v):
+                return P.T @ v
+
+
+            def in_basis(A, P):
+                return np.linalg.solve(P, A @ P)
+
+
+            print("[2.0, 1.0]\n[[1.0, 0.0], [0.0, -1.0]]")
+          - |
+            import numpy as np
+
+
+            def coordinates(P, v):
+                return np.linalg.solve(P, v)
+
+
+            def in_basis(A, P):
+                return P @ np.linalg.solve(P.T, A.T).T
+
+
+            print("[2.0, 1.0]\n[[1.0, 0.0], [0.0, -1.0]]")
+          - |
+            import numpy as np
+
+
+            def coordinates(P, v):
+                return np.linalg.solve(P, v)
+
+
+            def in_basis(A, P):
+                return P.T @ A @ P
+
+
+            print("[2.0, 1.0]\n[[1.0, 0.0], [0.0, -1.0]]")
+          - |
+            import numpy as np
+
+
+            def coordinates(P, v):
+                return np.linalg.solve(P, v)
+
+
+            def in_basis(A, P):
+                return np.linalg.solve(P, A)
+
+
+            print("[2.0, 1.0]\n[[1.0, 0.0], [0.0, -1.0]]")
+        explanation: |
+          $P\mathbf{y}$ turns new coordinates into old ones, so going the other way is solving $P\mathbf{y} = \mathbf{v}$. The matrix in the new basis is $P^{-1}(AP)$, and `solve` with the matrix `A @ P` on the right computes it column by column.
+
+          The third wrong version computes $PAP^{-1}$, the translations on the wrong sides. It is the matrix of some map in some basis, but not of this map in this basis. The fourth uses $P^\top$ where $P^{-1}$ belongs. Those agree only when the columns of $P$ are orthonormal, and here they are orthogonal but of length $\sqrt5$, so the result is the right matrix multiplied by 5. An orthonormal basis would have made the transpose correct, a convenience the last cluster dwelt on and the end of this one explains.
+    - question:
+        id: fix-order
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `power_in_basis(A, P, k)` is meant to compute the $k$th power of `A` cheaply when the columns of `P` are a basis in which the map is diagonal. It converts to that basis, raises the diagonal entries to the power `k`, and converts back. For the reflection of the puzzle and $k = 2$ the answer must be the identity, since reflecting twice does nothing. It prints something else. Fix it. One line needs to change.
+        starter: |
+          import numpy as np
+
+
+          def power_in_basis(A, P, k):
+              B = np.linalg.solve(P, A @ P)
+              powered = np.diag(np.diag(B) ** k)
+              return np.linalg.solve(P, powered @ P)
+
+
+          A = np.array([[0.6, 0.8], [0.8, -0.6]])
+          P = np.array([[2.0, -1.0], [1.0, 2.0]])
+          print([[round(float(v), 4) + 0.0 for v in row] for row in power_in_basis(A, P, 3)])
+        solution: |
+          import numpy as np
+
+
+          def power_in_basis(A, P, k):
+              B = np.linalg.solve(P, A @ P)
+              powered = np.diag(np.diag(B) ** k)
+              return P @ powered @ np.linalg.inv(P)
+
+
+          A = np.array([[0.6, 0.8], [0.8, -0.6]])
+          P = np.array([[2.0, -1.0], [1.0, 2.0]])
+          print([[round(float(v), 4) + 0.0 for v in row] for row in power_in_basis(A, P, 3)])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[0.6, 0.8], [0.8, -0.6]])
+          _P = _np.array([[2.0, -1.0], [1.0, 2.0]])
+          assert _np.allclose(power_in_basis(_A, _P, 1), _A), "The first power should be A itself: converting to the diagonal basis and back must undo each other"
+          assert _np.allclose(power_in_basis(_A, _P, 2), _np.eye(2)), "Reflecting twice is the identity"
+          assert _np.allclose(power_in_basis(_A, _P, 3), _A), "Reflecting three times is reflecting once"
+          _M = _np.array([[2.0, 1.0], [1.0, 2.0]])
+          _Q = _np.array([[1.0, 1.0], [1.0, -1.0]])
+          assert _np.allclose(power_in_basis(_M, _Q, 3), _M @ _M @ _M), "For [[2, 1], [1, 2]], diagonal in the basis (1, 1), (1, -1), the cube should equal the product of three copies: [[14, 13], [13, 14]]"
+          _S = _np.array([[4.0, -2.0], [1.0, 1.0]])
+          _R = _np.array([[2.0, 1.0], [1.0, 1.0]])
+          assert _np.allclose(power_in_basis(_S, _R, 4), _S @ _S @ _S @ _S), "For [[4, -2], [1, 1]], diagonal in the basis (2, 1), (1, 1), the fourth power should equal the product of four copies"
+          assert output.strip() == "[[0.6, 0.8], [0.8, -0.6]]", "The program should print [[0.6, 0.8], [0.8, -0.6]]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def power_in_basis(A, P, k):
+                B = np.linalg.solve(P, A @ P)
+                powered = np.diag(np.diag(B) ** k)
+                return np.linalg.solve(P, powered @ P)
+
+
+            print("[[0.6, 0.8], [0.8, -0.6]]")
+          - |
+            import numpy as np
+
+
+            def power_in_basis(A, P, k):
+                B = np.linalg.solve(P, A @ P)
+                powered = np.diag(np.diag(B) ** k)
+                return powered
+
+
+            print("[[0.6, 0.8], [0.8, -0.6]]")
+          - |
+            import numpy as np
+
+
+            def power_in_basis(A, P, k):
+                B = np.linalg.solve(P, A @ P)
+                powered = np.diag(np.diag(B) ** k)
+                return P @ powered @ P.T
+
+
+            print("[[0.6, 0.8], [0.8, -0.6]]")
+          - |
+            import numpy as np
+
+
+            def power_in_basis(A, P, k):
+                B = np.linalg.solve(P, A @ P)
+                powered = np.diag(np.diag(B) ** k)
+                return P @ powered
+
+
+            print("[[0.6, 0.8], [0.8, -0.6]]")
+        explanation: |
+          Going to the new basis is $B = P^{-1}AP$. Coming back is the reverse: $A = PBP^{-1}$. The function applied $P^{-1}(\,\cdot\,)P$ both times, which translates twice in the same direction and ends up in a third basis that nobody asked for.
+
+          With the return corrected, the function shows why a good basis is worth finding. $A^k = (PBP^{-1})^k = PB^kP^{-1}$, because the inner $P^{-1}P$ pairs cancel, and a power of a diagonal matrix is the powers of its entries. A thousandth power costs the same as a square. Everything depends on having a basis in which the map is diagonal. When such a basis exists, and how to find it, is the opening question of the next cluster.
+    - question:
+        id: work-not-similar
+        type: choice
+        system: s2
+        prompt: |
+          $I = \begin{pmatrix} 1 & 0 \\ 0 & 1 \end{pmatrix}$ and $J = \begin{pmatrix} 1 & 1 \\ 0 & 1 \end{pmatrix}$ have the same rank, trace and determinant. Are they similar?
+        options:
+          - 'Yes. Matrices with the same rank, trace and determinant are similar.'
+          - 'No. $P^{-1}IP = P^{-1}P = I$ for every invertible $P$, so the only matrix similar to $I$ is $I$. Equal invariants are necessary for similarity and not sufficient.'
+          - 'Yes, with $P = J$.'
+          - 'It depends on the field.'
+        answer: 1
+        explanation: |
+          The identity map is the identity in every basis, while $J$ is a shear that moves $(0, 1)$ to $(1, 1)$. To show that two matrices are **not** similar it is enough to find one invariant that differs. To show that they **are** similar one must produce $P$, or compare a complete set of invariants, and rank, trace and determinant are not complete. What a complete set looks like is settled at the far end of the next cluster.
+    - question:
+        id: work-trace
+        type: numeric
+        system: s2
+        prompt: |
+          A projection of $\mathbb{R}^5$ onto a 3-dimensional subspace has, in a suitable basis, a diagonal matrix with three ones and two zeros. What is the trace of its matrix in the standard basis?
+        answer: "3"
+        explanation: |
+          Take a basis whose first three vectors span the subspace and whose last two span the directions the projection kills. In it the matrix is diagonal with entries $1, 1, 1, 0, 0$, of trace 3. The trace is invariant, so the matrix in the standard basis has trace 3 as well, whatever its entries look like. This is the fact from the lesson on projection matrices, that the trace of a projection is the dimension of its subspace, now with a one-line reason.
+    - question:
+        id: work-why-inverse
+        type: choice
+        system: s2
+        prompt: |
+          A student writes the new matrix as $PAP^{-1}$, with the columns of $P$ the new basis in old coordinates. Reading the product from right to left, what does it do, and why is that wrong?
+        options:
+          - 'It is correct. The order does not matter.'
+          - '$P^{-1}$ would first turn old coordinates into new ones, but the input is already in new coordinates. Then $A$, which expects old coordinates, is applied to new ones. The translations are on the wrong sides: $P$ must come first, to bring new coordinates into the language $A$ understands, and $P^{-1}$ last.'
+          - 'It is wrong because $P$ is not invertible.'
+          - 'It is wrong because matrices cannot be multiplied in threes.'
+        answer: 1
+        explanation: |
+          Each matrix expects its input in a particular coordinate system. $A$ takes old to old. $P$ takes new to old. $P^{-1}$ takes old to new. The only way to chain them from new to new is $P^{-1}AP$. The formula $PAP^{-1}$ is the right one for the opposite convention, in which the columns of $P$ are the **old** basis in new coordinates. Both conventions appear in books, so the safe habit is to check the formula on a basis vector.
+    - question:
+        id: work-two-bases
+        type: choice
+        system: s2
+        prompt: |
+          For a map $T: V \to W$ between **different** spaces, with bases chosen freely on both sides, the matrix can always be brought to the form with $r$ ones on the diagonal and zeros elsewhere, where $r$ is the rank. Why is no such simple form available for a map $T: V \to V$?
+        options:
+          - 'It is available. Every square matrix is similar to such a form.'
+          - 'For a map from a space to itself the input and the output are described in the **same** basis, so there is one $P$ to choose and not two. That is what lets one speak of applying the map twice, or of a vector being sent to a multiple of itself, and it leaves much more of the map visible in the matrix than its rank.'
+          - 'Because square matrices have no rank.'
+          - 'Because $V$ has no basis.'
+        answer: 1
+        explanation: |
+          With two free bases the matrix records only how many dimensions survive. With one basis it must also record how the image sits relative to the input: a rotation and the identity both have full rank and are utterly different as maps of the plane to itself. Similarity is the finer relation, and its invariants, starting with trace and determinant, are what the spectral cluster extracts. If every square matrix were similar to the ones-and-zeros form, the identity and the reflection of the puzzle would be similar, and their traces, 2 and 0, say otherwise.
+  connections:
+    - text: |
+        A reflection had the entries $0.6, 0.8, 0.8, -0.6$ in one basis and $1, 0, 0, -1$ in another. The **matrix of a linear map** records, column by column, the coordinates of the images of the basis vectors, and it depends on the basis as much as on the map. Composition of maps becomes multiplication of matrices. For a map from a space to itself, changing basis by $P$ turns $A$ into $P^{-1}AP$, and matrices so related are **similar**: one map, two descriptions.
+
+        Rank, determinant and trace are the same for all of them and so belong to the map. Entries do not. The identity is similar only to itself, so sharing those three numbers is not enough.
+
+        The matrix of a map turns columns of coordinates into columns of coordinates. But a matrix has rows too, and each row is a recipe that turns a vector into a single number. Such recipes are themselves vectors, in a space attached to every vector space, and the transpose of a matrix, which has been used since the matrices cluster without ever being given a meaning independent of entries, turns out to be the matrix of a perfectly natural map between those spaces. That is the next lesson: [[m6.dual-spaces-and-the-transpose]].

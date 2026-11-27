@@ -1,0 +1,595 @@
+concept: m6.rank-nullity-theorem
+minutes: 80
+claim: You can state and prove that for a linear map on a finite-dimensional space the dimensions of the kernel and of the image add up to the dimension of the space it starts from, use it to show without computation that a system with more unknowns than equations has non-zero solutions and that a map into a larger space cannot be surjective, show that for a map between spaces of equal dimension injective, surjective and bijective are the same thing, and apply that to prove that polynomial interpolation always has exactly one answer.
+recalls: [m6.linear-maps-kernel-and-image]
+uses: [m6.subspaces-sums-and-direct-sums, m6.fields-and-the-vector-space-axioms, m5.rank, m5.column-space-and-null-space, m5.basis-and-dimension, m5.elimination-and-linear-systems, m5.identity-and-inverse, m4.linear-independence, m4.linear-combinations-and-span, m3.direct-proof, m3.contrapositive-and-contradiction, m2.injective-surjective-and-bijective-maps, m1.polynomials, m10.differentiation-rules, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e5.random-number-generation, e0.functions, e0.loops]
+leads: [m6.matrix-of-a-linear-map-and-similarity, m6.dual-spaces-and-the-transpose, m8.eigenvalues-and-eigenvectors, m8.diagonalisation]
+starter: |
+  # Scratch space. The parabola c0 + c1 t + c2 t^2 through three points.
+  # Each row says: the parabola's value at t equals the height wanted there.
+  import numpy as np
+
+  ts = np.array([0.0, 1.0, 2.0])
+  heights = np.array([1.0, 3.0, 4.0])
+  E = np.stack([ts ** 0, ts, ts ** 2], axis=1)
+  print([round(float(c), 4) for c in np.linalg.solve(E, heights)])
+parts:
+  recall:
+    - text: |
+        [[m6.linear-maps-kernel-and-image]] counted, for two maps, the dimension of what was sent to zero and the dimension of what was produced, and both times the two added up to the dimension of the starting space. Today proves that they always do, and puts the fact to work. Three quick pulls first.
+  puzzle:
+    - text: |
+        Through two points there is exactly one line. The starter finds the parabola through three points, $(0, 1)$, $(1, 3)$ and $(2, 4)$, by solving three equations for three coefficients.
+
+        ```
+        [1.0, 2.5, -0.5]
+        ```
+
+        So $1 + 2.5t - 0.5t^2$ passes through all three. Change the heights and there is another parabola. Change them again, and another.
+
+        This is a claim with two halves, and neither is obvious. **Existence:** for **any** three heights at three different places, some polynomial of degree at most 2 takes them. **Uniqueness:** only one does. The same is asserted for four points and cubics, and for a hundred points and polynomials of degree at most 99.
+
+        One way to prove it is to write down a formula for the polynomial. Another is to show that a certain determinant is never zero. Both take work, and the work grows with the number of points.
+
+        **Can both halves be proved at once, for any number of points, without solving anything, by counting dimensions?**
+  intuition:
+    - text: |
+        A linear map takes in a space of some dimension. Some directions it flattens to zero: those make up the kernel. What it does with the rest shows up as the image. The claim of this lesson is that nothing else can happen. **Every dimension of the input is either destroyed or delivered:**
+
+        $$\dim V = \dim\ker T + \dim\operatorname{im}T.$$
+
+        Differentiation on $P_3$ takes four dimensions in. It destroys one, the constants, and delivers three, all of $P_2$. Projection of space onto the floor takes three in, destroys one, the vertical direction, and delivers two.
+
+        A linear map cannot create dimensions: the image is spanned by the images of a basis, so it has dimension at most $\dim V$. And it cannot lose dimensions without trace: whatever fails to arrive in the image was sent to zero.
+
+        Here is why this settles the puzzle. Consider the map that sends a polynomial of degree at most 2 to its three values at the three places. It is linear. Its kernel consists of the polynomials of degree at most 2 that vanish at three different places, and a non-zero polynomial of degree at most 2 has at most two roots. So the kernel is zero: nothing is destroyed. Then all three dimensions are delivered. The image is a three-dimensional subspace of $\mathbb{R}^3$, which is all of it. Every triple of heights is reached, and by exactly one polynomial.
+
+        Uniqueness was a fact about roots. Existence then came for free, by counting.
+  derivation:
+    - text: |
+        **Theorem (rank-nullity).** Let $T: V \to W$ be linear with $V$ finite-dimensional. Then
+
+        $$\dim V = \dim\ker T + \dim\operatorname{im}T.$$
+
+        The dimension of the image is called the **rank** of $T$ and the dimension of the kernel its **nullity**.
+
+        *Proof.* Let $\mathbf{k}_1, \dots, \mathbf{k}_p$ be a basis of $\ker T$. Extend it to a basis of $V$ by adding vectors $\mathbf{v}_1, \dots, \mathbf{v}_r$, so that $\dim V = p + r$. The claim is that $T(\mathbf{v}_1), \dots, T(\mathbf{v}_r)$ is a basis of $\operatorname{im}T$, which gives $\dim\operatorname{im}T = r$.
+
+        *They span the image.* Any vector of $V$ is $\sum a_i\mathbf{k}_i + \sum b_j\mathbf{v}_j$. Applying $T$ kills the first sum, leaving $\sum b_jT(\mathbf{v}_j)$.
+
+        *They are independent.* Suppose $\sum b_jT(\mathbf{v}_j) = \mathbf{0}$. Then $T(\sum b_j\mathbf{v}_j) = \mathbf{0}$, so $\sum b_j\mathbf{v}_j$ lies in the kernel and equals some $\sum a_i\mathbf{k}_i$. That is a linear relation among the vectors of a basis of $V$, so all coefficients are zero. In particular every $b_j = 0$. $\blacksquare$
+
+        The proof shows more than the count. The added vectors $\mathbf{v}_j$ span a complement of the kernel, and $T$ maps that complement isomorphically onto the image: $V = \ker T \oplus U$ with $U \cong \operatorname{im}T$.
+
+        **For matrices.** For $A$ with $n$ columns, the map $\mathbf{x} \mapsto A\mathbf{x}$ starts from $F^n$, and the theorem reads
+
+        $$n = \dim N(A) + \operatorname{rank}A.$$
+
+        In elimination: every column is a pivot column or a free column. Pivot columns count the rank and free columns count the null space.
+
+        **Three consequences, none needing computation.**
+
+        *More unknowns than equations.* If $T: V \to W$ with $\dim V > \dim W$, then $\dim\operatorname{im}T \le \dim W < \dim V$, so $\dim\ker T > 0$. A homogeneous linear system with more unknowns than equations always has a non-zero solution. Five vectors in $\mathbb{R}^3$ always satisfy a non-trivial relation.
+
+        *Fewer unknowns than equations.* If $\dim V < \dim W$, then $\dim\operatorname{im}T \le \dim V < \dim W$. The map misses something. Three vectors cannot span $\mathbb{R}^5$.
+
+        *Equal dimensions.* If $\dim V = \dim W$, then
+
+        $$T \text{ injective} \iff \ker T = \{\mathbf{0}\} \iff \dim\operatorname{im}T = \dim W \iff T \text{ surjective}.$$
+
+        For a square system, "at most one solution for every right-hand side" and "at least one solution for every right-hand side" are the same condition. To prove a square matrix invertible it is enough to show that $A\mathbf{x} = \mathbf{0}$ forces $\mathbf{x} = \mathbf{0}$.
+    - question:
+        id: derivation-kernel
+        type: numeric
+        system: s2
+        prompt: |
+          A linear map $T: \mathbb{R}^7 \to \mathbb{R}^4$ is surjective. What is the dimension of its kernel?
+        answer: "3"
+        explanation: |
+          Surjective means the image is all of $\mathbb{R}^4$, of dimension 4. Then $\dim\ker T = 7 - 4 = 3$. In terms of equations: four independent equations in seven unknowns leave three degrees of freedom. If the map were not known to be surjective, the theorem would still give a bound: the image has dimension at most 4, so the kernel has dimension at least 3.
+    - text: |
+        **Interpolation.** Let $t_0, \dots, t_n$ be $n + 1$ different numbers. Define
+
+        $$E: P_n \to F^{n+1}, \qquad E(p) = (p(t_0), \dots, p(t_n)).$$
+
+        $E$ is linear, since evaluation is. If $E(p) = \mathbf{0}$ then $p$ has $n + 1$ different roots and degree at most $n$, so $p = 0$. Hence $\ker E = \{\mathbf{0}\}$. Both spaces have dimension $n + 1$, so $E$ is also surjective. **For any $n + 1$ values there is exactly one polynomial of degree at most $n$ taking them at the given places.**
+
+        In the basis $1, t, \dots, t^n$ the map $E$ is the matrix whose row $i$ is $(1, t_i, t_i^2, \dots, t_i^n)$, the matrix in the starter. The argument shows that it is invertible whenever the places are different, with no determinant computed. It says nothing about how **well-conditioned** it is, which the last cluster showed can be very badly.
+
+        **Where it fails: infinite dimensions.** On the space $P$ of all polynomials, differentiation is surjective and not injective: every polynomial is a derivative, and constants are killed. Multiplication by $x$ is injective and not surjective: nothing has image 1. The equivalence of injective and surjective needs a finite dimension to count against. A set can be put in bijection with a proper part of itself only if it is infinite, and something like that is true of spaces.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the steps of the proof of the rank-nullity theorem.
+        steps:
+          - 'Choose a basis of the kernel.'
+          - 'Extend it to a basis of the whole space by adding further vectors.'
+          - 'Apply the map to a general vector: the kernel part vanishes, so the images of the added vectors span the image.'
+          - 'Show those images are independent: a relation among them would put a combination of the added vectors into the kernel, contradicting independence of the full basis.'
+          - 'Count: the dimension of the space is the number of kernel vectors plus the number of added vectors.'
+        explanation: The proof splits a basis of the space into the part the map destroys and the part it carries faithfully to a basis of the image.
+  formal:
+    - text: |
+        Let $T: V \to W$ be linear and $V$ finite-dimensional.
+
+        **Rank-nullity.** $\dim V = \dim\ker T + \dim\operatorname{im}T$. Moreover, if $U$ is any complement of $\ker T$ in $V$, the restriction of $T$ to $U$ is an isomorphism onto $\operatorname{im}T$.
+
+        **Matrix form.** For $A \in F^{m \times n}$: $n = \operatorname{rank}A + \dim N(A)$, and likewise $m = \operatorname{rank}A + \dim N(A^\top)$, using $\operatorname{rank}A^\top = \operatorname{rank}A$.
+
+        **Corollaries.**
+
+        - If $\dim V > \dim W$, no linear map $V \to W$ is injective.
+        - If $\dim V < \dim W$, no linear map $V \to W$ is surjective.
+        - If $\dim V = \dim W$ is finite, then $T$ is injective $\iff$ $T$ is surjective $\iff$ $T$ is an isomorphism.
+        - Finite-dimensional $V$ and $W$ are isomorphic if and only if they have the same dimension.
+
+        **Interpolation.** For distinct $t_0, \dots, t_n \in F$ and any $y_0, \dots, y_n \in F$ there is exactly one $p \in P_n(F)$ with $p(t_i) = y_i$ for all $i$.
+
+        **Rank of a composition.** $\operatorname{rank}(ST) \le \min(\operatorname{rank}S, \operatorname{rank}T)$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-statement
+        type: choice
+        system: s1
+        prompt: |
+          For linear $T: V \to W$, the rank-nullity theorem says $\dim\ker T + \dim\operatorname{im}T$ equals
+        options: ['$\dim W$', '$\dim V$', '$\dim V + \dim W$', '$\dim V - \dim W$']
+        answer: 1
+        explanation: The dimension of the space the map starts from.
+    - question:
+        id: drill-names
+        type: choice
+        system: s1
+        prompt: |
+          The nullity of a linear map is
+        options: ['the dimension of its image', 'the dimension of its kernel', 'the number of zero entries', 'the dimension of its target']
+        answer: 1
+        explanation: And the rank is the dimension of the image.
+    - question:
+        id: drill-columns
+        type: numeric
+        system: s1
+        prompt: |
+          A matrix has 9 columns and rank 6. What is the dimension of its null space?
+        answer: "3"
+        explanation: $9 - 6$.
+    - question:
+        id: drill-rank
+        type: numeric
+        system: s1
+        prompt: |
+          A 4 by 7 matrix has a null space of dimension 5. What is its rank?
+        answer: "2"
+        explanation: $7 - 5$. The number of rows does not enter.
+    - question:
+        id: drill-derivative
+        type: numeric
+        system: s1
+        prompt: |
+          Differentiation on $P_5$ has a kernel of dimension 1. What is the dimension of its image?
+        answer: "5"
+        explanation: $\dim P_5 = 6$, and $6 - 1 = 5$.
+    - question:
+        id: drill-wide
+        type: choice
+        system: s1
+        prompt: |
+          Can a linear map from $\mathbb{R}^5$ to $\mathbb{R}^3$ be injective?
+        options: ['Yes', 'No, its kernel has dimension at least 2', 'Only if it is surjective', 'Only for some bases']
+        answer: 1
+        explanation: The image has dimension at most 3.
+    - question:
+        id: drill-tall
+        type: choice
+        system: s1
+        prompt: |
+          Can a linear map from $\mathbb{R}^3$ to $\mathbb{R}^5$ be surjective?
+        options: ['Yes', 'No, its image has dimension at most 3', 'Only if it is injective', 'Yes, if its kernel is zero']
+        answer: 1
+        explanation: It cannot deliver more dimensions than it receives.
+    - question:
+        id: drill-square
+        type: choice
+        system: s1
+        prompt: |
+          $T: V \to V$ is linear, $V$ is finite-dimensional, and $T$ is injective. Then $T$ is
+        options: ['possibly not surjective', 'surjective', 'the identity', 'zero']
+        answer: 1
+        explanation: Between spaces of equal finite dimension, injective and surjective coincide.
+    - question:
+        id: drill-relation
+        type: choice
+        system: s1
+        prompt: |
+          Six vectors in $\mathbb{R}^4$ are
+        options: ['always independent', 'always dependent', 'a basis', 'sometimes independent']
+        answer: 1
+        explanation: The matrix with those columns has a null space of dimension at least 2.
+    - question:
+        id: drill-interpolation
+        type: numeric
+        system: s1
+        prompt: |
+          How many polynomials of degree at most 3 pass through four given points with different $t$ values?
+        answer: "1"
+        explanation: Exactly one.
+    - question:
+        id: drill-degree
+        type: numeric
+        system: s1
+        prompt: |
+          Ten points with different $t$ values are given. What is the least $n$ such that a polynomial of degree at most $n$ is guaranteed to pass through all of them?
+        answer: "9"
+        explanation: $P_9$ has dimension 10.
+    - question:
+        id: drill-infinite
+        type: choice
+        system: s1
+        prompt: |
+          On the space of all polynomials, differentiation is
+        options: ['injective and surjective', 'surjective but not injective', 'injective but not surjective', 'neither']
+        answer: 1
+        explanation: Every polynomial is a derivative, and constants go to zero. The space is infinite-dimensional, so the two need not coincide.
+    - question:
+        id: predict-shapes
+        type: predict
+        system: s1
+        prompt: Rank and nullity for random matrices of three shapes. What does this show?
+        code: |
+          import numpy as np
+
+          for shape in [(3, 5), (5, 3), (4, 4)]:
+              A = np.random.default_rng(0).normal(size=shape)
+              r = int(np.linalg.matrix_rank(A))
+              print(shape, r, shape[1] - r)
+        output: |
+          (3, 5) 3 2
+          (5, 3) 3 0
+          (4, 4) 4 0
+        explanation: A random matrix has the largest rank its shape allows. The wide one is surjective with a two-dimensional kernel, the tall one is injective and misses most of its target, and the square one is both injective and surjective. The nullity is the number of columns minus the rank in every case.
+    - question:
+        id: predict-derivative
+        type: predict
+        system: s1
+        prompt: The matrix of differentiation from cubics to quadratics, in the bases of powers. What does this show?
+        code: |
+          import numpy as np
+
+          D = np.array([[0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 2.0, 0.0], [0.0, 0.0, 0.0, 3.0]])
+          r = int(np.linalg.matrix_rank(D))
+          print(D.shape, r, D.shape[1] - r)
+          print((D @ np.array([7.0, 0.0, 0.0, 0.0])).tolist())
+        output: |
+          (3, 4) 3 1
+          [0.0, 0.0, 0.0]
+        explanation: Four columns, rank 3, nullity 1. The first column is zero because the derivative of the constant 1 is zero, and the constants are the whole kernel. The three other columns are independent, so every quadratic is reached.
+  work:
+    - text: Slower now. The theorem turns one count into another, and the code has to count against the right space.
+    - question:
+        id: write-interpolate
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `interpolate(ts, ys)`. `ts` is an array of $n + 1$ different numbers and `ys` an array of $n + 1$ values. Return the array of coefficients, lowest power first, of the one polynomial of degree at most $n$ with $p(t_i) = y_i$. Build the matrix of the evaluation map, whose row $i$ is $1, t_i, t_i^2, \dots, t_i^n$, and solve with `np.linalg.solve`.
+        starter: |
+          import numpy as np
+
+
+          def interpolate(ts, ys):
+              return np.zeros(len(ts))
+
+
+          c = interpolate(np.array([0.0, 1.0, 2.0]), np.array([1.0, 3.0, 4.0]))
+          print([round(float(v), 4) for v in c])
+        solution: |
+          import numpy as np
+
+
+          def interpolate(ts, ys):
+              E = np.stack([ts ** k for k in range(len(ts))], axis=1)
+              return np.linalg.solve(E, ys)
+
+
+          c = interpolate(np.array([0.0, 1.0, 2.0]), np.array([1.0, 3.0, 4.0]))
+          print([round(float(v), 4) for v in c])
+        tests: |
+          import numpy as _np
+          _ts, _ys = _np.array([0.0, 1.0, 2.0]), _np.array([1.0, 3.0, 4.0])
+          _c = interpolate(_ts, _ys)
+          assert _np.shape(_c) == (3,), "Three points fix three coefficients"
+          assert _np.allclose(_c, [1.0, 2.5, -0.5]), "The parabola through (0, 1), (1, 3), (2, 4) is 1 + 2.5 t - 0.5 t^2, lowest power first"
+          assert _np.allclose(interpolate(_np.array([1.0, 3.0]), _np.array([2.0, 8.0])), [-1.0, 3.0]), "The line through (1, 2) and (3, 8) is -1 + 3t"
+          assert _np.allclose(interpolate(_np.array([5.0]), _np.array([7.0])), [7.0]), "Through one point the polynomial of degree 0 is the constant"
+          _t = _np.array([-1.0, 0.0, 1.0, 2.0])
+          _c = interpolate(_t, _t ** 3 - 2 * _t + 1)
+          assert _np.allclose(_c, [1.0, -2.0, 0.0, 1.0]), "Values taken from t^3 - 2t + 1 at four places should give back its coefficients"
+          _t = _np.array([0.5, -1.5, 2.0, 3.0, -0.25])
+          _y = _np.random.default_rng(0).normal(size=5)
+          _c = interpolate(_t, _y)
+          assert _np.allclose(sum(_c[k] * _t ** k for k in range(5)), _y), "For five random values the polynomial should take each value at its place"
+          assert _np.allclose(interpolate(_ts, _np.zeros(3)), 0), "If all the values are zero the polynomial is zero: the kernel of evaluation is trivial"
+          assert output.strip() == "[1.0, 2.5, -0.5]", "The program should print [1.0, 2.5, -0.5]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def interpolate(ts, ys):
+                E = np.stack([ts ** k for k in range(len(ts))], axis=0)
+                return np.linalg.solve(E, ys)
+
+
+            print("[1.0, 2.5, -0.5]")
+          - |
+            import numpy as np
+
+
+            def interpolate(ts, ys):
+                E = np.stack([ts ** k for k in range(1, len(ts) + 1)], axis=1)
+                return np.linalg.solve(E, ys)
+
+
+            print("[1.0, 2.5, -0.5]")
+          - |
+            import numpy as np
+
+
+            def interpolate(ts, ys):
+                E = np.stack([ts ** k for k in range(len(ts) - 1, -1, -1)], axis=1)
+                return np.linalg.solve(E, ys)
+
+
+            print("[1.0, 2.5, -0.5]")
+          - |
+            import numpy as np
+
+
+            def interpolate(ts, ys):
+                E = np.stack([ts ** k for k in range(len(ts))], axis=1)
+                return E @ ys
+
+
+            print("[1.0, 2.5, -0.5]")
+        explanation: |
+          The matrix is the evaluation map written in the basis of powers: column $k$ holds the values of $t^k$ at the given places. Solving inverts the map, and the theorem of this lesson is what guarantees that `solve` will never find the matrix singular when the places are different.
+
+          Stacking along axis 0 gives the transpose, which solves a different problem. Starting the powers at 1 leaves out the constant, and the matrix is then singular whenever one of the places is 0. Running the powers downwards returns the coefficients highest power first.
+
+          This is the square case of the least squares design matrix. With as many coefficients as points the fit is exact, and with more points than coefficients the map into $\mathbb{R}^m$ cannot be surjective, by today's second corollary, which is why least squares was needed at all.
+    - question:
+        id: write-dims
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A linear map from an $n$-dimensional space is given by the list `images` of the $n$ arrays that a basis is sent to. Write `kernel_and_image(images)`, returning two ints: the dimension of the kernel and the dimension of the image. The image is spanned by the given arrays. Get the kernel from the theorem.
+        starter: |
+          import numpy as np
+
+
+          def kernel_and_image(images):
+              return 0, 0
+
+
+          derivative = [np.array([0.0, 0.0, 0.0]), np.array([1.0, 0.0, 0.0]), np.array([0.0, 2.0, 0.0]), np.array([0.0, 0.0, 3.0])]
+          print(kernel_and_image(derivative))
+        solution: |
+          import numpy as np
+
+
+          def kernel_and_image(images):
+              rank = int(np.linalg.matrix_rank(np.stack(images, axis=1)))
+              return len(images) - rank, rank
+
+
+          derivative = [np.array([0.0, 0.0, 0.0]), np.array([1.0, 0.0, 0.0]), np.array([0.0, 2.0, 0.0]), np.array([0.0, 0.0, 3.0])]
+          print(kernel_and_image(derivative))
+        tests: |
+          import numpy as _np
+          _d = [_np.array([0.0, 0.0, 0.0]), _np.array([1.0, 0.0, 0.0]), _np.array([0.0, 2.0, 0.0]), _np.array([0.0, 0.0, 3.0])]
+          _out = kernel_and_image(_d)
+          assert isinstance(_out, tuple) and len(_out) == 2 and all(isinstance(_v, int) for _v in _out), "kernel_and_image should return two ints"
+          assert _out == (1, 3), "Differentiation on cubics has a kernel of dimension 1 and an image of dimension 3"
+          assert kernel_and_image([_np.array([1.0, 0.0]), _np.array([0.0, 1.0])]) == (0, 2), "The identity of the plane has kernel 0 and image 2"
+          assert kernel_and_image([_np.array([0.0, 0.0]), _np.array([0.0, 0.0]), _np.array([0.0, 0.0])]) == (3, 0), "The zero map from a 3-dimensional space kills everything"
+          assert kernel_and_image([_np.array([1.0]), _np.array([1.0]), _np.array([1.0])]) == (2, 1), "Evaluation at 1 on quadratics sends each of 1, t, t^2 to 1: kernel 2 and image 1"
+          assert kernel_and_image([_np.array([1.0, 2.0, 3.0, 4.0, 5.0])]) == (0, 1), "A map from a line into a 5-dimensional space: the kernel is counted against the space the map starts from"
+          _im = [_np.array([1.0, 0.0, 1.0]), _np.array([0.0, 1.0, 1.0]), _np.array([1.0, 1.0, 2.0]), _np.array([2.0, 1.0, 3.0]), _np.array([0.0, 0.0, 0.0])]
+          assert kernel_and_image(_im) == (3, 2), "Five images spanning a plane: image 2, kernel 3"
+          assert output.strip() == "(1, 3)", "The program should print (1, 3)"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def kernel_and_image(images):
+                rank = int(np.linalg.matrix_rank(np.stack(images, axis=1)))
+                return len(images[0]) - rank, rank
+
+
+            print("(1, 3)")
+          - |
+            import numpy as np
+
+
+            def kernel_and_image(images):
+                rank = int(np.linalg.matrix_rank(np.stack(images, axis=1)))
+                return rank, len(images) - rank
+
+
+            print("(1, 3)")
+          - |
+            import numpy as np
+
+
+            def kernel_and_image(images):
+                rank = len(images)
+                return 0, rank
+
+
+            print("(1, 3)")
+          - |
+            import numpy as np
+
+
+            def kernel_and_image(images):
+                rank = int(np.linalg.matrix_rank(np.stack(images, axis=1)))
+                zeros = len([w for w in images if not w.any()])
+                return zeros, rank
+
+
+            print("(1, 3)")
+        explanation: |
+          The image is the span of the images of a basis, so its dimension is a rank. The kernel then costs nothing: it is the number of basis vectors minus the rank.
+
+          The dimension to subtract from is that of the space the map **starts** from, the number of images given, and not the length of each image, which is the dimension of the space it lands in. The first wrong version makes that mistake, and it is invisible for square matrices.
+
+          Counting the basis vectors that are sent to zero, the last wrong version, finds only the part of the kernel that happens to be aligned with the chosen basis. Evaluation at 1 sends none of $1, t, t^2$ to zero, and still has a two-dimensional kernel, containing $t - 1$ and $t^2 - 1$.
+    - question:
+        id: fix-nullity
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `free_parameters(A)` should return the number of free parameters in the solution of $A\mathbf{x} = \mathbf{0}$, which is the dimension of the null space. For a system of 2 independent equations in 5 unknowns it should return 3. It returns 0. Fix it. One line needs to change.
+        starter: |
+          import numpy as np
+
+
+          def free_parameters(A):
+              rank = int(np.linalg.matrix_rank(A))
+              return A.shape[0] - rank
+
+
+          A = np.array([[1.0, 0.0, 2.0, 0.0, 1.0], [0.0, 1.0, 1.0, 3.0, 0.0]])
+          print(free_parameters(A))
+        solution: |
+          import numpy as np
+
+
+          def free_parameters(A):
+              rank = int(np.linalg.matrix_rank(A))
+              return A.shape[1] - rank
+
+
+          A = np.array([[1.0, 0.0, 2.0, 0.0, 1.0], [0.0, 1.0, 1.0, 3.0, 0.0]])
+          print(free_parameters(A))
+        tests: |
+          import numpy as _np
+          _A = _np.array([[1.0, 0.0, 2.0, 0.0, 1.0], [0.0, 1.0, 1.0, 3.0, 0.0]])
+          assert free_parameters(_A) == 3, "Two independent equations in five unknowns leave three free parameters: the number of unknowns, which is the number of columns, minus the rank"
+          assert free_parameters(_A.T) == 0, "Five equations in two unknowns with independent columns leave no freedom"
+          assert free_parameters(_np.eye(4)) == 0, "An invertible matrix has only the zero solution"
+          assert free_parameters(_np.zeros((2, 6))) == 6, "If every equation is 0 = 0, all six unknowns are free"
+          assert free_parameters(_np.array([[1.0, 2.0, 3.0], [2.0, 4.0, 6.0], [3.0, 6.0, 9.0]])) == 2, "Three equations that are multiples of one another in three unknowns: rank 1, two free parameters"
+          assert free_parameters(_np.random.default_rng(0).normal(size=(3, 8))) == 5, "Three random equations in eight unknowns leave five free parameters"
+          assert output.strip() == "3", "The program should print 3"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def free_parameters(A):
+                rank = int(np.linalg.matrix_rank(A))
+                return A.shape[0] - rank
+
+
+            print("3")
+          - |
+            import numpy as np
+
+
+            def free_parameters(A):
+                rank = int(np.linalg.matrix_rank(A))
+                return A.shape[1] - A.shape[0]
+
+
+            print("3")
+          - |
+            import numpy as np
+
+
+            def free_parameters(A):
+                rank = int(np.linalg.matrix_rank(A))
+                return rank
+
+
+            print("3")
+          - |
+            import numpy as np
+
+
+            def free_parameters(A):
+                rank = int(np.linalg.matrix_rank(A))
+                return abs(A.shape[0] - A.shape[1])
+
+
+            print("3")
+        explanation: |
+          The map $\mathbf{x} \mapsto A\mathbf{x}$ starts from the space of the unknowns, whose dimension is the number of **columns**. Rank-nullity counts against that: null space dimension equals columns minus rank. Rows minus rank counts something else, the dimension of the null space of $A^\top$, which is the number of redundant equations.
+
+          Columns minus rows, the second wrong version, is right when the equations are independent and wrong when they are not, as with the three proportional equations. The rank is what counts the equations that say something.
+
+          The two differences answer two different practical questions about a system. Columns minus rank: how much freedom is in the solution. Rows minus rank: how many conditions the right-hand side must satisfy for a solution to exist at all.
+    - question:
+        id: work-square
+        type: choice
+        system: s2
+        prompt: |
+          $A$ and $B$ are $n \times n$ matrices with $AB = I$. Why must $BA = I$ as well?
+        options:
+          - 'Because matrix multiplication is commutative.'
+          - 'If $B\mathbf{x} = \mathbf{0}$ then $\mathbf{x} = AB\mathbf{x} = \mathbf{0}$, so $B$ is injective. It is a map between spaces of equal dimension, so it is also surjective, hence invertible. Multiplying $AB = I$ on the right by $B^{-1}$ gives $A = B^{-1}$, and so $BA = I$.'
+          - 'It need not be. One-sided inverses are common for square matrices.'
+          - 'Because $A$ and $B$ have the same determinant.'
+        answer: 1
+        explanation: |
+          For rectangular matrices a one-sided inverse is all there is, as with the pseudo-inverse: a tall matrix has a left inverse and no right inverse. For square ones the counting argument upgrades one side to both. The step that does the work is "injective between equal finite dimensions implies surjective". On the infinite-dimensional space of all polynomials, differentiation after integration is the identity and integration after differentiation is not.
+    - question:
+        id: work-conditions
+        type: numeric
+        system: s2
+        prompt: |
+          Consider the polynomials $p$ of degree at most 6 with $p(1) = 0$, $p(2) = 0$ and $p'(0) = 0$. These three conditions are independent. What is the dimension of this space of polynomials?
+        answer: "4"
+        explanation: |
+          The map $p \mapsto (p(1), p(2), p'(0))$ from $P_6$ to $\mathbb{R}^3$ is linear, and independent conditions mean it is surjective, with image of dimension 3. Its kernel, the space in question, has dimension $7 - 3 = 4$. Counting solutions of linear conditions is always this: dimension of the space, minus the number of independent conditions.
+    - question:
+        id: work-infinite
+        type: choice
+        system: s2
+        prompt: |
+          On the space of all polynomials, multiplication by $x$ is injective and not surjective. Why does this not contradict "injective if and only if surjective" for maps from a space to itself?
+        options:
+          - 'Multiplication by $x$ is not linear.'
+          - 'That equivalence was derived from rank-nullity by comparing two equal finite numbers. The space of all polynomials has no finite dimension, and the argument, which amounts to subtracting, does not apply. The equivalence is false in infinite dimensions.'
+          - 'It does contradict it, so one of the two claims is wrong.'
+          - 'The space of all polynomials is not a vector space.'
+        answer: 1
+        explanation: |
+          $x(p + q) = xp + xq$, so the map is linear. Its image is the polynomials with constant term zero, a proper subspace that is nevertheless isomorphic to the whole space. In finite dimensions a proper subspace has strictly smaller dimension and that cannot happen. Whenever a theorem is used, it is worth knowing which of its hypotheses the proof actually leaned on, and here it was finiteness.
+    - question:
+        id: work-existence
+        type: choice
+        system: s2
+        prompt: |
+          In the interpolation argument, existence of a polynomial through any given values was obtained without constructing one. What was actually proved, and what does the argument not tell you?
+        options:
+          - 'Nothing was proved, since no formula was given.'
+          - 'It was proved that the evaluation map is injective, by counting roots, and therefore surjective, by rank-nullity. So a polynomial exists for every choice of values, and is unique. The argument does not say what the polynomial is, nor how sensitive its coefficients are to the values.'
+          - 'It was proved only that the polynomial is unique.'
+          - 'It was proved only for three points.'
+        answer: 1
+        explanation: |
+          This is a non-constructive existence proof, and a typical use of dimension counting: show nothing is lost, and conclude everything is reached. To find the polynomial you still solve the system, or use a formula. And the last cluster's warning stands: for many points, and especially equally spaced ones, the evaluation matrix in the basis of powers is extremely ill-conditioned, and the interpolating polynomial can swing wildly between the points. Existence and uniqueness are the beginning of the story.
+  connections:
+    - text: |
+        Three points fixed a parabola, and the reason needed no algebra: a quadratic with three roots is zero, so evaluation at three places destroys nothing, and a linear map that destroys nothing delivers every dimension it was given. That is the **rank-nullity theorem**, $\dim V = \dim\ker T + \dim\operatorname{im}T$, proved by splitting a basis into the part the map kills and the part it carries faithfully.
+
+        From it: more unknowns than equations forces non-zero solutions, a map into a larger space misses something, and between spaces of equal finite dimension injective and surjective are the same. All of it fails in infinite dimensions, where there is nothing to count against.
+
+        Twice today a linear map between spaces of polynomials was handed to NumPy as a matrix: the evaluation map, and differentiation. Each time a basis was chosen without comment, the powers of $t$. A different basis would have given a different matrix for the same map. The next lesson makes the translation from maps to matrices precise, and asks the question the whole spectral cluster depends on: when are two matrices the same map, seen in two bases? That is [[m6.matrix-of-a-linear-map-and-similarity]].

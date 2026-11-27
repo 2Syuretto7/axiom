@@ -1,0 +1,675 @@
+concept: m6.dual-spaces-and-the-transpose
+minutes: 90
+claim: You can say what a linear functional is and recognise examples such as evaluation and integration, describe the dual space and compute the dual basis of a given basis, define the dual of a linear map as composition and show that its matrix is the transpose, use annihilators to explain why the row rank of a matrix equals its column rank, and say how the coordinates of vectors and of functionals change in opposite ways when the basis changes.
+recalls: [m6.matrix-of-a-linear-map-and-similarity]
+uses: [m6.rank-nullity-theorem, m6.linear-maps-kernel-and-image, m6.subspaces-sums-and-direct-sums, m6.fields-and-the-vector-space-axioms, m5.transpose, m5.rank, m5.identity-and-inverse, m5.change-of-basis, m5.basis-and-dimension, m7.orthogonal-subspaces, m4.dot-product, m1.polynomials, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e0.functions, e0.loops]
+leads: [m6.inner-product-spaces, m6.adjoints-orthogonal-and-unitary-maps]
+starter: |
+  # Scratch space. Three numbers w such that, for every quadratic p,
+  # the integral of p from -1 to 1 equals
+  # w[0] * p(-1) + w[1] * p(0) + w[2] * p(1).
+  import numpy as np
+
+  nodes = [-1.0, 0.0, 1.0]
+  V = np.array([[t ** k for k in range(3)] for t in nodes])
+  moments = np.array([2.0, 0.0, 2.0 / 3.0])
+  w = np.linalg.solve(V.T, moments)
+  print([round(float(c), 4) for c in w])
+parts:
+  recall:
+    - text: |
+        [[m6.matrix-of-a-linear-map-and-similarity]] read a matrix by its columns: each column is where a basis vector goes. Today reads a matrix by its rows, and finds out what the transpose has meant all along. Three quick pulls first.
+  puzzle:
+    - text: |
+        Simpson's rule says that for every quadratic polynomial $p$,
+
+        $$\int_{-1}^{1} p(x)\,dx = \tfrac13\,p(-1) + \tfrac43\,p(0) + \tfrac13\,p(1).$$
+
+        The starter finds those weights by solving one linear system.
+
+        ```
+        [0.3333, 1.3333, 0.3333]
+        ```
+
+        This is a strange thing to be possible. An integral looks at a polynomial over a whole interval. The right-hand side looks at it in three places only. And the three weights do not depend on the polynomial.
+
+        Notice also the system that was solved. `V` has one row for each point, holding $1, t, t^2$. The weights came from solving with `V.T`, the transpose, and not with `V`.
+
+        **Why can the integral of every quadratic be read off from three of its values? And what is the transpose doing there?**
+  intuition:
+    - text: |
+        "Integrate from $-1$ to $1$" is a machine that takes a polynomial and returns one number. So is "evaluate at $0$". Both machines are linear: the integral of a sum is the sum of the integrals, and the same holds for values. A linear machine from a vector space to its field of scalars is called a **linear functional**.
+
+        Functionals on a space can be added to each other and multiplied by scalars, and the results are functionals again. So they form a vector space of their own, the **dual space**. The surprise is its size: for a space of dimension $n$, the dual space also has dimension $n$. A functional is fixed by its values on a basis, and that is $n$ numbers.
+
+        Quadratics form a space of dimension 3, so their dual has dimension 3. Evaluation at $-1$, at $0$ and at $1$ are three functionals, and they are independent. So they are a basis of the dual space, and **every** functional on quadratics is a combination of them. Integration is a functional. Simpson's rule is integration written in that basis, and its weights are coordinates.
+
+        In $\mathbb{R}^n$ a functional is a **row**: the row $(a_1, \dots, a_n)$ sends the column $\mathbf{x}$ to the number $a_1x_1 + \dots + a_nx_n$. Vectors are columns and functionals are rows, and the product of a row and a column is a number. That is the pattern of the whole lesson. The transpose is what a linear map does to the rows.
+  derivation:
+    - text: |
+        **Functionals and the dual space.** A **linear functional** on a vector space $V$ over $F$ is a linear map $\varphi: V \to F$. The set of all of them, with pointwise addition and scaling, is the **dual space** $V^*$.
+
+        Examples.
+
+        - On $\mathbb{R}^3$: $\varphi(x, y, z) = 2x - y + 5z$, the row $(2, -1, 5)$.
+        - On polynomials: evaluation $\operatorname{ev}_t(p) = p(t)$, and integration $p \mapsto \int_{-1}^{1} p$.
+        - On square matrices: the trace.
+        - On random quantities: the expectation.
+
+        Squaring the first coordinate, or taking the length, is **not** a functional: neither is linear.
+
+        **The dual basis.** Let $\mathbf{b}_1, \dots, \mathbf{b}_n$ be a basis of $V$. Define $\varphi_i$ as the functional that reads off the $i$th coordinate:
+
+        $$\varphi_i(c_1\mathbf{b}_1 + \dots + c_n\mathbf{b}_n) = c_i, \qquad\text{so}\qquad \varphi_i(\mathbf{b}_j) = \begin{cases} 1 & i = j \\ 0 & i \ne j. \end{cases}$$
+
+        These are a basis of $V^*$, the **dual basis**. Any functional $\varphi$ equals $\varphi(\mathbf{b}_1)\varphi_1 + \dots + \varphi(\mathbf{b}_n)\varphi_n$, since both sides agree on every basis vector. Hence $\dim V^* = \dim V$.
+
+        *In coordinates.* Put the basis vectors of $\mathbb{R}^n$ in the columns of $P$. The dual basis is the rows of $P^{-1}$, because $P^{-1}P = I$ says exactly that row $i$ times column $j$ is 1 or 0. For the basis $(1, 1), (1, 2)$ of the plane:
+
+        $$P = \begin{pmatrix} 1 & 1 \\ 1 & 2 \end{pmatrix}, \qquad P^{-1} = \begin{pmatrix} 2 & -1 \\ -1 & 1 \end{pmatrix},$$
+
+        so $\varphi_1 = (2, -1)$ and $\varphi_2 = (-1, 1)$. The coordinates of $(3, 4)$ in this basis are $\varphi_1(3, 4) = 2$ and $\varphi_2(3, 4) = 1$, and indeed $(3, 4) = 2(1, 1) + 1(1, 2)$.
+
+        Note that $\varphi_1$ is not determined by $\mathbf{b}_1$ alone. Change $\mathbf{b}_2$ and $\varphi_1$ changes too. The dual basis belongs to the basis as a whole.
+    - question:
+        id: derivation-functional
+        type: numeric
+        system: s2
+        prompt: |
+          A linear functional $\varphi$ on $\mathbb{R}^2$ has $\varphi(1, 1) = 3$ and $\varphi(1, 2) = 5$. What is $\varphi(0, 1)$?
+        answer: "2"
+        explanation: |
+          $(0, 1) = (1, 2) - (1, 1)$, and $\varphi$ is linear, so $\varphi(0, 1) = 5 - 3 = 2$. Likewise $\varphi(1, 0) = 3 - 2 = 1$, so $\varphi$ is the row $(1, 2)$. Two values on a basis fixed the whole functional. In the dual basis found above, $\varphi = 3\varphi_1 + 5\varphi_2 = 3(2, -1) + 5(-1, 1) = (1, 2)$.
+    - text: |
+        **Simpson's rule, explained.** In $P_2$ with the basis $1, x, x^2$, the functional $\operatorname{ev}_t$ is the row $(1, t, t^2)$, since $p(t) = c_0 + c_1t + c_2t^2$. Integration over $[-1, 1]$ is the row $(2, 0, \tfrac23)$, since $\int 1 = 2$, $\int x = 0$, $\int x^2 = \tfrac23$. We want weights with
+
+        $$w_1(1, -1, 1) + w_2(1, 0, 0) + w_3(1, 1, 1) = (2, 0, \tfrac23).$$
+
+        The rows of $V$ are the evaluation functionals. A combination of the **rows** of $V$ with weights $\mathbf{w}$ is $V^\top\mathbf{w}$. That is why the starter solved with the transpose.
+
+        **The dual of a map.** Let $T: V \to W$ be linear. A functional $\psi$ on $W$ can be turned into a functional on $V$: first apply $T$, then $\psi$. This defines the **dual map**
+
+        $$T^*: W^* \to V^*, \qquad T^*(\psi) = \psi \circ T.$$
+
+        It is linear, and it runs backwards: $T$ carries vectors from $V$ to $W$, and $T^*$ carries functionals from $W$ back to $V$.
+
+        *Example.* $D$ is differentiation on $P_2$ and $\psi = \operatorname{ev}_2$. Then $D^*(\psi)$ is the functional "differentiate, then evaluate at 2", the slope at 2.
+
+        **Its matrix is the transpose.** In coordinates $T$ is $\mathbf{x} \mapsto A\mathbf{x}$ and $\psi$ is a row $\mathbf{a}$. Then $\psi \circ T$ sends $\mathbf{x}$ to $\mathbf{a}(A\mathbf{x}) = (\mathbf{a}A)\mathbf{x}$, so it is the row $\mathbf{a}A$. Written as a column, that is $A^\top\mathbf{a}^\top$. So with respect to the dual bases,
+
+        > **the matrix of $T^*$ is $A^\top$.**
+
+        For the example: $(1, 2, 4)$ times the matrix of $D$ is $(0, 1, 4)$, the functional $c_1 + 4c_2$, which is indeed the slope of $c_0 + c_1x + c_2x^2$ at $x = 2$.
+
+        The rule $(AB)^\top = B^\top A^\top$ now needs no computation with entries. $(S \circ T)^*(\psi) = \psi \circ S \circ T = T^*(S^*(\psi))$. Maps that run backwards compose in the reverse order.
+
+        **Annihilators, and why row rank equals column rank.** For a subspace $U$ of $V$, the **annihilator** $U^0$ is the set of functionals that vanish on all of $U$. It is a subspace of $V^*$, and
+
+        $$\dim U^0 = \dim V - \dim U.$$
+
+        (Extend a basis of $U$ to a basis of $V$. The dual basis functionals belonging to the added vectors are a basis of $U^0$.)
+
+        Now ask which functionals $\psi$ on $W$ are killed by $T^*$. $\psi \circ T = 0$ means that $\psi$ vanishes on everything $T$ produces. So
+
+        $$\ker T^* = (\operatorname{im} T)^0.$$
+
+        Its dimension is $\dim W - \operatorname{rank} T$. By rank-nullity applied to $T^*$, whose domain $W^*$ has dimension $\dim W$,
+
+        $$\operatorname{rank} T^* = \dim W - (\dim W - \operatorname{rank} T) = \operatorname{rank} T.$$
+
+        In matrices: $A^\top$ and $A$ have the same rank. The number of independent rows equals the number of independent columns, for a reason that has nothing to do with elimination.
+
+        **Vectors and functionals change in opposite ways.** Change basis by $P$, whose columns are the new basis vectors. Coordinates of a vector go from $\mathbf{x}$ to $P^{-1}\mathbf{x}$. A functional with row $\mathbf{a}$ must still give the same number, $\mathbf{a}\mathbf{x} = (\mathbf{a}P)(P^{-1}\mathbf{x})$, so its row becomes $\mathbf{a}P$. Measure a length in centimetres instead of metres: the coordinate is multiplied by 100, and a price per unit of length is divided by 100. The total price is unchanged.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the argument that a matrix and its transpose have the same rank.
+        steps:
+          - 'The transpose is the matrix of the dual map, which sends a functional $\psi$ to $\psi \circ T$.'
+          - 'The dual map kills $\psi$ exactly when $\psi$ vanishes on the image of $T$.'
+          - 'So the kernel of the dual map is the annihilator of the image, of dimension $\dim W - \operatorname{rank} T$.'
+          - 'Rank-nullity for the dual map gives its rank as $\dim W$ minus that.'
+          - 'Hence the rank of the dual map equals the rank of $T$.'
+        explanation: Each step uses one definition. The kernel of the dual map is found first, and rank-nullity converts it into a rank.
+  formal:
+    - text: |
+        Let $V, W$ be vector spaces over $F$, finite-dimensional unless stated.
+
+        **Dual space.** $V^* = \mathcal{L}(V, F)$. Its elements are linear functionals.
+
+        **Dual basis.** For a basis $(\mathbf{b}_j)$ of $V$ there are unique $\varphi_i \in V^*$ with $\varphi_i(\mathbf{b}_j) = \delta_{ij}$. They form a basis of $V^*$, $\varphi = \sum_i \varphi(\mathbf{b}_i)\varphi_i$ for $\varphi \in V^*$, and $\mathbf{v} = \sum_i \varphi_i(\mathbf{v})\mathbf{b}_i$ for $\mathbf{v} \in V$. So $\dim V^* = \dim V$.
+
+        **Dual map.** For $T \in \mathcal{L}(V, W)$, $T^*: W^* \to V^*$ is $T^*(\psi) = \psi \circ T$. It is linear, $(S \circ T)^* = T^* \circ S^*$, and $(\lambda S + T)^* = \lambda S^* + T^*$. If $A$ is the matrix of $T$ in bases $\mathcal{B}, \mathcal{C}$, then the matrix of $T^*$ in the dual bases is $A^\top$.
+
+        **Annihilator.** $U^0 = \{\varphi \in V^* : \varphi(\mathbf{u}) = 0 \text{ for all } \mathbf{u} \in U\}$, with $\dim U^0 = \dim V - \dim U$.
+
+        **Kernel and image of the dual map.** $\ker T^* = (\operatorname{im} T)^0$ and $\operatorname{im} T^* = (\ker T)^0$. Hence $\operatorname{rank} T^* = \operatorname{rank} T$, and $T$ is injective if and only if $T^*$ is surjective, and the other way round.
+
+        **Double dual.** Each $\mathbf{v} \in V$ gives a functional on $V^*$, namely $\varphi \mapsto \varphi(\mathbf{v})$. This map $V \to V^{**}$ is linear and injective, and for finite-dimensional $V$ it is an isomorphism that involves no choice of basis.
+
+        **Change of basis.** If the columns of $P$ are a new basis, coordinates of vectors become $P^{-1}\mathbf{x}$ and rows of functionals become $\mathbf{a}P$.
+
+        **Infinite dimension.** $V^*$ is still defined, but can be strictly larger than $V$, and the map to the double dual need not be surjective.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-functional
+        type: choice
+        system: s1
+        prompt: |
+          A linear functional on $V$ is a linear map from $V$ to
+        options: ['$V$', 'the field of scalars', 'the dual space', 'the zero space']
+        answer: 1
+        explanation: It turns a vector into one number, linearly.
+    - question:
+        id: drill-which
+        type: choice
+        system: s1
+        prompt: |
+          Which of these is a linear functional on $\mathbb{R}^2$?
+        options: ['$(x, y) \mapsto xy$', '$(x, y) \mapsto 3x - y$', '$(x, y) \mapsto x + 1$', '$(x, y) \mapsto \sqrt{x^2 + y^2}$']
+        answer: 1
+        explanation: The others fail additivity or do not send zero to zero.
+    - question:
+        id: drill-row
+        type: numeric
+        system: s1
+        prompt: |
+          The functional given by the row $(2, -1, 5)$ is applied to $(1, 1, 1)$. What is the value?
+        answer: "6"
+        explanation: $2 - 1 + 5$.
+    - question:
+        id: drill-dim
+        type: numeric
+        system: s1
+        prompt: |
+          $V$ has dimension 7. What is the dimension of its dual space?
+        answer: "7"
+        explanation: One dual basis functional for each basis vector.
+    - question:
+        id: drill-dual-basis
+        type: choice
+        system: s1
+        prompt: |
+          The dual basis functional $\varphi_2$ applied to the basis vector $\mathbf{b}_2$ gives
+        options: ['0', '1', '2', '$\mathbf{b}_2$']
+        answer: 1
+        explanation: It reads off the second coordinate, which is 1 for the second basis vector.
+    - question:
+        id: drill-dual-basis-other
+        type: choice
+        system: s1
+        prompt: |
+          The dual basis functional $\varphi_2$ applied to the basis vector $\mathbf{b}_3$ gives
+        options: ['0', '1', '3', 'it depends']
+        answer: 0
+        explanation: The second coordinate of the third basis vector is 0.
+    - question:
+        id: drill-rows-of-inverse
+        type: choice
+        system: s1
+        prompt: |
+          The columns of $P$ are a basis of $\mathbb{R}^n$. The dual basis is
+        options: ['the rows of $P$', 'the rows of $P^{-1}$', 'the columns of $P^\top$', 'the columns of $P$']
+        answer: 1
+        explanation: $P^{-1}P = I$ is the defining property, row by column.
+    - question:
+        id: drill-eval
+        type: choice
+        system: s1
+        prompt: |
+          In the basis $1, x, x^2$, evaluation at $3$ is the row
+        options: ['$(3, 3, 3)$', '$(1, 3, 9)$', '$(0, 1, 6)$', '$(1, 1, 1)$']
+        answer: 1
+        explanation: $p(3) = c_0 + 3c_1 + 9c_2$.
+    - question:
+        id: drill-dual-map
+        type: choice
+        system: s1
+        prompt: |
+          The dual map $T^*$ sends a functional $\psi$ to
+        options: ['$T \circ \psi$', '$\psi \circ T$', '$\psi + T$', '$\psi^{-1}$']
+        answer: 1
+        explanation: First the map, then the functional.
+    - question:
+        id: drill-direction
+        type: choice
+        system: s1
+        prompt: |
+          $T$ goes from $V$ to $W$. The dual map goes from
+        options: ['$V^*$ to $W^*$', '$W^*$ to $V^*$', '$V$ to $W^*$', '$W$ to $V$']
+        answer: 1
+        explanation: It pulls functionals on $W$ back to $V$.
+    - question:
+        id: drill-matrix
+        type: choice
+        system: s1
+        prompt: |
+          $T$ has matrix $A$. In the dual bases, $T^*$ has matrix
+        options: ['$A^{-1}$', '$A^\top$', '$A$', '$-A$']
+        answer: 1
+        explanation: A row times $A$, written as a column, is $A^\top$ times the column.
+    - question:
+        id: drill-annihilator
+        type: numeric
+        system: s1
+        prompt: |
+          $U$ is a subspace of dimension 2 in a space of dimension 6. What is the dimension of its annihilator?
+        answer: "4"
+        explanation: $6 - 2$.
+    - question:
+        id: drill-rank
+        type: numeric
+        system: s1
+        prompt: |
+          A 5 by 9 matrix has rank 4. What is the rank of its transpose?
+        answer: "4"
+        explanation: The dual map has the same rank as the map.
+    - question:
+        id: predict-dual-basis
+        type: predict
+        system: s1
+        prompt: A basis in the columns of P, and its dual basis. What does this show?
+        code: |
+          import numpy as np
+
+          P = np.array([[1.0, 1.0], [1.0, 2.0]])
+          dual = np.linalg.inv(P)
+          print([[round(float(c), 4) + 0.0 for c in row] for row in dual])
+          print([round(float(c), 4) + 0.0 for c in dual @ np.array([3.0, 4.0])])
+        output: |
+          [[2.0, -1.0], [-1.0, 1.0]]
+          [2.0, 1.0]
+        explanation: The rows of the inverse are the functionals that read off coordinates. Applied to (3, 4) they give 2 and 1, and (3, 4) is 2 times (1, 1) plus 1 times (1, 2).
+    - question:
+        id: predict-pullback
+        type: predict
+        system: s1
+        prompt: The matrix of differentiation on quadratics, and evaluation at 2 as a row. What does this show?
+        code: |
+          import numpy as np
+
+          D = np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]])
+          ev2 = np.array([1.0, 2.0, 4.0])
+          slope_at_2 = D.T @ ev2
+          print(slope_at_2.tolist())
+          print(float(slope_at_2 @ np.array([3.0, 5.0, -4.0])))
+        output: |
+          [0.0, 1.0, 4.0]
+          -11.0
+        explanation: The transpose turns "evaluate at 2" into "differentiate, then evaluate at 2". For 3 + 5x - 4x^2 the derivative is 5 - 8x, which is -11 at 2.
+  work:
+    - text: Slower now. Keep asking of each array whether it is a vector or a functional.
+    - question:
+        id: write-dual-basis
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `dual_basis(P)`: the columns of `P` are a basis. Return the matrix whose **rows** are the dual basis functionals. Then write `expand(P, phi)`: `phi` is a functional given as an array (a row). Return its coordinates in the dual basis, which are its values on the basis vectors.
+        starter: |
+          import numpy as np
+
+
+          def dual_basis(P):
+              return P * 1.0
+
+
+          def expand(P, phi):
+              return phi * 1.0
+
+
+          P = np.array([[1.0, 1.0], [1.0, 2.0]])
+          print([[round(float(c), 4) + 0.0 for c in row] for row in dual_basis(P)])
+          print([round(float(c), 4) + 0.0 for c in expand(P, np.array([1.0, 2.0]))])
+        solution: |
+          import numpy as np
+
+
+          def dual_basis(P):
+              return np.linalg.inv(P)
+
+
+          def expand(P, phi):
+              return phi @ P
+
+
+          P = np.array([[1.0, 1.0], [1.0, 2.0]])
+          print([[round(float(c), 4) + 0.0 for c in row] for row in dual_basis(P)])
+          print([round(float(c), 4) + 0.0 for c in expand(P, np.array([1.0, 2.0]))])
+        tests: |
+          import numpy as _np
+          _P = _np.array([[1.0, 1.0], [1.0, 2.0]])
+          _D = dual_basis(_P)
+          assert _np.shape(_D) == (2, 2), "There is one functional for each basis vector, each a row of length 2"
+          assert _np.allclose(_D, [[2.0, -1.0], [-1.0, 1.0]]), "For the basis (1, 1), (1, 2) the dual basis is the rows (2, -1) and (-1, 1): the rows of the inverse of P"
+          assert _np.allclose(_D @ _P, _np.eye(2)), "Functional i applied to basis vector j should be 1 when i = j and 0 otherwise"
+          _Q = _np.array([[2.0, 0.0, 1.0], [1.0, 1.0, 0.0], [0.0, 3.0, 1.0]])
+          assert _np.allclose(dual_basis(_Q) @ _Q, _np.eye(3)), "Row i of the result times column j of P should be 1 when i = j and 0 otherwise, for a 3 by 3 basis too"
+          _c = expand(_P, _np.array([1.0, 2.0]))
+          assert _np.shape(_c) == (2,), "The coordinates are one number for each dual basis functional"
+          assert _np.allclose(_c, [3.0, 5.0]), "The functional (1, 2) takes the values 3 on (1, 1) and 5 on (1, 2), so its coordinates in the dual basis are (3, 5)"
+          _phi = _np.array([1.0, -2.0, 4.0])
+          assert _np.allclose(expand(_Q, _phi) @ dual_basis(_Q), _phi), "Combining the dual basis rows with the coordinates should rebuild the functional"
+          assert output.strip() == "[[2.0, -1.0], [-1.0, 1.0]]\n[3.0, 5.0]", "The program should print [[2.0, -1.0], [-1.0, 1.0]] and then [3.0, 5.0]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def dual_basis(P):
+                return P.T
+
+
+            def expand(P, phi):
+                return phi @ P
+
+
+            print("[[2.0, -1.0], [-1.0, 1.0]]\n[3.0, 5.0]")
+          - |
+            import numpy as np
+
+
+            def dual_basis(P):
+                return np.linalg.inv(P).T
+
+
+            def expand(P, phi):
+                return phi @ P
+
+
+            print("[[2.0, -1.0], [-1.0, 1.0]]\n[3.0, 5.0]")
+          - |
+            import numpy as np
+
+
+            def dual_basis(P):
+                return np.linalg.inv(P)
+
+
+            def expand(P, phi):
+                return P @ phi
+
+
+            print("[[2.0, -1.0], [-1.0, 1.0]]\n[3.0, 5.0]")
+          - |
+            import numpy as np
+
+
+            def dual_basis(P):
+                return np.linalg.inv(P)
+
+
+            def expand(P, phi):
+                return np.linalg.solve(P, phi)
+
+
+            print("[[2.0, -1.0], [-1.0, 1.0]]\n[3.0, 5.0]")
+        explanation: |
+          The dual basis is defined by "row $i$ times column $j$ is 1 or 0", which is $RP = I$, so $R = P^{-1}$. The coordinates of a functional in the dual basis are its values on the basis vectors, and a row applied to each column of $P$ is the product $\boldsymbol\varphi P$.
+
+          Compare with the last lesson. The coordinates of a **vector** in the basis were $P^{-1}\mathbf{v}$. The coordinates of a **functional** are $\boldsymbol\varphi P$, with no inverse. The fourth wrong version treats the functional as if it were a vector. The transpose of $P$ would be right only for an orthonormal basis, where $P^{-1} = P^\top$, and then the dual basis functionals are the basis vectors themselves laid on their sides. That coincidence is why rows and columns can be confused for so long without harm.
+    - question:
+        id: write-quadrature
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `weights(nodes, a, b)`. `nodes` is a list of $n$ distinct numbers. Return the array $\mathbf{w}$ of length $n$ such that for every polynomial $p$ of degree below $n$,
+
+          $$\int_a^b p(x)\,dx = \sum_i w_i\,p(t_i).$$
+
+          Row $i$ of `V` should be the evaluation functional at node $t_i$: $(1, t_i, t_i^2, \dots)$. The integration functional has entries $\dfrac{b^{k+1} - a^{k+1}}{k+1}$ for $k = 0, \dots, n - 1$. Express integration as a combination of the rows of `V`.
+        starter: |
+          import numpy as np
+
+
+          def weights(nodes, a, b):
+              return np.ones(len(nodes))
+
+
+          print([round(float(c), 4) for c in weights([-1.0, 0.0, 1.0], -1.0, 1.0)])
+          print([round(float(c), 4) for c in weights([0.0, 1.0], 0.0, 1.0)])
+        solution: |
+          import numpy as np
+
+
+          def weights(nodes, a, b):
+              n = len(nodes)
+              V = np.array([[t ** k for k in range(n)] for t in nodes])
+              moments = np.array([(b ** (k + 1) - a ** (k + 1)) / (k + 1) for k in range(n)])
+              return np.linalg.solve(V.T, moments)
+
+
+          print([round(float(c), 4) for c in weights([-1.0, 0.0, 1.0], -1.0, 1.0)])
+          print([round(float(c), 4) for c in weights([0.0, 1.0], 0.0, 1.0)])
+        tests: |
+          import numpy as _np
+          _w = weights([-1.0, 0.0, 1.0], -1.0, 1.0)
+          assert _np.shape(_w) == (3,), "There is one weight for each node"
+          assert _np.allclose(_w, [1 / 3, 4 / 3, 1 / 3]), "For nodes -1, 0, 1 on [-1, 1] the weights are Simpson's: 1/3, 4/3, 1/3. Solve with the transpose of V, since the evaluation functionals are its rows"
+          assert _np.allclose(weights([0.0, 1.0], 0.0, 1.0), [0.5, 0.5]), "Two nodes at the ends of [0, 1] give the trapezium rule, weights 1/2 and 1/2"
+          assert _np.allclose(weights([0.5], 0.0, 1.0), [1.0]), "One node gives a single weight equal to the length of the interval"
+          _nodes = [0.0, 1.0, 3.0, 4.0]
+          _w4 = weights(_nodes, 0.0, 4.0)
+          _p = lambda x: 2.0 - x + 0.5 * x ** 2 + 0.25 * x ** 3
+          assert abs(sum(float(_w4[i]) * _p(_nodes[i]) for i in range(4)) - (8.0 - 8.0 + 32.0 / 3.0 + 16.0)) < 1e-9, "With 4 nodes the rule should integrate every cubic exactly: for 2 - x + x^2/2 + x^3/4 on [0, 4] the integral is 80/3"
+          assert abs(float(_np.sum(weights([0.0, 2.0, 3.0], 1.0, 5.0))) - 4.0) < 1e-9, "The weights should add up to the length of the interval, because the rule must integrate the constant 1 exactly"
+          assert output.strip() == "[0.3333, 1.3333, 0.3333]\n[0.5, 0.5]", "The program should print [0.3333, 1.3333, 0.3333] and then [0.5, 0.5]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def weights(nodes, a, b):
+                n = len(nodes)
+                V = np.array([[t ** k for k in range(n)] for t in nodes])
+                moments = np.array([(b ** (k + 1) - a ** (k + 1)) / (k + 1) for k in range(n)])
+                return np.linalg.solve(V, moments)
+
+
+            print("[0.3333, 1.3333, 0.3333]\n[0.5, 0.5]")
+          - |
+            import numpy as np
+
+
+            def weights(nodes, a, b):
+                n = len(nodes)
+                V = np.array([[t ** k for k in range(n)] for t in nodes])
+                moments = np.array([(b ** (k + 1) - a ** (k + 1)) / (k + 1) for k in range(n)])
+                return V.T @ moments
+
+
+            print("[0.3333, 1.3333, 0.3333]\n[0.5, 0.5]")
+          - |
+            import numpy as np
+
+
+            def weights(nodes, a, b):
+                n = len(nodes)
+                V = np.array([[t ** k for k in range(n)] for t in nodes])
+                moments = np.array([b ** k - a ** k for k in range(n)])
+                return np.linalg.solve(V.T, moments)
+
+
+            print("[0.3333, 1.3333, 0.3333]\n[0.5, 0.5]")
+          - |
+            import numpy as np
+
+
+            def weights(nodes, a, b):
+                return np.ones(len(nodes)) * (b - a) / len(nodes)
+
+
+            print("[0.3333, 1.3333, 0.3333]\n[0.5, 0.5]")
+        explanation: |
+          The evaluation functionals are the rows of $V$, and a combination of rows with weights $\mathbf{w}$ is $V^\top\mathbf{w}$. Setting that equal to the row of integration gives the system $V^\top\mathbf{w} = \mathbf{m}$.
+
+          Solving with $V$ in place of its transpose answers a different question: it finds the **polynomial** whose values at the nodes are the numbers in $\mathbf{m}$. That is interpolation, from the lesson on rank-nullity. The same matrix serves both problems. Used one way it acts on vectors, and transposed it acts on functionals.
+
+          Equal weights, the last wrong version, is the average of the values times the length. It is exact for constants only. Every numerical integration rule of this kind, including the Gaussian rules used to compute expectations, is a functional written in a basis of evaluations.
+    - question:
+        id: fix-pullback
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `pullback(A, psi)` should return the functional "apply the map with matrix `A`, then apply `psi`", as an array. The program uses it to build "the slope at $t$" out of differentiation and evaluation at $t$, and prints the slope of $3 + 5x - 4x^2$ at $x = 2$, which is $-11$. It prints something else. Fix it.
+        starter: |
+          import numpy as np
+
+
+          def pullback(A, psi):
+              return A @ psi
+
+
+          def slope_at(t, p):
+              D = np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]])
+              ev = np.array([1.0, t, t ** 2])
+              return float(pullback(D, ev) @ p)
+
+
+          print(slope_at(2.0, np.array([3.0, 5.0, -4.0])))
+        solution: |
+          import numpy as np
+
+
+          def pullback(A, psi):
+              return A.T @ psi
+
+
+          def slope_at(t, p):
+              D = np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]])
+              ev = np.array([1.0, t, t ** 2])
+              return float(pullback(D, ev) @ p)
+
+
+          print(slope_at(2.0, np.array([3.0, 5.0, -4.0])))
+        tests: |
+          import numpy as _np
+          _D = _np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]])
+          assert _np.allclose(pullback(_D, _np.array([1.0, 2.0, 4.0])), [0.0, 1.0, 4.0]), "Differentiate then evaluate at 2 is the functional c1 + 4 c2, the row (0, 1, 4): a row times A, which as a column is the transpose of A times it"
+          _A = _np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+          _r = pullback(_A, _np.array([1.0, -1.0]))
+          assert _np.shape(_r) == (3,), "For a map from dimension 3 to dimension 2, a functional on the target pulls back to a functional on the source, of length 3"
+          assert _np.allclose(_r, [-3.0, -3.0, -3.0]), "The row (1, -1) times [[1, 2, 3], [4, 5, 6]] is (-3, -3, -3)"
+          _M = _np.random.default_rng(0).normal(size=(4, 4))
+          _psi = _np.random.default_rng(1).normal(size=4)
+          _x = _np.random.default_rng(2).normal(size=4)
+          assert abs(float(pullback(_M, _psi) @ _x) - float(_psi @ (_M @ _x))) < 1e-9, "The pulled-back functional applied to x should equal psi applied to A x"
+          assert abs(slope_at(2.0, _np.array([3.0, 5.0, -4.0])) + 11.0) < 1e-9, "The slope of 3 + 5x - 4x^2 at 2 is -11"
+          assert abs(slope_at(1.0, _np.array([0.0, 0.0, 1.0])) - 2.0) < 1e-9, "The slope of x^2 at 1 is 2"
+          assert output.strip() == "-11.0", "The program should print -11.0"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def pullback(A, psi):
+                return A @ psi
+
+
+            def slope_at(t, p):
+                D = np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]])
+                ev = np.array([1.0, t, t ** 2])
+                return float(pullback(D, ev) @ p)
+
+
+            print("-11.0")
+          - |
+            import numpy as np
+
+
+            def pullback(A, psi):
+                return psi
+
+
+            def slope_at(t, p):
+                D = np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]])
+                ev = np.array([1.0, t, t ** 2])
+                return float(pullback(D, ev) @ p)
+
+
+            print("-11.0")
+          - |
+            import numpy as np
+
+
+            def pullback(A, psi):
+                return np.linalg.pinv(A) @ psi
+
+
+            def slope_at(t, p):
+                D = np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]])
+                ev = np.array([1.0, t, t ** 2])
+                return float(pullback(D, ev) @ p)
+
+
+            print("-11.0")
+          - |
+            import numpy as np
+
+
+            def pullback(A, psi):
+                return A.T @ A @ psi
+
+
+            def slope_at(t, p):
+                D = np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]])
+                ev = np.array([1.0, t, t ** 2])
+                return float(pullback(D, ev) @ p)
+
+
+            print("-11.0")
+        explanation: |
+          `A @ psi` treats the functional as a vector and pushes it forward through the map. A functional goes the other way: $\psi \circ T$ is the row $\boldsymbol\psi A$, and stored as a flat array that is `A.T @ psi`.
+
+          With a square matrix nothing complains, because the shapes fit either way. With a map between spaces of different dimensions the wrong version would have raised an error at once, which is a reason to test such code on non-square matrices.
+
+          This function is the heart of reverse-mode differentiation. A loss is a number computed from the output of a chain of maps, so its sensitivity to the output is a functional. Passing that functional back through each layer, by the transpose of the layer's matrix, gives the sensitivity to the input. Gradients travel backwards through a network because functionals pull back.
+    - question:
+        id: work-annihilator
+        type: numeric
+        system: s2
+        prompt: |
+          A 4 by 7 matrix $A$ has rank 3. Consider the rows $\mathbf{y}$ of length 4 with $\mathbf{y}A = \mathbf{0}$. What is the dimension of the space they form?
+        answer: "1"
+        explanation: |
+          $\mathbf{y}A = \mathbf{0}$ says that the functional $\mathbf{y}$ vanishes on every column of $A$, so on the whole column space. These rows are the annihilator of the image, of dimension $4 - 3 = 1$. Equivalently they are the kernel of $A^\top$, and rank-nullity for $A^\top$, which is 7 by 4 of rank 3, gives $4 - 3 = 1$ again. In the lesson on orthogonal subspaces this space appeared as the left null space, the vectors perpendicular to the column space. The annihilator is the same idea without needing a dot product.
+    - question:
+        id: work-units
+        type: choice
+        system: s2
+        prompt: |
+          A model has one parameter, a length $x$ in metres, and the slope of its loss is $g$ per metre. The same length is now recorded in centimetres. What happens to the two numbers, and why?
+        options:
+          - 'Both are multiplied by 100, since both describe the same quantity.'
+          - 'The coordinate is multiplied by 100 and the slope is divided by 100. The coordinate belongs to a vector and the slope to a functional, and they must change oppositely so that slope times displacement, a change in loss, stays the same.'
+          - 'Neither changes. Units do not affect mathematics.'
+          - 'The coordinate is divided by 100 and the slope multiplied by 100.'
+        answer: 1
+        explanation: |
+          The new basis vector is one centimetre, $P = (0.01)$. Vector coordinates become $P^{-1}x = 100x$, and functional rows become $gP = g/100$. Their product is unchanged, as it must be: it is a number that does not care about units. One consequence is that the rule "new parameters = old parameters minus a step size times the slope" subtracts a functional from a vector, and its result depends on the units chosen. Rescale a parameter and plain gradient descent takes a different path. Much of the craft of optimisation is a response to this fact.
+    - question:
+        id: work-not-natural
+        type: choice
+        system: s2
+        prompt: |
+          $V$ and $V^*$ have the same dimension, so they are isomorphic. Why does one still keep them apart?
+        options:
+          - 'They are not really isomorphic, since functionals are not vectors.'
+          - 'An isomorphism exists, but each one depends on a choice. Sending each basis vector to its dual basis functional gives a different map for a different basis, and no choice-free candidate exists. Only extra structure, such as a dot product, singles one out.'
+          - 'Because the dual space has no zero vector.'
+          - 'Because the dual space is over a different field.'
+        answer: 1
+        explanation: |
+          For the basis $(1, 1), (1, 2)$ the dual basis was $(2, -1), (-1, 1)$, so "turn each basis vector into its dual functional" sends $(1, 1)$ to the row $(2, -1)$. For the standard basis the same recipe sends $(1, 1)$ to the row $(1, 1)$. The identification moves when the basis moves. In $\mathbb{R}^n$ we have always identified the column $\mathbf{a}$ with the functional $\mathbf{x} \mapsto \mathbf{a} \cdot \mathbf{x}$, and that used the dot product. A dot product is exactly the extra structure that ties a space to its dual, and it is the subject of the next lesson.
+  connections:
+    - text: |
+        Simpson's rule computes an integral from three values because integration and evaluation are **linear functionals** on quadratics, the functionals form the **dual space**, of dimension 3, and three evaluations are a basis of it. Every basis of a space has a **dual basis** of coordinate functionals, which in $\mathbb{R}^n$ are the rows of $P^{-1}$.
+
+        A linear map $T$ has a **dual map** $\psi \mapsto \psi \circ T$ that carries functionals backwards, and its matrix is the **transpose**. The kernel of the dual map is the annihilator of the image, and from that the rank of a matrix equals the rank of its transpose. Under a change of basis, vectors and functionals change in opposite ways, so that a functional applied to a vector is the same number in every basis.
+
+        Until now, a column $\mathbf{a}$ and the functional "take the dot product with $\mathbf{a}$" have been treated as the same object. That identification is not free. It is made by the dot product, and a different way of multiplying vectors would make it differently. The next lesson asks what a dot product is, abstractly, and finds that spaces of polynomials, of matrices and of random quantities all carry one, with lengths and right angles to match: [[m6.inner-product-spaces]].

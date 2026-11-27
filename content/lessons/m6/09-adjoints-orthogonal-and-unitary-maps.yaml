@@ -1,0 +1,667 @@
+concept: m6.adjoints-orthogonal-and-unitary-maps
+minutes: 90
+claim: You can define the adjoint of a linear map on an inner product space by moving the map across the inner product, show that its matrix in an orthonormal basis is the transpose or conjugate transpose and compute it in a basis that is not orthonormal, relate the kernel of the adjoint to the image of the map, recognise self-adjoint maps, and characterise orthogonal and unitary maps as those that preserve inner products, lengths and orthonormal bases.
+recalls: [m6.cauchy-schwarz-and-the-triangle-inequality]
+uses: [m6.inner-product-spaces, m6.dual-spaces-and-the-transpose, m6.matrix-of-a-linear-map-and-similarity, m6.linear-maps-kernel-and-image, m6.rank-nullity-theorem, m5.transpose, m5.identity-and-inverse, m5.determinant, m7.orthonormal-bases, m7.orthogonal-subspaces, m7.projection-onto-a-subspace, m7.least-squares-and-the-normal-equations, m7.conditioning, m1.complex-numbers, e5.linear-algebra-routines, e5.broadcasting, e0.functions]
+leads: [m8.eigenvalues-and-eigenvectors, m8.spectral-theorem, m8.singular-value-decomposition]
+starter: |
+  # Scratch space. Polynomials of degree at most 2 as coefficient arrays.
+  # G gives the inner product "integral of p*q from -1 to 1" as p @ G @ q.
+  # D is differentiation. Can D be moved to the other side as D.T?
+  import numpy as np
+
+  G = np.array([[2.0 / (i + j + 1) if (i + j) % 2 == 0 else 0.0 for j in range(3)] for i in range(3)])
+  D = np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]])
+  p = np.array([1.0, 1.0, 0.0])
+  q = np.array([0.0, 0.0, 1.0])
+  left = (D @ p) @ G @ q
+  with_transpose = p @ G @ (D.T @ q)
+  with_adjoint = p @ G @ np.linalg.solve(G, D.T @ G @ q)
+  print(round(float(left), 4), round(float(with_transpose), 4), round(float(with_adjoint), 4))
+parts:
+  recall:
+    - text: |
+        [[m6.cauchy-schwarz-and-the-triangle-inequality]] finished the geometry of vectors in an inner product space. The cluster's other subject, linear maps, has not yet met that geometry. Today they meet, and the cluster closes. Three quick pulls first.
+  puzzle:
+    - text: |
+        One rule about the transpose has been used again and again since the matrices cluster: a matrix can be moved to the other side of a dot product if it is transposed,
+
+        $$(A\mathbf{x}) \cdot \mathbf{y} = \mathbf{x} \cdot (A^\top\mathbf{y}).$$
+
+        The normal equations came from it. So did the four fundamental subspaces.
+
+        The starter tries the rule on polynomials, with the integral inner product, for $p = 1 + x$, $q = x^2$ and $D$ = differentiation.
+
+        ```
+        0.6667 0.0 0.6667
+        ```
+
+        $\langle Dp, q \rangle = \tfrac23$, but $\langle p, D^\top q \rangle = 0$. The rule fails. The third number uses a different matrix in place of $D^\top$, namely $G^{-1}D^\top G$, and it agrees.
+
+        **Which map belongs on the other side of an inner product? And when is it simply the transpose?**
+  intuition:
+    - text: |
+        Fix a linear map $T$ on an inner product space. For any two vectors, $\langle T\mathbf{u}, \mathbf{v} \rangle$ is a number that measures how much of $T\mathbf{u}$ lies along $\mathbf{v}$. The question is whether the same number can be had by leaving $\mathbf{u}$ alone and doing something to $\mathbf{v}$ instead.
+
+        It can, and there is exactly one linear map that does it. It is called the **adjoint** of $T$ and written $T^*$:
+
+        $$\langle T\mathbf{u}, \mathbf{v} \rangle = \langle \mathbf{u}, T^*\mathbf{v} \rangle \quad\text{for all } \mathbf{u}, \mathbf{v}.$$
+
+        This is the dual map of two lessons ago, seen through the inner product. The dual map carried functionals backwards. The inner product turns functionals into vectors, so now a map carries **vectors** backwards.
+
+        The transpose is the matrix of the adjoint when coordinates are taken in an **orthonormal** basis, because then the inner product is the plain dot product of coordinates. The monomials $1, x, x^2$ are not orthonormal for the integral. That is all that went wrong in the puzzle.
+
+        Two kinds of map stand out once adjoints exist. A map equal to its own adjoint, $T^* = T$, is **self-adjoint**: symmetric matrices, in an orthonormal basis. And a map whose adjoint is its inverse, $T^*T = I$, preserves every inner product, hence every length and angle. Over the reals these are the **orthogonal** maps, rotations and reflections, and over the complex numbers the **unitary** maps. They are the rigid motions of the space.
+  derivation:
+    - text: |
+        **Existence and uniqueness.** Let $T: V \to W$ be linear between finite-dimensional inner product spaces. Fix $\mathbf{v} \in W$. The rule $\mathbf{u} \mapsto \langle T\mathbf{u}, \mathbf{v} \rangle$ is a linear functional on $V$. By the representation theorem of the inner product lesson, it equals $\mathbf{u} \mapsto \langle \mathbf{u}, \mathbf{a} \rangle$ for exactly one $\mathbf{a} \in V$. Define $T^*\mathbf{v} = \mathbf{a}$. Then $\langle T\mathbf{u}, \mathbf{v} \rangle = \langle \mathbf{u}, T^*\mathbf{v} \rangle$ by construction, and one checks that $T^*: W \to V$ is linear.
+
+        **Its matrix.** Take orthonormal bases, so that inner products are dot products of coordinates, and let $A$ be the matrix of $T$. In the real case
+
+        $$\langle T\mathbf{u}, \mathbf{v} \rangle = (A\mathbf{x})^\top\mathbf{y} = \mathbf{x}^\top(A^\top\mathbf{y}),$$
+
+        so the matrix of $T^*$ is $A^\top$. In the complex case the inner product is $\mathbf{x}^\top\overline{\mathbf{y}}$, and the same computation gives the **conjugate transpose** $A^{\mathsf H} = \overline{A}^\top$.
+
+        In a basis with Gram matrix $G$, the real inner product is $\mathbf{x}^\top G\mathbf{y}$. We need $(A\mathbf{x})^\top G\mathbf{y} = \mathbf{x}^\top G(B\mathbf{y})$ for all $\mathbf{x}, \mathbf{y}$, that is $A^\top G = GB$:
+
+        $$B = G^{-1}A^\top G.$$
+
+        That is the matrix the starter used. For differentiation on $P_2$ it works out to
+
+        $$D^* = \begin{pmatrix} 0 & -2.5 & 0 \\ 3 & 0 & 1 \\ 0 & 7.5 & 0 \end{pmatrix},$$
+
+        which looks nothing like $D^\top$. When $G = I$ the formula collapses to $A^\top$.
+
+        **Rules.** $(S + T)^* = S^* + T^*$, $(ST)^* = T^*S^*$, $(T^*)^* = T$, and $(cT)^* = \overline{c}\,T^*$. Each follows by moving maps across the inner product one at a time.
+
+        **Kernel and image.** $\mathbf{v} \in \ker T^*$ means $\langle \mathbf{u}, T^*\mathbf{v} \rangle = 0$ for all $\mathbf{u}$, that is $\langle T\mathbf{u}, \mathbf{v} \rangle = 0$ for all $\mathbf{u}$: $\mathbf{v}$ is orthogonal to everything $T$ produces.
+
+        $$\ker T^* = (\operatorname{im} T)^\perp, \qquad \ker T = (\operatorname{im} T^*)^\perp.$$
+
+        These are the four fundamental subspaces, now without matrices. Least squares is one line: the residual $\mathbf{b} - T\mathbf{x}$ of the best approximation is orthogonal to the image, so it lies in $\ker T^*$, so $T^*T\mathbf{x} = T^*\mathbf{b}$.
+    - question:
+        id: derivation-adjoint-entry
+        type: numeric
+        system: s2
+        prompt: |
+          Use $\langle \mathbf{x}, \mathbf{y} \rangle = x_1y_1 + 4x_2y_2$ on the plane, with Gram matrix $G = \begin{pmatrix} 1 & 0 \\ 0 & 4 \end{pmatrix}$ in the standard basis. Let $A = \begin{pmatrix} 0 & 1 \\ 0 & 0 \end{pmatrix}$. In the matrix $G^{-1}A^\top G$ of the adjoint, what is the entry in row 2, column 1?
+        answer: "0.25"
+        explanation: |
+          $A^\top G = \begin{pmatrix} 0 & 0 \\ 1 & 0 \end{pmatrix}\begin{pmatrix} 1 & 0 \\ 0 & 4 \end{pmatrix} = \begin{pmatrix} 0 & 0 \\ 1 & 0 \end{pmatrix}$, and multiplying by $G^{-1}$ divides the second row by 4. So the adjoint is $\begin{pmatrix} 0 & 0 \\ 0.25 & 0 \end{pmatrix}$, where the transpose has a 1. Check on $\mathbf{u} = \mathbf{e}_2$, $\mathbf{v} = \mathbf{e}_1$: $\langle A\mathbf{e}_2, \mathbf{e}_1 \rangle = \langle \mathbf{e}_1, \mathbf{e}_1 \rangle = 1$, and $\langle \mathbf{e}_2, 0.25\,\mathbf{e}_2 \rangle = 4 \times 0.25 = 1$.
+    - text: |
+        **Self-adjoint maps.** $T: V \to V$ is **self-adjoint** if $T^* = T$, that is $\langle T\mathbf{u}, \mathbf{v} \rangle = \langle \mathbf{u}, T\mathbf{v} \rangle$. In an orthonormal basis its matrix is symmetric, $A^\top = A$, or over $\mathbb{C}$ Hermitian, $A^{\mathsf H} = A$.
+
+        - $T^*T$ is always self-adjoint: $(T^*T)^* = T^*T^{**} = T^*T$. So $A^\top A$ is symmetric, whatever $A$ is.
+        - An orthogonal projection is self-adjoint. A projection along a slanted direction is not.
+        - Whether a map is self-adjoint depends on the inner product. Symmetry of a matrix means something only when the basis is orthonormal.
+
+        **Maps that preserve the geometry.** For $Q: V \to V$ the following are equivalent.
+
+        1. $\langle Q\mathbf{u}, Q\mathbf{v} \rangle = \langle \mathbf{u}, \mathbf{v} \rangle$ for all $\mathbf{u}, \mathbf{v}$.
+        2. $\|Q\mathbf{v}\| = \|\mathbf{v}\|$ for all $\mathbf{v}$.
+        3. $Q^*Q = I$.
+        4. $Q$ sends an orthonormal basis to an orthonormal basis.
+
+        *Why.* (1) gives (2) by taking $\mathbf{u} = \mathbf{v}$. (2) gives (1) by polarisation: the inner product is built from norms. (1) says $\langle \mathbf{u}, Q^*Q\mathbf{v} \rangle = \langle \mathbf{u}, \mathbf{v} \rangle$ for all $\mathbf{u}$, which forces $Q^*Q\mathbf{v} = \mathbf{v}$, and that is (3). And (4) is (1) read on basis vectors.
+
+        Such a map is called **orthogonal** over $\mathbb{R}$ and **unitary** over $\mathbb{C}$. As matrices in an orthonormal basis: $Q^\top Q = I$, or $U^{\mathsf H}U = I$. The columns are orthonormal, the inverse is the transpose (or conjugate transpose), and so the rows are orthonormal too.
+
+        **Consequences.**
+
+        - $\det(Q^\top Q) = (\det Q)^2 = 1$, so $\det Q = \pm1$. Determinant $+1$ are the rotations and $-1$ includes the reflections.
+        - Products and inverses of orthogonal maps are orthogonal.
+        - An orthogonal map moves errors without stretching them: $\|Q(\mathbf{x} + \mathbf{e}) - Q\mathbf{x}\| = \|\mathbf{e}\|$. Its condition number is 1, the best possible. That is why QR, built from orthogonal matrices, is the stable way to solve least squares.
+        - A change of basis between two orthonormal bases has $P^{-1} = P^\top$. So $B = P^\top AP$, and if $A$ is symmetric then so is $B$. Orthonormal changes of basis keep self-adjoint maps looking self-adjoint.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the argument that a map which preserves all lengths satisfies Q*Q = I.
+        steps:
+          - 'Assume $\|Q\mathbf{v}\| = \|\mathbf{v}\|$ for every $\mathbf{v}$.'
+          - 'By polarisation, inner products are determined by norms, so $\langle Q\mathbf{u}, Q\mathbf{v} \rangle = \langle \mathbf{u}, \mathbf{v} \rangle$.'
+          - 'Move $Q$ across the inner product: $\langle \mathbf{u}, Q^*Q\mathbf{v} \rangle = \langle \mathbf{u}, \mathbf{v} \rangle$ for all $\mathbf{u}$.'
+          - 'So $Q^*Q\mathbf{v} - \mathbf{v}$ is orthogonal to every vector, including itself, and must be zero.'
+          - 'This holds for every $\mathbf{v}$, so $Q^*Q = I$.'
+        explanation: Lengths give inner products by polarisation, the adjoint moves one Q across, and a vector orthogonal to everything is zero.
+  formal:
+    - text: |
+        Let $V, W$ be finite-dimensional inner product spaces over $F = \mathbb{R}$ or $\mathbb{C}$.
+
+        **Adjoint.** For $T \in \mathcal{L}(V, W)$ there is a unique $T^* \in \mathcal{L}(W, V)$ with $\langle T\mathbf{u}, \mathbf{v} \rangle_W = \langle \mathbf{u}, T^*\mathbf{v} \rangle_V$ for all $\mathbf{u} \in V$, $\mathbf{v} \in W$. In orthonormal bases its matrix is $A^{\mathsf H}$ ($= A^\top$ over $\mathbb{R}$). With real Gram matrices $G_V, G_W$ in arbitrary bases it is $G_V^{-1}A^\top G_W$.
+
+        **Properties.** $(S + T)^* = S^* + T^*$, $(cT)^* = \overline{c}T^*$, $(ST)^* = T^*S^*$, $T^{**} = T$, $I^* = I$.
+
+        **Subspaces.** $\ker T^* = (\operatorname{im} T)^\perp$, $\operatorname{im} T^* = (\ker T)^\perp$, and $\operatorname{rank} T^* = \operatorname{rank} T$. Also $\ker T^*T = \ker T$.
+
+        **Self-adjoint.** $T \in \mathcal{L}(V, V)$ with $T^* = T$. Matrix in an orthonormal basis: symmetric (real), Hermitian (complex). For self-adjoint $T$, $\langle T\mathbf{v}, \mathbf{v} \rangle$ is real for every $\mathbf{v}$.
+
+        **Orthogonal and unitary.** $Q \in \mathcal{L}(V, V)$ with $Q^*Q = I$, equivalently $QQ^* = I$, equivalently $\langle Q\mathbf{u}, Q\mathbf{v} \rangle = \langle \mathbf{u}, \mathbf{v} \rangle$ for all $\mathbf{u}, \mathbf{v}$, equivalently $\|Q\mathbf{v}\| = \|\mathbf{v}\|$ for all $\mathbf{v}$. Then $|\det Q| = 1$. They form a group under composition.
+
+        **Isometries between different spaces.** If $T: V \to W$ has $T^*T = I_V$ then $T$ preserves inner products and is injective, but $TT^*$ is only the orthogonal projection onto $\operatorname{im} T$. This is the tall matrix with orthonormal columns.
+
+        **Normal maps.** $T$ is normal if $T^*T = TT^*$. Self-adjoint and unitary maps are normal.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-definition
+        type: choice
+        system: s1
+        prompt: |
+          The adjoint $T^*$ is defined by
+        options: ['$T^*T = I$', '$\langle T\mathbf{u}, \mathbf{v} \rangle = \langle \mathbf{u}, T^*\mathbf{v} \rangle$ for all $\mathbf{u}, \mathbf{v}$', '$T^* = T^{-1}$', '$\langle T\mathbf{u}, T^*\mathbf{v} \rangle = 0$']
+        answer: 1
+        explanation: It is the map that does the same job from the other slot.
+    - question:
+        id: drill-matrix-real
+        type: choice
+        system: s1
+        prompt: |
+          In an orthonormal basis of a real inner product space, the matrix of $T^*$ is
+        options: ['$A^{-1}$', '$A^\top$', '$-A$', '$A$']
+        answer: 1
+        explanation: The inner product is the dot product of coordinates.
+    - question:
+        id: drill-matrix-complex
+        type: choice
+        system: s1
+        prompt: |
+          In an orthonormal basis of a complex inner product space, the matrix of $T^*$ is
+        options: ['$A^\top$', 'the conjugate transpose of $A$', 'the conjugate of $A$', '$A^{-1}$']
+        answer: 1
+        explanation: Transpose, and conjugate every entry.
+    - question:
+        id: drill-gram
+        type: choice
+        system: s1
+        prompt: |
+          In a basis with Gram matrix $G$, the matrix of the adjoint of $A$ is
+        options: ['$A^\top$', '$G^{-1}A^\top G$', '$GA^\top G^{-1}$', '$G A G$']
+        answer: 1
+        explanation: From $A^\top G = GB$.
+    - question:
+        id: drill-product
+        type: choice
+        system: s1
+        prompt: |
+          $(ST)^*$ equals
+        options: ['$S^*T^*$', '$T^*S^*$', '$ST$', '$(TS)^*$']
+        answer: 1
+        explanation: Moving a product across reverses the order.
+    - question:
+        id: drill-kernel
+        type: choice
+        system: s1
+        prompt: |
+          The kernel of $T^*$ is
+        options: ['the image of $T$', 'the orthogonal complement of the image of $T$', 'the kernel of $T$', 'always zero']
+        answer: 1
+        explanation: The vectors orthogonal to everything $T$ produces.
+    - question:
+        id: drill-self-adjoint
+        type: choice
+        system: s1
+        prompt: |
+          Which matrix is self-adjoint for the dot product?
+        options: ['$\begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix}$', '$\begin{pmatrix} 1 & 2 \\ 2 & 5 \end{pmatrix}$', '$\begin{pmatrix} 0 & 1 \\ -1 & 0 \end{pmatrix}$', '$\begin{pmatrix} 1 & 1 \\ 0 & 1 \end{pmatrix}$']
+        answer: 1
+        explanation: It equals its transpose.
+    - question:
+        id: drill-ata
+        type: choice
+        system: s1
+        prompt: |
+          For any real matrix $A$, the matrix $A^\top A$ is
+        options: ['orthogonal', 'symmetric', 'invertible', 'diagonal']
+        answer: 1
+        explanation: $(A^\top A)^\top = A^\top A$.
+    - question:
+        id: drill-orthogonal
+        type: choice
+        system: s1
+        prompt: |
+          A real square matrix $Q$ is orthogonal when
+        options: ['$Q^\top = Q$', '$Q^\top Q = I$', '$Q^2 = I$', '$\det Q = 0$']
+        answer: 1
+        explanation: Its transpose is its inverse.
+    - question:
+        id: drill-length
+        type: numeric
+        system: s1
+        prompt: |
+          $Q$ is orthogonal and $\|\mathbf{x}\| = 5$. What is $\|Q\mathbf{x}\|$?
+        answer: "5"
+        explanation: Orthogonal maps preserve lengths.
+    - question:
+        id: drill-inner
+        type: numeric
+        system: s1
+        prompt: |
+          $Q$ is orthogonal and $\mathbf{u} \cdot \mathbf{v} = -3$. What is $(Q\mathbf{u}) \cdot (Q\mathbf{v})$?
+        answer: "-3"
+        explanation: They preserve inner products, hence angles.
+    - question:
+        id: drill-det
+        type: choice
+        system: s1
+        prompt: |
+          The determinant of an orthogonal matrix is
+        options: ['0', '$+1$ or $-1$', 'any positive number', '2']
+        answer: 1
+        explanation: $(\det Q)^2 = \det(Q^\top Q) = 1$.
+    - question:
+        id: drill-unitary
+        type: choice
+        system: s1
+        prompt: |
+          A complex square matrix $U$ is unitary when
+        options: ['$U^\top U = I$', '$U^{\mathsf H}U = I$', '$U = \overline{U}$', '$U^2 = I$']
+        answer: 1
+        explanation: The conjugate transpose is the inverse.
+    - question:
+        id: predict-rotation
+        type: predict
+        system: s1
+        prompt: A rotation of the plane, applied to two vectors. What does this show?
+        code: |
+          import numpy as np
+
+          Q = np.array([[0.6, -0.8], [0.8, 0.6]])
+          u = np.array([1.0, 2.0])
+          v = np.array([3.0, -1.0])
+          print(round(float(u @ v), 4), round(float((Q @ u) @ (Q @ v)), 4))
+          print(round(float(u @ u), 4), round(float((Q @ u) @ (Q @ u)), 4))
+          print(np.allclose(Q.T @ Q, np.eye(2)), round(float(np.linalg.det(Q)), 4))
+        output: |
+          1.0 1.0
+          5.0 5.0
+          True 1.0
+        explanation: The dot product and the squared length are the same before and after. Q transpose times Q is the identity, and the determinant is +1, as for every rotation.
+    - question:
+        id: predict-adjoint
+        type: predict
+        system: s1
+        prompt: The plane with the inner product x1 y1 + 4 x2 y2. What does this show?
+        code: |
+          import numpy as np
+
+          G = np.array([[1.0, 0.0], [0.0, 4.0]])
+          A = np.array([[0.0, 1.0], [0.0, 0.0]])
+          adj = np.linalg.solve(G, A.T @ G)
+          print(adj.tolist())
+          u = np.array([2.0, 3.0])
+          v = np.array([5.0, 1.0])
+          print(float((A @ u) @ G @ v), float(u @ G @ (A.T @ v)), float(u @ G @ (adj @ v)))
+        output: |
+          [[0.0, 0.0], [0.25, 0.0]]
+          15.0 60.0 15.0
+        explanation: With a weighted inner product the adjoint is not the transpose. Moving A across with its transpose gives 60 where 15 is needed, and the true adjoint gives 15.
+  work:
+    - text: Slower now. Keep track of which inner product is in force.
+    - question:
+        id: write-adjoint
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          The inner product of coordinate arrays is `x @ G @ y` for a Gram matrix `G`. Write `adjoint(A, G)`: the matrix `B` with `(A @ x) @ G @ y == x @ G @ (B @ y)` for all `x`, `y`. Use `np.linalg.solve`. Then write `self_adjoint(A, G)`, which returns whether `A` is its own adjoint for that inner product, using `np.allclose`.
+        starter: |
+          import numpy as np
+
+
+          def adjoint(A, G):
+              return A * 1.0
+
+
+          def self_adjoint(A, G):
+              return False
+
+
+          G = np.array([[2.0 / (i + j + 1) if (i + j) % 2 == 0 else 0.0 for j in range(3)] for i in range(3)])
+          D = np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]])
+          print([[round(float(c), 4) + 0.0 for c in row] for row in adjoint(D, G)])
+          S = np.array([[2.0, 1.0], [1.0, 3.0]])
+          print(self_adjoint(S, np.eye(2)), self_adjoint(S, np.array([[1.0, 0.0], [0.0, 4.0]])))
+        solution: |
+          import numpy as np
+
+
+          def adjoint(A, G):
+              return np.linalg.solve(G, A.T @ G)
+
+
+          def self_adjoint(A, G):
+              return np.allclose(adjoint(A, G), A)
+
+
+          G = np.array([[2.0 / (i + j + 1) if (i + j) % 2 == 0 else 0.0 for j in range(3)] for i in range(3)])
+          D = np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]])
+          print([[round(float(c), 4) + 0.0 for c in row] for row in adjoint(D, G)])
+          S = np.array([[2.0, 1.0], [1.0, 3.0]])
+          print(self_adjoint(S, np.eye(2)), self_adjoint(S, np.array([[1.0, 0.0], [0.0, 4.0]])))
+        tests: |
+          import numpy as _np
+          _A = _np.array([[1.0, 2.0], [3.0, 4.0]])
+          assert _np.allclose(adjoint(_A, _np.eye(2)), _A.T), "For the dot product, G = I, the adjoint is the transpose"
+          _W = _np.array([[1.0, 0.0], [0.0, 4.0]])
+          assert _np.allclose(adjoint(_np.array([[0.0, 1.0], [0.0, 0.0]]), _W), [[0.0, 0.0], [0.25, 0.0]]), "With G = diag(1, 4) the adjoint of [[0, 1], [0, 0]] is [[0, 0], [0.25, 0]]: G inverse times A transpose times G"
+          _G = _np.array([[2.0 / (i + j + 1) if (i + j) % 2 == 0 else 0.0 for j in range(3)] for i in range(3)])
+          _D = _np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]])
+          assert _np.allclose(adjoint(_D, _G), [[0.0, -2.5, 0.0], [3.0, 0.0, 1.0], [0.0, 7.5, 0.0]]), "The adjoint of differentiation on quadratics for the integral inner product has rows (0, -2.5, 0), (3, 0, 1), (0, 7.5, 0)"
+          _M = _np.random.default_rng(0).normal(size=(4, 4))
+          _H = _M.T @ _M + _np.eye(4)
+          _B = _np.random.default_rng(1).normal(size=(4, 4))
+          _x = _np.random.default_rng(2).normal(size=4); _y = _np.random.default_rng(3).normal(size=4)
+          assert abs(float((_B @ _x) @ _H @ _y) - float(_x @ _H @ (adjoint(_B, _H) @ _y))) < 1e-8, "The defining identity (A x) @ G @ y == x @ G @ (adjoint @ y) should hold for a general Gram matrix"
+          _S = _np.array([[2.0, 1.0], [1.0, 3.0]])
+          assert self_adjoint(_S, _np.eye(2)) == True, "A symmetric matrix is self-adjoint for the dot product"
+          assert self_adjoint(_S, _W) == False, "The same symmetric matrix is not self-adjoint for the weighted inner product"
+          assert self_adjoint(_A, _np.eye(2)) == False, "[[1, 2], [3, 4]] is not symmetric"
+          assert self_adjoint(_np.eye(4), _H) == True, "The identity is self-adjoint for every inner product"
+          assert self_adjoint(_np.linalg.solve(_H, _B + _B.T), _H) == True, "G inverse times a symmetric matrix is self-adjoint for the inner product with Gram matrix G"
+          assert output.strip() == "[[0.0, -2.5, 0.0], [3.0, 0.0, 1.0], [0.0, 7.5, 0.0]]\nTrue False", "The program should print the adjoint of D and then True False"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def adjoint(A, G):
+                return A.T * 1.0
+
+
+            def self_adjoint(A, G):
+                return np.allclose(adjoint(A, G), A)
+
+
+            print("[[0.0, -2.5, 0.0], [3.0, 0.0, 1.0], [0.0, 7.5, 0.0]]\nTrue False")
+          - |
+            import numpy as np
+
+
+            def adjoint(A, G):
+                return G @ A.T @ np.linalg.inv(G)
+
+
+            def self_adjoint(A, G):
+                return np.allclose(adjoint(A, G), A)
+
+
+            print("[[0.0, -2.5, 0.0], [3.0, 0.0, 1.0], [0.0, 7.5, 0.0]]\nTrue False")
+          - |
+            import numpy as np
+
+
+            def adjoint(A, G):
+                return np.linalg.solve(G, A.T)
+
+
+            def self_adjoint(A, G):
+                return np.allclose(adjoint(A, G), A)
+
+
+            print("[[0.0, -2.5, 0.0], [3.0, 0.0, 1.0], [0.0, 7.5, 0.0]]\nTrue False")
+          - |
+            import numpy as np
+
+
+            def adjoint(A, G):
+                return np.linalg.solve(G, A.T @ G)
+
+
+            def self_adjoint(A, G):
+                return np.allclose(A, A.T)
+
+
+            print("[[0.0, -2.5, 0.0], [3.0, 0.0, 1.0], [0.0, 7.5, 0.0]]\nTrue False")
+        explanation: |
+          The requirement $(A\mathbf{x})^\top G\mathbf{y} = \mathbf{x}^\top GB\mathbf{y}$ for all $\mathbf{x}, \mathbf{y}$ is the matrix equation $A^\top G = GB$, and `solve(G, A.T @ G)` returns $B$.
+
+          The adjoint of differentiation has a meaning. Integration by parts says $\int p'q = [pq]_{-1}^{1} - \int pq'$. So moving a derivative across the integral gives **minus** the derivative plus boundary terms, and the matrix found is those two effects together on quadratics. On functions that vanish at both ends the boundary terms disappear and the adjoint of $D$ is $-D$.
+
+          The last wrong version tests symmetry of the matrix. That is the right test only when the basis is orthonormal. The matrix $S$ is self-adjoint for the dot product and not for the weighted one: self-adjointness is a property of a map together with an inner product.
+    - question:
+        id: write-reflection
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `orthogonal(Q)`: whether the square matrix `Q` satisfies $Q^\top Q = I$, using `np.allclose`. Then write `reflection(n)`: the matrix of the reflection of $\mathbb{R}^k$ in the hyperplane perpendicular to the nonzero vector `n`,
+
+          $$H = I - 2\,\frac{\mathbf{n}\mathbf{n}^\top}{\mathbf{n}^\top\mathbf{n}}.$$
+
+          The matrix $\mathbf{n}\mathbf{n}^\top$ can be formed as `n[:, np.newaxis] * n[np.newaxis, :]`.
+        starter: |
+          import numpy as np
+
+
+          def orthogonal(Q):
+              return False
+
+
+          def reflection(n):
+              return np.eye(len(n))
+
+
+          H = reflection(np.array([1.0, 2.0, 2.0]))
+          print([[round(float(c), 4) + 0.0 for c in row] for row in H * 9.0])
+          print(orthogonal(H), round(float(np.linalg.det(H)), 4))
+        solution: |
+          import numpy as np
+
+
+          def orthogonal(Q):
+              return np.allclose(Q.T @ Q, np.eye(len(Q)))
+
+
+          def reflection(n):
+              return np.eye(len(n)) - 2.0 * n[:, np.newaxis] * n[np.newaxis, :] / (n @ n)
+
+
+          H = reflection(np.array([1.0, 2.0, 2.0]))
+          print([[round(float(c), 4) + 0.0 for c in row] for row in H * 9.0])
+          print(orthogonal(H), round(float(np.linalg.det(H)), 4))
+        tests: |
+          import numpy as _np
+          assert orthogonal(_np.array([[0.6, -0.8], [0.8, 0.6]])) == True, "A rotation is orthogonal"
+          assert orthogonal(_np.array([[0.0, 1.0], [1.0, 0.0]])) == True, "Swapping the two coordinates is orthogonal"
+          assert orthogonal(_np.array([[1.0, 1.0], [0.0, 1.0]])) == False, "A shear is not orthogonal"
+          assert orthogonal(_np.array([[2.0, 0.0], [0.0, 0.5]])) == False, "diag(2, 0.5) has determinant 1 but changes lengths, so it is not orthogonal"
+          assert orthogonal(_np.array([[3.0, -4.0], [4.0, 3.0]])) == False, "Columns that are perpendicular but of length 5 do not make an orthogonal matrix"
+          _n = _np.array([1.0, 2.0, 2.0])
+          _H = reflection(_n)
+          assert _np.shape(_H) == (3, 3), "The reflection of R^3 is a 3 by 3 matrix"
+          assert _np.allclose(_H * 9.0, [[7.0, -4.0, -4.0], [-4.0, 1.0, -8.0], [-4.0, -8.0, 1.0]]), "For n = (1, 2, 2), nine times the reflection has rows (7, -4, -4), (-4, 1, -8), (-4, -8, 1)"
+          assert _np.allclose(_H @ _n, -_n), "The reflection should send n to minus n"
+          assert _np.allclose(_H @ _np.array([2.0, -1.0, 0.0]), [2.0, -1.0, 0.0]), "A vector perpendicular to n lies in the mirror and should not move"
+          assert _np.allclose(reflection(_np.array([0.0, 5.0])), [[1.0, 0.0], [0.0, -1.0]]), "Reflecting the plane in the line perpendicular to (0, 5) flips the second coordinate, whatever the length of n"
+          assert _np.allclose(_H @ _H, _np.eye(3)) and _np.allclose(_H, _H.T), "A reflection is its own inverse and is symmetric"
+          assert output.strip() == "[[7.0, -4.0, -4.0], [-4.0, 1.0, -8.0], [-4.0, -8.0, 1.0]]\nTrue -1.0", "The program should print nine times H and then True -1.0"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def orthogonal(Q):
+                return np.allclose(Q.T, Q)
+
+
+            def reflection(n):
+                return np.eye(len(n)) - 2.0 * n[:, np.newaxis] * n[np.newaxis, :] / (n @ n)
+
+
+            print("[[7.0, -4.0, -4.0], [-4.0, 1.0, -8.0], [-4.0, -8.0, 1.0]]\nTrue -1.0")
+          - |
+            import numpy as np
+
+
+            def orthogonal(Q):
+                return np.allclose(abs(float(np.linalg.det(Q))), 1.0)
+
+
+            def reflection(n):
+                return np.eye(len(n)) - 2.0 * n[:, np.newaxis] * n[np.newaxis, :] / (n @ n)
+
+
+            print("[[7.0, -4.0, -4.0], [-4.0, 1.0, -8.0], [-4.0, -8.0, 1.0]]\nTrue -1.0")
+          - |
+            import numpy as np
+
+
+            def orthogonal(Q):
+                return np.allclose(Q.T @ Q, np.eye(len(Q)))
+
+
+            def reflection(n):
+                return np.eye(len(n)) - n[:, np.newaxis] * n[np.newaxis, :] / (n @ n)
+
+
+            print("[[7.0, -4.0, -4.0], [-4.0, 1.0, -8.0], [-4.0, -8.0, 1.0]]\nTrue -1.0")
+          - |
+            import numpy as np
+
+
+            def orthogonal(Q):
+                return np.allclose(Q.T @ Q, np.eye(len(Q)))
+
+
+            def reflection(n):
+                return np.eye(len(n)) - 2.0 * n[:, np.newaxis] * n[np.newaxis, :]
+
+
+            print("[[7.0, -4.0, -4.0], [-4.0, 1.0, -8.0], [-4.0, -8.0, 1.0]]\nTrue -1.0")
+        explanation: |
+          $\dfrac{\mathbf{n}\mathbf{n}^\top}{\mathbf{n}^\top\mathbf{n}}$ is the projection onto the line of $\mathbf{n}$. Subtracting it once removes the part of a vector along $\mathbf{n}$, which is the third wrong version, a projection onto the mirror. Subtracting it twice reverses that part, which is a reflection.
+
+          A reflection is both self-adjoint and orthogonal: $H^\top = H$ and $H^\top H = H^2 = I$. Its determinant is $-1$. A determinant of $\pm1$ does not make a matrix orthogonal, as $\operatorname{diag}(2, 0.5)$ shows.
+
+          These matrices are called Householder reflections, and they are how QR factorisations are computed in practice: a few reflections, each chosen to clear a column below the diagonal. Being orthogonal, they add no error of their own.
+    - question:
+        id: fix-unitary
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `unitary(U)` should say whether a complex square matrix preserves the complex inner product. The matrix $\frac{1}{\sqrt2}\begin{pmatrix} 1 & i \\ i & 1 \end{pmatrix}$ does, and the function says `False`. Fix it.
+        starter: |
+          import numpy as np
+
+
+          def unitary(U):
+              return np.allclose(U.T @ U, np.eye(len(U)))
+
+
+          U = np.array([[1.0, 1j], [1j, 1.0]]) / np.sqrt(2.0)
+          print(unitary(U))
+        solution: |
+          import numpy as np
+
+
+          def unitary(U):
+              return np.allclose(U.conjugate().T @ U, np.eye(len(U)))
+
+
+          U = np.array([[1.0, 1j], [1j, 1.0]]) / np.sqrt(2.0)
+          print(unitary(U))
+        tests: |
+          import numpy as _np
+          _U = _np.array([[1.0, 1j], [1j, 1.0]]) / _np.sqrt(2.0)
+          assert unitary(_U) == True, "This matrix has orthonormal columns for the complex inner product: use the conjugate transpose"
+          assert unitary(_np.array([[1j, 0.0], [0.0, 1.0]])) == True, "diag(i, 1) multiplies one coordinate by a number of modulus 1, which preserves lengths"
+          assert unitary(_np.array([[0.6, -0.8], [0.8, 0.6]])) == True, "A real rotation is unitary"
+          assert unitary(_np.array([[1.25, 0.75j], [-0.75j, 1.25]])) == False, "[[1.25, 0.75i], [-0.75i, 1.25]] sends (1, 0) to a vector of squared length 1.5625 + 0.5625, so it is not unitary"
+          assert unitary(_np.array([[2.0, 0.0], [0.0, 0.5]])) == False, "diag(2, 0.5) changes lengths"
+          assert unitary(_np.array([[1.0, 1.0], [1.0, -1.0]]) / _np.sqrt(2.0)) == True, "The normalised matrix [[1, 1], [1, -1]] is unitary"
+          assert output.strip() == "True", "The program should print True"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def unitary(U):
+                return np.allclose(U.T @ U, np.eye(len(U)))
+
+
+            print("True")
+          - |
+            import numpy as np
+
+
+            def unitary(U):
+                return np.allclose(U.conjugate() @ U, np.eye(len(U)))
+
+
+            print("True")
+          - |
+            import numpy as np
+
+
+            def unitary(U):
+                return np.allclose(np.abs(np.linalg.det(U)), 1.0)
+
+
+            print("True")
+          - |
+            import numpy as np
+
+
+            def unitary(U):
+                return np.allclose(U.conjugate().T, U)
+
+
+            print("True")
+        explanation: |
+          Over the complex numbers the adjoint is the **conjugate** transpose, because the inner product conjugates one slot. $U^\top U$ pairs each column with another without the conjugate, and for the matrix in the program gives $\begin{pmatrix} 0 & i \\ i & 0 \end{pmatrix}$ where the identity is wanted.
+
+          The plain transpose errs in both directions. It rejects this unitary matrix, and it accepts $\begin{pmatrix} 1.25 & 0.75i \\ -0.75i & 1.25 \end{pmatrix}$, which satisfies $U^\top U = I$ and yet stretches $(1, 0)$ to length $\sqrt{2.125}$. For real matrices the two tests coincide, which is why this bug survives until the first complex input.
+    - question:
+        id: work-normal-equations
+        type: choice
+        system: s2
+        prompt: |
+          $T: V \to W$ is linear between inner product spaces and $\mathbf{b} \in W$. Why does the $\mathbf{x}$ that makes $\|\mathbf{b} - T\mathbf{x}\|$ smallest satisfy $T^*T\mathbf{x} = T^*\mathbf{b}$?
+        options:
+          - 'Because $T^*$ is the inverse of $T$.'
+          - 'The closest point $T\mathbf{x}$ of the image is the orthogonal projection of $\mathbf{b}$, so the residual $\mathbf{b} - T\mathbf{x}$ is orthogonal to the image. The orthogonal complement of the image is the kernel of $T^*$, so $T^*(\mathbf{b} - T\mathbf{x}) = \mathbf{0}$.'
+          - 'Because $T^*T$ is always the identity.'
+          - 'It does not. That equation holds only in $\mathbb{R}^n$.'
+        answer: 1
+        explanation: |
+          This is the derivation of the normal equations from the orthogonality cluster, with $\ker T^* = (\operatorname{im} T)^\perp$ doing the work that $A^\top$ did there. In this form it covers every inner product at once. With a weighted inner product on $W$ the adjoint is $A^\top G$ in coordinates and the equations become $A^\top GA\mathbf{x} = A^\top G\mathbf{b}$, which is weighted least squares. With an integral inner product they give the best polynomial approximation to a function.
+    - question:
+        id: work-projection
+        type: choice
+        system: s2
+        prompt: |
+          $P = \begin{pmatrix} 1 & 1 \\ 0 & 0 \end{pmatrix}$ satisfies $P^2 = P$, so it is a projection onto the first axis. Is it self-adjoint for the dot product, and what does that say?
+        options:
+          - 'Yes. Every projection is self-adjoint.'
+          - 'No, since $P^\top \ne P$. It projects onto the axis along the slanted direction $(1, -1)$ and not along the perpendicular. A projection is self-adjoint exactly when the direction it kills is orthogonal to the subspace it keeps.'
+          - 'No, because it is not invertible.'
+          - 'Yes, because its trace is 1.'
+        answer: 1
+        explanation: |
+          $P$ sends $(1, -1)$ to zero, and $(1, -1)$ is not perpendicular to the first axis. For a self-adjoint projection, $\ker P = \ker P^* = (\operatorname{im} P)^\perp$, so the kernel is the orthogonal complement of the image, which is the orthogonal projection. The projection matrices of least squares are symmetric for this reason. It also means the closest-point property, and with it the least squares interpretation, belongs to symmetric projections only.
+    - question:
+        id: work-condition
+        type: choice
+        system: s2
+        prompt: |
+          Why does multiplying by an orthogonal matrix never make a computation less accurate, while multiplying by a general invertible matrix can?
+        options:
+          - 'Orthogonal matrices have fewer nonzero entries.'
+          - 'An orthogonal $Q$ preserves lengths, so an error $\mathbf{e}$ in the input becomes $Q\mathbf{e}$ of exactly the same length, and the same holds for $Q^{-1} = Q^\top$. Its condition number is 1. A general matrix stretches some directions and shrinks others, and the ratio of the two is the factor by which relative errors can grow.'
+          - 'Orthogonal matrices are always the identity in some basis.'
+          - 'Floating-point arithmetic is exact for orthogonal matrices.'
+        answer: 1
+        explanation: |
+          The condition number was the largest stretch divided by the smallest, and for an orthogonal matrix every stretch is 1. So factorisations that route a problem through orthogonal matrices, such as QR, leave its conditioning untouched, while forming $A^\top A$ squares it. The same idea is used in deep networks: weight matrices initialised or constrained to be orthogonal pass signals forward and gradients backward without their lengths exploding or vanishing.
+  connections:
+    - text: |
+        The transpose failed to move differentiation across the integral inner product because the transpose is the matrix of the **adjoint** only in an orthonormal basis. The adjoint itself is defined without a basis, by $\langle T\mathbf{u}, \mathbf{v} \rangle = \langle \mathbf{u}, T^*\mathbf{v} \rangle$, and in a basis with Gram matrix $G$ its matrix is $G^{-1}A^\top G$. The kernel of the adjoint is the orthogonal complement of the image, which is the normal equations in one line.
+
+        **Self-adjoint** maps equal their adjoint: symmetric or Hermitian matrices in an orthonormal basis. **Orthogonal** and **unitary** maps have their adjoint as inverse, and are exactly the maps that preserve inner products, lengths and orthonormal bases.
+
+        That completes the cluster. A vector space is anything satisfying eight axioms. A linear map has a kernel and an image whose dimensions add up. A matrix is a map seen in a basis, and similar matrices are one map in several bases. Functionals form the dual space, where the transpose lives. An inner product adds geometry, and the adjoint brings the transpose into it.
+
+        One question has been waiting since the reflection that became $\operatorname{diag}(1, -1)$ in the right basis. Given a map, is there a basis in which it only stretches each basis vector, and how does one find those special directions? For self-adjoint maps the answer will be the best possible, an orthonormal basis of them, and that single fact carries principal component analysis, the behaviour of gradient descent near a minimum, and much of what follows. It begins with the directions a map does not turn: [[m8.eigenvalues-and-eigenvectors]].
