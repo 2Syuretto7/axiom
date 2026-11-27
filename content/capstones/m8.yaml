@@ -1,0 +1,472 @@
+cluster: M8
+title: The shape of a data cloud
+minutes: 110
+claim: You will have taken one covariance matrix apart completely. You will have found its eigenvalues and eigenvectors, read variances off it as a quadratic form, manufactured data with exactly that covariance, recovered the principal components by a singular value decomposition, measured and compressed the matrix, found a component by multiplication alone, and predicted how training on such data behaves.
+brief: |
+  This cluster was about the numbers hidden inside a matrix: eigenvalues for what it does again and again, singular values for how much it stretches. This project spends all of it on one small symmetric matrix.
+
+  **The project.** An instrument takes three readings at a time. Over many samples the readings, with their averages removed, have the covariance matrix
+
+  $$C = \begin{pmatrix} 2 & 1 & 0 \\ 1 & 3 & 1 \\ 0 & 1 & 2 \end{pmatrix}.$$
+
+  The diagonal says how much each reading varies. The off-diagonal entries say that the middle reading tends to move together with each of its neighbours, and that the two outer readings are uncorrelated.
+
+  Everything about the shape of the cloud of samples is in $C$: in which directions it is long, in which it is thin, how well it can be described with fewer numbers, and how a model trained on it will behave. The project is to read all of that off.
+
+  Nothing here is new. Keep your results as you go, because later stages use earlier ones.
+starter: |
+  # Scratch space. The covariance matrix of the project.
+  import numpy as np
+
+  C = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+  print(float(np.trace(C)), round(float(np.linalg.det(C)), 4))
+  print([round(float(v), 4) for v in C @ np.array([1.0, 2.0, 1.0])])
+stages:
+  - title: Three directions and three numbers
+    blocks:
+      - text: |
+          Start with the eigenvalues. Two of them can be found by inspection: $C$ sends $(1, 0, -1)$ to $(2, 0, -2)$ and $(1, -1, 1)$ to $(1, -1, 1)$. So 2 and 1 are eigenvalues.
+      - question:
+          id: third-eigenvalue
+          type: numeric
+          system: s1
+          concepts: [m8.characteristic-polynomial, m8.eigenvalues-and-eigenvectors]
+          prompt: Two eigenvalues of $C$ are 2 and 1. What is the third?
+          answer: "4"
+          explanation: |
+            The eigenvalues add up to the trace, $2 + 3 + 2 = 7$, so the third is $7 - 2 - 1 = 4$. The determinant confirms it: $\det C = 2(6 - 1) - 1(2 - 0) = 8 = 4 \times 2 \times 1$. Its eigenvector is $(1, 2, 1)$, since $C(1, 2, 1) = (4, 8, 4)$, as the starter prints.
+      - question:
+          id: orthogonal-directions
+          type: choice
+          system: s2
+          concepts: [m8.spectral-theorem, m8.diagonalisation]
+          prompt: |
+            The three eigenvectors $(1, 2, 1)$, $(1, 0, -1)$ and $(1, -1, 1)$ are mutually perpendicular. Was that luck, and what does it give?
+          options:
+            - 'It was luck. Eigenvectors are in general not perpendicular.'
+            - 'It is forced: $C$ is symmetric, and eigenvectors of a symmetric matrix for different eigenvalues are orthogonal. Scaled to unit length they form an orthogonal matrix $Q$ with $C = Q\Lambda Q^\top$, $\Lambda = \operatorname{diag}(4, 2, 1)$, so $C$ is diagonalised by a rotation of the axes, with no inverse to compute.'
+            - 'It holds because the eigenvalues are whole numbers.'
+            - 'It holds for every matrix with nonnegative entries.'
+          answer: 1
+          explanation: |
+            This is the spectral theorem. For the cloud it means there are three perpendicular axes, along $(1, 2, 1)/\sqrt6$, $(1, 0, -1)/\sqrt2$ and $(1, -1, 1)/\sqrt3$, in which the three coordinates are uncorrelated, with variances 4, 2 and 1. The cloud is an ellipsoid with these axes, and semi-axes proportional to $2$, $\sqrt2$ and $1$. Every later stage is a reading of this one fact.
+  - title: Variance in any direction
+    blocks:
+      - text: |
+          For a unit vector $\mathbf{w}$, the combination $\mathbf{w} \cdot \mathbf{x}$ of the three readings has variance $\mathbf{w}^\top C\mathbf{w}$. For a vector that is not of unit length, divide by $\mathbf{w}^\top\mathbf{w}$: the Rayleigh quotient.
+      - question:
+          id: variance-of-average
+          type: numeric
+          system: s1
+          concepts: [m8.quadratic-forms-and-the-rayleigh-quotient]
+          prompt: What is the variance of the readings along the direction $(1, 1, 1)$, that is, the Rayleigh quotient of $C$ at $(1, 1, 1)$? Answer to 4 decimal places.
+          answer: "3.6667"
+          explanation: |
+            $\mathbf{w}^\top C\mathbf{w}$ at $(1, 1, 1)$ is the sum of all entries of $C$, which is 11, and $\mathbf{w}^\top\mathbf{w} = 3$. So the quotient is $11/3 = 3.6667$. It lies between the smallest eigenvalue 1 and the largest 4, as every Rayleigh quotient must, and close to 4 because $(1, 1, 1)$ is close to the top eigenvector $(1, 2, 1)$.
+      - question:
+          id: is-positive-definite
+          type: choice
+          system: s1
+          concepts: [m8.positive-definite-matrices-and-cholesky, m8.quadratic-forms-and-the-rayleigh-quotient]
+          prompt: |
+            Could some combination of the three readings have zero variance, that is, be the same for every sample?
+          options:
+            - 'Yes, along the eigenvector for the smallest eigenvalue.'
+            - 'No. The smallest eigenvalue is 1, so $\mathbf{w}^\top C\mathbf{w} \ge 1$ for every unit vector. $C$ is positive definite, and no reading is determined by the others.'
+            - 'Yes, since $C$ has a zero entry.'
+            - 'It cannot be decided from $C$.'
+          answer: 1
+          explanation: |
+            A covariance matrix is always positive semidefinite, since a variance cannot be negative. It is positive definite exactly when no combination of the readings is constant. Here all eigenvalues are positive, so the least variance, along $(1, -1, 1)/\sqrt3$, is 1. A zero eigenvalue would have meant that the cloud is flat, lying in a plane.
+      - question:
+          id: constrained-maximum
+          type: choice
+          system: s2
+          concepts: [m8.courant-fischer-min-max-theorem, m8.quadratic-forms-and-the-rayleigh-quotient]
+          prompt: |
+            A second summary of the readings is wanted, uncorrelated with the first, so its direction must be perpendicular to $(1, 2, 1)$. What is the greatest variance it can have, and where?
+          options:
+            - '4 again, along $(1, 2, 1)$.'
+            - '2, along $(1, 0, -1)/\sqrt2$. On the plane perpendicular to the top eigenvector the Rayleigh quotient ranges over the remaining eigenvalues, from 1 to 2, and its maximum there is the second eigenvalue.'
+            - '3, the largest diagonal entry.'
+            - '1, along $(1, -1, 1)/\sqrt3$.'
+          answer: 1
+          explanation: |
+            This is the min-max theorem at work. The plane perpendicular to $\mathbf{q}_1$ is spanned by $\mathbf{q}_2$ and $\mathbf{q}_3$. A unit vector in it is $a\mathbf{q}_2 + b\mathbf{q}_3$ with $a^2 + b^2 = 1$, and its quotient is $2a^2 + b^2$, at most 2. Had a different plane been chosen, the maximum on it would have been at least 2: the plane perpendicular to the top eigenvector is the one that makes the best remaining direction as poor as possible.
+  - title: Manufacturing the cloud
+    blocks:
+      - text: |
+          To test anything, data with exactly this covariance are needed. The matrix $Z$ below holds four standardised samples of three quantities: its columns average to zero, have variance 1, and are uncorrelated, so $Z^\top Z/3 = I$.
+
+          If $C = LL^\top$ and each sample $\mathbf{z}$ is replaced by $L\mathbf{z}$, the covariance becomes $LIL^\top = C$. Samples are **rows** of the data matrix, so the whole table is transformed at once by a product with $L^\top$ on the right.
+      - question:
+          id: colour
+          type: code
+          mode: write
+          system: s2
+          concepts: [m8.positive-definite-matrices-and-cholesky]
+          prompt: |
+            Write `colour(Z, C)`: given standardised samples as the rows of `Z`, return samples whose covariance matrix is `C`. Use `np.linalg.cholesky`. The program prints the covariance of the result.
+          starter: |
+            import numpy as np
+
+
+            def colour(Z, C):
+                return Z * 1.0
+
+
+            C = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+            Z = np.sqrt(3.0) / 2.0 * np.array([[1.0, 1.0, 1.0], [1.0, -1.0, -1.0], [-1.0, 1.0, -1.0], [-1.0, -1.0, 1.0]])
+            X = colour(Z, C)
+            print([[round(float(v), 4) + 0.0 for v in row] for row in X.T @ X / 3])
+          solution: |
+            import numpy as np
+
+
+            def colour(Z, C):
+                L = np.linalg.cholesky(C)
+                return Z @ L.T
+
+
+            C = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+            Z = np.sqrt(3.0) / 2.0 * np.array([[1.0, 1.0, 1.0], [1.0, -1.0, -1.0], [-1.0, 1.0, -1.0], [-1.0, -1.0, 1.0]])
+            X = colour(Z, C)
+            print([[round(float(v), 4) + 0.0 for v in row] for row in X.T @ X / 3])
+          tests: |
+            import numpy as _np
+            _C = _np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+            _Z = _np.sqrt(3.0) / 2.0 * _np.array([[1.0, 1.0, 1.0], [1.0, -1.0, -1.0], [-1.0, 1.0, -1.0], [-1.0, -1.0, 1.0]])
+            _X = colour(_Z, _C)
+            assert _np.shape(_X) == (4, 3), "The result has one row per sample, like Z"
+            assert _np.allclose(_X.mean(axis=0), 0.0), "The columns of the result should still average to zero"
+            assert _np.allclose(_X.T @ _X / 3, _C), "The covariance of the result should be C. With C = L L^T, each sample z becomes L z, which for a table of rows is Z @ L.T"
+            _D = _np.array([[4.0, 2.0], [2.0, 5.0]])
+            _Z2 = _np.sqrt(3.0) / 2.0 * _np.array([[1.0, 1.0], [1.0, -1.0], [-1.0, 1.0], [-1.0, -1.0]])
+            _Y = colour(_Z2, _D)
+            assert _np.allclose(_Y.T @ _Y / 3, _D), "For two quantities and C = [[4, 2], [2, 5]] the covariance of the result should be that matrix"
+            assert _np.allclose(_Y[:, 0], 2.0 * _Z2[:, 0]), "The Cholesky factor is lower triangular, so the first new quantity is just the first old one scaled by the root of its variance"
+            assert output.strip() == "[[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]]", "The program should print [[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]]"
+          wrong:
+            - |
+              import numpy as np
+
+
+              def colour(Z, C):
+                  L = np.linalg.cholesky(C)
+                  return Z @ L
+
+
+              print("[[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]]")
+            - |
+              import numpy as np
+
+
+              def colour(Z, C):
+                  return Z @ C
+
+
+              print("[[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]]")
+            - |
+              import numpy as np
+
+
+              def colour(Z, C):
+                  return Z * np.sqrt(np.diag(C))
+
+
+              print("[[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]]")
+          explanation: |
+            With rows as samples, $X = ZL^\top$ gives $X^\top X/3 = L(Z^\top Z/3)L^\top = LL^\top = C$. Using `Z @ L` gives $L^\top L$ instead, which is a different matrix.
+
+            The third wrong version only rescales each column to the right variance. The diagonal of the covariance comes out right and the correlations are missing. A covariance matrix is more than its diagonal, and the Cholesky factor is the cheapest matrix that puts the whole of it into the data.
+
+            Any matrix $B$ with $BB^\top = C$ would serve, for instance the symmetric square root $Q\Lambda^{1/2}Q^\top$. Cholesky is preferred because it costs a third of an eigendecomposition and its triangular shape means that quantity $k$ is built from the first $k$ standard ones only.
+      - question:
+          id: component-variances
+          type: code
+          mode: write
+          system: s2
+          concepts: [m8.pca-as-svd, m8.singular-value-decomposition]
+          prompt: |
+            Write `component_variances(X)`: the variances of the data along its principal components, largest first, from the singular values of the centred data matrix, with divisor `n - 1`. The program applies it to the manufactured cloud, moved away from the origin.
+          starter: |
+            import numpy as np
+
+
+            def component_variances(X):
+                return np.ones(X.shape[1])
+
+
+            C = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+            Z = np.sqrt(3.0) / 2.0 * np.array([[1.0, 1.0, 1.0], [1.0, -1.0, -1.0], [-1.0, 1.0, -1.0], [-1.0, -1.0, 1.0]])
+            X = Z @ np.linalg.cholesky(C).T + np.array([10.0, 20.0, 30.0])
+            print([round(float(v), 4) for v in component_variances(X)])
+          solution: |
+            import numpy as np
+
+
+            def component_variances(X):
+                s = np.linalg.svd(X - X.mean(axis=0), compute_uv=False)
+                return s ** 2 / (len(X) - 1)
+
+
+            C = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+            Z = np.sqrt(3.0) / 2.0 * np.array([[1.0, 1.0, 1.0], [1.0, -1.0, -1.0], [-1.0, 1.0, -1.0], [-1.0, -1.0, 1.0]])
+            X = Z @ np.linalg.cholesky(C).T + np.array([10.0, 20.0, 30.0])
+            print([round(float(v), 4) for v in component_variances(X)])
+          tests: |
+            import numpy as _np
+            _C = _np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+            _Z = _np.sqrt(3.0) / 2.0 * _np.array([[1.0, 1.0, 1.0], [1.0, -1.0, -1.0], [-1.0, 1.0, -1.0], [-1.0, -1.0, 1.0]])
+            _X = _Z @ _np.linalg.cholesky(_C).T
+            assert _np.allclose(component_variances(_X), [4.0, 2.0, 1.0]), "For the manufactured cloud the variances along the components are the eigenvalues of C: 4, 2, 1. Square the singular values and divide by n - 1"
+            assert _np.allclose(component_variances(_X + _np.array([10.0, 20.0, 30.0])), [4.0, 2.0, 1.0]), "Moving the cloud does not change its shape, so the variances should still be 4, 2, 1. Centre the columns first"
+            _P = _np.array([[1.0, 2.0], [3.0, 3.0], [4.0, 5.0], [6.0, 6.0], [7.0, 9.0], [9.0, 11.0]])
+            assert _np.allclose(component_variances(_P), [20.16393497, 0.23606503]), "For six points in the plane with column variances 8.4 and 12 the result should be about 20.1639 and 0.2361"
+            assert output.strip() == "[4.0, 2.0, 1.0]", "The program should print [4.0, 2.0, 1.0]"
+          wrong:
+            - |
+              import numpy as np
+
+
+              def component_variances(X):
+                  s = np.linalg.svd(X, compute_uv=False)
+                  return s ** 2 / (len(X) - 1)
+
+
+              print("[4.0, 2.0, 1.0]")
+            - |
+              import numpy as np
+
+
+              def component_variances(X):
+                  s = np.linalg.svd(X - X.mean(axis=0), compute_uv=False)
+                  return s / (len(X) - 1)
+
+
+              print("[4.0, 2.0, 1.0]")
+            - |
+              import numpy as np
+
+
+              def component_variances(X):
+                  s = np.linalg.svd(X - X.mean(axis=0), compute_uv=False)
+                  return s ** 2 / len(X)
+
+
+              print("[4.0, 2.0, 1.0]")
+          explanation: |
+            The singular values of the centred table are $\sqrt{3 \times 4}$, $\sqrt{3 \times 2}$ and $\sqrt{3 \times 1}$, and squaring and dividing by $n - 1 = 3$ returns the eigenvalues of $C$. The data went in through a Cholesky factor and the spectrum came out through a singular value decomposition, and they agree, because $X_c^\top X_c/(n - 1) = C$ whichever way the data were made.
+
+            Without centring, the offset $(10, 20, 30)$ swamps everything: the first "variance" comes out near 1870.
+
+            The right singular vectors of the centred table are the eigenvectors of $C$ from stage 1, up to sign. So the principal components of this cloud are $(1, 2, 1)/\sqrt6$, $(1, 0, -1)/\sqrt2$ and $(1, -1, 1)/\sqrt3$.
+      - question:
+          id: share-kept
+          type: numeric
+          system: s1
+          concepts: [m8.pca-as-svd, m8.eckart-young-theorem]
+          prompt: Each sample is replaced by its two scores on the first two principal components. What share of the total variance is kept? Answer to 4 decimal places.
+          answer: "0.8571"
+          explanation: |
+            $(4 + 2)/(4 + 2 + 1) = 6/7 = 0.8571$. The lost seventh is the variance along $(1, -1, 1)/\sqrt3$, and by Eckart-Young no other pair of numbers per sample, formed linearly, loses less. The first component alone keeps $4/7 = 57\%$.
+  - title: Measuring and compressing the matrix
+    blocks:
+      - text: |
+          Now treat $C$ itself as an object with a size. Since $C$ is symmetric positive definite, its singular values are its eigenvalues: 4, 2, 1.
+      - question:
+          id: which-norm
+          type: choice
+          system: s1
+          concepts: [m8.operator-and-frobenius-norms, m8.singular-value-decomposition]
+          prompt: |
+            Three sizes of $C$ are $4$, $\sqrt{21} \approx 4.58$ and $5$. Which is which?
+          options:
+            - 'Spectral norm 5, Frobenius norm 4, largest column sum $\sqrt{21}$.'
+            - 'Spectral norm 4, the largest singular value. Frobenius norm $\sqrt{21} = \sqrt{16 + 4 + 1}$. Largest column sum 5, from the middle column, which is the 1-norm and here also the infinity-norm.'
+            - 'Spectral norm $\sqrt{21}$, Frobenius norm 5, largest column sum 4.'
+            - 'All three are the Frobenius norm in different units.'
+          answer: 1
+          explanation: |
+            The Frobenius norm can be found either from the entries, $\sqrt{4 + 1 + 1 + 9 + 1 + 1 + 4}$, or from the singular values, and both give $\sqrt{21}$. The order $4 \le 4.58 \le 5$ illustrates two general facts: $\|C\|_2 \le \|C\|_F$, and $\|C\|_2 \le \sqrt{\|C\|_1\|C\|_\infty}$. The condition number in the spectral norm is $4/1 = 4$, so the cloud is twice as long as it is thin, in standard deviations.
+      - question:
+          id: rank-one-error
+          type: numeric
+          system: s2
+          concepts: [m8.eckart-young-theorem, m8.operator-and-frobenius-norms, m8.spectral-theorem]
+          prompt: |
+            $C$ is replaced by its best approximation of rank 1, which is $4\mathbf{q}_1\mathbf{q}_1^\top$ with $\mathbf{q}_1 = (1, 2, 1)/\sqrt6$. What is the Frobenius norm of the error? Answer to 4 decimal places.
+          answer: "2.2361"
+          explanation: |
+            The discarded singular values are 2 and 1, so the error is $\sqrt{4 + 1} = \sqrt5 = 2.2361$. In the spectral norm the error would be 2. The approximation is $\tfrac23\begin{pmatrix} 1 & 2 & 1 \\ 2 & 4 & 2 \\ 1 & 2 & 1 \end{pmatrix}$, a model in which the three readings are driven by one common factor, with the middle reading responding twice as strongly. For a symmetric positive definite matrix the truncated SVD and the truncated spectral decomposition are the same thing.
+  - title: A component from multiplication alone
+    blocks:
+      - text: |
+          For a cloud with thousands of readings per sample, a full decomposition is too expensive, and only the leading components are wanted. Power iteration finds the first. For the second, the same iteration is run while the first is kept out: after every multiplication, subtract from the vector its component along $\mathbf{q}_1$.
+      - question:
+          id: second-component
+          type: code
+          mode: write
+          system: s2
+          concepts: [m8.perron-frobenius-and-power-iteration, m8.spectral-theorem, m8.quadratic-forms-and-the-rayleigh-quotient]
+          prompt: |
+            Write `second_component(C, q1, start, steps)` for a symmetric matrix `C` whose top unit eigenvector `q1` is known. Remove from `start` its component along `q1` and scale it to unit length. Then repeat `steps` times: multiply by `C`, remove the component along `q1`, and scale to unit length. Return `(value, x)`: the Rayleigh quotient of the final unit vector as a float, and the vector.
+          starter: |
+            import numpy as np
+
+
+            def second_component(C, q1, start, steps):
+                return 0.0, start * 1.0
+
+
+            C = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+            q1 = np.array([1.0, 2.0, 1.0]) / np.sqrt(6.0)
+            value, x = second_component(C, q1, np.array([1.0, 2.0, 3.0]), 60)
+            print(round(value, 4), [round(abs(float(v)), 4) for v in x])
+          solution: |
+            import numpy as np
+
+
+            def second_component(C, q1, start, steps):
+                x = start - (start @ q1) * q1
+                x = x / np.linalg.norm(x)
+                for step in range(steps):
+                    y = C @ x
+                    y = y - (y @ q1) * q1
+                    x = y / np.linalg.norm(y)
+                return float(x @ C @ x), x
+
+
+            C = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+            q1 = np.array([1.0, 2.0, 1.0]) / np.sqrt(6.0)
+            value, x = second_component(C, q1, np.array([1.0, 2.0, 3.0]), 60)
+            print(round(value, 4), [round(abs(float(v)), 4) for v in x])
+          tests: |
+            import numpy as _np
+            _C = _np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+            _q = _np.array([1.0, 2.0, 1.0]) / _np.sqrt(6.0)
+            _out = second_component(_C, _q, _np.array([1.0, 2.0, 3.0]), 60)
+            assert isinstance(_out, tuple) and len(_out) == 2, "second_component should return the pair (value, x)"
+            _val, _x = _out
+            assert abs(float(_np.linalg.norm(_x)) - 1.0) < 1e-9, "The returned vector should have unit length"
+            assert abs(float(_x @ _q)) < 1e-9, "The returned vector should be perpendicular to q1. Subtract (y @ q1) * q1 after every multiplication"
+            assert abs(_val - 2.0) < 1e-8, "The second eigenvalue of C is 2"
+            assert _np.allclose(_np.abs(_x), _np.array([1.0, 0.0, 1.0]) / _np.sqrt(2.0), atol=1e-7), "The second component is (1, 0, -1) scaled to unit length, up to sign"
+            _val, _x = second_component(_C, _q, _np.array([1.0, 2.0, 3.0]), 0)
+            assert abs(float(_x @ _q)) < 1e-12 and abs(float(_np.linalg.norm(_x)) - 1.0) < 1e-12, "With 0 steps the result is the start with its component along q1 removed, scaled to unit length"
+            _D = _np.diag([5.0, 1.0, 3.0])
+            _val, _x = second_component(_D, _np.array([1.0, 0.0, 0.0]), _np.array([1.0, 1.0, 1.0]), 80)
+            assert abs(_val - 3.0) < 1e-8 and _np.allclose(_np.abs(_x), [0.0, 0.0, 1.0], atol=1e-7), "For diag(5, 1, 3) with q1 the first axis, the second component is the third axis with eigenvalue 3"
+            assert output.strip() == "2.0 [0.7071, 0.0, 0.7071]", "The program should print 2.0 [0.7071, 0.0, 0.7071]"
+          wrong:
+            - |
+              import numpy as np
+
+
+              def second_component(C, q1, start, steps):
+                  x = start / np.linalg.norm(start)
+                  for step in range(steps):
+                      y = C @ x
+                      x = y / np.linalg.norm(y)
+                  return float(x @ C @ x), x
+
+
+              print("2.0 [0.7071, 0.0, 0.7071]")
+            - |
+              import numpy as np
+
+
+              def second_component(C, q1, start, steps):
+                  x = start - (start @ q1)
+                  x = x / np.linalg.norm(x)
+                  for step in range(steps):
+                      y = C @ x
+                      y = y - (y @ q1)
+                      x = y / np.linalg.norm(y)
+                  return float(x @ C @ x), x
+
+
+              print("2.0 [0.7071, 0.0, 0.7071]")
+            - |
+              import numpy as np
+
+
+              def second_component(C, q1, start, steps):
+                  x = start - (start @ q1) * q1
+                  x = x / np.linalg.norm(x)
+                  for step in range(steps):
+                      y = C @ x
+                      y = y - (y @ q1) * q1
+                      x = y / np.linalg.norm(y)
+                  return float(np.linalg.norm(x)), x
+
+
+              print("2.0 [0.7071, 0.0, 0.7071]")
+          explanation: |
+            Because $C$ is symmetric, the plane perpendicular to $\mathbf{q}_1$ is mapped into itself by $C$, and on that plane the largest eigenvalue is 2. Power iteration confined to the plane therefore converges to $\mathbf{q}_2$, at the rate $\lambda_3/\lambda_2 = 1/2$ per step.
+
+            In exact arithmetic it would be enough to remove the component along $\mathbf{q}_1$ once, at the start. In floating point, rounding puts back a component of size $10^{-16}$ at every step, and $C$ multiplies it by 4 while everything else is multiplied by at most 2. After about 50 steps it would dominate again. Removing it after every multiplication costs one dot product and keeps the iteration honest.
+
+            The vector is printed with absolute values because its sign is arbitrary.
+      - question:
+          id: positive-direction
+          type: choice
+          system: s2
+          concepts: [m8.perron-frobenius-and-power-iteration, m8.eigenvalues-and-eigenvectors]
+          prompt: |
+            The top component $(1, 2, 1)$ has all entries positive: it is a weighted average of the three readings. Could that have been predicted from $C$ without computing anything, and can the second component be of the same kind?
+          options:
+            - 'No, it is a coincidence, and the second component could also be all positive.'
+            - 'Yes. $C$ has nonnegative entries and $C^2$ has all entries positive, so by Perron-Frobenius the eigenvector of its largest eigenvalue can be taken positive. And no other eigenvector can be: being perpendicular to a positive vector, each must have entries of both signs.'
+            - 'Yes, because every eigenvector of a symmetric matrix is positive.'
+            - 'Yes, because the trace is positive.'
+          answer: 1
+          explanation: |
+            Readings that are all positively correlated, directly or through a chain, always have a first principal component of one sign: a "general level" in which they rise and fall together. The later components must be **contrasts**. Here the second, $(1, 0, -1)$, sets the first reading against the third, and the third, $(1, -1, 1)$, sets the middle against the outer two. Orthogonality to a positive vector forces a change of sign, which is point 5 of the theorem seen through the spectral theorem.
+  - title: Training on this cloud
+    blocks:
+      - text: |
+          A linear model with weights $\mathbf{w}$ is trained on these readings, and near its optimum the loss is $\tfrac12\mathbf{w}^\top C\mathbf{w}$, with $\mathbf{w}$ measured from the optimum. Its gradient is $C\mathbf{w}$. Gradient descent with a vanishingly small step follows $\mathbf{w}' = -C\mathbf{w}$, so $\mathbf{w}(t) = e^{-tC}\mathbf{w}(0)$.
+      - question:
+          id: flow-factor
+          type: numeric
+          system: s2
+          concepts: [m8.jordan-form-and-the-matrix-exponential, m8.spectral-theorem]
+          prompt: |
+            At time $t = \ln 2$ the error along the slowest direction, $(1, -1, 1)$, has been halved. By what factor has the error along the fastest direction, $(1, 2, 1)$, been multiplied? Answer to 4 decimal places.
+          answer: "0.0625"
+          explanation: |
+            $e^{-tC} = Qe^{-t\Lambda}Q^\top$, so the error along the eigenvector with eigenvalue $\lambda$ is multiplied by $e^{-\lambda t}$. At $t = \ln 2$ that is $2^{-\lambda}$: $\tfrac12$ for $\lambda = 1$, $\tfrac14$ for $\lambda = 2$, and $\tfrac1{16} = 0.0625$ for $\lambda = 4$. The direction of greatest variance in the data is learned first and the direction of least variance last. The ratio of the two rates is the condition number.
+      - question:
+          id: step-size
+          type: choice
+          system: s2
+          concepts: [m8.diagonalisation, m8.operator-and-frobenius-norms, m8.jordan-form-and-the-matrix-exponential]
+          prompt: |
+            Real gradient descent takes steps: $\mathbf{w}_{k+1} = (I - \eta C)\mathbf{w}_k$. For which step sizes $\eta$ does it converge, and can the error grow for a while before shrinking, as it did for the defective matrix with eigenvalue $0.9$?
+          options:
+            - 'It converges for every $\eta > 0$, like the continuous flow.'
+            - 'It converges exactly when $0 < \eta < 2/4 = 0.5$. The matrix $I - \eta C$ has eigenvalues $1 - 4\eta$, $1 - 2\eta$ and $1 - \eta$, and all must lie strictly between $-1$ and $1$. There is no hump: $I - \eta C$ is symmetric, so its spectral norm equals its spectral radius and the error shrinks from the first step.'
+            - 'It converges when $\eta < 2$, and the error can grow for a while first.'
+            - 'It converges when $\eta < 1/7$, the reciprocal of the trace.'
+          answer: 1
+          explanation: |
+            $I - \eta C = Q(I - \eta\Lambda)Q^\top$, so its powers are $Q(I - \eta\Lambda)^kQ^\top$. The factor $1 - 4\eta$ is the first to leave the interval: at $\eta = 0.5$ it is $-1$ and the error along $(1, 2, 1)$ flips sign for ever, and beyond that it grows. So the largest eigenvalue of the covariance limits the step, and with the step so limited the smallest eigenvalue sets the pace, at $1 - \eta\lambda_{\min}$ per step. The best fixed step is $\eta = 2/(\lambda_{\max} + \lambda_{\min}) = 0.4$, giving the factor $(\kappa - 1)/(\kappa + 1) = 0.6$. Transient growth needs a matrix that is not normal, and a symmetric matrix always is.
+review: |
+  One covariance matrix, and the whole cluster:
+
+  - Checking $C\mathbf{v} = \lambda\mathbf{v}$ for three directions was [[m8.eigenvalues-and-eigenvectors]].
+  - Getting the third eigenvalue from the trace, and confirming with the determinant, was [[m8.characteristic-polynomial]].
+  - Writing powers of $I - \eta C$ through the eigenvalues was [[m8.diagonalisation]].
+  - The perpendicular axes of the cloud, and $C = Q\Lambda Q^\top$, were [[m8.spectral-theorem]].
+  - Knowing that no combination of the readings is constant, and manufacturing data through $C = LL^\top$, was [[m8.positive-definite-matrices-and-cholesky]].
+  - Variance along a direction as $\mathbf{w}^\top C\mathbf{w}$, between 1 and 4, was [[m8.quadratic-forms-and-the-rayleigh-quotient]].
+  - The best second direction, with variance 2 on the plane perpendicular to the first, was [[m8.courant-fischer-min-max-theorem]].
+  - Recovering the spectrum from the singular values of the data table was [[m8.singular-value-decomposition]].
+  - The error $\sqrt5$ of the one-factor model, and the lost seventh of the variance, were [[m8.eckart-young-theorem]].
+  - Centring, components, scores and explained variance were [[m8.pca-as-svd]].
+  - The sizes 4, $\sqrt{21}$ and 5, and the absence of a hump for a symmetric matrix, were [[m8.operator-and-frobenius-norms]].
+  - The flow $e^{-tC}$, with each direction decaying at its own rate, was [[m8.jordan-form-and-the-matrix-exponential]].
+  - Finding a component by multiplying, and predicting that the first one is positive, was [[m8.perron-frobenius-and-power-iteration]].
+
+  Two things here go forward. The first is the picture of the last stage: near a minimum a loss is a quadratic form, its matrix has eigenvalues, and those eigenvalues set the step size and the speed of training. For a real network that matrix is the Hessian of the loss, and it is far too large to write down. The second is the method of the fifth stage: everything needed was obtained from products of the matrix with vectors. Putting the two together requires derivatives of functions of many variables, organised so that such products can be computed without the matrix ever being formed. That is matrix calculus and automatic differentiation, the next cluster.
