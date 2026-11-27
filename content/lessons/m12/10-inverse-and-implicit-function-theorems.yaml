@@ -1,0 +1,545 @@
+concept: m12.inverse-and-implicit-function-theorems
+minutes: 85
+claim: You can state when a function of several variables can be undone near a point and give the Jacobian of its local inverse, state when an equation relating several variables defines some of them as functions of the others near a point, find the derivatives of such implicitly defined functions without solving the equation, explain why both statements are local and where they fail, and differentiate the solution of an optimisation problem with respect to a setting of the problem.
+recalls: [m12.multivariable-taylor-expansion]
+uses: [m12.jacobian, m12.multivariable-chain-rule, m12.gradient, m12.hessian-and-symmetry-of-mixed-partials, m12.total-derivative-as-best-linear-approximation, m12.partial-derivatives, m12.functions-of-several-variables, m5.identity-and-inverse, m5.determinant, m5.elimination-and-linear-systems, m5.matrix-multiplication-as-composition, m5.matrix-vector-product, m2.composition-and-inverses, m2.injective-surjective-and-bijective-maps, m2.the-exponential-and-e, m2.trigonometric-functions-on-the-unit-circle, m10.derivative-as-slope-and-rate, m10.chain-rule, m10.maxima-and-minima, m10.taylor-approximation, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e5.reshaping-views-and-copies, e5.vectorisation, e5.numerical-error-analysis-in-practice, e0.functions, e0.loops]
+leads: [m12.multiple-integrals-and-change-of-variables, m13.implicit-differentiation-through-solvers, m15.change-of-variables-for-densities, m19.lagrange-multipliers]
+starter: |
+  # Scratch space. The equation e^y + y = x has exactly one solution y for each x,
+  # and no formula for it. solve(x) finds it numerically, by Newton's method.
+  import math
+
+  def solve(x):
+      y = 0.0
+      for k in range(50):
+          y = y - (math.exp(y) + y - x) / (math.exp(y) + 1)
+      return y
+
+  for x in [1.1, 1.01, 1.001]:
+      print(x, round(solve(x), 6), round(solve(x) / (x - 1), 5))
+parts:
+  recall:
+    - text: |
+        [[m12.multivariable-taylor-expansion]] ended on the idea that has run through the whole cluster: near a point, replace a function by its linear or quadratic stand-in and reason about that. Today the stand-in is asked whether the function can be run backwards. Three quick pulls first.
+  puzzle:
+    - text: |
+        Consider the equation
+
+        $$e^y + y = x.$$
+
+        For each value of $x$ there is exactly one $y$ that satisfies it, because the left side increases steadily from $-\infty$ to $\infty$ as $y$ does. So the equation defines $y$ as a function of $x$. When $x = 1$, the answer is $y = 0$, since $e^0 + 0 = 1$.
+
+        Try to write that function down. Solve for $y$. You cannot: $y$ is at once inside an exponential and outside it, and no arrangement of the functions you know isolates it. There is no formula.
+
+        The starter does not need one. It finds $y$ numerically for $x = 1.1$, $1.01$ and $1.001$, and divides the change in $y$ by the change in $x$.
+
+        Run it. The ratios are 0.4938, 0.49938 and 0.49994. They are closing in on $\tfrac12$.
+
+        So this function, which cannot be written down, has a derivative at $x = 1$, and the derivative appears to be exactly one half.
+
+        **How can a function with no formula be differentiated, exactly and by hand? Where does the $\tfrac12$ come from? And when an equation ties several quantities together, when can you be sure that it defines some of them as functions of the others at all?**
+  intuition:
+    - text: |
+        **Differentiate the equation, not the solution.** Suppose $y$ really is a function of $x$, even an unknown one. Then both sides of $e^y + y = x$ are functions of $x$, and they are equal for every $x$. Functions that are equal have equal derivatives. Differentiate both sides with respect to $x$, using the chain rule wherever $y$ appears, since $y$ depends on $x$:
+
+        $$e^y\,\frac{dy}{dx} + \frac{dy}{dx} = 1.$$
+
+        The unknown derivative appears in this equation **linearly**, however tangled the original equation was. Solve for it:
+
+        $$\frac{dy}{dx} = \frac{1}{e^y + 1}.$$
+
+        At the point $x = 1$, $y = 0$ this is $\tfrac{1}{1 + 1} = \tfrac12$. No formula for $y$ was needed. All that was needed was **one point** on the curve, and the equation.
+
+        This is **implicit differentiation**. The equation $e^y + y - x = 0$ defines $y$ implicitly: not as "$y = \dots$" but as "the $y$ that makes this true".
+
+        **Why the derivative equation is always linear.** Write the equation as $F(x, y) = 0$. Near a point on it, $F$ is nearly linear: a small step $(dx, dy)$ changes $F$ by about $F_x\,dx + F_y\,dy$. To stay on the curve $F = 0$, that change must be zero:
+
+        $$F_x\,dx + F_y\,dy = 0, \qquad\text{so}\qquad \frac{dy}{dx} = -\frac{F_x}{F_y}.$$
+
+        It is the chain rule again, and it is also a fact you already have: the curve $F = 0$ is a level curve of $F$, the gradient $(F_x, F_y)$ is at right angles to it, and a line at right angles to $(F_x, F_y)$ has slope $-F_x / F_y$.
+
+        **When it fails.** The formula divides by $F_y$. Where $F_y = 0$ something goes wrong, and the circle shows what. Take $x^2 + y^2 = 25$. Here $F_x = 2x$ and $F_y = 2y$, so the slope is $-x/y$. At $(3, 4)$ it is $-\tfrac34$, and near that point the circle is the graph of a function, $y = \sqrt{25 - x^2}$. But at $(5, 0)$, $F_y = 0$. There the circle is vertical. Just to the left of $x = 5$ there are **two** values of $y$, one above the axis and one below. Just to the right there are none. Near $(5, 0)$ the circle is not the graph of any function of $x$.
+
+        So the condition $F_y \ne 0$ is not a technicality of the algebra. It is exactly what makes the curve cross each vertical line once near the point.
+
+        **Running a function backwards.** A closely related question. The conversion from polar coordinates takes $(r, \theta)$ to $(x, y)$. Can it be undone: given a point on the map, recover the distance and bearing? Near most points, yes. And the reason is the same kind of reason. Near a point, the conversion acts like its Jacobian matrix. **A matrix can be undone exactly when its determinant is not zero.** If the linear stand-in can be undone, then so can the function, nearby, and the stand-in for the inverse function is the inverse matrix.
+
+        In one variable you knew this as "the slope of the inverse is one over the slope": reflect a graph in the diagonal, and a slope of 3 becomes a slope of $\tfrac13$. A point where the slope is 0 reflects to a point where the inverse would have to be vertical, and there the inverse fails. In several variables "one over the slope" becomes "the inverse of the Jacobian", and "slope not zero" becomes "determinant not zero".
+  derivation:
+    - text: |
+        **Inverse function theorem.** *Let $\mathbf{f} : \mathbb{R}^n \to \mathbb{R}^n$ have continuous partial derivatives near $\mathbf{a}$, and suppose $\det J_{\mathbf{f}}(\mathbf{a}) \ne 0$. Then there is a region round $\mathbf{a}$ on which $\mathbf{f}$ is one-to-one, with an inverse $\mathbf{f}^{-1}$ defined on a region round $\mathbf{f}(\mathbf{a})$. The inverse has continuous partial derivatives, and*
+
+        $$J_{\mathbf{f}^{-1}}(\mathbf{f}(\mathbf{a})) = \bigl(J_{\mathbf{f}}(\mathbf{a})\bigr)^{-1}.$$
+
+        The formula for the Jacobian of the inverse, **given** that the inverse exists and is differentiable, is one line. $\mathbf{f}^{-1}(\mathbf{f}(\mathbf{x})) = \mathbf{x}$, and the Jacobian of the identity map is the identity matrix, so by the chain rule $J_{\mathbf{f}^{-1}}\,J_{\mathbf{f}} = I$. The depth of the theorem is in the existence: that an invertible linear approximation forces the function itself to be invertible nearby. The proof builds the inverse by an iteration much like Newton's method and shows that it converges, using a theorem about contractions from analysis.
+
+        **It is local.** The theorem promises an inverse near the point and nothing more. Polar coordinates have $\det J = r$, which is not zero anywhere away from the origin, so the conversion is invertible near every such point. Yet it is not invertible as a whole: $(r, \theta)$ and $(r, \theta + 2\pi)$ go to the same place. In one variable a function with a derivative that is never zero is one-to-one on an interval. In several variables that is no longer so.
+
+        *Polar coordinates, inverted.* The Jacobian of $(r, \theta) \mapsto (x, y)$ is $\begin{pmatrix} \cos\theta & -r\sin\theta \\ \sin\theta & r\cos\theta \end{pmatrix}$ with determinant $r$, so the Jacobian of the inverse map $(x, y) \mapsto (r, \theta)$ is its inverse matrix:
+
+        $$\begin{pmatrix} \dfrac{\partial r}{\partial x} & \dfrac{\partial r}{\partial y} \\[2mm] \dfrac{\partial \theta}{\partial x} & \dfrac{\partial \theta}{\partial y} \end{pmatrix} = \frac{1}{r}\begin{pmatrix} r\cos\theta & r\sin\theta \\ -\sin\theta & \cos\theta \end{pmatrix}.$$
+
+        So $\dfrac{\partial r}{\partial x} = \cos\theta = \dfrac{x}{r}$, which you can confirm from $r = \sqrt{x^2 + y^2}$. A warning is hidden here. $\dfrac{\partial x}{\partial r} = \cos\theta$ and $\dfrac{\partial r}{\partial x} = \cos\theta$ too: **they are not reciprocals of each other.** Partial derivatives depend on what is being held still. The first holds $\theta$ still and the second holds $y$ still. It is the whole matrices that are inverse to each other, not their entries one by one.
+    - question:
+        id: derivation-local
+        type: choice
+        system: s2
+        prompt: |
+          The polar conversion has Jacobian determinant $r$, which is not zero at any point with $r > 0$. Does it follow that the conversion, on the whole region $r > 0$, has an inverse?
+        options:
+          - 'Yes. A function whose Jacobian determinant is never zero is one-to-one.'
+          - 'No. The theorem gives an inverse on some region round each point, and those regions may be small. The points $(r, \theta)$ and $(r, \theta + 2\pi)$ are different inputs with the same output, so the conversion as a whole is not one-to-one, though it is one-to-one near each of them separately.'
+          - 'No, because the determinant is zero at $r = 0$.'
+          - 'Yes, because its inverse Jacobian can be written down.'
+        answer: 1
+        explanation: |
+          The inverse function theorem is a statement about a neighbourhood. Round $(2, 0)$ the conversion is invertible, and round $(2, 2\pi)$ it is invertible, but the two neighbourhoods are sent to the same patch of the plane, and a single inverse cannot return both. A function can be locally invertible everywhere and still wrap round and cover its range many times. To get a true inverse the angle has to be restricted to an interval of length less than $2\pi$, which is why every formula for the bearing of a point has a jump somewhere.
+    - text: |
+        **Implicit function theorem, one equation.** *Let $F(x, y)$ have continuous partial derivatives near $(a, b)$, with $F(a, b) = 0$ and $F_y(a, b) \ne 0$. Then near $(a, b)$ the solutions of $F(x, y) = 0$ are exactly the points of the graph of a function $y = g(x)$, with $g(a) = b$. The function $g$ is differentiable, and*
+
+        $$g'(x) = -\frac{F_x(x, g(x))}{F_y(x, g(x))}.$$
+
+        For the puzzle, $F(x, y) = e^y + y - x$, so $F_x = -1$ and $F_y = e^y + 1$, and $g' = \dfrac{1}{e^y + 1}$. Since $F_y$ is never zero, $y$ is a function of $x$ near every point of the curve.
+
+        **Several equations.** The same holds with vectors. Suppose $m$ equations relate $n + m$ variables: $\mathbf{F}(\mathbf{x}, \mathbf{y}) = \mathbf{0}$, with $\mathbf{x} \in \mathbb{R}^n$, $\mathbf{y} \in \mathbb{R}^m$ and $\mathbf{F}$ having $m$ outputs. Split the Jacobian of $\mathbf{F}$ into the block of columns for $\mathbf{x}$, call it $J_{\mathbf{x}}$, of shape $m \times n$, and the block for $\mathbf{y}$, $J_{\mathbf{y}}$, of shape $m \times m$. A small step that keeps $\mathbf{F} = \mathbf{0}$ satisfies $J_{\mathbf{x}}\,d\mathbf{x} + J_{\mathbf{y}}\,d\mathbf{y} = \mathbf{0}$. *If $J_{\mathbf{y}}$ is invertible at a solution, then nearby $\mathbf{y}$ is a function of $\mathbf{x}$, and its Jacobian is*
+
+        $$\frac{\partial \mathbf{y}}{\partial \mathbf{x}} = -J_{\mathbf{y}}^{-1}\,J_{\mathbf{x}}.$$
+
+        $m$ equations pin down $m$ of the variables in terms of the rest, provided the equations are independent **in those variables**, which is what invertibility of $J_{\mathbf{y}}$ says. This is the nonlinear form of something from the lesson on elimination: a linear system with as many independent equations as unknowns has one solution.
+
+        **The solution of an optimisation problem, differentiated.** Here is the use that matters most in machine learning. A model is trained by minimising a loss that depends on the weights $\boldsymbol\theta$ and also on some setting $\lambda$ of the problem: a strength of regularisation, say. The trained weights $\boldsymbol\theta^{*}$ depend on $\lambda$. How?
+
+        There is usually no formula for $\boldsymbol\theta^{*}(\lambda)$. But there is an **equation** it satisfies: at a minimum the gradient vanishes, $\nabla_{\boldsymbol\theta} L(\boldsymbol\theta^{*}, \lambda) = \mathbf{0}$. That is $\mathbf{F}(\lambda, \boldsymbol\theta) = \mathbf{0}$ with $\mathbf{F} = \nabla_{\boldsymbol\theta} L$. Its Jacobian with respect to $\boldsymbol\theta$ is the Hessian $H$. So wherever the Hessian is invertible,
+
+        $$\frac{d\boldsymbol\theta^{*}}{d\lambda} = -H^{-1}\,\frac{\partial}{\partial \lambda}\nabla_{\boldsymbol\theta} L.$$
+
+        A small example with one weight. Minimise $L(\theta, \lambda) = (\theta - 3)^2 + \lambda\theta^2$. The condition is $2(\theta - 3) + 2\lambda\theta = 0$. Here it can be solved, $\theta^{*} = \dfrac{3}{1 + \lambda}$, which lets the method be checked. Implicitly: the derivative of the condition with respect to $\theta$ is $2 + 2\lambda$, and with respect to $\lambda$ it is $2\theta$, so
+
+        $$\frac{d\theta^{*}}{d\lambda} = -\frac{2\theta^{*}}{2 + 2\lambda} = -\frac{\theta^{*}}{1 + \lambda} = -\frac{3}{(1 + \lambda)^2},$$
+
+        which is what differentiating the formula gives. The implicit route never used the formula, and it works when there is none: the derivative of a trained model with respect to a hyperparameter can be found from the trained model alone, without retraining.
+    - question:
+        id: order-implicit
+        type: order
+        system: s2
+        prompt: Put in order the steps for finding the slope of the curve $x^3 + y^3 = 9$ at the point $(1, 2)$ by implicit differentiation.
+        steps:
+          - 'Check that the point is on the curve: $1 + 8 = 9$.'
+          - 'Treat $y$ as a function of $x$ and differentiate both sides with respect to $x$: $3x^2 + 3y^2\,\dfrac{dy}{dx} = 0$.'
+          - 'Solve for the derivative: $\dfrac{dy}{dx} = -\dfrac{x^2}{y^2}$.'
+          - 'Substitute the point: $-\dfrac{1}{4}$.'
+        explanation: The point must satisfy the equation, or the slope found belongs to a different level curve. The chain rule supplies a factor of the unknown derivative wherever y is differentiated. That derivative then appears to the first power and can be solved for, provided its coefficient, here 3 y squared, is not zero at the point.
+  formal:
+    - text: |
+        **Inverse function theorem.** Let $\mathbf{f} : U \to \mathbb{R}^n$ be of class $C^1$ on an open set $U \subseteq \mathbb{R}^n$, and let $\mathbf{a} \in U$ with $J_{\mathbf{f}}(\mathbf{a})$ invertible. Then there are open sets $V \ni \mathbf{a}$ and $W \ni \mathbf{f}(\mathbf{a})$ such that $\mathbf{f} : V \to W$ is a bijection, its inverse is of class $C^1$, and $J_{\mathbf{f}^{-1}}(\mathbf{f}(\mathbf{x})) = J_{\mathbf{f}}(\mathbf{x})^{-1}$ for $\mathbf{x} \in V$.
+
+        **Implicit function theorem.** Let $\mathbf{F} : U \to \mathbb{R}^m$ be of class $C^1$ on an open set $U \subseteq \mathbb{R}^n \times \mathbb{R}^m$, with $\mathbf{F}(\mathbf{a}, \mathbf{b}) = \mathbf{0}$ and the $m \times m$ matrix $J_{\mathbf{y}} = \partial \mathbf{F} / \partial \mathbf{y}$ invertible at $(\mathbf{a}, \mathbf{b})$. Then there are a neighbourhood of $\mathbf{a}$ and a unique $C^1$ function $\mathbf{g}$ on it with $\mathbf{g}(\mathbf{a}) = \mathbf{b}$ and $\mathbf{F}(\mathbf{x}, \mathbf{g}(\mathbf{x})) = \mathbf{0}$, and
+
+        $$J_{\mathbf{g}}(\mathbf{x}) = -\bigl(J_{\mathbf{y}}(\mathbf{x}, \mathbf{g}(\mathbf{x}))\bigr)^{-1}\,J_{\mathbf{x}}(\mathbf{x}, \mathbf{g}(\mathbf{x})).$$
+
+        **One equation, two variables.** If $F(a, b) = 0$ and $F_y(a, b) \ne 0$, then near $(a, b)$ the set $F = 0$ is the graph of a function $y = g(x)$ with $g' = -F_x / F_y$.
+
+        The two theorems are equivalent: each can be deduced from the other. Both conclusions are local, and the hypotheses are sufficient, not necessary: $y^3 = x$ defines $y$ as a function of $x$ near the origin although $F_y = 0$ there, but that function is not differentiable at 0.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-circle
+        type: numeric
+        system: s1
+        prompt: |
+          What is the slope $dy/dx$ of the circle $x^2 + y^2 = 25$ at the point $(3, 4)$?
+        answer: "-0.75"
+        tolerance: "0.0001"
+        explanation: The slope is minus x over y.
+    - question:
+        id: drill-circle-2
+        type: numeric
+        system: s1
+        prompt: |
+          What is the slope $dy/dx$ of the circle $x^2 + y^2 = 25$ at the point $(-4, 3)$?
+        answer: "1.3333"
+        tolerance: "0.001"
+        explanation: Minus x over y is 4 over 3.
+    - question:
+        id: drill-formula
+        type: choice
+        system: s1
+        prompt: |
+          $F(x, y) = 0$ defines $y$ as a function of $x$ near a point. What is $dy/dx$?
+        options: ['$-F_x / F_y$', '$F_x / F_y$', '$-F_y / F_x$', '$F_x \cdot F_y$']
+        answer: 0
+        explanation: Staying on the curve needs the changes due to x and to y to cancel.
+    - question:
+        id: drill-condition
+        type: choice
+        system: s1
+        prompt: |
+          Which condition at a point of the curve $F(x, y) = 0$ guarantees that $y$ is a function of $x$ nearby?
+        options: ['$F_x \ne 0$', '$F_y \ne 0$', '$F_x = F_y$', '$F = 1$']
+        answer: 1
+        explanation: The equation must respond to y, so that y can be adjusted to keep it satisfied.
+    - question:
+        id: drill-vertical
+        type: choice
+        system: s1
+        prompt: |
+          At which point of the circle $x^2 + y^2 = 25$ does the implicit function theorem fail to give $y$ as a function of $x$?
+        options: ['$(3, 4)$', '$(0, 5)$', '$(5, 0)$', '$(-3, -4)$']
+        answer: 2
+        explanation: There the partial derivative with respect to y, which is 2y, is zero and the circle is vertical.
+    - question:
+        id: drill-inverse-1d
+        type: numeric
+        system: s1
+        prompt: |
+          $f$ is a function of one variable with $f(2) = 7$ and $f'(2) = 4$. What is the derivative of $f^{-1}$ at 7?
+        answer: "0.25"
+        tolerance: "0.0001"
+        explanation: The slope of the inverse is one over the slope.
+    - question:
+        id: drill-inverse-jac
+        type: choice
+        system: s1
+        prompt: |
+          $\mathbf{f}$ has Jacobian $J$ at $\mathbf{a}$, with $\det J \ne 0$. What is the Jacobian of $\mathbf{f}^{-1}$ at $\mathbf{f}(\mathbf{a})$?
+        options: ['$J^{-1}$', '$J^{\mathsf T}$', '$-J$', 'The matrix of reciprocals of the entries of $J$']
+        answer: 0
+        explanation: The Jacobians of a function and its inverse multiply to the identity.
+    - question:
+        id: drill-det-inverse
+        type: numeric
+        system: s1
+        prompt: |
+          At a point, $\det J_{\mathbf{f}} = 4$. What is the Jacobian determinant of the local inverse at the image point?
+        answer: "0.25"
+        tolerance: "0.0001"
+        explanation: The determinant of an inverse matrix is one over the determinant.
+    - question:
+        id: drill-invertible
+        type: choice
+        system: s1
+        prompt: |
+          Near which points is the polar conversion $(r, \theta) \mapsto (r\cos\theta, r\sin\theta)$ guaranteed locally invertible by the theorem?
+        options: ['All points', 'Points with $r \ne 0$', 'Points with $\theta \ne 0$', 'No points']
+        answer: 1
+        explanation: Its Jacobian determinant is r.
+    - question:
+        id: drill-local
+        type: choice
+        system: s1
+        prompt: |
+          What kind of statement is the inverse function theorem?
+        options: ['Local: it holds in some region round the point', 'Global: it holds on the whole domain', 'It holds only at the point itself', 'It holds only for linear maps']
+        answer: 0
+        explanation: An invertible linear approximation controls the function only nearby.
+    - question:
+        id: drill-count
+        type: numeric
+        system: s1
+        prompt: |
+          Three independent equations relate five variables. Near a suitable solution, how many of the variables are left free, with the others determined as functions of them?
+        answer: "2"
+        explanation: Each independent equation pins down one variable.
+    - question:
+        id: predict-implicit
+        type: predict
+        system: s1
+        prompt: The slope of the puzzle's curve, from the equation alone, at three points on it. What does this show?
+        code: |
+          import math
+
+          for y in [0.0, 1.0, -1.0]:
+              x = math.exp(y) + y
+              print(round(x, 4), round(1 / (math.exp(y) + 1), 4))
+        output: |
+          1.0 0.5
+          3.7183 0.2689
+          -0.6321 0.7311
+        explanation: Each line is a point on the curve, found by choosing y and computing x, with the slope there. At y = 0 the slope is one half. Higher up the exponential dominates and y responds less to x. Lower down the exponential is small and y nearly equals x, so the slope approaches 1.
+    - question:
+        id: predict-inverse
+        type: predict
+        system: s1
+        prompt: The Jacobian of the polar conversion and of its inverse. What does this show?
+        code: |
+          import numpy as np
+
+          r, t = 2.0, np.pi / 2
+          J = np.array([[np.cos(t), -r * np.sin(t)], [np.sin(t), r * np.cos(t)]])
+          K = np.linalg.inv(J)
+          print([[round(float(v), 4) + 0.0 for v in row] for row in K])
+          print(round(float(J[1, 0]), 4), round(float(K[0, 1]), 4))
+          print(round(float(np.linalg.det(K)), 4))
+        output: |
+          [[0.0, 1.0], [-0.5, 0.0]]
+          1.0 1.0
+          0.5
+        explanation: At distance 2 and bearing 90 degrees the point is (0, 2). Moving it up increases the distance at rate 1 and leaves the bearing alone, and moving it to the right decreases the bearing at half a radian per unit. The partial derivative of y with respect to r and that of r with respect to y are both 1, not reciprocals in general but equal here. The determinant of the inverse is one over r.
+  work:
+    - text: Slower now. Before using either theorem, name the matrix that has to be invertible.
+    - question:
+        id: write-implicit
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `implicit_jacobian(Jx, Jy)`. At a solution of a system $\mathbf{F}(\mathbf{x}, \mathbf{y}) = \mathbf{0}$ of $m$ equations, `Jx` is the $m$ by $n$ array of partial derivatives of $\mathbf{F}$ with respect to $\mathbf{x}$ and `Jy` the invertible $m$ by $m$ array of those with respect to $\mathbf{y}$. Return the $m$ by $n$ Jacobian of $\mathbf{y}$ as a function of $\mathbf{x}$. Do not form an inverse matrix.
+        starter: |
+          import numpy as np
+
+          def implicit_jacobian(Jx, Jy):
+              # Replace the next line with your own.
+              return np.zeros(Jx.shape)
+
+          # The circle x^2 + y^2 = 25 at (3, 4): F_x = 6 and F_y = 8.
+          print(implicit_jacobian(np.array([[6.0]]), np.array([[8.0]])).tolist())
+        solution: |
+          import numpy as np
+
+          def implicit_jacobian(Jx, Jy):
+              return -np.linalg.solve(Jy, Jx)
+
+          # The circle x^2 + y^2 = 25 at (3, 4): F_x = 6 and F_y = 8.
+          print(implicit_jacobian(np.array([[6.0]]), np.array([[8.0]])).tolist())
+        tests: |
+          import numpy as _np
+          assert _np.allclose(implicit_jacobian(_np.array([[6.0]]), _np.array([[8.0]])), [[-0.75]]), "For the circle at (3, 4) the slope is -0.75"
+          assert _np.allclose(implicit_jacobian(_np.array([[-1.0]]), _np.array([[2.0]])), [[0.5]]), "For the puzzle's curve at (1, 0), F_x = -1 and F_y = 2, and the slope is 0.5"
+          _Jx = _np.array([[1.0, 2.0, 0.0], [0.0, 1.0, 3.0]])
+          _Jy = _np.array([[2.0, 1.0], [1.0, 1.0]])
+          _R = implicit_jacobian(_Jx, _Jy)
+          assert _R.shape == (2, 3), "Two determined variables and three free ones give a 2 by 3 matrix"
+          assert _np.allclose(_Jx + _Jy @ _R, 0.0), "A step dx with dy = R dx must keep F unchanged to first order: Jx + Jy R = 0"
+          assert _np.allclose(_R, [[-1.0, -1.0, 3.0], [1.0, 0.0, -6.0]]), "For this pair of blocks the answer is [[-1, -1, 3], [1, 0, -6]]"
+          assert "inv" not in source, "Solve the linear system and do not form an inverse"
+          assert output.strip() == "[[-0.75]]", "The program should print [[-0.75]]"
+        wrong:
+          - |
+            import numpy as np
+
+            def implicit_jacobian(Jx, Jy):
+                return np.linalg.solve(Jy, Jx)
+
+            print([[-0.75]])
+          - |
+            import numpy as np
+
+            def implicit_jacobian(Jx, Jy):
+                return -Jx / Jy[0, 0]
+
+            print([[-0.75]])
+          - |
+            import numpy as np
+
+            def implicit_jacobian(Jx, Jy):
+                return -Jy @ Jx
+
+            print([[-0.75]])
+        explanation: |
+          Staying on the solution set means $J_{\mathbf{x}}\,d\mathbf{x} + J_{\mathbf{y}}\,d\mathbf{y} = \mathbf{0}$, so $d\mathbf{y} = -J_{\mathbf{y}}^{-1}J_{\mathbf{x}}\,d\mathbf{x}$. `np.linalg.solve(Jy, Jx)` solves for all the columns of the answer at once: a matrix on the right-hand side is treated as several right-hand sides. With one equation and one determined variable the blocks are 1 by 1 and this is $-F_x / F_y$. The test that $J_{\mathbf{x}} + J_{\mathbf{y}}R = 0$ is the defining property, and it is how you would check such a result when no formula for the answer is at hand.
+    - question:
+        id: write-invert
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `local_inverse(f, J, target, guess)`. `f` maps arrays of length $n$ to arrays of length $n$ and `J` gives its Jacobian at a point. Return the point `x` near `guess` with `f(x)` equal to `target`, found by 20 steps of Newton's method applied to $\mathbf{f}(\mathbf{x}) - \text{target} = \mathbf{0}$. Leave `guess` unchanged.
+        starter: |
+          import numpy as np
+
+          def local_inverse(f, J, target, guess):
+              # Replace the next line with your own.
+              return guess
+
+          polar = lambda p: np.array([p[0] * np.cos(p[1]), p[0] * np.sin(p[1])])
+          polar_J = lambda p: np.array([[np.cos(p[1]), -p[0] * np.sin(p[1])], [np.sin(p[1]), p[0] * np.cos(p[1])]])
+          found = local_inverse(polar, polar_J, np.array([3.0, 4.0]), np.array([4.0, 1.0]))
+          print([round(float(v), 6) for v in found])
+        solution: |
+          import numpy as np
+
+          def local_inverse(f, J, target, guess):
+              x = guess.copy()
+              for k in range(20):
+                  x = x + np.linalg.solve(J(x), target - f(x))
+              return x
+
+          polar = lambda p: np.array([p[0] * np.cos(p[1]), p[0] * np.sin(p[1])])
+          polar_J = lambda p: np.array([[np.cos(p[1]), -p[0] * np.sin(p[1])], [np.sin(p[1]), p[0] * np.cos(p[1])]])
+          found = local_inverse(polar, polar_J, np.array([3.0, 4.0]), np.array([4.0, 1.0]))
+          print([round(float(v), 6) for v in found])
+        tests: |
+          import numpy as _np
+          _polar = lambda p: _np.array([p[0] * _np.cos(p[1]), p[0] * _np.sin(p[1])])
+          _pJ = lambda p: _np.array([[_np.cos(p[1]), -p[0] * _np.sin(p[1])], [_np.sin(p[1]), p[0] * _np.cos(p[1])]])
+          _g = _np.array([4.0, 1.0])
+          _x = local_inverse(_polar, _pJ, _np.array([3.0, 4.0]), _g)
+          assert _np.allclose(_polar(_x), [3.0, 4.0], atol=1e-10), "The point returned must be sent to the target"
+          assert abs(_x[0] - 5.0) < 1e-9, "The point (3, 4) is at distance 5"
+          assert abs(_x[1] - 0.9272952180016122) < 1e-9, "Its bearing is the angle whose tangent is 4/3, about 0.927295"
+          assert _g.tolist() == [4.0, 1.0], "The guess must not be changed"
+          _x = local_inverse(_polar, _pJ, _np.array([3.0, 4.0]), _np.array([4.0, 7.0]))
+          assert abs(_x[1] - (0.9272952180016122 + 2 * _np.pi)) < 1e-9, "From a guess near bearing 7, the answer is the same bearing plus a full turn: the inverse is local"
+          _f = lambda p: _np.array([p[0] + p[1] ** 3, p[1] - p[0] ** 3])
+          _fJ = lambda p: _np.array([[1.0, 3 * p[1] ** 2], [-3 * p[0] ** 2, 1.0]])
+          _t = _f(_np.array([0.4, -0.3]))
+          assert _np.allclose(local_inverse(_f, _fJ, _t, _np.array([0.0, 0.0])), [0.4, -0.3], atol=1e-10), "It should recover the point (0.4, -0.3) from its image under another map"
+          assert output.strip() == "[5.0, 0.927295]", "The program should print [5.0, 0.927295]"
+        wrong:
+          - |
+            import numpy as np
+
+            def local_inverse(f, J, target, guess):
+                x = guess.copy()
+                for k in range(20):
+                    x = x + np.linalg.solve(J(x), f(x) - target)
+                return x
+
+            print([5.0, 0.927295])
+          - |
+            import numpy as np
+
+            def local_inverse(f, J, target, guess):
+                return guess + np.linalg.solve(J(guess), target - f(guess))
+
+            print([5.0, 0.927295])
+          - |
+            import numpy as np
+
+            def local_inverse(f, J, target, guess):
+                return np.array([np.linalg.norm(target), np.arccos(target[0] / np.linalg.norm(target))])
+
+            print([5.0, 0.927295])
+        explanation: |
+          The inverse function theorem says an inverse exists near a point where the Jacobian is invertible. Newton's method computes it: the step solves $J\mathbf{d} = \text{target} - \mathbf{f}(\mathbf{x})$, which is the linear approximation set equal to the target. A single step uses the inverse of the linear stand-in once, and is only approximately right. Repeating it converges to the exact preimage. The test that starts near bearing 7 shows the locality in action: the same point of the plane is reached from a different bearing, a full turn further round, and which preimage Newton's method finds depends on where it starts.
+    - question:
+        id: fix-sensitivity
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          The best weight for $L(\theta, \lambda) = (\theta - 3)^2 + \lambda\theta^2$ satisfies $G(\theta, \lambda) = 2(\theta - 3) + 2\lambda\theta = 0$. `sensitivity(lam)` should return $d\theta^{*}/d\lambda$ by implicit differentiation. Compared with the slope measured from two nearby solutions it is far off. Fix `sensitivity`.
+        starter: |
+          def best(lam):
+              return 3 / (1 + lam)
+
+          def sensitivity(lam):
+              theta = best(lam)
+              G_theta = 2 + 2 * lam
+              G_lam = 2 * theta
+              return -G_theta / G_lam
+
+          measured = (best(0.5 + 1e-6) - best(0.5 - 1e-6)) / 2e-6
+          print(round(sensitivity(0.5), 4), round(measured, 4))
+        solution: |
+          def best(lam):
+              return 3 / (1 + lam)
+
+          def sensitivity(lam):
+              theta = best(lam)
+              G_theta = 2 + 2 * lam
+              G_lam = 2 * theta
+              return -G_lam / G_theta
+
+          measured = (best(0.5 + 1e-6) - best(0.5 - 1e-6)) / 2e-6
+          print(round(sensitivity(0.5), 4), round(measured, 4))
+        tests: |
+          for _lam in [0.0, 0.5, 1.0, 2.0, 9.0]:
+              assert abs(sensitivity(_lam) - (-3 / (1 + _lam) ** 2)) < 1e-12, "The sensitivity should equal the derivative of 3 / (1 + lam), which is -3 / (1 + lam) squared"
+          assert sensitivity(0.0) < 0, "More regularisation pulls the best weight towards 0, so the sensitivity is negative"
+          assert output.strip() == "-1.3333 -1.3333", "The program should print -1.3333 -1.3333"
+        wrong:
+          - |
+            def best(lam):
+                return 3 / (1 + lam)
+
+            def sensitivity(lam):
+                theta = best(lam)
+                G_theta = 2 + 2 * lam
+                G_lam = 2 * theta
+                return -G_theta / G_lam
+
+            print("-1.3333 -1.3333")
+          - |
+            def best(lam):
+                return 3 / (1 + lam)
+
+            def sensitivity(lam):
+                theta = best(lam)
+                G_theta = 2 + 2 * lam
+                G_lam = 2 * theta
+                return G_lam / G_theta
+
+            print("-1.3333 -1.3333")
+          - |
+            def best(lam):
+                return 3 / (1 + lam)
+
+            def sensitivity(lam):
+                G_theta = 2 + 2 * lam
+                G_lam = 2 * 3
+                return -G_lam / G_theta
+
+            print("-1.3333 -1.3333")
+        explanation: |
+          The variable being solved for is $\theta$, so it is the derivative with respect to $\theta$ that must be invertible and that goes on the bottom: $d\theta^{*}/d\lambda = -G_\lambda / G_\theta$. The broken version had the ratio upside down, which is the slope of $\lambda$ as a function of $\theta$, with a sign error besides. In the general form, $-H^{-1}\,\partial(\nabla L)/\partial\lambda$, the bottom is the Hessian of the loss in the weights. Note also that $G_\lambda = 2\theta$ is evaluated at the solution $\theta^{*}$, not at the unregularised value 3: the theorem's formula holds on the solution curve.
+    - question:
+        id: work-puzzle
+        type: numeric
+        system: s2
+        prompt: |
+          For the puzzle's curve $e^y + y = x$, the slope at $(1, 0)$ is $\tfrac12$. Use it to estimate the solution $y$ of $e^y + y = 1.04$, to two decimal places.
+        answer: "0.02"
+        tolerance: "0.001"
+        explanation: |
+          The implicit function $y = g(x)$ has $g(1) = 0$ and $g'(1) = \tfrac12$, so by the linear approximation $g(1.04) \approx 0 + \tfrac12 \times 0.04 = 0.02$. Check: $e^{0.02} + 0.02 \approx 1.0202 + 0.02 = 1.0402$, very near 1.04. One known solution and one derivative give the solutions of all the nearby equations, to first order, without solving any of them. The true value is about 0.0199.
+    - question:
+        id: work-fails
+        type: choice
+        system: s2
+        prompt: |
+          The curve $y^2 = x^2(x + 1)$ passes through the origin. Writing $F(x, y) = y^2 - x^3 - x^2$, both $F_x$ and $F_y$ are zero there. What does the curve look like near the origin, and what do the theorems say?
+        options:
+          - 'It is a single smooth curve, and the theorems give its slope as 0.'
+          - 'Near the origin $y^2 \approx x^2$, so the curve is two branches crossing, close to the lines $y = x$ and $y = -x$. With both partial derivatives zero the gradient is zero, neither variable is guaranteed to be a function of the other, and indeed the curve is not the graph of a function of $x$ or of $y$ near the crossing.'
+          - 'The origin is not on the curve.'
+          - 'The curve has a vertical tangent there, so $x$ is a function of $y$.'
+        answer: 1
+        explanation: |
+          Where the gradient of $F$ is not zero, at least one partial derivative is not zero, and the theorem makes the level set a smooth curve near the point, the graph of one variable in terms of the other. Where the gradient vanishes the theorem is silent, and the level set can do anything: cross itself, as here, or come to a sharp point, or be a single isolated point. For small $x$ the factor $x + 1$ is near 1, so $y \approx \pm x$: two smooth branches through one point, each fine alone, whose union is not a graph.
+    - question:
+        id: work-not-reciprocal
+        type: choice
+        system: s2
+        prompt: |
+          For polar coordinates, $\dfrac{\partial x}{\partial r} = \cos\theta$. A student concludes that $\dfrac{\partial r}{\partial x} = \dfrac{1}{\cos\theta}$. The correct value is $\cos\theta$. What is wrong with the student's reasoning?
+        options:
+          - 'Nothing. $\cos\theta$ and $1/\cos\theta$ are the same.'
+          - 'In one variable the derivative of the inverse is the reciprocal of the derivative. In several, the **matrices** are inverse to each other, and an entry of an inverse matrix is not the reciprocal of the matching entry. The two partial derivatives also hold different things still: $\partial x / \partial r$ keeps $\theta$ fixed, and $\partial r / \partial x$ keeps $y$ fixed.'
+          - 'The student should have written $-1/\cos\theta$.'
+          - 'Partial derivatives of inverse functions do not exist.'
+        answer: 1
+        explanation: |
+          Moving outwards at fixed bearing, $x$ grows at $\cos\theta$ per unit of $r$. Moving to the right at fixed height $y$, the point travels partly outwards and partly round, and $r$ grows at $\cos\theta$ per unit of $x$: only the component of the motion along the radius lengthens $r$. Both are projections onto the same direction. The Jacobian of the inverse map is $J^{-1}$, whose top-left entry is $r\cos\theta / r = \cos\theta$. The symbol $\partial r / \partial x$ is incomplete until one says which other variable is held constant, and the rule "flip the fraction" belongs to total derivatives in one variable only.
+    - question:
+        id: work-hyper
+        type: numeric
+        system: s2
+        prompt: |
+          A model with one weight is trained by minimising $L(\theta, \lambda) = (\theta - 3)^2 + \lambda\theta^2$. At $\lambda = 0.5$ the best weight is $\theta^{*} = 2$ and $d\theta^{*}/d\lambda = -\tfrac43$. Estimate the best weight at $\lambda = 0.53$, to two decimal places, without solving again.
+        answer: "1.96"
+        tolerance: "0.005"
+        explanation: |
+          $\theta^{*}(0.53) \approx 2 - \tfrac43 \times 0.03 = 1.96$. The exact value is $3 / 1.53 \approx 1.9608$. The derivative of the trained weight with respect to the hyperparameter came from the equation $\nabla_\theta L = 0$ and its two partial derivatives at the solution. For a real model the same calculation uses the Hessian in place of $2 + 2\lambda$ and gives, from one training run, the direction in which every hyperparameter would move every weight. That is the basis of tuning hyperparameters by gradient descent.
+  connections:
+    - text: |
+        The equation $e^y + y = x$ has no formula for $y$, and its solution has slope exactly $\tfrac12$ at $(1, 0)$: differentiating the equation gives $(e^y + 1)\,y' = 1$, in which the unknown slope appears linearly.
+
+        The **implicit function theorem**: if $F(a, b) = 0$ and $F_y(a, b) \ne 0$, then near that point the equation defines $y$ as a function of $x$, with $dy/dx = -F_x / F_y$. With several equations, $\partial\mathbf{y}/\partial\mathbf{x} = -J_{\mathbf{y}}^{-1}J_{\mathbf{x}}$, provided $J_{\mathbf{y}}$ is invertible. Where it is not, as on a circle at its vertical tangents or at a crossing of two branches, the conclusion can fail.
+
+        The **inverse function theorem**: if the Jacobian of $\mathbf{f}$ at a point is invertible, then $\mathbf{f}$ has an inverse near that point, whose Jacobian is the inverse matrix. Both theorems say that what is true of the linear approximation is true of the function nearby, and both are local: polar coordinates are invertible near every point away from the origin and not as a whole.
+
+        Applied to the equation $\nabla_{\boldsymbol\theta} L = \mathbf{0}$, the implicit function theorem differentiates the result of an optimisation with respect to its settings, $d\boldsymbol\theta^{*}/d\lambda = -H^{-1}\,\partial(\nabla L)/\partial\lambda$, which is taken further in [[m13.implicit-differentiation-through-solvers]].
+
+        One half of calculus has now been rebuilt for several variables: the derivative, in all its forms. The other half is the integral. What does it mean to add up a function over a region of the plane instead of an interval of the line? And when the region is awkward in $x$ and $y$ and simple in other coordinates, such as a disc in polar coordinates, how do you change variables? The answer uses the Jacobian determinant, the local magnification you met three lessons ago, and it is the last lesson of the cluster, [[m12.multiple-integrals-and-change-of-variables]].
