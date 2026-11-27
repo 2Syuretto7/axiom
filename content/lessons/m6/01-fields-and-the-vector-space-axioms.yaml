@@ -1,0 +1,783 @@
+concept: m6.fields-and-the-vector-space-axioms
+minutes: 85
+claim: You can state the axioms of a vector space over a field, decide whether a given set with a given addition and scaling satisfies them and name the axiom that fails when it does not, recognise polynomials, functions, matrices and bit strings as vectors, say what makes a number system a field and why the integers modulo a prime are one, and prove simple consequences such as zero times any vector being the zero vector from the axioms alone.
+recalls: [m5.determinant, m3.reading-and-writing-epsilon-style-arguments, m7.conditioning]
+uses: [m7.least-squares-and-the-normal-equations, m5.matrices-as-linear-maps, m5.basis-and-dimension, m4.vectors-as-arrows-and-as-lists, m4.vector-addition-and-scaling, m4.linear-combinations-and-span, m3.direct-proof, m3.cases-and-counterexamples, m3.quantifiers-and-their-negation, m3.equivalence-relations-and-partitions, m2.sets, m2.functions-as-machines, m1.polynomials, m1.exponent-laws, m1.logarithms, e0.functions, e0.loops, e0.lists-and-tuples]
+leads: [m6.subspaces-sums-and-direct-sums, m6.linear-maps-kernel-and-image, m6.inner-product-spaces, m8.eigenvalues-and-eigenvectors]
+starter: |
+  # Scratch space. Three kinds of thing, each added and scaled.
+  # Lists of numbers:
+  u, v = [1.0, 2.0], [3.0, -1.0]
+  print([a + b for a, b in zip(u, v)], [2 * a for a in u])
+
+  # Polynomials, stored as coefficients of 1, x, x^2:
+  p, q = [1.0, 0.0, 2.0], [0.0, 3.0, -2.0]
+  print([a + b for a, b in zip(p, q)], [2 * a for a in p])
+
+  # Bit strings, added without carrying:
+  s, t = [1, 0, 1, 1], [0, 0, 1, 0]
+  print([(a + b) % 2 for a, b in zip(s, t)])
+parts:
+  recall:
+    - text: |
+        Three lines of work meet here. [[m5.determinant]] closed the study of matrices acting on lists of numbers. [[m3.reading-and-writing-epsilon-style-arguments]] closed the cluster on proof, where a definition was something to be argued from, word by word. [[m7.conditioning]] closed the geometry of right angles in $\mathbb{R}^n$. Today asks what all of that was really about. Three quick pulls first.
+  puzzle:
+    - text: |
+        In the least squares lessons a parabola was fitted by giving the design matrix three columns: ones, $x$ and $x^2$. The method did not care that the columns came from powers. It needed only that predictions were **combinations** of fixed things.
+
+        The starter adds and scales three kinds of object.
+
+        ```
+        [4.0, 1.0] [2.0, 4.0]
+        [1.0, 3.0, 0.0] [2.0, 0.0, 4.0]
+        [1, 0, 0, 1]
+        ```
+
+        The first line is the familiar one, vectors in the plane. The second adds the polynomials $1 + 2x^2$ and $3x - 2x^2$ to get $1 + 3x$, and doubles the first. The third adds two strings of bits, with $1 + 1 = 0$, which is how a computer combines data with a mask or a key.
+
+        Nothing in the second and third lines is an arrow, and the third does not even use real numbers. Yet for all three it makes sense to ask the questions of the linear algebra you know. Which combinations can be reached from a given few? Is one of them a combination of the others? How many are needed to reach everything?
+
+        Every theorem so far was proved for lists of real numbers. Proving each one again for polynomials, again for functions, again for bit strings, would be endless.
+
+        **What is the least that must be true of a collection of objects, and of the numbers that scale them, for the whole of linear algebra to apply to it at once?**
+  intuition:
+    - text: |
+        Look at what the proofs so far actually used. To show that the null space is closed under addition, or that a projection is unique, nobody used the fact that a vector was a list with entries. They used that vectors can be **added**, that they can be **scaled**, and that these two operations obey a handful of rules: order of addition does not matter, scaling distributes over sums, there is a zero, and so on.
+
+        So turn it round. Do not say what a vector **is**. Say what can be **done** with vectors and which rules the doing obeys, and call anything that obeys them a vector space. A theorem proved from the rules alone is then true of lists, polynomials, functions, matrices and bit strings together, and of every example anyone finds later.
+
+        This is the method of the proof cluster applied to a whole subject. A definition is a contract. Whoever supplies an example must show it meets every clause. Whoever proves a theorem may use the clauses and nothing else.
+
+        There are two parts to the contract. The scalars must themselves form a decent number system, one where you can add, subtract, multiply and divide by anything but zero. Such a system is a **field**. And the vectors, with their addition and their scaling by those scalars, must satisfy eight rules.
+  derivation:
+    - text: |
+        **Fields.** A field is a set $F$ with an addition and a multiplication such that: both are commutative and associative, multiplication distributes over addition, there are distinct elements 0 and 1 with $a + 0 = a$ and $a \cdot 1 = a$, every $a$ has a negative $-a$, and every $a \ne 0$ has a reciprocal $a^{-1}$ with $a \cdot a^{-1} = 1$.
+
+        The rationals $\mathbb{Q}$, the reals $\mathbb{R}$ and the complex numbers $\mathbb{C}$ are fields. The integers $\mathbb{Z}$ are not: 2 has no integer reciprocal.
+
+        The surprise is that there are **finite** fields. Take the remainders $\{0, 1, \dots, p - 1\}$ on division by $p$, with addition and multiplication done as usual and then reduced to the remainder. For $p = 5$: $3 + 4 = 2$, $3 \times 4 = 2$, and $2 \times 3 = 1$, so 3 is the reciprocal of 2. Every non-zero remainder has a reciprocal when $p$ is prime, and the system, written $\mathbb{Z}_p$ or $\mathbb{F}_p$, is a field.
+    - figure: remainder-classes
+      props: { modulus: 5, number: 6 }
+    - text: |
+        The figure sorts whole numbers by remainder. Arithmetic in $\mathbb{Z}_5$ is arithmetic on its five classes.
+
+        For a modulus that is not prime, the reciprocals fail. In $\mathbb{Z}_4$, the multiples of 2 are $0, 2, 0, 2$. None is 1, so 2 has no reciprocal. Worse, $2 \times 2 = 0$: two non-zero numbers with product zero, which cannot happen in a field.
+
+        The smallest field is $\mathbb{Z}_2 = \{0, 1\}$, where $1 + 1 = 0$. Its addition is the exclusive-or of two bits and its multiplication is their and.
+
+        **Vector spaces.** A vector space over a field $F$ is a set $V$ with two operations. Addition takes two elements of $V$ and gives an element of $V$. Scalar multiplication takes an element of $F$ and an element of $V$ and gives an element of $V$. For all $\mathbf{u}, \mathbf{v}, \mathbf{w}$ in $V$ and all $a, b$ in $F$:
+
+        1. $\mathbf{u} + \mathbf{v} = \mathbf{v} + \mathbf{u}$.
+        2. $(\mathbf{u} + \mathbf{v}) + \mathbf{w} = \mathbf{u} + (\mathbf{v} + \mathbf{w})$.
+        3. There is a vector $\mathbf{0}$ with $\mathbf{v} + \mathbf{0} = \mathbf{v}$ for every $\mathbf{v}$.
+        4. Every $\mathbf{v}$ has a negative $-\mathbf{v}$ with $\mathbf{v} + (-\mathbf{v}) = \mathbf{0}$.
+        5. $a(b\mathbf{v}) = (ab)\mathbf{v}$.
+        6. $1\mathbf{v} = \mathbf{v}$.
+        7. $a(\mathbf{u} + \mathbf{v}) = a\mathbf{u} + a\mathbf{v}$.
+        8. $(a + b)\mathbf{v} = a\mathbf{v} + b\mathbf{v}$.
+
+        Hidden in the words "gives an element of $V$" is **closure**: the sum of two vectors and every scalar multiple of a vector must land back in the set. In practice closure is what fails most often.
+
+        **Examples.**
+
+        - $\mathbb{R}^n$, and likewise $F^n$ for any field. With $F = \mathbb{Z}_2$ this is the space of bit strings of length $n$.
+        - The polynomials of degree at most $n$, written $P_n$. Sums and multiples of such polynomials are such polynomials. The zero vector is the zero polynomial.
+        - All real functions on a set $S$, with $(f + g)(x) = f(x) + g(x)$ and $(af)(x) = a\,f(x)$. The zero vector is the function that is 0 everywhere.
+        - The $m \times n$ matrices, added and scaled entry by entry.
+        - The null space of a matrix, and the solutions of an equation such as $f'' = -f$: sums and multiples of solutions are solutions.
+
+        **Non-examples.**
+
+        - The polynomials of degree **exactly** 2. The sum of $x^2$ and $-x^2 + 1$ has degree 0. Not closed, and no zero vector.
+        - The lists with no negative entries. Scaling by $-1$ leaves the set.
+        - A line that misses the origin. It has no zero vector.
+
+        **A strange example.** Let $V$ be the positive real numbers. Define the "sum" of $x$ and $y$ to be the product $xy$, and "$a$ times $x$" to be the power $x^a$. All eight rules hold. The zero vector is the number 1, since $x \cdot 1 = x$. The negative of $x$ is $1/x$. Rule 8 reads $x^{a+b} = x^a x^b$, and rule 7 reads $(xy)^a = x^a y^a$. They are the laws of exponents. The names "addition" and "zero" in the contract are roles, and anything that plays the roles correctly qualifies. Taking logarithms turns this space into the ordinary real line.
+    - question:
+        id: derivation-fails
+        type: choice
+        system: s2
+        prompt: |
+          On pairs of real numbers keep the usual addition, but define scaling by $a(x, y) = (ax, y)$, which stretches only the first entry. Which axiom fails?
+        options:
+          - 'Axiom 1, $\mathbf{u} + \mathbf{v} = \mathbf{v} + \mathbf{u}$.'
+          - 'Axiom 8, $(a + b)\mathbf{v} = a\mathbf{v} + b\mathbf{v}$.'
+          - 'Axiom 6, $1\mathbf{v} = \mathbf{v}$.'
+          - 'Axiom 5, $a(b\mathbf{v}) = (ab)\mathbf{v}$.'
+        answer: 1
+        explanation: |
+          Take $a = b = 1$ and $\mathbf{v} = (0, 1)$. Then $(1 + 1)\mathbf{v} = 2(0, 1) = (0, 1)$, while $1\mathbf{v} + 1\mathbf{v} = (0, 1) + (0, 1) = (0, 2)$. The others hold: addition is the usual one, $1(x, y) = (x, y)$, and $a(b(x, y)) = (abx, y) = (ab)(x, y)$. A single counterexample settles it, as in the proof cluster. Note that the set is closed under this scaling, so closure alone does not make a vector space.
+    - text: |
+        **Arguing from the axioms.** Some facts are so familiar for lists that they seem not to need proof. In an abstract space they do, and the proof may use only the eight rules.
+
+        *Claim: $0\mathbf{v} = \mathbf{0}$ for every vector $\mathbf{v}$.* Here the first 0 is the scalar and the second is the zero vector.
+
+        *Proof.* In the field, $0 + 0 = 0$. So $0\mathbf{v} = (0 + 0)\mathbf{v} = 0\mathbf{v} + 0\mathbf{v}$, by rule 8. Let $\mathbf{w} = 0\mathbf{v}$. It has a negative, by rule 4. Add $-\mathbf{w}$ to both sides of $\mathbf{w} = \mathbf{w} + \mathbf{w}$: the left side becomes $\mathbf{0}$, and the right, by rules 2, 4 and 3, becomes $\mathbf{w}$. So $\mathbf{w} = \mathbf{0}$. $\blacksquare$
+
+        Check it against the strange example: the scalar 0 times the vector $x$ is $x^0 = 1$, which is that space's zero vector.
+
+        In the same way one proves that the zero vector is unique, that $(-1)\mathbf{v} = -\mathbf{v}$, and that $a\mathbf{v} = \mathbf{0}$ forces $a = 0$ or $\mathbf{v} = \mathbf{0}$. The last uses the reciprocal of $a$, which is why the scalars must be a field.
+
+        **What carries over.** Linear combination, span, linear independence, basis and dimension were all defined using only addition and scaling. Their definitions, and the theorems about them, hold in every vector space without change. $P_2$ has the basis $1, x, x^2$ and dimension 3. The $2 \times 2$ matrices have dimension 4. The space of all polynomials has no finite basis: it is infinite-dimensional.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the steps of the proof that the scalar 0 times any vector v is the zero vector.
+        steps:
+          - 'In the field, $0 + 0 = 0$.'
+          - 'So $0\mathbf{v} = (0 + 0)\mathbf{v}$.'
+          - 'By the rule for a sum of scalars, this is $0\mathbf{v} + 0\mathbf{v}$.'
+          - 'Add the negative of $0\mathbf{v}$ to both sides.'
+          - 'The left side is the zero vector and the right side is $0\mathbf{v}$.'
+        explanation: The proof turns a fact about the scalar zero into a fact about vectors through the one axiom that links addition of scalars to addition of vectors, and then cancels using the existence of negatives.
+  formal:
+    - text: |
+        **Field.** A set $F$ with operations $+$ and $\cdot$ and elements $0 \ne 1$ such that, for all $a, b, c \in F$: $a + b = b + a$; $(a + b) + c = a + (b + c)$; $a + 0 = a$; there is $-a$ with $a + (-a) = 0$; $ab = ba$; $(ab)c = a(bc)$; $a \cdot 1 = a$; if $a \ne 0$ there is $a^{-1}$ with $aa^{-1} = 1$; $a(b + c) = ab + ac$.
+
+        **Finite fields.** $\mathbb{Z}_n$ is a field if and only if $n$ is prime.
+
+        **Vector space.** A set $V$ with an addition $V \times V \to V$ and a scalar multiplication $F \times V \to V$ satisfying axioms 1 to 8 above. Elements of $V$ are vectors and elements of $F$ are scalars.
+
+        **Consequences.** In every vector space: the zero vector is unique; each vector has exactly one negative; $0\mathbf{v} = \mathbf{0}$; $a\mathbf{0} = \mathbf{0}$; $(-1)\mathbf{v} = -\mathbf{v}$; if $a\mathbf{v} = \mathbf{0}$ then $a = 0$ or $\mathbf{v} = \mathbf{0}$.
+
+        **Standard spaces.** $F^n$; $F^{m \times n}$; $P_n(F)$, the polynomials of degree at most $n$, of dimension $n + 1$; $P(F)$, all polynomials, infinite-dimensional; $F^S$, the functions from a set $S$ to $F$.
+
+        **Carried over.** A linear combination of $\mathbf{v}_1, \dots, \mathbf{v}_k$ is $a_1\mathbf{v}_1 + \dots + a_k\mathbf{v}_k$ with $a_i \in F$. Span, linear independence, basis and dimension are defined as in $\mathbb{R}^n$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-operations
+        type: choice
+        system: s1
+        prompt: |
+          Which two operations does a vector space have?
+        options: ['Addition and a dot product', 'Addition of vectors and multiplication of a vector by a scalar', 'Multiplication of vectors and division', 'Addition and length']
+        answer: 1
+        explanation: Nothing else is part of the definition.
+    - question:
+        id: drill-field-z
+        type: choice
+        system: s1
+        prompt: |
+          Why are the integers not a field?
+        options: ['They are infinite', 'Most integers have no integer reciprocal', 'They have no zero', 'Addition is not commutative']
+        answer: 1
+        explanation: There is no integer $b$ with $2b = 1$.
+    - question:
+        id: drill-mod5-sum
+        type: numeric
+        system: s1
+        prompt: |
+          In $\mathbb{Z}_5$, what is $3 + 4$?
+        answer: "2"
+        explanation: $7$ leaves remainder 2.
+    - question:
+        id: drill-mod5-inverse
+        type: numeric
+        system: s1
+        prompt: |
+          In $\mathbb{Z}_5$, what is the reciprocal of 2?
+        answer: "3"
+        explanation: $2 \times 3 = 6$, which is 1.
+    - question:
+        id: drill-mod7-inverse
+        type: numeric
+        system: s1
+        prompt: |
+          In $\mathbb{Z}_7$, what is the reciprocal of 3?
+        answer: "5"
+        explanation: $3 \times 5 = 15 = 14 + 1$.
+    - question:
+        id: drill-z2
+        type: numeric
+        system: s1
+        prompt: |
+          In $\mathbb{Z}_2$, what is $1 + 1$?
+        answer: "0"
+        explanation: Addition of bits without carrying.
+    - question:
+        id: drill-z6
+        type: choice
+        system: s1
+        prompt: |
+          Is $\mathbb{Z}_6$ a field?
+        options: ['Yes', 'No, since $2 \times 3 = 0$', 'Yes, since 6 is even', 'No, since it is finite']
+        answer: 1
+        explanation: Two non-zero elements with product zero, so 2 has no reciprocal.
+    - question:
+        id: drill-zero-poly
+        type: choice
+        system: s1
+        prompt: |
+          What is the zero vector of the space of polynomials of degree at most 2?
+        options: ['The number 0 as an input', 'The polynomial with all coefficients 0', 'The polynomial $x^2$', 'There is none']
+        answer: 1
+        explanation: Adding it changes nothing.
+    - question:
+        id: drill-dimension-p2
+        type: numeric
+        system: s1
+        prompt: |
+          What is the dimension of $P_2$, the polynomials of degree at most 2?
+        answer: "3"
+        explanation: A basis is $1, x, x^2$.
+    - question:
+        id: drill-dimension-matrices
+        type: numeric
+        system: s1
+        prompt: |
+          What is the dimension of the space of 2 by 3 real matrices?
+        answer: "6"
+        explanation: One basis matrix for each entry.
+    - question:
+        id: drill-exactly
+        type: choice
+        system: s1
+        prompt: |
+          Are the polynomials of degree exactly 2 a vector space?
+        options: ['Yes', 'No. $x^2 + (-x^2) = 0$ has no degree 2', 'Yes, with basis $x^2$', 'Only over the reals']
+        answer: 1
+        explanation: Not closed under addition.
+    - question:
+        id: drill-strange-zero
+        type: numeric
+        system: s1
+        prompt: |
+          In the space of positive reals with "addition" $xy$ and "scaling" $x^a$, which number is the zero vector?
+        answer: "1"
+        explanation: $x \cdot 1 = x$.
+    - question:
+        id: drill-strange-negative
+        type: choice
+        system: s1
+        prompt: |
+          In that same space, what is the negative of the vector 4?
+        options: ['$-4$', '$\tfrac14$', '$0$', '$4$']
+        answer: 1
+        explanation: $4 \times \tfrac14 = 1$, the zero vector.
+    - question:
+        id: predict-inverses
+        type: predict
+        system: s1
+        prompt: A search for reciprocals among the remainders modulo 5. What does this show?
+        code: |
+          p = 5
+          for a in range(1, p):
+              for b in range(1, p):
+                  if a * b % p == 1:
+                      print(a, b)
+        output: |
+          1 1
+          2 3
+          3 2
+          4 4
+        explanation: Every non-zero remainder has exactly one reciprocal. 2 and 3 are each other's, and 4 is its own, since 16 leaves remainder 1.
+    - question:
+        id: predict-mod4
+        type: predict
+        system: s1
+        prompt: The row of the multiplication table for 2, modulo 4 and modulo 5. What does this show?
+        code: |
+          for n in [4, 5]:
+              print(n, [2 * b % n for b in range(n)])
+        output: |
+          4 [0, 2, 0, 2]
+          5 [0, 2, 4, 1, 3]
+        explanation: Modulo 4 the multiples of 2 never reach 1, and a non-zero number times 2 gives 0. Modulo 5 the multiples of 2 are all five remainders, each once, so 1 is among them.
+  work:
+    - text: Slower now. A definition by axioms can be tested by a program when the set is finite, and probed by one when it is not.
+    - question:
+        id: write-field
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `inverse_mod(a, n)`: return the number `b` in the range 1 to `n - 1` with `a * b % n == 1`, or `None` if there is none. Then write `is_field(n)` for `n` at least 2: return `True` if every `a` from 1 to `n - 1` has such an inverse, and `False` otherwise.
+        starter: |
+          def inverse_mod(a, n):
+              return None
+
+
+          def is_field(n):
+              return False
+
+
+          print(inverse_mod(3, 7), inverse_mod(2, 4))
+          print([n for n in range(2, 14) if is_field(n)])
+        solution: |
+          def inverse_mod(a, n):
+              for b in range(1, n):
+                  if a * b % n == 1:
+                      return b
+              return None
+
+
+          def is_field(n):
+              for a in range(1, n):
+                  if inverse_mod(a, n) is None:
+                      return False
+              return True
+
+
+          print(inverse_mod(3, 7), inverse_mod(2, 4))
+          print([n for n in range(2, 14) if is_field(n)])
+        tests: |
+          assert inverse_mod(2, 5) == 3, "Modulo 5 the reciprocal of 2 is 3, since 2 times 3 is 6"
+          assert inverse_mod(3, 7) == 5, "Modulo 7 the reciprocal of 3 is 5, since 3 times 5 is 15"
+          assert inverse_mod(1, 2) == 1, "The reciprocal of 1 is 1"
+          assert inverse_mod(6, 7) == 6, "Modulo 7 the reciprocal of 6 is 6: the search must go up to n - 1"
+          assert inverse_mod(2, 4) is None, "Modulo 4 the number 2 has no reciprocal, so the result is None"
+          assert inverse_mod(3, 9) is None, "Modulo 9 the number 3 has no reciprocal"
+          assert inverse_mod(10, 7) == 5, "10 is the same as 3 modulo 7, so its reciprocal is 5"
+          assert is_field(2) is True and is_field(3) is True and is_field(13) is True, "For a prime modulus every non-zero remainder has a reciprocal"
+          assert is_field(4) is False and is_field(9) is False and is_field(15) is False, "For a modulus that is not prime some remainder has no reciprocal"
+          assert [n for n in range(2, 30) if is_field(n)] == [2, 3, 5, 7, 11, 13, 17, 19, 23, 29], "Below 30 the moduli that give fields are exactly the primes"
+          assert output.strip() == "5 None\n[2, 3, 5, 7, 11, 13]", "The program should print 5 None and then [2, 3, 5, 7, 11, 13]"
+        wrong:
+          - |
+            def inverse_mod(a, n):
+                for b in range(1, n - 1):
+                    if a * b % n == 1:
+                        return b
+                return None
+
+
+            def is_field(n):
+                for a in range(1, n):
+                    if inverse_mod(a, n) is None:
+                        return False
+                return True
+
+
+            print("5 None\n[2, 3, 5, 7, 11, 13]")
+          - |
+            def inverse_mod(a, n):
+                for b in range(1, n):
+                    if a * b == 1:
+                        return b
+                return None
+
+
+            def is_field(n):
+                for a in range(1, n):
+                    if inverse_mod(a, n) is None:
+                        return False
+                return True
+
+
+            print("5 None\n[2, 3, 5, 7, 11, 13]")
+          - |
+            def inverse_mod(a, n):
+                for b in range(1, n):
+                    if a * b % n == 1:
+                        return b
+                return None
+
+
+            def is_field(n):
+                for a in range(1, n):
+                    if inverse_mod(a, n) is None:
+                        return False
+                    return True
+                return True
+
+
+            print("5 None\n[2, 3, 5, 7, 11, 13]")
+          - |
+            def inverse_mod(a, n):
+                for b in range(1, n):
+                    if a * b % n == 1:
+                        return b
+                return None
+
+
+            def is_field(n):
+                return n % 2 == 1 or n == 2
+
+
+            print("5 None\n[2, 3, 5, 7, 11, 13]")
+        explanation: |
+          `inverse_mod` is the definition of a reciprocal, tried on every candidate. `is_field` checks the one field axiom that can fail for remainders: the others hold for every modulus, since they are inherited from the integers.
+
+          The list printed is the list of primes. If $n = ab$ with both factors smaller than $n$, then $a$ and $b$ are non-zero remainders with product zero, and $a$ can have no reciprocal: multiplying $ab = 0$ by it would give $b = 0$. If $n$ is prime, the multiples $a, 2a, \dots, (n - 1)a$ of a non-zero $a$ are all different and all non-zero, so one of them is 1.
+
+          Returning `True` inside the loop, the third wrong version, reports on $a = 1$ alone, which always has a reciprocal.
+    - question:
+        id: write-polynomials
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A polynomial is stored as the list of its coefficients, lowest power first, so `[1.0, 0.0, 2.0]` is $1 + 2x^2$. The lists may have different lengths. Write `poly_add(p, q)`, returning the coefficient list of the sum, as long as the longer of the two. Write `poly_scale(a, p)`, returning the list for $a$ times the polynomial. Neither may change its arguments.
+
+          `poly_eval` is given. The program checks one instance of axiom 7 by evaluating both sides at a point.
+        starter: |
+          def poly_eval(p, x):
+              return sum(c * x ** k for k, c in enumerate(p))
+
+
+          def poly_add(p, q):
+              return []
+
+
+          def poly_scale(a, p):
+              return []
+
+
+          p, q = [1.0, 0.0, 2.0], [0.0, 3.0]
+          print(poly_add(p, q), poly_scale(2.0, p))
+          print(poly_eval(poly_scale(3.0, poly_add(p, q)), 2.0), poly_eval(poly_add(poly_scale(3.0, p), poly_scale(3.0, q)), 2.0))
+        solution: |
+          def poly_eval(p, x):
+              return sum(c * x ** k for k, c in enumerate(p))
+
+
+          def poly_add(p, q):
+              n = max(len(p), len(q))
+              total = [0.0] * n
+              for k in range(len(p)):
+                  total[k] = total[k] + p[k]
+              for k in range(len(q)):
+                  total[k] = total[k] + q[k]
+              return total
+
+
+          def poly_scale(a, p):
+              return [a * c for c in p]
+
+
+          p, q = [1.0, 0.0, 2.0], [0.0, 3.0]
+          print(poly_add(p, q), poly_scale(2.0, p))
+          print(poly_eval(poly_scale(3.0, poly_add(p, q)), 2.0), poly_eval(poly_add(poly_scale(3.0, p), poly_scale(3.0, q)), 2.0))
+        tests: |
+          _p, _q = [1.0, 0.0, 2.0], [0.0, 3.0]
+          _s = poly_add(_p, _q)
+          assert _p == [1.0, 0.0, 2.0] and _q == [0.0, 3.0], "The arguments should be left as they were: build a new list"
+          assert isinstance(_s, list) and len(_s) == 3, "The sum of a list of 3 coefficients and a list of 2 has 3 coefficients"
+          assert _s == [1.0, 3.0, 2.0], "(1 + 2x^2) + 3x is 1 + 3x + 2x^2, so the list is [1.0, 3.0, 2.0]"
+          assert poly_add(_q, _p) == [1.0, 3.0, 2.0], "Addition should not depend on the order, even when the shorter list comes first"
+          assert poly_add([1.0, 2.0], [3.0, 4.0]) == [4.0, 6.0], "(1 + 2x) + (3 + 4x) is 4 + 6x"
+          assert poly_add([5.0], []) == [5.0] and poly_add([], []) == [], "Adding the empty list, the zero polynomial, changes nothing"
+          _t = poly_scale(2.0, _p)
+          assert _p == [1.0, 0.0, 2.0], "poly_scale should not change its argument"
+          assert _t == [2.0, 0.0, 4.0], "Twice 1 + 2x^2 is 2 + 4x^2"
+          assert poly_scale(0.0, [1.0, 2.0]) == [0.0, 0.0], "Zero times a polynomial has all coefficients zero"
+          assert poly_scale(-1.0, [1.0, -2.0]) == [-1.0, 2.0], "Minus one times 1 - 2x is -1 + 2x"
+          _a, _b = [2.0, -1.0, 0.5, 4.0], [1.0, 1.0]
+          for _x in [0.0, 1.0, -2.0, 3.0]:
+              assert abs(poly_eval(poly_add(_a, _b), _x) - (poly_eval(_a, _x) + poly_eval(_b, _x))) < 1e-9, "The value of a sum at any point should be the sum of the values"
+              assert abs(poly_eval(poly_scale(2.5, _a), _x) - 2.5 * poly_eval(_a, _x)) < 1e-9, "The value of a multiple at any point should be the multiple of the value"
+          assert output.strip() == "[1.0, 3.0, 2.0] [2.0, 0.0, 4.0]\n45.0 45.0", "The program should print [1.0, 3.0, 2.0] [2.0, 0.0, 4.0] and then 45.0 45.0"
+        wrong:
+          - |
+            def poly_eval(p, x):
+                return sum(c * x ** k for k, c in enumerate(p))
+
+
+            def poly_add(p, q):
+                return [a + b for a, b in zip(p, q)]
+
+
+            def poly_scale(a, p):
+                return [a * c for c in p]
+
+
+            print("[1.0, 3.0, 2.0] [2.0, 0.0, 4.0]\n45.0 45.0")
+          - |
+            def poly_eval(p, x):
+                return sum(c * x ** k for k, c in enumerate(p))
+
+
+            def poly_add(p, q):
+                return p + q
+
+
+            def poly_scale(a, p):
+                return [a * c for c in p]
+
+
+            print("[1.0, 3.0, 2.0] [2.0, 0.0, 4.0]\n45.0 45.0")
+          - |
+            def poly_eval(p, x):
+                return sum(c * x ** k for k, c in enumerate(p))
+
+
+            def poly_add(p, q):
+                for k in range(len(q)):
+                    p[k] = p[k] + q[k]
+                return p
+
+
+            def poly_scale(a, p):
+                return [a * c for c in p]
+
+
+            print("[1.0, 3.0, 2.0] [2.0, 0.0, 4.0]\n45.0 45.0")
+          - |
+            def poly_eval(p, x):
+                return sum(c * x ** k for k, c in enumerate(p))
+
+
+            def poly_add(p, q):
+                n = max(len(p), len(q))
+                total = [0.0] * n
+                for k in range(len(p)):
+                    total[k] = total[k] + p[k]
+                for k in range(len(q)):
+                    total[k] = total[k] + q[k]
+                return total
+
+
+            def poly_scale(a, p):
+                return [a * p[0]] + p[1:]
+
+
+            print("[1.0, 3.0, 2.0] [2.0, 0.0, 4.0]\n45.0 45.0")
+          - |
+            def poly_eval(p, x):
+                return sum(c * x ** k for k, c in enumerate(p))
+
+
+            def poly_add(p, q):
+                n = max(len(p), len(q))
+                total = [0.0] * n
+                for k in range(len(p)):
+                    total[k] = total[k] + p[k]
+                for k in range(len(q)):
+                    total[k] = total[k] + q[k]
+                return total
+
+
+            def poly_scale(a, p):
+                return p * int(a)
+
+
+            print("[1.0, 3.0, 2.0] [2.0, 0.0, 4.0]\n45.0 45.0")
+        explanation: |
+          A polynomial of degree at most $n$ **is** its list of $n + 1$ coefficients, as far as addition and scaling are concerned, and the two operations are those of $\mathbb{R}^{n+1}$. The only extra care is that a shorter list stands for a polynomial whose higher coefficients are zero.
+
+          `zip` stops at the shorter list and silently drops the $x^2$ term. `p + q` on lists joins them end to end, and `p * 2` repeats the list: for Python lists, `+` and `*` are not the vector space operations, which is one reason numerical work uses arrays. Adding into `p` in place gives the right answer once and damages the caller's polynomial.
+
+          The last line of the program evaluates $3(p + q)$ and $3p + 3q$ at $x = 2$ and gets 45 both times. One instance proves nothing, but an axiom that failed would show up in a test like this at once.
+    - question:
+        id: fix-zero
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          This code implements the strange space of the lesson: the vectors are positive numbers, `vadd` is the space's addition and `vscale` its scaling. `satisfies_zero_axioms` checks, for a list of vectors, that adding the zero vector changes nothing and that each vector plus its negative is the zero vector. It reports `False` for a space that is known to satisfy every axiom. Fix it. One line needs to change.
+        starter: |
+          def vadd(x, y):
+              return x * y
+
+
+          def vscale(a, x):
+              return x ** a
+
+
+          def vzero():
+              return 0.0
+
+
+          def vneg(x):
+              return vscale(-1.0, x)
+
+
+          def satisfies_zero_axioms(vectors):
+              for x in vectors:
+                  if abs(vadd(x, vzero()) - x) > 1e-9:
+                      return False
+                  if abs(vadd(x, vneg(x)) - vzero()) > 1e-9:
+                      return False
+              return True
+
+
+          print(satisfies_zero_axioms([0.5, 1.0, 2.0, 8.0]))
+          print(vadd(2.0, 8.0), vscale(3.0, 2.0), vneg(4.0))
+        solution: |
+          def vadd(x, y):
+              return x * y
+
+
+          def vscale(a, x):
+              return x ** a
+
+
+          def vzero():
+              return 1.0
+
+
+          def vneg(x):
+              return vscale(-1.0, x)
+
+
+          def satisfies_zero_axioms(vectors):
+              for x in vectors:
+                  if abs(vadd(x, vzero()) - x) > 1e-9:
+                      return False
+                  if abs(vadd(x, vneg(x)) - vzero()) > 1e-9:
+                      return False
+              return True
+
+
+          print(satisfies_zero_axioms([0.5, 1.0, 2.0, 8.0]))
+          print(vadd(2.0, 8.0), vscale(3.0, 2.0), vneg(4.0))
+        tests: |
+          assert vzero() == 1.0, "The zero vector of this space is the number that changes nothing when 'added', and adding here is multiplying: it is 1"
+          assert vadd(2.0, 8.0) == 16.0, "vadd should still multiply: the 'sum' of 2 and 8 is 16"
+          assert vscale(3.0, 2.0) == 8.0, "vscale should still take a power: 3 'times' 2 is 2 cubed"
+          assert abs(vneg(4.0) - 0.25) < 1e-12, "The negative of 4 is still 1/4"
+          for _x in [0.5, 1.0, 2.0, 8.0, 100.0]:
+              assert abs(vadd(_x, vzero()) - _x) < 1e-9, "Adding the zero vector should change nothing"
+              assert abs(vadd(_x, vneg(_x)) - vzero()) < 1e-9, "A vector plus its negative should be the zero vector"
+              assert abs(vscale(0.0, _x) - vzero()) < 1e-9, "The scalar 0 times any vector should be the zero vector"
+          assert satisfies_zero_axioms([0.5, 1.0, 2.0, 8.0]) is True, "The check should now report True"
+          assert output.strip() == "True\n16.0 8.0 0.25", "The program should print True and then 16.0 8.0 0.25"
+        wrong:
+          - |
+            def vadd(x, y):
+                return x * y
+
+
+            def vscale(a, x):
+                return x ** a
+
+
+            def vzero():
+                return 0.0
+
+
+            def vneg(x):
+                return vscale(-1.0, x)
+
+
+            def satisfies_zero_axioms(vectors):
+                for x in vectors:
+                    if abs(vadd(x, vzero()) - x) > 1e-9:
+                        return False
+                    if abs(vadd(x, vneg(x)) - vzero()) > 1e-9:
+                        return False
+                return True
+
+
+            print("True\n16.0 8.0 0.25")
+          - |
+            def vadd(x, y):
+                return x + y
+
+
+            def vscale(a, x):
+                return x ** a
+
+
+            def vzero():
+                return 1.0
+
+
+            def vneg(x):
+                return vscale(-1.0, x)
+
+
+            def satisfies_zero_axioms(vectors):
+                for x in vectors:
+                    if abs(vadd(x, vzero()) - x) > 1e-9:
+                        return False
+                    if abs(vadd(x, vneg(x)) - vzero()) > 1e-9:
+                        return False
+                return True
+
+
+            print("True\n16.0 8.0 0.25")
+          - |
+            def vadd(x, y):
+                return x * y
+
+
+            def vscale(a, x):
+                return x ** a
+
+
+            def vzero():
+                return 1.0
+
+
+            def vneg(x):
+                return -x
+
+
+            def satisfies_zero_axioms(vectors):
+                for x in vectors:
+                    if abs(vadd(x, vzero()) - x) > 1e-9:
+                        return False
+                    if abs(vadd(x, vneg(x)) - vzero()) > 1e-9:
+                        return False
+                return True
+
+
+            print("True\n16.0 8.0 0.25")
+        explanation: |
+          "Zero vector" names a role: the element that leaves every vector unchanged under the space's addition. Here addition is multiplication of numbers, and the number that leaves others unchanged under multiplication is 1. The number 0 is not even a member of this space, which contains only positive numbers.
+
+          The theorem proved in the lesson gives a way to find the zero vector of any space without guessing: it is the scalar 0 times any vector at all. Here that is $x^0 = 1$.
+
+          Changing `vadd` to ordinary addition makes the check about zero pass and turns the code into a different space, in which the scaling no longer distributes: $(2 + 8)^3$ is not $2^3 + 8^3$.
+    - question:
+        id: work-which
+        type: choice
+        system: s2
+        prompt: |
+          Which of these sets of real functions on the line is a vector space under the usual addition and scaling of functions?
+        options:
+          - 'The functions with $f(0) = 1$.'
+          - 'The functions with $f(1) = 0$.'
+          - 'The functions with $f(x) \ge 0$ for all $x$.'
+          - 'The functions that are increasing.'
+        answer: 1
+        explanation: |
+          If $f(1) = 0$ and $g(1) = 0$ then $(f + g)(1) = 0$ and $(af)(1) = 0$, so the set is closed, it contains the zero function, and the eight rules are inherited from the space of all functions. The functions with $f(0) = 1$ do not contain the zero function, and the sum of two of them has value 2 at 0. The non-negative and the increasing functions are closed under addition and fail under scaling by $-1$. A condition of the form "something linear equals zero" gives a vector space. A condition with a non-zero right-hand side, or an inequality, does not.
+    - question:
+        id: work-bits
+        type: numeric
+        system: s2
+        prompt: |
+          How many vectors are there in $\mathbb{Z}_2^{\,3}$, the space of bit strings of length 3 over the field with two elements?
+        answer: "8"
+        explanation: |
+          Each of the three entries is 0 or 1, giving $2^3 = 8$ vectors. The space has dimension 3, with basis $100$, $010$, $001$, and a space of dimension $n$ over a field with $q$ elements has $q^n$ vectors, since each vector is a unique combination of the basis with $q$ choices for each coefficient. In this space every vector is its own negative: $\mathbf{v} + \mathbf{v} = \mathbf{0}$. Error-correcting codes and much of cryptography are linear algebra over this field.
+    - question:
+        id: work-cancel
+        type: choice
+        system: s2
+        prompt: |
+          The proof that $a\mathbf{v} = \mathbf{0}$ with $a \ne 0$ forces $\mathbf{v} = \mathbf{0}$ multiplies both sides by $a^{-1}$. What would go wrong if the scalars were the remainders modulo 4, which are not a field?
+        options:
+          - 'Nothing. The conclusion still holds.'
+          - 'The scalar 2 has no reciprocal, and the conclusion is false: take the "vector" 2 in $\mathbb{Z}_4$ itself. Then $2 \cdot 2 = 0$ although neither the scalar nor the vector is zero.'
+          - 'Addition of vectors would not be commutative.'
+          - 'There would be no zero vector.'
+        answer: 1
+        explanation: |
+          With scalars from a field, a non-zero multiple of a non-zero vector is non-zero, and this is what makes a single non-zero vector linearly independent, and in the end what makes dimension well defined. Over $\mathbb{Z}_4$ the list consisting of the single vector 2 satisfies $2 \cdot \mathbf{v} = \mathbf{0}$ with a non-zero coefficient. The demand that scalars form a field is the least assumption under which the theory of bases goes through.
+    - question:
+        id: work-why-abstract
+        type: choice
+        system: s2
+        prompt: |
+          A theorem is proved using only the eight axioms: in a space of dimension $n$, any $n + 1$ vectors are linearly dependent. Which of the following does it give without further proof?
+        options:
+          - 'Only that any four vectors in $\mathbb{R}^3$ are dependent.'
+          - 'That any four polynomials of degree at most 2 are dependent, that any five 2 by 2 matrices are dependent, and that any four bit strings of length 3 are dependent, along with the statement for $\mathbb{R}^3$.'
+          - 'Nothing about particular spaces, since it is abstract.'
+          - 'Only statements about spaces of functions.'
+        answer: 1
+        explanation: |
+          $P_2$ has dimension 3, the 2 by 2 matrices have dimension 4, and $\mathbb{Z}_2^{\,3}$ has dimension 3 over $\mathbb{Z}_2$. Each satisfies the axioms, so each inherits the theorem. That is the return on the abstraction: one proof, and every space that meets the contract. For instance, the four polynomials $1 + x$, $x + x^2$, $1 + x^2$ and $1 + x + x^2$ must satisfy a linear relation, and you know so before looking for it.
+  connections:
+    - text: |
+        Lists, polynomials and bit strings were added and scaled by the same lines of code, and the least squares fit of a parabola never noticed that its columns were powers. The reason is that linear algebra uses only two operations and eight rules about them. A set with an addition and a scaling that obey the rules is a **vector space**, and the scalars may come from any **field**: the reals, the complex numbers, or the remainders modulo a prime.
+
+        The zero vector, negatives and even "addition" are roles. In the space of positive numbers under multiplication and powers, the zero vector is 1. Facts such as $0\mathbf{v} = \mathbf{0}$ are theorems, proved from the rules, and so is everything about span, independence, basis and dimension.
+
+        Most of the examples today were found inside a larger space by imposing a condition: the polynomials of degree at most 2 inside all polynomials, the functions vanishing at 1 inside all functions, a null space inside $\mathbb{R}^n$. Checking eight axioms each time would be tedious, and it turned out to be unnecessary: only closure ever needed checking. That observation is the notion of a subspace, and the next lesson also asks how two subspaces combine: [[m6.subspaces-sums-and-direct-sums]].
