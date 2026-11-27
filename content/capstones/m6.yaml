@@ -1,0 +1,422 @@
+cluster: M6
+title: Three samples of a curve
+minutes: 100
+claim: You will have turned three samples of a signal into the quadratic through them, rewritten differentiation so that it acts on samples directly, expressed the slope and the average of the curve as fixed weights on the samples, measured how far the curve is from a straight line with an inner product, and seen which of these results depended on a choice of basis or of inner product and which did not.
+brief: |
+  This cluster replaced lists of numbers by anything that satisfies the axioms, and then rebuilt maps, matrices, the transpose and geometry on that footing. This project uses all of it on the smallest space that is not a list of numbers in disguise: the quadratics.
+
+  **The project.** An instrument watches a slowly varying signal through a short window of time, $-1 \le t \le 1$, and samples it three times:
+
+  | Time $t$ | $-1$ | $0$ | $1$ |
+  |---|---|---|---|
+  | Sample $y$ | 2 | 1 | 4 |
+
+  Over so short a window the signal is taken to be a quadratic, $p(t) = c_0 + c_1t + c_2t^2$. From the three samples the instrument must report the slope of the signal at each sample time, the average of the signal over the window, and how far the signal is from a straight line.
+
+  There are two ways to describe a quadratic here: by its **coefficients** $(c_0, c_1, c_2)$, and by its **samples** $(y_{-1}, y_0, y_1)$. They are two bases of one space. Calculus is easy in the first. The instrument lives in the second. The project is the traffic between them.
+
+  Nothing here is new. Keep your results as you go, because later stages use earlier ones.
+starter: |
+  # Scratch space. Row i of V is the evaluation at the i-th sample time,
+  # so V @ coefficients gives the three samples.
+  import numpy as np
+
+  times = [-1.0, 0.0, 1.0]
+  V = np.array([[t ** k for k in range(3)] for t in times])
+  y = np.array([2.0, 1.0, 4.0])
+  print(V.tolist())
+  print(int(np.linalg.matrix_rank(V)))
+stages:
+  - title: Three numbers are a quadratic
+    blocks:
+      - text: |
+          Sampling is a map $E: P_2 \to \mathbb{R}^3$, $E(p) = (p(-1), p(0), p(1))$. It is linear, since the value of a sum is the sum of the values. In the monomial basis its matrix is the `V` of the starter.
+      - question:
+          id: kernel-of-sampling
+          type: numeric
+          system: s1
+          concepts: [m6.linear-maps-kernel-and-image]
+          prompt: What is the dimension of the kernel of the sampling map $E$?
+          answer: "0"
+          explanation: |
+            A polynomial in the kernel has the three roots $-1, 0, 1$. A nonzero polynomial of degree at most 2 has at most two roots. So the kernel holds only the zero polynomial, and $E$ is injective: different quadratics have different samples.
+      - question:
+          id: why-unique
+          type: choice
+          system: s2
+          concepts: [m6.rank-nullity-theorem, m6.linear-maps-kernel-and-image]
+          prompt: |
+            Why does it follow that **every** triple of samples comes from exactly one quadratic?
+          options:
+            - 'Because polynomials are continuous.'
+            - 'Rank-nullity: $\dim P_2 = 3 = \operatorname{rank} E + 0$, so the image has dimension 3 and is all of $\mathbb{R}^3$. An injective map between spaces of equal finite dimension is surjective, hence an isomorphism.'
+            - 'Because three equations always have a solution.'
+            - 'It does not follow. Some triples come from no quadratic.'
+          answer: 1
+          explanation: |
+            Injectivity was shown by counting roots, and surjectivity came for nothing from the dimension count. So coefficients and samples carry exactly the same information, and $E$ is a change of coordinates. With four samples the map $P_2 \to \mathbb{R}^4$ would still be injective but its image would be a 3-dimensional subspace, and most quadruples would fit no quadratic. That is the over-determined situation of least squares.
+      - question:
+          id: fit
+          type: code
+          mode: write
+          system: s2
+          concepts: [m6.linear-maps-kernel-and-image, m6.rank-nullity-theorem]
+          prompt: |
+            Write `fit(times, y)`: the coefficient array, lowest power first, of the polynomial of degree below `len(times)` that takes the values `y` at the distinct `times`. Build the matrix of the sampling map and solve.
+          starter: |
+            import numpy as np
+
+
+            def fit(times, y):
+                return y * 0.0
+
+
+            print([round(float(c), 4) + 0.0 for c in fit([-1.0, 0.0, 1.0], np.array([2.0, 1.0, 4.0]))])
+          solution: |
+            import numpy as np
+
+
+            def fit(times, y):
+                n = len(times)
+                V = np.array([[t ** k for k in range(n)] for t in times])
+                return np.linalg.solve(V, y)
+
+
+            print([round(float(c), 4) + 0.0 for c in fit([-1.0, 0.0, 1.0], np.array([2.0, 1.0, 4.0]))])
+          tests: |
+            import numpy as _np
+            _c = fit([-1.0, 0.0, 1.0], _np.array([2.0, 1.0, 4.0]))
+            assert _np.shape(_c) == (3,), "Three samples give three coefficients"
+            assert _np.allclose(_c, [1.0, 1.0, 2.0]), "The quadratic through (-1, 2), (0, 1), (1, 4) is 1 + t + 2t^2: solve V c = y, where row i of V holds the powers of the i-th time"
+            assert _np.allclose(fit([0.0, 1.0], _np.array([3.0, 5.0])), [3.0, 2.0]), "The line through (0, 3) and (1, 5) is 3 + 2t"
+            assert _np.allclose(fit([0.0, 1.0, 2.0, 3.0], _np.array([1.0, 2.0, 9.0, 28.0])), [1.0, 0.0, 0.0, 1.0]), "The cubic through (0, 1), (1, 2), (2, 9), (3, 28) is 1 + t^3"
+            assert _np.allclose(fit([-1.0, 0.0, 1.0], _np.array([0.0, 0.0, 0.0])), [0.0, 0.0, 0.0]), "Zero samples come only from the zero polynomial"
+            assert output.strip() == "[1.0, 1.0, 2.0]", "The program should print [1.0, 1.0, 2.0]"
+          wrong:
+            - |
+              import numpy as np
+
+
+              def fit(times, y):
+                  n = len(times)
+                  V = np.array([[t ** k for k in range(n)] for t in times])
+                  return np.linalg.solve(V.T, y)
+
+
+              print("[1.0, 1.0, 2.0]")
+            - |
+              import numpy as np
+
+
+              def fit(times, y):
+                  n = len(times)
+                  V = np.array([[t ** k for k in range(n)] for t in times])
+                  return V @ y
+
+
+              print("[1.0, 1.0, 2.0]")
+            - |
+              import numpy as np
+
+
+              def fit(times, y):
+                  n = len(times)
+                  V = np.array([[t ** (k + 1) for k in range(n)] for t in times])
+                  return np.linalg.pinv(V) @ y
+
+
+              print("[1.0, 1.0, 2.0]")
+          explanation: |
+            The signal is $p(t) = 1 + t + 2t^2$. Solving $V\mathbf{c} = \mathbf{y}$ inverts the sampling map, which the last two questions showed to be an isomorphism.
+
+            Solving with the transpose answers a question about functionals and returns something else, as stage 3 will show. Multiplying by $V$ samples a polynomial whose coefficients happen to be the samples, which goes the wrong way.
+  - title: Differentiation that acts on samples
+    blocks:
+      - text: |
+          In the monomial basis differentiation has the matrix
+
+          $$D = \begin{pmatrix} 0 & 1 & 0 \\ 0 & 0 & 2 \\ 0 & 0 & 0 \end{pmatrix}.$$
+
+          The instrument holds samples, and wants the samples of the derivative. That is the same map $P_2 \to P_2$, described in the other basis. Coefficients become samples by $V$, so samples become coefficients by $V^{-1}$. The matrix that takes samples of $p$ to samples of $p'$ is therefore $VDV^{-1}$: back to coefficients, differentiate, sample again.
+      - question:
+          id: on-samples
+          type: code
+          mode: write
+          system: s2
+          concepts: [m6.matrix-of-a-linear-map-and-similarity]
+          prompt: |
+            Write `on_samples(A, V)`: `A` is the matrix of a map in the monomial basis and `V` is the matrix that turns coefficients into samples. Return the matrix of the same map acting on samples. The program applies it to differentiation and then to the samples $(2, 1, 4)$.
+          starter: |
+            import numpy as np
+
+
+            def on_samples(A, V):
+                return A * 1.0
+
+
+            V = np.array([[t ** k for k in range(3)] for t in [-1.0, 0.0, 1.0]])
+            D = np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]])
+            S = on_samples(D, V)
+            print([[round(float(c), 4) + 0.0 for c in row] for row in S])
+            print([round(float(c), 4) + 0.0 for c in S @ np.array([2.0, 1.0, 4.0])])
+          solution: |
+            import numpy as np
+
+
+            def on_samples(A, V):
+                return V @ A @ np.linalg.inv(V)
+
+
+            V = np.array([[t ** k for k in range(3)] for t in [-1.0, 0.0, 1.0]])
+            D = np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]])
+            S = on_samples(D, V)
+            print([[round(float(c), 4) + 0.0 for c in row] for row in S])
+            print([round(float(c), 4) + 0.0 for c in S @ np.array([2.0, 1.0, 4.0])])
+          tests: |
+            import numpy as _np
+            _V = _np.array([[t ** k for k in range(3)] for t in [-1.0, 0.0, 1.0]])
+            _D = _np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]])
+            _S = on_samples(_D, _V)
+            assert _np.shape(_S) == (3, 3), "The result is a 3 by 3 matrix"
+            assert _np.allclose(_S, [[-1.5, 2.0, -0.5], [-0.5, 0.0, 0.5], [0.5, -2.0, 1.5]]), "Differentiation on samples has rows (-1.5, 2, -0.5), (-0.5, 0, 0.5), (0.5, -2, 1.5): V times D times the inverse of V"
+            assert _np.allclose(_S @ _np.array([2.0, 1.0, 4.0]), [-3.0, 1.0, 5.0]), "For 1 + t + 2t^2 the derivative 1 + 4t has samples -3, 1, 5"
+            assert _np.allclose(on_samples(_np.eye(3), _V), _np.eye(3)), "The identity map is the identity in every basis"
+            _W = _np.array([[t ** k for k in range(3)] for t in [0.0, 1.0, 2.0]])
+            assert _np.allclose(on_samples(_D, _W) @ _np.array([0.0, 1.0, 4.0]), [0.0, 2.0, 4.0]), "With sample times 0, 1, 2 the samples 0, 1, 4 of t^2 should go to the samples 0, 2, 4 of 2t"
+            assert abs(float(_np.trace(on_samples(_D, _W)))) < 1e-9, "The trace of differentiation is 0 in every basis"
+            assert output.strip() == "[[-1.5, 2.0, -0.5], [-0.5, 0.0, 0.5], [0.5, -2.0, 1.5]]\n[-3.0, 1.0, 5.0]", "The program should print the matrix on samples and then [-3.0, 1.0, 5.0]"
+          wrong:
+            - |
+              import numpy as np
+
+
+              def on_samples(A, V):
+                  return np.linalg.inv(V) @ A @ V
+
+
+              print("[[-1.5, 2.0, -0.5], [-0.5, 0.0, 0.5], [0.5, -2.0, 1.5]]\n[-3.0, 1.0, 5.0]")
+            - |
+              import numpy as np
+
+
+              def on_samples(A, V):
+                  return V @ A @ V.T
+
+
+              print("[[-1.5, 2.0, -0.5], [-0.5, 0.0, 0.5], [0.5, -2.0, 1.5]]\n[-3.0, 1.0, 5.0]")
+            - |
+              import numpy as np
+
+
+              def on_samples(A, V):
+                  return V @ A
+
+
+              print("[[-1.5, 2.0, -0.5], [-0.5, 0.0, 0.5], [0.5, -2.0, 1.5]]\n[-3.0, 1.0, 5.0]")
+          explanation: |
+            The slopes of the signal at the three sample times are $-3, 1, 5$, obtained from the samples alone.
+
+            The rows of the matrix are formulas that numerical analysts know by name. The middle row, $\tfrac12(y_1 - y_{-1})$, is the central difference. The outer rows are the one-sided three-point formulas. They were not looked up. They are differentiation, written in the basis the instrument uses.
+
+            Compare with the lessons, where the new matrix was $P^{-1}AP$ with the columns of $P$ holding the new basis in old coordinates. Here $V$ goes from old coordinates to new, so $V = P^{-1}$ and the formula is the same one. Checking a formula on one basis vector is quicker than remembering which convention is in force.
+      - question:
+          id: invariants
+          type: choice
+          system: s2
+          concepts: [m6.matrix-of-a-linear-map-and-similarity]
+          prompt: |
+            $D$ and the matrix $S$ just found share no nonzero entry. Which of these must nevertheless be the same for both, and what are they?
+          options:
+            - 'Nothing need be the same.'
+            - 'Rank, trace and determinant, since the matrices are similar: rank 2, trace 0, determinant 0. And $S^3 = 0$, because $D^3 = 0$ and powers of similar matrices are similar.'
+            - 'Only the determinant.'
+            - 'The row sums.'
+          answer: 1
+          explanation: |
+            $S = VDV^{-1}$ is the same map in another basis, so everything that belongs to the map is shared. The diagonal of $S$ is $-1.5, 0, 1.5$, with sum 0. The rank is 2 because differentiation kills exactly the constants, and in sample coordinates the constants are the multiples of $(1, 1, 1)$: each row of $S$ adds up to zero. $S^3 = 0$ says that the third derivative of a quadratic vanishes, a fact that does not care how the quadratic is written down.
+  - title: Reports are functionals
+    blocks:
+      - text: |
+          Each number the instrument reports is a linear functional on $P_2$: it takes the signal and returns one number, linearly. In the sample basis a functional is a row of three **weights** on the samples. The slope at $t = 0$ is the middle row of $S$: weights $(-0.5, 0, 0.5)$.
+
+          The average over the window is $\tfrac12\int_{-1}^{1} p$. In the monomial basis, integration is the row $\mathbf{m} = (2, 0, \tfrac23)$. To rewrite a functional from coefficient coordinates to sample coordinates, solve $V^\top\mathbf{w} = \mathbf{m}$: the integration functional must be a combination of the three evaluation functionals, which are the rows of $V$.
+      - question:
+          id: average
+          type: numeric
+          system: s2
+          concepts: [m6.dual-spaces-and-the-transpose]
+          prompt: |
+            Solving $V^\top\mathbf{w} = \mathbf{m}$ gives $\mathbf{w} = (\tfrac13, \tfrac43, \tfrac13)$. What is the **average** of the signal over the window, for the samples $(2, 1, 4)$? Give it to three decimal places.
+          answer: "1.667"
+          tolerance: "0.001"
+          explanation: |
+            The integral is $\tfrac13 \cdot 2 + \tfrac43 \cdot 1 + \tfrac13 \cdot 4 = \tfrac{10}{3}$, and the average is half of that, $\tfrac53 \approx 1.667$. Check against the coefficients: $\int_{-1}^{1}(1 + t + 2t^2)\,dt = 2 + 0 + \tfrac43 = \tfrac{10}{3}$. The plain mean of the three samples is $\tfrac73 \approx 2.333$, which is too high: it gives the two end samples the same say as the middle one, though each end sample speaks for only half as much of the window.
+      - question:
+          id: why-transpose
+          type: choice
+          system: s2
+          concepts: [m6.dual-spaces-and-the-transpose, m6.matrix-of-a-linear-map-and-similarity]
+          prompt: |
+            Coefficients were turned into samples by $V$: $\mathbf{y} = V\mathbf{c}$. Why are functionals turned from coefficient form into sample form by solving with $V^\top$, and not by multiplying by $V$?
+          options:
+            - 'It is a convention with no reason behind it.'
+            - 'The number reported must not depend on the coordinates: $\mathbf{m}\mathbf{c} = \mathbf{w}\mathbf{y} = \mathbf{w}V\mathbf{c}$ for every $\mathbf{c}$, so $\mathbf{m} = \mathbf{w}V$, which as columns is $V^\top\mathbf{w} = \mathbf{m}$. Vectors and functionals change in opposite ways so that a functional applied to a vector stays the same.'
+            - 'Because $V$ is symmetric.'
+            - 'Because functionals are always orthogonal to vectors.'
+          answer: 1
+          explanation: |
+            Vectors go from coefficients to samples by $V$. Rows go from sample form to coefficient form by multiplying by $V$ on the right, which is the dual map, with matrix $V^\top$. So going from coefficient form to sample form means solving with $V^\top$. This is the same contravariance as metres and centimetres. An instrument that stored the monomial row $(2, 0, \tfrac23)$ and applied it to samples would report $2 \cdot 2 + \tfrac23 \cdot 4 \approx 6.67$ for an integral that is $3.33$.
+      - question:
+          id: dual-basis
+          type: choice
+          system: s2
+          concepts: [m6.dual-spaces-and-the-transpose, m6.linear-maps-kernel-and-image]
+          prompt: |
+            The columns of $V^{-1}$ are the coefficient arrays of three quadratics $\ell_{-1}, \ell_0, \ell_1$. What are these polynomials, in relation to the samples?
+          options:
+            - 'They are the monomials.'
+            - 'They are the basis of $P_2$ whose dual basis is the three evaluations: $\ell_j$ takes the value 1 at sample time $j$ and 0 at the other two, and every quadratic is $p = y_{-1}\ell_{-1} + y_0\ell_0 + y_1\ell_1$. The samples are the coordinates of $p$ in this basis.'
+            - 'They are orthonormal for the integral inner product.'
+            - 'They are the derivatives of the monomials.'
+          answer: 1
+          explanation: |
+            $VV^{-1} = I$ says that row $i$ of $V$, evaluation at time $i$, applied to column $j$ of $V^{-1}$, gives 1 or 0. So evaluations are the coordinate functionals of that basis, which is what "the samples are coordinates" meant from the start. The middle one is $\ell_0 = 1 - t^2$. These are the Lagrange polynomials. The phrase "sample basis" used loosely since the brief now has a precise meaning.
+  - title: How far from a straight line
+    blocks:
+      - text: |
+          "How far" needs a length, and a length needs an inner product. Take $\langle p, q \rangle = \int_{-1}^{1} p\,q$, whose Gram matrix in the monomial basis is
+
+          $$G = \begin{pmatrix} 2 & 0 & \tfrac23 \\ 0 & \tfrac23 & 0 \\ \tfrac23 & 0 & \tfrac25 \end{pmatrix}.$$
+
+          The straight lines form the subspace $P_1$ of $P_2$. The closest line to the signal is its orthogonal projection onto $P_1$, and the distance is the norm of what is left.
+      - question:
+          id: best-line
+          type: code
+          mode: write
+          system: s2
+          concepts: [m6.inner-product-spaces, m6.subspaces-sums-and-direct-sums, m6.adjoints-orthogonal-and-unitary-maps]
+          prompt: |
+            Write `best_line(c, G)`. `c` holds the three coefficients of a quadratic and `G` is the Gram matrix of $1, t, t^2$. Return the pair `(line, distance)`: the array of two coefficients of the closest polynomial of degree at most 1, and the norm of the difference, both for the inner product `u @ G @ v`. With `B = np.eye(3)[:, :2]` holding the basis of the lines, the condition is that the residual is orthogonal to both columns of `B`: `B.T @ G @ (c - B @ line) = 0`.
+          starter: |
+            import numpy as np
+
+
+            def best_line(c, G):
+                return c[:2] * 1.0, 0.0
+
+
+            G = np.array([[2.0 / (i + j + 1) if (i + j) % 2 == 0 else 0.0 for j in range(3)] for i in range(3)])
+            line, distance = best_line(np.array([1.0, 1.0, 2.0]), G)
+            print([round(float(v), 4) + 0.0 for v in line], round(float(distance), 4))
+          solution: |
+            import numpy as np
+
+
+            def best_line(c, G):
+                B = np.eye(3)[:, :2]
+                line = np.linalg.solve(B.T @ G @ B, B.T @ G @ c)
+                e = c - B @ line
+                return line, float(np.sqrt(e @ G @ e))
+
+
+            G = np.array([[2.0 / (i + j + 1) if (i + j) % 2 == 0 else 0.0 for j in range(3)] for i in range(3)])
+            line, distance = best_line(np.array([1.0, 1.0, 2.0]), G)
+            print([round(float(v), 4) + 0.0 for v in line], round(float(distance), 4))
+          tests: |
+            import numpy as _np
+            _G = _np.array([[2.0 / (i + j + 1) if (i + j) % 2 == 0 else 0.0 for j in range(3)] for i in range(3)])
+            _out = best_line(_np.array([1.0, 1.0, 2.0]), _G)
+            assert isinstance(_out, tuple) and len(_out) == 2, "best_line should return the pair (line, distance)"
+            _l, _d = _out
+            assert _np.shape(_l) == (2,), "The line has two coefficients"
+            assert _np.allclose(_l, [5 / 3, 1.0]), "The closest line to 1 + t + 2t^2 on [-1, 1] is 5/3 + t: the t^2 term contributes its average, 2/3, to the constant. Solve the normal equations with G inside"
+            assert abs(float(_d) - (32 / 45) ** 0.5) < 1e-9, "The distance is the norm of 2(t^2 - 1/3), the square root of 32/45, about 0.8433"
+            _l2, _d2 = best_line(_np.array([4.0, -2.0, 0.0]), _G)
+            assert _np.allclose(_l2, [4.0, -2.0]) and abs(float(_d2)) < 1e-9, "A polynomial that is already a line is its own closest line, at distance 0"
+            _H = _np.eye(3)
+            _l3, _d3 = best_line(_np.array([1.0, 1.0, 2.0]), _H)
+            assert _np.allclose(_l3, [1.0, 1.0]) and abs(float(_d3) - 2.0) < 1e-9, "With G the identity the monomials are orthonormal, the closest line just drops the t^2 term, and the distance is 2"
+            assert output.strip() == "[1.6667, 1.0] 0.8433", "The program should print [1.6667, 1.0] 0.8433"
+          wrong:
+            - |
+              import numpy as np
+
+
+              def best_line(c, G):
+                  B = np.eye(3)[:, :2]
+                  line = np.linalg.solve(B.T @ B, B.T @ c)
+                  e = c - B @ line
+                  return line, float(np.sqrt(e @ G @ e))
+
+
+              print("[1.6667, 1.0] 0.8433")
+            - |
+              import numpy as np
+
+
+              def best_line(c, G):
+                  B = np.eye(3)[:, :2]
+                  line = np.linalg.solve(B.T @ G @ B, B.T @ G @ c)
+                  e = c - B @ line
+                  return line, float(np.sqrt(e @ e))
+
+
+              print("[1.6667, 1.0] 0.8433")
+            - |
+              import numpy as np
+
+
+              def best_line(c, G):
+                  B = np.eye(3)[:, :2]
+                  line = np.linalg.solve(B.T @ G @ B, B.T @ G @ c)
+                  e = c - B @ line
+                  return line, float(e @ G @ e)
+
+
+              print("[1.6667, 1.0] 0.8433")
+          explanation: |
+            The closest line is $\tfrac53 + t$ and the signal is at distance about $0.84$ from it. The remainder is $2(t^2 - \tfrac13)$, a multiple of the polynomial that Gram-Schmidt produced from $t^2$ in the lessons, which is exactly the part of $t^2$ orthogonal to all lines.
+
+            Dropping the $t^2$ term, the first wrong version, gives $1 + t$. That is the closest line for the inner product in which the monomials are orthonormal, and for no other. It ignores that $t^2$ has an average of $\tfrac13$ over the window which a constant can absorb. Notice that the constant of the best line, $\tfrac53$, is the average found in stage 3: the residual is orthogonal to the constant 1, so the line and the curve have the same integral.
+
+            These equations are the normal equations $T^*T\mathbf{x} = T^*\mathbf{c}$ for the inclusion $T$ of the lines into the quadratics, whose adjoint in these coordinates is $B^\top G$ up to the Gram matrix of the lines.
+      - question:
+          id: bound
+          type: numeric
+          system: s2
+          concepts: [m6.cauchy-schwarz-and-the-triangle-inequality, m6.inner-product-spaces]
+          prompt: |
+            The remainder $e = p - \text{line}$ has norm $0.8433$. A second instrument reports $\int_{-1}^{1} e(t)\,q(t)\,dt$ for some quadratic $q$ of norm 3 that you are not told. What is the largest absolute value this report can have? Give it to two decimal places.
+          answer: "2.53"
+          tolerance: "0.01"
+          explanation: |
+            By Cauchy-Schwarz, $|\langle e, q \rangle| \le \|e\|\,\|q\| = 0.8433 \times 3 \approx 2.53$, with equality when $q$ is a multiple of $e$. If $q$ happens to be a straight line the report is exactly 0, whatever its norm, because $e$ is orthogonal to all of $P_1$. The bound needed no knowledge of $q$ beyond its length, which is the reason the inequality is used so often.
+      - question:
+          id: self-adjoint
+          type: choice
+          system: s2
+          concepts: [m6.adjoints-orthogonal-and-unitary-maps, m6.matrix-of-a-linear-map-and-similarity, m6.inner-product-spaces]
+          prompt: |
+            The map "replace a quadratic by its closest line" has, in the monomial basis, the matrix $\begin{pmatrix} 1 & 0 & \tfrac13 \\ 0 & 1 & 0 \\ 0 & 0 & 0 \end{pmatrix}$. It is an orthogonal projection, and those are self-adjoint. The matrix is not symmetric. What resolves this?
+          options:
+            - 'The map is not really an orthogonal projection.'
+            - 'Self-adjoint means $\langle Tp, q \rangle = \langle p, Tq \rangle$ for the integral inner product. A matrix $A$ of a self-adjoint map is symmetric only in an orthonormal basis. In general the condition is $G^{-1}A^\top G = A$, and the monomials are not orthonormal for the integral. In the basis $1, t, t^2 - \tfrac13$, suitably scaled, the matrix is $\operatorname{diag}(1, 1, 0)$.'
+            - 'Self-adjoint maps never have symmetric matrices.'
+            - 'The matrix is wrong.'
+          answer: 1
+          explanation: |
+            One can check $A^\top G = GA$ directly: both sides are the matrix with rows $(2, 0, \tfrac23)$, $(0, \tfrac23, 0)$, $(\tfrac23, 0, \tfrac29)$, which is symmetric, as $GA$ must be for a self-adjoint $A$. In an orthonormal basis adapted to the lines, the projection keeps the first two basis vectors and kills the third. Symmetry of a matrix is a statement about a map, an inner product and a basis together. The property of the map alone is that what it keeps is orthogonal to what it discards.
+review: |
+  Three samples, and the whole cluster:
+
+  - Treating quadratics as vectors at all, with samples and coefficients as two sets of coordinates for the same objects, was [[m6.fields-and-the-vector-space-axioms]].
+  - The lines as a subspace of the quadratics, and the splitting of the signal into a line and a remainder, was [[m6.subspaces-sums-and-direct-sums]].
+  - The sampling map, its kernel found by counting roots, and its inverse `fit` were [[m6.linear-maps-kernel-and-image]].
+  - Getting surjectivity from injectivity by counting dimensions, so that every triple of samples is a quadratic, was [[m6.rank-nullity-theorem]].
+  - Differentiation as $VDV^{-1}$ on samples, with its rank, trace and nilpotency unchanged, was [[m6.matrix-of-a-linear-map-and-similarity]].
+  - The weights for the slope and the average, the transpose that converts them, and the Lagrange polynomials as the basis dual to the evaluations were [[m6.dual-spaces-and-the-transpose]].
+  - The integral as a dot product for polynomials, the Gram matrix, and the closest line were [[m6.inner-product-spaces]].
+  - The bound on an unseen report from two norms alone was [[m6.cauchy-schwarz-and-the-triangle-inequality]].
+  - The projection that is self-adjoint without having a symmetric matrix was [[m6.adjoints-orthogonal-and-unitary-maps]].
+
+  Two things here go forward. The first is the habit of asking, of any formula with matrices in it, which objects are vectors and which are functionals, and which basis each is written in. Gradients are functionals, and the whole of automatic differentiation is the dual map applied layer by layer. The second is the search for a good basis. In the sample basis differentiation was a table of difference formulas, and in a basis adapted to the lines the projection was diagonal. Asking for the basis in which a given map is diagonal is the subject of the next cluster.
