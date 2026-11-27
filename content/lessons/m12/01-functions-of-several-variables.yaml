@@ -1,0 +1,550 @@
+concept: m12.functions-of-several-variables
+minutes: 80
+claim: You can read a function of several numbers as a rule from a vector to a number, picture a function of two variables as a surface and as a map of level curves, cut it into slices by holding all inputs but one still, evaluate it over a whole grid with broadcasting, and decide whether it has a limit at a point by approaching along different paths.
+recalls: [e5.numerical-error-analysis-in-practice, m10.integration-techniques, m5.determinant]
+uses: [e5.broadcasting, e5.arrays-dtype-and-shape, e5.axis-operations-and-reductions, e5.vectorisation, e5.indexing-and-slicing, m10.limits-and-continuity, m10.maxima-and-minima, m10.derivative-as-slope-and-rate, m4.vectors-as-arrows-and-as-lists, m4.lines-planes-and-hyperplanes, m4.dot-product, m4.norms-and-distance, m2.functions-as-machines, m1.quadratics, m1.coordinates-and-the-plane, e0.functions, e0.loops]
+leads: [m12.partial-derivatives, m12.gradient, m12.hessian-and-symmetry-of-mixed-partials, m12.multiple-integrals-and-change-of-variables]
+bridges:
+  e5.numerical-error-analysis-in-practice: |
+    The last tool you built, `derivative(f, x)`, measures the slope of a function of one number. Almost nothing you computed with in the NumPy lessons was such a function. A sum of squared errors depends on every weight. A softmax depends on a whole row of scores. Before asking what the slope of such a thing is, this lesson asks what the thing itself looks like, and uses the arrays you now have to compute it over a whole grid of inputs at once.
+starter: |
+  # Scratch space. Four points, and a line y = w x + b that tries to pass near them.
+  # loss(w, b) is the total squared miss. It depends on two numbers.
+  import numpy as np
+
+  xs = np.array([0.0, 1.0, 2.0, 3.0])
+  ys = np.array([1.0, 3.0, 4.0, 6.0])
+
+  def loss(w, b):
+      return ((w * xs + b - ys) ** 2).sum()
+
+  print("      b=0    b=1    b=2")
+  for w in [1.0, 1.5, 2.0]:
+      print("w =", w, [round(float(loss(w, b)), 2) for b in [0.0, 1.0, 2.0]])
+parts:
+  recall:
+    - text: |
+        Three lines of work meet here. [[m10.integration-techniques]] closed a calculus in which every function took **one** number in. [[m5.determinant]] closed a study of maps that take whole **vectors** in, though only the straight ones, the linear maps. And [[e5.numerical-error-analysis-in-practice]] left you with arrays, and with a way of measuring a slope numerically. Today the calculus and the vectors are joined. Three quick pulls first.
+  puzzle:
+    - text: |
+        Four points are plotted: $(0, 1)$, $(1, 3)$, $(2, 4)$ and $(3, 6)$. They lie nearly, and not exactly, on a straight line. You want the line $y = wx + b$ that fits them best.
+
+        In the lesson on maxima and minima you did something like this with one adjustable number. You scored each candidate by its total squared miss, found where the derivative of the score was zero, and the answer was the mean. Do the same here. The score of a line is
+
+        $$L(w, b) = \sum_{i=1}^{4} (w x_i + b - y_i)^2.$$
+
+        The starter prints it for nine lines. With $w = 1.5$ and $b = 1$ the score is 0.5. With $w = 2$ and $b = 1$ it is 2. With $w = 2$ and $b = 0$ it is also 2.
+
+        Now try to carry on as before. "Find where the derivative is zero." **The derivative with respect to what?** There are two numbers to adjust. Change $w$ and the score changes. Change $b$ and it changes too, by a different amount. Change both together and something else again happens. The score has no single graph to draw above a number line, no single tangent, no single slope.
+
+        **What kind of object is $L$? What does it look like? And where on it would you even look for the best line?**
+  intuition:
+    - text: |
+        Begin with what $L$ is, since that part is easy. It is a machine, as every function is. What goes in is a **pair** of numbers, $(w, b)$. What comes out is one number. A pair of numbers is a vector, or a point of the plane. **So $L$ assigns a number to every point of a plane.**
+
+        You know many things of this kind already, without having called them functions. The height of the land above sea level is a number for every point on a map. The temperature in a room is a number for every point in it. The price of a flat depends on its area, its floor and its distance from the station. A function of several variables is any rule that takes several numbers in and gives one number out.
+
+        **The surface.** For a function of one variable you drew a graph: above each $x$ on a line, a point at height $f(x)$, and the points made a curve. Do the same here. The inputs fill a plane, a floor. Above each point $(w, b)$ of the floor put a point at height $L(w, b)$. **The points make a surface**, a landscape standing over the floor. Where the score is high the land is high. The best line is at the lowest point of the land.
+
+        That picture is correct and it is the one to keep in your head. But it has a practical weakness: a surface is hard to draw on a flat page and impossible to draw when there are three inputs or a million. So there are two other ways of looking, both of which reduce the surface to curves, and you will use them constantly.
+
+        **Level curves.** A walker's map does not show hills as hills. It shows **contours**: each contour joins the points that are at one height. Where contours crowd together the ground is steep, and where they are far apart it is nearly flat. A ring of closed contours, one inside another, is a hilltop or the bottom of a hollow.
+
+        Do the same to any function. Pick a height $c$ and mark every input where $f = c$. That set is a **level curve**. Draw it for several values of $c$ and you have a map of the function, drawn in the plane of the inputs, with no third dimension needed. The figure is such a map, for the bowl $f(x, y) = x^2 + y^2$. Move the point and watch the value.
+    - figure: contours
+      props: { surface: bowl, x: 2, y: 1 }
+    - text: |
+        The level curves of $x^2 + y^2$ are circles round the origin, since $x^2 + y^2 = c$ is the circle of radius $\sqrt{c}$. All the points on one circle are at one height. Walk along a circle and you neither climb nor descend. Walk straight across the circles and you climb or descend as fast as possible. Hold on to that remark: within three lessons it will be the most important fact in the cluster.
+
+        **Slices.** The second way is the one that connects to everything you already know. Fix all the inputs but one. In the puzzle, fix $b = 1$ and let only $w$ vary. Then $L(w, 1)$ is a function of **one** variable, an ordinary one, with an ordinary graph. On the landscape, you have cut the surface with a vertical knife along the line $b = 1$ and you are looking at the cut edge.
+
+        Fix $w = 1.5$ instead and let $b$ vary, and you get another slice, cut at right angles to the first. Each row of the table the starter printed is three points of a slice with $w$ fixed. Each column is three points of a slice with $b$ fixed.
+
+        **A function of several variables is a whole family of functions of one variable, one for every way of cutting it.** Everything in single-variable calculus applies to each slice. The work of this cluster is to say how the slices fit together.
+
+        Switch the figure to a different function, $f(x, y) = x^2 - y^2$.
+    - figure: contours
+      props: { surface: saddle, x: 1, y: 1 }
+    - text: |
+        Slice this one along the $x$-axis, with $y = 0$, and you get $x^2$, a bowl with its lowest point at the origin. Slice it along the $y$-axis, with $x = 0$, and you get $-y^2$, a dome with its **highest** point at the origin. The same point is the bottom of one slice and the top of another. The surface is shaped like a saddle, or like a mountain pass: the lowest point of the ridge and the highest point of the road. Its level curves are hyperbolas, and through the pass itself go two straight lines, $y = x$ and $y = -x$, where the height is 0.
+
+        So one slice can mislead. A point can look like a minimum from one direction and not be one. A function of several variables has more ways of behaving than a function of one, and the saddle is the first new one.
+  derivation:
+    - text: |
+        **Notation.** Write $\mathbb{R}^n$ for the set of lists of $n$ real numbers, the vectors with $n$ entries. A **function of $n$ variables** is a function $f : \mathbb{R}^n \to \mathbb{R}$, or one defined on part of $\mathbb{R}^n$. Its input can be written out, $f(x_1, x_2, \dots, x_n)$, or as one vector, $f(\mathbf{x})$. The two mean the same. A function whose output is one number is called **scalar-valued**, or a **scalar field**.
+
+        **Graph and level sets.** The **graph** of $f : \mathbb{R}^2 \to \mathbb{R}$ is the set of points $(x, y, f(x, y))$ in space. The **level set** of $f$ at height $c$ is $\{\mathbf{x} : f(\mathbf{x}) = c\}$, a set of inputs. For two variables it is usually a curve. For three it is usually a surface. For $n$ it is usually a thing of dimension $n - 1$.
+
+        **Three shapes to know by sight.** Most of what follows is built from these.
+
+        | Function | Slices along the axes | Level curves | Shape |
+        |---|---|---|---|
+        | $ax + by + c$ | straight lines | parallel straight lines | a tilted plane |
+        | $x^2 + y^2$ | two bowls | circles | a bowl |
+        | $x^2 - y^2$ | a bowl and a dome | hyperbolas | a saddle |
+
+        The first row is the linear case, and you met its level sets in the lesson on lines, planes and hyperplanes: the set where $\mathbf{a} \cdot \mathbf{x} = c$ is a line in the plane and a hyperplane in general, at right angles to $\mathbf{a}$. A linear function is the one kind whose slices are all straight and whose contours are all evenly spaced.
+
+        **The puzzle, as a surface.** Multiply out $L$ with the four points. The sums needed are $\sum x_i^2 = 14$, $\sum x_i = 6$, $\sum x_i y_i = 29$, $\sum y_i = 14$ and $\sum y_i^2 = 62$, and
+
+        $$L(w, b) = 14w^2 + 12wb + 4b^2 - 58w - 28b + 62.$$
+
+        It is a quadratic in two variables. Its slices are parabolas: with $b$ fixed at 1, $L(w, 1) = 14w^2 - 46w + 38$, which opens upwards. Every slice in every direction opens upwards, so the surface is a bowl, though a lopsided one, long and narrow, and its level curves are ellipses and not circles. A bowl has one lowest point. You will find it exactly in the next lesson. It is at $w = 1.6$, $b = 1.1$, where $L = 0.2$.
+
+        **Computing over a grid.** To see a function of two variables you need its value at many points, and broadcasting gives them all at once. Put the values of $w$ in a column and the values of $b$ in a row:
+
+        ```python
+        import numpy as np
+
+        w = np.linspace(0.0, 3.0, 7)[:, np.newaxis]
+        b = np.linspace(0.0, 2.0, 5)[np.newaxis, :]
+        table = 14 * w ** 2 + 12 * w * b + 4 * b ** 2 - 58 * w - 28 * b + 62
+        print(table.shape)
+        ```
+
+        A column of shape `(7, 1)` against a row of shape `(1, 5)` broadcasts to `(7, 5)`: one entry for every pairing. `table[i, j]` is the value at the `i`-th $w$ and the `j`-th $b$. Row `i` of the table is a slice with $w$ fixed, and column `j` is a slice with $b$ fixed. The place of the smallest entry, from `table.argmin()`, is the grid's best guess at the bottom of the bowl. It is only as fine as the grid, and with ten inputs in place of two a grid of a hundred values each way would need $100^{10}$ entries. **Grids are for looking. They are not a way of finding minima in many dimensions**, and that is why the derivative has to be rebuilt.
+    - question:
+        id: derivation-slices
+        type: choice
+        system: s2
+        prompt: |
+          $f(x, y) = x^2 - y^2$. A student checks the slice along the $x$-axis, finds that it is $x^2$ with its least value at $x = 0$, and concludes that the origin is the lowest point of the surface nearby. What is wrong?
+        options:
+          - 'Nothing. A point that is the least along one slice is the least nearby.'
+          - 'The slice along the $y$-axis is $-y^2$, which has its greatest value at the origin. Moving a little way along that axis from the origin goes down. A lowest point must be lowest along every direction through it, and one slice shows only one direction.'
+          - 'The slice along the $x$-axis is really $-x^2$.'
+          - 'The origin is not in the domain of $f$.'
+        answer: 1
+        explanation: |
+          For the origin to be a local minimum, every nearby point must be at least as high. The points $(0, 0.1)$ and $(0, -0.1)$ are at height $-0.01$, below the origin's 0. One slice is evidence about one line through the point and says nothing about the others. This is the saddle. Later in the cluster the second derivatives, gathered into a table, will tell bowls, domes and saddles apart without looking at slices one by one.
+    - text: |
+        **More than one output.** Nothing requires the output to be a single number. A rule that takes $n$ numbers in and gives $m$ numbers out is a function $\mathbf{f} : \mathbb{R}^n \to \mathbb{R}^m$, called **vector-valued**. You know a whole family of them: a matrix $A$ with $m$ rows and $n$ columns gives the linear map $\mathbf{x} \mapsto A\mathbf{x}$. A softmax takes a row of scores to a row of probabilities. A layer of a network takes a vector to a vector. Such a function is just $m$ scalar-valued functions side by side, one for each entry of the output, so whatever is learnt about scalar-valued functions applies to each entry. Most of this cluster treats one output at a time. The lesson on the Jacobian puts them back together.
+
+        **Limits.** In one variable, $\lim_{x \to a} f(x) = \ell$ meant that $f(x)$ can be kept as close to $\ell$ as you please by keeping $x$ close enough to $a$. The definition for several variables is the same sentence, with "close" measured by the distance between vectors:
+
+        $$\lim_{\mathbf{x} \to \mathbf{a}} f(\mathbf{x}) = \ell \quad\text{means}\quad \text{for every } \varepsilon > 0 \text{ there is a } \delta > 0 \text{ with } |f(\mathbf{x}) - \ell| < \varepsilon \text{ whenever } 0 < \lVert \mathbf{x} - \mathbf{a} \rVert < \delta.$$
+
+        And $f$ is **continuous** at $\mathbf{a}$ if the limit there exists and equals $f(\mathbf{a})$. Sums, products and compositions of continuous functions are continuous, and quotients are too wherever the bottom is not zero, exactly as before. So polynomials in several variables are continuous everywhere, and so is $L$.
+
+        The one real difference is in how a point can be approached. On a line there are two ways to come at $a$: from the left and from the right. In the plane there are infinitely many: along any straight line through the point, along a parabola, along a spiral. **The limit exists only if every way of approaching gives the same value.**
+
+        Take
+
+        $$g(x, y) = \frac{xy}{x^2 + y^2}, \qquad (x, y) \ne (0, 0).$$
+
+        Approach the origin along the $x$-axis, where $y = 0$: $g = 0$ all the way. Approach along the $y$-axis: again 0. Now approach along the line $y = x$: $g = \dfrac{x^2}{2x^2} = \dfrac12$ all the way. Two paths, two different values. **So $g$ has no limit at the origin**, and no value given to $g(0, 0)$ could make it continuous there. Along the line $y = mx$ the value is $\dfrac{m}{1 + m^2}$, a different constant for each slope: the surface near the origin is like a spiral staircase, where the height you arrive at depends on the direction you came from.
+
+        This gives a method for showing that a limit does **not** exist: find two paths with different results. It gives no method for showing that one does. Agreement along every straight line is not enough, since a curved path can still disagree. To prove a limit exists you must bound $|f(\mathbf{x}) - \ell|$ by something that depends only on the distance $\lVert \mathbf{x} - \mathbf{a} \rVert$ and shrinks with it. For example $h(x, y) = \dfrac{x^2 y}{x^2 + y^2}$ satisfies $|h| \le |y|$, because $\dfrac{x^2}{x^2 + y^2} \le 1$, and $|y| \le \lVert (x, y) \rVert$, so $h \to 0$ at the origin along every path at once.
+    - question:
+        id: order-limit
+        type: order
+        system: s2
+        prompt: Put in order an argument that $g(x, y) = \dfrac{xy}{x^2 + y^2}$ has no limit at the origin.
+        steps:
+          - 'A limit at the origin, if it exists, is one number that $g$ approaches along every path into the origin.'
+          - 'Along the $x$-axis, $y = 0$, so $g(x, 0) = 0$ for every $x \ne 0$, and the values approach 0.'
+          - 'Along the line $y = x$, $g(x, x) = x^2 / (2x^2) = \tfrac12$ for every $x \ne 0$, and the values approach $\tfrac12$.'
+          - 'One number cannot be both 0 and $\tfrac12$, so no limit exists.'
+        explanation: The definition demands a single value however the point is approached. Exhibiting two approaches with different values contradicts that, and nothing more is needed. Note that both slices along the axes agree with each other. Checking only the axes would have suggested a limit of 0.
+  formal:
+    - text: |
+        **Functions.** A scalar-valued function of $n$ variables is a function $f : D \to \mathbb{R}$ with $D \subseteq \mathbb{R}^n$. A vector-valued function is $\mathbf{f} : D \to \mathbb{R}^m$, and is given by $m$ scalar-valued functions, its components.
+
+        **Graph.** The graph of $f : D \to \mathbb{R}$ is $\{(\mathbf{x}, f(\mathbf{x})) : \mathbf{x} \in D\} \subseteq \mathbb{R}^{n + 1}$.
+
+        **Level set.** For a number $c$, the level set of $f$ at $c$ is $\{\mathbf{x} \in D : f(\mathbf{x}) = c\}$.
+
+        **Slice.** Fixing every variable but $x_i$ at the values of a point $\mathbf{a}$ gives the function of one variable $t \mapsto f(a_1, \dots, a_{i-1}, t, a_{i+1}, \dots, a_n)$.
+
+        **Limit.** $\lim_{\mathbf{x} \to \mathbf{a}} f(\mathbf{x}) = \ell$ if for every $\varepsilon > 0$ there is $\delta > 0$ such that $0 < \lVert \mathbf{x} - \mathbf{a} \rVert < \delta$ implies $|f(\mathbf{x}) - \ell| < \varepsilon$. If two paths into $\mathbf{a}$ give different limiting values, the limit does not exist.
+
+        **Continuity.** $f$ is continuous at $\mathbf{a}$ if $\lim_{\mathbf{x} \to \mathbf{a}} f(\mathbf{x}) = f(\mathbf{a})$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-evaluate
+        type: numeric
+        system: s1
+        prompt: |
+          $f(x, y) = x^2 y + 3y$. What is $f(2, -1)$?
+        answer: "-7"
+        explanation: Four times minus one is minus four, and three times minus one is minus three.
+    - question:
+        id: drill-inputs
+        type: numeric
+        system: s1
+        prompt: |
+          A function $\mathbf{f} : \mathbb{R}^5 \to \mathbb{R}^3$ takes how many numbers in?
+        answer: "5"
+        explanation: The first space is where the inputs live, and its vectors have five entries.
+    - question:
+        id: drill-circles
+        type: choice
+        system: s1
+        prompt: |
+          What are the level curves of $f(x, y) = x^2 + y^2$?
+        options: ['Circles round the origin', 'Parallel straight lines', 'Hyperbolas', 'Parabolas']
+        answer: 0
+        explanation: The points at one distance from the origin are at one height.
+    - question:
+        id: drill-lines
+        type: choice
+        system: s1
+        prompt: |
+          What are the level curves of $f(x, y) = 2x + 3y$?
+        options: ['Circles', 'Parallel straight lines', 'Hyperbolas', 'Single points']
+        answer: 1
+        explanation: Each is the line where 2x + 3y equals a constant, and all such lines have the same slope.
+    - question:
+        id: drill-saddle-level
+        type: choice
+        system: s1
+        prompt: |
+          What is the level set of $f(x, y) = x^2 - y^2$ at height 0?
+        options: ['The origin alone', 'A circle', 'The two lines $y = x$ and $y = -x$', 'A parabola']
+        answer: 2
+        explanation: The squares are equal exactly when y is x or minus x.
+    - question:
+        id: drill-slice
+        type: choice
+        system: s1
+        prompt: |
+          $f(x, y) = x^2 y + y^3$. What is the slice with $y$ fixed at 2?
+        options: ['$2x^2 + 8$', '$x^2 + 8$', '$4y + y^3$', '$2x^2 + 2$']
+        answer: 0
+        explanation: Put 2 wherever y appears and leave x free.
+    - question:
+        id: drill-radius
+        type: numeric
+        system: s1
+        prompt: |
+          What is the radius of the level curve of $x^2 + y^2$ at height 25?
+        answer: "5"
+        explanation: The curve is the circle whose radius squared is 25.
+    - question:
+        id: drill-crowded
+        type: choice
+        system: s1
+        prompt: |
+          On a contour map drawn at equal steps of height, what do contours crowded close together show?
+        options: ['Flat ground', 'Steep ground', 'A lowest point', 'A level road']
+        answer: 1
+        explanation: A short distance across them covers a large change of height.
+    - question:
+        id: drill-grid-shape
+        type: choice
+        system: s1
+        prompt: |
+          `w` has shape `(7, 1)` and `b` has shape `(1, 5)`. What is the shape of `w ** 2 + b`?
+        options: ["`(7, 5)`", "`(5, 7)`", "`(7,)`", "`(12,)`"]
+        answer: 0
+        explanation: Each axis of length 1 stretches to match the other array.
+    - question:
+        id: drill-path
+        type: choice
+        system: s1
+        prompt: |
+          Along the line $y = x$, what is the value of $\dfrac{xy}{x^2 + y^2}$ away from the origin?
+        options: ['0', '$\tfrac12$', '1', 'It varies with $x$']
+        answer: 1
+        explanation: The top is x squared and the bottom is twice x squared.
+    - question:
+        id: drill-level-dim
+        type: choice
+        system: s1
+        prompt: |
+          The level sets of a function of **three** variables, such as temperature in a room, are usually what?
+        options: ['Points', 'Curves', 'Surfaces', 'Solid regions']
+        answer: 2
+        explanation: One equation on three free numbers leaves two degrees of freedom.
+    - question:
+        id: predict-grid
+        type: predict
+        system: s1
+        prompt: A function on a small grid. What does this show?
+        code: |
+          import numpy as np
+
+          x = np.array([0, 1, 2])[:, np.newaxis]
+          y = np.array([0, 1])[np.newaxis, :]
+          t = x * x - y * y
+          print(t.shape)
+          print(t[2, 1], t[0, 1])
+          print(t[:, 0].tolist())
+        output: |
+          (3, 2)
+          3 -1
+          [0, 1, 4]
+        explanation: A column of three against a row of two gives a table of three rows and two columns. The entry in row 2 and column 1 is at x = 2 and y = 1, which is 4 less 1. Column 0 is the slice with y fixed at 0, which is x squared.
+    - question:
+        id: predict-argmin
+        type: predict
+        system: s1
+        prompt: Looking for the bottom of a bowl on a grid. What does this show?
+        code: |
+          import numpy as np
+
+          x = np.arange(-2, 3)[:, np.newaxis]
+          y = np.arange(-2, 3)[np.newaxis, :]
+          f = (x - 1) ** 2 + (y + 2) ** 2
+          print(f.min(), f.argmin())
+          print(f.min(axis=1).tolist())
+        output: |
+          0 15
+          [9, 4, 1, 0, 1]
+        explanation: The bowl has its lowest point at x = 1 and y = −2, which are entry 3 of the x values and entry 0 of the y values. In a table of five columns that is place 3 × 5 + 0 = 15 of the block. The least value in each row is that row's value at y = −2, which is the square of x less 1.
+  work:
+    - text: Slower now. For each function, say what goes in and what comes out before you compute anything.
+    - question:
+        id: write-surface
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `surface(f, xs, ys)`. `xs` and `ys` are one-dimensional arrays, and `f` is a function of two arguments written with array arithmetic, so that it broadcasts. Return the table of shape `(len(xs), len(ys))` whose entry `[i, j]` is `f(xs[i], ys[j])`, without a Python loop.
+        starter: |
+          import numpy as np
+
+          def surface(f, xs, ys):
+              # Replace the next line with your own.
+              return f(xs, ys)
+
+          t = surface(lambda x, y: x * x - y * y, np.array([0.0, 1.0, 2.0]), np.array([0.0, 1.0]))
+          print(t.shape)
+        solution: |
+          import numpy as np
+
+          def surface(f, xs, ys):
+              return f(xs[:, np.newaxis], ys[np.newaxis, :])
+
+          t = surface(lambda x, y: x * x - y * y, np.array([0.0, 1.0, 2.0]), np.array([0.0, 1.0]))
+          print(t.shape)
+        tests: |
+          import numpy as _np
+          _t = surface(lambda x, y: x * x - y * y, _np.array([0.0, 1.0, 2.0]), _np.array([0.0, 1.0]))
+          assert _t.shape == (3, 2), "Three x values and two y values give a table of shape (3, 2)"
+          assert _t.tolist() == [[0.0, -1.0], [1.0, 0.0], [4.0, 3.0]], "Entry [i, j] is f(xs[i], ys[j])"
+          _u = surface(lambda x, y: x + 10 * y, _np.array([1.0, 2.0, 3.0]), _np.array([1.0, 2.0, 3.0]))
+          assert _u.shape == (3, 3), "Three values each way give a table of shape (3, 3)"
+          assert _u.tolist() == [[11.0, 21.0, 31.0], [12.0, 22.0, 32.0], [13.0, 23.0, 33.0]], "Rows go with xs and columns with ys"
+          assert "for " not in source and "while " not in source, "Do it without a loop"
+          assert output.strip() == "(3, 2)", "The program should print (3, 2)"
+        wrong:
+          - |
+            import numpy as np
+
+            def surface(f, xs, ys):
+                return f(xs[np.newaxis, :], ys[:, np.newaxis])
+
+            print("(3, 2)")
+          - |
+            import numpy as np
+
+            def surface(f, xs, ys):
+                return f(xs, xs[:, np.newaxis])
+
+            print("(3, 2)")
+          - |
+            import numpy as np
+
+            def surface(f, xs, ys):
+                return np.array([[f(x, y) for x in xs] for y in ys])
+
+            print("(3, 2)")
+        explanation: |
+          Passing the two one-dimensional arrays straight in pairs them entry by entry, the first $x$ with the first $y$ and so on, which is the diagonal of the table at best and an error when the lengths differ. A table needs every $x$ against every $y$. Standing `xs` up as a column of shape `(n, 1)` and laying `ys` out as a row of shape `(1, m)` makes broadcasting stretch each along the other's axis. Putting them the other way round gives the transposed table, with rows going with `ys`.
+    - question:
+        id: write-best-on-grid
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `best_on_grid(ws, bs)` for the puzzle's four points. `ws` and `bs` are one-dimensional arrays of candidate values. Among all pairings, find the one with the smallest loss $L(w, b) = \sum_i (w x_i + b - y_i)^2$, and return the list `[w, b, loss]` as plain floats. Use no Python loop.
+
+          A table of losses needs one axis for $w$, one for $b$ and, while it is being computed, a third for the four points.
+        starter: |
+          import numpy as np
+
+          xs = np.array([0.0, 1.0, 2.0, 3.0])
+          ys = np.array([1.0, 3.0, 4.0, 6.0])
+
+          def best_on_grid(ws, bs):
+              # Replace the next line with your own.
+              return [0.0, 0.0, 0.0]
+
+          print(best_on_grid(np.array([1.0, 1.5, 2.0]), np.array([0.0, 1.0, 2.0])))
+        solution: |
+          import numpy as np
+
+          xs = np.array([0.0, 1.0, 2.0, 3.0])
+          ys = np.array([1.0, 3.0, 4.0, 6.0])
+
+          def best_on_grid(ws, bs):
+              w = ws[:, np.newaxis, np.newaxis]
+              b = bs[np.newaxis, :, np.newaxis]
+              table = ((w * xs + b - ys) ** 2).sum(axis=2)
+              k = int(table.argmin())
+              i = k // len(bs)
+              j = k % len(bs)
+              return [float(ws[i]), float(bs[j]), float(table[i, j])]
+
+          print(best_on_grid(np.array([1.0, 1.5, 2.0]), np.array([0.0, 1.0, 2.0])))
+        tests: |
+          import numpy as _np
+          _r = best_on_grid(_np.array([1.0, 1.5, 2.0]), _np.array([0.0, 1.0, 2.0]))
+          assert len(_r) == 3, "Return a list of three numbers"
+          assert _r[0] == 1.5 and _r[1] == 1.0, "On the starter's grid the best pairing is w = 1.5 with b = 1"
+          assert abs(_r[2] - 0.5) < 1e-9, "Its loss is 0.5"
+          _r = best_on_grid(_np.linspace(0.0, 3.0, 31), _np.linspace(0.0, 2.0, 21))
+          assert abs(_r[0] - 1.6) < 1e-9 and abs(_r[1] - 1.1) < 1e-9, "On a grid of tenths the best pairing is w = 1.6 with b = 1.1"
+          assert abs(_r[2] - 0.2) < 1e-9, "Its loss is 0.2"
+          _r = best_on_grid(_np.array([2.0]), _np.array([0.0, 1.0]))
+          assert _r[0] == 2.0 and _r[1] == 0.0 and abs(_r[2] - 2.0) < 1e-9, "With w fixed at 2, b = 0 and b = 1 tie at 2, and the first is taken"
+          _r = best_on_grid(_np.array([0.0, 1.0, 2.0, 3.0]), _np.array([1.0]))
+          assert _r[0] == 2.0 and _r[1] == 1.0, "With b fixed at 1 and whole values of w, the best w is 2"
+          assert "for " not in source and "while " not in source, "Do it without a loop"
+          assert output.strip() == "[1.5, 1.0, 0.5]", "The program should print [1.5, 1.0, 0.5]"
+        wrong:
+          - |
+            import numpy as np
+
+            xs = np.array([0.0, 1.0, 2.0, 3.0])
+            ys = np.array([1.0, 3.0, 4.0, 6.0])
+
+            def best_on_grid(ws, bs):
+                w = ws[:, np.newaxis, np.newaxis]
+                b = bs[np.newaxis, :, np.newaxis]
+                table = ((w * xs + b - ys) ** 2).sum(axis=2)
+                k = int(table.argmin())
+                i = k % len(ws)
+                j = k // len(ws)
+                return [float(ws[i]), float(bs[j]), float(table.min())]
+
+            print([1.5, 1.0, 0.5])
+          - |
+            import numpy as np
+
+            xs = np.array([0.0, 1.0, 2.0, 3.0])
+            ys = np.array([1.0, 3.0, 4.0, 6.0])
+
+            def best_on_grid(ws, bs):
+                w = ws[:, np.newaxis, np.newaxis]
+                b = bs[np.newaxis, :, np.newaxis]
+                table = ((w * xs + b - ys) ** 2).sum(axis=2)
+                return [float(ws[table.min(axis=1).argmin()]), float(bs[table.min(axis=1).argmin()]), float(table.min())]
+
+            print([1.5, 1.0, 0.5])
+          - |
+            import numpy as np
+
+            xs = np.array([0.0, 1.0, 2.0, 3.0])
+            ys = np.array([1.0, 3.0, 4.0, 6.0])
+
+            def best_on_grid(ws, bs):
+                w = ws[:, np.newaxis, np.newaxis]
+                b = bs[np.newaxis, :, np.newaxis]
+                table = (w * xs + b - ys).sum(axis=2) ** 2
+                k = int(table.argmin())
+                return [float(ws[k // len(bs)]), float(bs[k % len(bs)]), float(table.min())]
+
+            print([1.5, 1.0, 0.5])
+        explanation: |
+          Three axes: candidates for $w$ along the first, candidates for $b$ along the second, and the four data points along the third. `w * xs + b - ys` broadcasts to shape `(len(ws), len(bs), 4)`, the miss of every line at every point. Squaring and summing over the last axis collapses the points and leaves the table of losses. `argmin` gives a place in the flattened block, and with `len(bs)` columns the row is the quotient and the column the remainder. On a grid of tenths the answer lands exactly on the true minimum, 1.6 and 1.1, by luck of the numbers. On any other grid it would be merely near. And the cost of the table is the product of the grid sizes, which is why this is a way of looking at a loss and not a way of training.
+    - question:
+        id: fix-path
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `along(m, t)` should return the value of $g(x, y) = \dfrac{xy}{x^2 + y^2}$ at the point a distance-parameter `t` along the line $y = mx$, that is, at $x = t$, $y = mt$. Away from the origin the value should not depend on `t` at all. The program prints two different numbers for the same line. Fix the function.
+        starter: |
+          def along(m, t):
+              x = t
+              y = m * t
+              return x * y / (x ** 2 + y) ** 2
+
+          print(round(along(1.0, 0.1), 6), round(along(1.0, 0.001), 6))
+        solution: |
+          def along(m, t):
+              x = t
+              y = m * t
+              return x * y / (x ** 2 + y ** 2)
+
+          print(round(along(1.0, 0.1), 6), round(along(1.0, 0.001), 6))
+        tests: |
+          assert abs(along(1.0, 0.1) - 0.5) < 1e-12, "Along y = x the value is one half"
+          assert abs(along(1.0, 0.001) - 0.5) < 1e-12, "Along y = x the value is one half however close to the origin"
+          assert abs(along(2.0, 0.3) - 0.4) < 1e-12, "Along y = 2x the value is two fifths"
+          assert abs(along(0.0, 0.5)) < 1e-12, "Along the x-axis the value is 0"
+          assert abs(along(-1.0, 0.25) + 0.5) < 1e-12, "Along y = -x the value is minus one half"
+          assert abs(along(3.0, -0.2) - 0.3) < 1e-12, "Along y = 3x the value is three tenths, on either side of the origin"
+          assert output.strip() == "0.5 0.5", "The program should print 0.5 0.5"
+        wrong:
+          - |
+            def along(m, t):
+                x = t
+                y = m * t
+                return x * y / (x ** 2 + y) ** 2
+
+            print("0.5 0.5")
+          - |
+            def along(m, t):
+                x = t
+                y = m * t
+                return x * y / (x + y) ** 2
+
+            print("0.5 0.5")
+          - |
+            def along(m, t):
+                return 0.5
+            print("0.5 0.5")
+        explanation: |
+          The bottom line was written as $(x^2 + y)^2$ where $x^2 + y^2$ was meant: the power sits outside the bracket. With the correct bottom, both top and bottom are $t^2$ times a number that depends only on $m$, so $t$ cancels and the value along the line is $\dfrac{m}{1 + m^2}$ whatever $t$ is. That constancy is the whole point of the example. Each line into the origin carries its own value right up to the origin, and different lines carry different values, so there is nothing for the function to tend to.
+    - question:
+        id: work-limit
+        type: choice
+        system: s2
+        prompt: |
+          $h(x, y) = \dfrac{x^2 y}{x^2 + y^2}$ for $(x, y) \ne (0, 0)$. Does it have a limit at the origin?
+        options:
+          - 'No, because the bottom is 0 at the origin.'
+          - 'Yes, the limit is 0. Since $x^2 \le x^2 + y^2$, the fraction $\dfrac{x^2}{x^2 + y^2}$ is at most 1, so $\lvert h \rvert \le \lvert y \rvert$, and $\lvert y \rvert$ is at most the distance from the origin. A bound that shrinks with the distance covers every path at once.'
+          - 'Yes, because the value along both axes is 0, and two paths that agree settle it.'
+          - 'No, because along $y = x$ the value is $\tfrac12$.'
+        answer: 1
+        explanation: |
+          A zero on the bottom only means the formula gives no value at the point. The limit is about nearby points. Along $y = x$ the value is $\dfrac{x^3}{2x^2} = \dfrac{x}{2}$, which tends to 0, and not $\tfrac12$. But agreement along some paths, even along all straight lines, proves nothing: the one sound argument is a bound in terms of the distance. Compare with $g$, whose top $xy$ has the same degree as its bottom, so nothing is left over to shrink. In $h$ the top has one more factor than the bottom, and that spare factor is what goes to 0.
+    - question:
+        id: work-slice-min
+        type: numeric
+        system: s2
+        prompt: |
+          For the puzzle's loss, the slice with $b$ fixed at 1 is $L(w, 1) = 14w^2 - 46w + 38$. At what value of $w$ is this slice lowest? Give it to two decimal places.
+        answer: "1.64"
+        tolerance: "0.01"
+        explanation: |
+          A slice is a function of one variable, so set its derivative to zero: $28w - 46 = 0$ gives $w = \tfrac{46}{28} \approx 1.64$. Notice that this is not 1.6, the $w$ of the true lowest point. The best $w$ depends on which $b$ you have fixed, because of the term $12wb$ that ties the two together. Had you fixed $b$ at 1.1, the best $w$ would be exactly 1.6. To find the bottom of the bowl, both slices must be level at the same point at once, and that is two equations in two unknowns.
+    - question:
+        id: work-level-linear
+        type: choice
+        system: s2
+        prompt: |
+          $f(\mathbf{x}) = \mathbf{a} \cdot \mathbf{x}$ with $\mathbf{a} = (3, 4)$. In which direction should you move from any point to stay at the same height, and in which to gain height fastest?
+        options:
+          - 'Stay level by moving along $(3, 4)$, and climb fastest along $(4, -3)$.'
+          - 'Stay level by moving along $(4, -3)$, which is at right angles to $\mathbf{a}$, since that adds $\mathbf{a} \cdot (4, -3) = 0$ to the value. Climb fastest along $\mathbf{a}$ itself, since among steps of one length the dot product with $\mathbf{a}$ is greatest for the step that points the same way.'
+          - 'Every direction changes the height by the same amount.'
+          - 'Stay level along the $x$-axis and climb fastest along the $y$-axis.'
+        answer: 1
+        explanation: |
+          Moving from $\mathbf{x}$ to $\mathbf{x} + \mathbf{d}$ changes the value by $\mathbf{a} \cdot \mathbf{d}$, because the dot product is linear. That is zero exactly when $\mathbf{d}$ is at right angles to $\mathbf{a}$, so the level sets are the lines perpendicular to $\mathbf{a}$. And $\mathbf{a} \cdot \mathbf{d} = \lVert \mathbf{a} \rVert \lVert \mathbf{d} \rVert \cos\theta$ is greatest when the angle is zero. For a linear function the vector $\mathbf{a}$ is at once the direction of steepest climb and the direction square to the contours. The cluster will show that every smooth function has such a vector at every point.
+  connections:
+    - text: |
+        The score of a line, $L(w, b)$, takes two numbers in and gives one out. It is a function on a plane, and its graph is a surface over that plane: here a long bowl, lowest at $w = 1.6$, $b = 1.1$. There is no single slope because there is no single direction to move in.
+
+        Three ways of seeing such a function. The **surface** itself. Its **level curves**, the contours of a map, drawn in the plane of the inputs: circles for $x^2 + y^2$, parallel lines for a linear function, hyperbolas for the saddle $x^2 - y^2$. And its **slices**, the functions of one variable left when all inputs but one are held still. A grid of values, computed by broadcasting a column against a row, shows all three, at a cost that grows as a power of the number of inputs.
+
+        Limits and continuity carry over word for word, with distance between vectors in place of distance between numbers. The new feature is that a point can be approached along infinitely many paths, and $\dfrac{xy}{x^2 + y^2}$ tends to a different value along each line into the origin.
+
+        The slices are where the calculus you know gets its grip. Hold $b$ still, and $L$ is an ordinary function of $w$ with an ordinary derivative. Hold $w$ still, and there is another. Those two numbers, the slopes of the two slices through a point, are the subject of the next lesson, [[m12.partial-derivatives]]. After that they are put together into one vector, [[m12.gradient]], which will turn out to point straight across the contours.
