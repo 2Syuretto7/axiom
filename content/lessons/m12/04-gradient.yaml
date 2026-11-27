@@ -1,0 +1,601 @@
+concept: m12.gradient
+minutes: 90
+claim: You can assemble the partial derivatives of a function into its gradient vector, explain from the dot product why the gradient points in the direction of steepest increase with length equal to that steepest rate and why it is at right angles to the level sets, compute the gradients of linear functions, squared lengths, quadratic forms and least-squares losses, and minimise a function by stepping against its gradient with a step size that converges.
+recalls: [m12.total-derivative-as-best-linear-approximation]
+uses: [m12.partial-derivatives, m12.functions-of-several-variables, m4.dot-product, m4.angle-and-cosine-similarity, m4.norms-and-distance, m4.vector-addition-and-scaling, m4.lines-planes-and-hyperplanes, m5.transpose, m5.matrix-vector-product, m5.matrices-as-linear-maps, m10.maxima-and-minima, m10.chain-rule, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e5.reshaping-views-and-copies, e5.vectorisation, e5.axis-operations-and-reductions, e5.numerical-error-analysis-in-practice, m2.trigonometric-functions-on-the-unit-circle, m2.summation-and-product-notation, e0.functions, e0.loops]
+leads: [m12.directional-derivative, m12.multivariable-chain-rule, m12.hessian-and-symmetry-of-mixed-partials, m19.gradient-descent, e6.reverse-mode-on-scalars]
+starter: |
+  # Scratch space. From the line w = 2, b = 1, take a step of length 0.01
+  # in each of eight compass directions and see what the loss does.
+  import math
+  import numpy as np
+
+  xs = np.array([0.0, 1.0, 2.0, 3.0])
+  ys = np.array([1.0, 3.0, 4.0, 6.0])
+
+  def loss(w, b):
+      return ((w * xs + b - ys) ** 2).sum()
+
+  for degrees in range(0, 360, 45):
+      angle = math.radians(degrees)
+      dw, db = 0.01 * math.cos(angle), 0.01 * math.sin(angle)
+      print(degrees, round(loss(2.0 + dw, 1.0 + db) - loss(2.0, 1.0), 4))
+parts:
+  recall:
+    - text: |
+        [[m12.total-derivative-as-best-linear-approximation]] showed that near a point a differentiable function changes by very nearly $\dfrac{\partial f}{\partial x_1} h_1 + \dots + \dfrac{\partial f}{\partial x_n} h_n$ over a step $\mathbf{h}$, and ended by noticing that this is a dot product. Today that dot product is read geometrically. Three quick pulls first.
+  puzzle:
+    - text: |
+        You are at the line $w = 2$, $b = 1$ once more, where the loss is 2 and its partial derivatives are 10 and 4. You may take one small step, of length 0.01, in any direction you like in the plane of $(w, b)$. You want the loss to fall as far as possible.
+
+        The starter tries eight directions, at 0°, 45°, 90° and so on round the compass, where 0° means increasing $w$ alone and 90° means increasing $b$ alone.
+
+        Run it. At 0° the loss rises by 0.1014. At 180° it falls by 0.0986. At 270° it falls by 0.0396. At 225°, down and to the left together, it falls by 0.0975. **The best of the eight is 180°, and 225° is a close second.** The truly best direction, then, is probably somewhere between them.
+
+        Eight directions is a crude search. In a plane you could try 360, or 36 000. But a network's loss lives in a space of a million dimensions, where there is no compass to walk round, and the number of directions worth trying is beyond counting.
+
+        **Among all the directions there are, which one makes the loss fall fastest? How steeply does it fall that way? And can the answer be had exactly, from the two numbers 10 and 4, without trying a single direction?**
+  intuition:
+    - text: |
+        The linear approximation answers at once. For a small step $\mathbf{h} = (dw, db)$,
+
+        $$\text{change in } L \approx 10\,dw + 4\,db.$$
+
+        Put the two partial derivatives into a vector, $\mathbf{g} = (10, 4)$. The right-hand side is then $\mathbf{g} \cdot \mathbf{h}$, a dot product. And you know what a dot product is, from the lessons on vectors:
+
+        $$\mathbf{g} \cdot \mathbf{h} = \lVert \mathbf{g} \rVert\,\lVert \mathbf{h} \rVert \cos\theta,$$
+
+        where $\theta$ is the angle between the two.
+
+        The length of the step is fixed at 0.01. The length of $\mathbf{g}$ is whatever it is. **The only thing you control is the angle.** And the cosine of an angle runs from 1, when the vectors point the same way, through 0, when they are at right angles, to $-1$, when they point in opposite ways.
+
+        So the whole question is settled in three lines.
+
+        - To make the function **rise** fastest, step along $\mathbf{g}$.
+        - To make it **fall** fastest, step exactly against $\mathbf{g}$.
+        - To keep it **level**, step at right angles to $\mathbf{g}$.
+
+        The vector of partial derivatives is called the **gradient**. **It points in the direction in which the function increases fastest.** Nobody designed it to. It was built by measuring slopes along the axes, one input at a time, which looks like a bookkeeping device. That the result points uphill, in whatever direction uphill happens to be, is a consequence of the function being locally linear.
+
+        In the puzzle, $\mathbf{g} = (10, 4)$ points right and a little up. The best direction to step is the opposite one, $(-10, -4)$, left and a little down, at about 202° on the compass. That is between 180° and 225°, as the eight trials suggested, and nearer to 180°.
+
+        **How steep?** Stepping along the gradient, the cosine is 1 and the change is $\lVert \mathbf{g} \rVert$ times the length of the step. So **the length of the gradient is the steepest slope**: the rate of climb per unit of distance in the best direction. Here $\lVert \mathbf{g} \rVert = \sqrt{116} \approx 10.77$. A step of 0.01 straight downhill lowers the loss by about 0.1077 according to the linear approximation, and by 0.106 in truth, since the bowl curves up a little even over so short a step. That beats all eight of the compass directions.
+
+        The figure shows the gradient at a point of the bowl. Move the point about.
+    - figure: contours
+      props: { surface: bowl, x: 2, y: 1, show: gradient }
+    - text: |
+        Notice where the arrow points relative to the contours. **It always crosses them at right angles.** That is the third line of the list above, read backwards. A contour is a path along which the function does not change. Stepping along it must therefore have zero dot product with the gradient. So the contour runs at right angles to the gradient, and the gradient at right angles to the contour.
+
+        A walker's map shows this. Water runs straight downhill, and streams on a map cross the contours squarely. Where the contours are crowded the slope is steep, and there the gradient is long. Where they are far apart it is short. At the top of a hill and at the bottom of a hollow the ground is level in every direction, and the gradient is the zero vector: it has no direction to point in.
+
+        **Following it down.** If the gradient says which way is up, a method for finding a minimum suggests itself. Take a small step against the gradient. You are now at a new point, a little lower. The gradient there is different, so work it out again. Step against that one. Repeat. This is **gradient descent**, and it is how almost every model in machine learning is trained. You met it for one variable in the lesson on maxima and minima. In several variables the rule is the same with the derivative replaced by the gradient.
+  derivation:
+    - text: |
+        **Definition.** The **gradient** of $f : \mathbb{R}^n \to \mathbb{R}$ at $\mathbf{a}$ is the vector of its partial derivatives there:
+
+        $$\nabla f(\mathbf{a}) = \left( \frac{\partial f}{\partial x_1}(\mathbf{a}),\ \dots,\ \frac{\partial f}{\partial x_n}(\mathbf{a}) \right).$$
+
+        The symbol $\nabla$ is read "del" or "nabla", and $\nabla f$ as "grad $f$". The gradient lives in the space of **inputs**: it has one entry for each input, and it can be drawn as an arrow on the contour map, starting at the point $\mathbf{a}$.
+
+        When $f$ is differentiable, the linear approximation of the last lesson reads
+
+        $$f(\mathbf{a} + \mathbf{h}) \approx f(\mathbf{a}) + \nabla f(\mathbf{a}) \cdot \mathbf{h}.$$
+
+        The total derivative was a matrix of one row. The gradient is that row stood up as a vector, and applying the row to $\mathbf{h}$ is taking the dot product with it.
+
+        **Steepest ascent.** Let $\mathbf{u}$ be a unit vector and take the step $\mathbf{h} = t\mathbf{u}$. The change in $f$ per unit of distance is about $\nabla f \cdot \mathbf{u} = \lVert \nabla f \rVert \cos\theta$. Over all unit vectors this is greatest when $\theta = 0$, that is, when $\mathbf{u} = \nabla f / \lVert \nabla f \rVert$, and the greatest value is $\lVert \nabla f \rVert$. It is least, $-\lVert \nabla f \rVert$, when $\mathbf{u}$ points the opposite way.
+
+        **Level sets.** If $\mathbf{u}$ is a direction along the level set through $\mathbf{a}$, the function does not change to first order in that direction, so $\nabla f \cdot \mathbf{u} = 0$. The gradient is **normal** to the level set. For $f(x, y) = x^2 + y^2$ the gradient is $(2x, 2y)$, which points straight out from the origin, along the radius, and the level curves are circles, which a radius meets at right angles.
+
+        This gives the tangent line to a level curve, or the tangent plane to a level surface, for nothing: it is the set of points $\mathbf{x}$ with $\nabla f(\mathbf{a}) \cdot (\mathbf{x} - \mathbf{a}) = 0$. That is the equation of a hyperplane with normal $\nabla f(\mathbf{a})$, in the form you met in the lesson on hyperplanes.
+
+        **Gradients to know.** Each is found by taking the partial derivative with respect to one coordinate and recognising the pattern.
+
+        | $f(\mathbf{x})$ | $\nabla f(\mathbf{x})$ |
+        |---|---|
+        | $\mathbf{a} \cdot \mathbf{x}$ | $\mathbf{a}$ |
+        | $\lVert \mathbf{x} \rVert^2 = \mathbf{x} \cdot \mathbf{x}$ | $2\mathbf{x}$ |
+        | $\mathbf{x}^{\mathsf T} A\,\mathbf{x}$ | $(A + A^{\mathsf T})\,\mathbf{x}$, which is $2A\mathbf{x}$ if $A$ is symmetric |
+        | $\lVert A\mathbf{x} - \mathbf{b} \rVert^2$ | $2A^{\mathsf T}(A\mathbf{x} - \mathbf{b})$ |
+
+        They are the many-variable forms of "the derivative of $ax$ is $a$" and "the derivative of $ax^2$ is $2ax$". The third deserves its derivation. Written out, $\mathbf{x}^{\mathsf T} A \mathbf{x} = \sum_i \sum_j a_{ij} x_i x_j$. The variable $x_k$ appears in the terms with $i = k$ and in the terms with $j = k$, so
+
+        $$\frac{\partial}{\partial x_k} \sum_{i, j} a_{ij} x_i x_j = \sum_j a_{kj} x_j + \sum_i a_{ik} x_i = (A\mathbf{x})_k + (A^{\mathsf T}\mathbf{x})_k.$$
+
+        **The loss as the fourth row.** Stack the data of the puzzle into a matrix with a row for each point, holding $x_i$ and a 1, and put the two knobs in a vector:
+
+        $$X = \begin{pmatrix} 0 & 1 \\ 1 & 1 \\ 2 & 1 \\ 3 & 1 \end{pmatrix}, \qquad \boldsymbol{\theta} = \begin{pmatrix} w \\ b \end{pmatrix}, \qquad \mathbf{y} = \begin{pmatrix} 1 \\ 3 \\ 4 \\ 6 \end{pmatrix}.$$
+
+        Then $X\boldsymbol{\theta}$ is the vector of predictions, $\mathbf{r} = X\boldsymbol{\theta} - \mathbf{y}$ is the vector of residuals, and $L = \lVert \mathbf{r} \rVert^2$. Two lessons ago you found $\partial L / \partial w = \sum 2 r_i x_i$ and $\partial L / \partial b = \sum 2 r_i$. Those are the dot products of $2\mathbf{r}$ with the two **columns** of $X$, and taking dot products with the columns of a matrix is multiplying by its transpose:
+
+        $$\nabla L(\boldsymbol{\theta}) = 2X^{\mathsf T}(X\boldsymbol{\theta} - \mathbf{y}).$$
+
+        At $\boldsymbol{\theta} = (2, 1)$ the residuals are $(0, 0, 1, 1)$ and $2X^{\mathsf T}\mathbf{r} = (10, 4)$. In code it is one line, `2 * X.T @ (X @ theta - y)`, whether there are two knobs or two thousand.
+    - question:
+        id: derivation-angle
+        type: choice
+        system: s2
+        prompt: |
+          At a point, $\nabla f = (3, 4)$. Among all steps of length 0.1 from that point, which changes $f$ the most, and by about how much?
+        options:
+          - 'The step $(0.1, 0)$, by about 0.3.'
+          - 'The step $(0.06, 0.08)$, which has length 0.1 and points along the gradient. The change is about the length of the gradient times the length of the step, $5 \times 0.1 = 0.5$.'
+          - 'The step $(0.1, 0.1)$, by about 0.7.'
+          - 'The step $(0, 0.1)$, by about 0.4.'
+        answer: 1
+        explanation: |
+          The change is $\nabla f \cdot \mathbf{h} = \lVert \nabla f \rVert \lVert \mathbf{h} \rVert \cos\theta$, and with both lengths fixed it is greatest when the cosine is 1. The gradient has length 5, so the unit vector along it is $(0.6, 0.8)$ and the step is a tenth of that. Stepping along the axis with the larger partial derivative gets only 0.4. The step $(0.1, 0.1)$ would do better still, but it is not allowed: its length is about 0.141, not 0.1.
+    - text: |
+        **Gradient descent.** Choose a starting point $\mathbf{x}_0$ and a positive number $\eta$, the **step size** or **learning rate**. Repeat
+
+        $$\mathbf{x}_{k+1} = \mathbf{x}_k - \eta\,\nabla f(\mathbf{x}_k).$$
+
+        By the linear approximation, one step changes $f$ by about $\nabla f \cdot (-\eta \nabla f) = -\eta \lVert \nabla f \rVert^2$, which is negative whenever the gradient is not zero. So a small enough step always goes down. The step is not of fixed length: it is proportional to the gradient, long on steep ground and short on gentle ground, and it shrinks to nothing as a stationary point is approached.
+
+        "Small enough" is the whole difficulty. Take $f(x, y) = x^2 + 4y^2$, a bowl four times as steep along $y$ as along $x$. Its gradient is $(2x, 8y)$, so one step does
+
+        $$x \leftarrow (1 - 2\eta)\,x, \qquad y \leftarrow (1 - 8\eta)\,y.$$
+
+        Each coordinate is multiplied by its own factor at every step, as in the lesson on maxima and minima, where the one factor was $1 - 2\eta$. For both to shrink, both factors must lie between $-1$ and 1, and the second is the stricter: it needs $\eta < \tfrac14$. With $\eta = 0.25$ exactly, $y$ is multiplied by $-1$ and jumps from side to side of the valley for ever. With $\eta = 0.3$ it grows by 1.4 times at each step and the method diverges, even though the other coordinate is converging happily.
+
+        **The steepest direction sets the largest safe step, and the shallowest direction then crawls.** With $\eta = 0.2$, $y$ is multiplied by $-0.6$ and $x$ by $0.6$. But for a bowl a hundred times steeper one way than the other, the safe step makes the shallow coordinate shrink by only about 2% a step. A long narrow valley is the hard case for gradient descent, and a large part of the later cluster on optimisation is about what to do there.
+
+        The puzzle's loss is such a valley, moderately so. With $\eta = 0.05$ it converges to $(1.6, 1.1)$ in about a hundred steps. With $\eta = 0.07$ it diverges.
+
+        **What the gradient does not say.** It is local. It describes the function at one point, to first order. It promises a descent only for a small step. And a zero gradient marks a stationary point, which may be a minimum, a maximum or a saddle. Gradient descent stops, or nearly stops, at all three.
+    - question:
+        id: order-descent
+        type: order
+        system: s2
+        prompt: Put in order one full step of gradient descent on $f(x, y) = x^2 + 4y^2$ from the point $(1, 1)$ with step size 0.1.
+        steps:
+          - 'Find the gradient as a function: $\nabla f = (2x, 8y)$.'
+          - 'Evaluate it at the current point: $\nabla f(1, 1) = (2, 8)$.'
+          - 'Scale it by the step size: $0.1 \times (2, 8) = (0.2, 0.8)$.'
+          - 'Subtract from the current point: $(1, 1) - (0.2, 0.8) = (0.8, 0.2)$.'
+          - 'Check: $f$ has fallen from 5 to $0.64 + 0.16 = 0.8$.'
+        explanation: The gradient is evaluated where you are, scaled, and subtracted. The step is longer along y, where the bowl is steeper. Notice that the step does not point at the minimum, the origin, which from (1, 1) is in the direction (−1, −1). Steepest descent goes square to the contour through the current point, and for an elongated bowl that is not the way to the bottom.
+  formal:
+    - text: |
+        **Gradient.** For $f : D \to \mathbb{R}$ differentiable at $\mathbf{a}$, $\nabla f(\mathbf{a}) = \bigl(\partial_1 f(\mathbf{a}), \dots, \partial_n f(\mathbf{a})\bigr) \in \mathbb{R}^n$, and $Df(\mathbf{a})\,\mathbf{h} = \nabla f(\mathbf{a}) \cdot \mathbf{h}$.
+
+        **Steepest ascent.** If $\nabla f(\mathbf{a}) \ne \mathbf{0}$, then over unit vectors $\mathbf{u}$ the quantity $\nabla f(\mathbf{a}) \cdot \mathbf{u}$ has greatest value $\lVert \nabla f(\mathbf{a}) \rVert$, attained only at $\mathbf{u} = \nabla f(\mathbf{a}) / \lVert \nabla f(\mathbf{a}) \rVert$.
+
+        **Level sets.** $\nabla f(\mathbf{a})$ is orthogonal to every direction tangent to the level set $\{f = f(\mathbf{a})\}$ at $\mathbf{a}$. The tangent hyperplane to the level set is $\nabla f(\mathbf{a}) \cdot (\mathbf{x} - \mathbf{a}) = 0$.
+
+        **Rules.** $\nabla(f + g) = \nabla f + \nabla g$, $\nabla(cf) = c\nabla f$, $\nabla(fg) = f\nabla g + g\nabla f$.
+
+        **Standard gradients.** $\nabla(\mathbf{a} \cdot \mathbf{x}) = \mathbf{a}$. $\nabla(\mathbf{x}^{\mathsf T}A\mathbf{x}) = (A + A^{\mathsf T})\mathbf{x}$. $\nabla \lVert A\mathbf{x} - \mathbf{b} \rVert^2 = 2A^{\mathsf T}(A\mathbf{x} - \mathbf{b})$.
+
+        **Gradient descent.** $\mathbf{x}_{k+1} = \mathbf{x}_k - \eta\,\nabla f(\mathbf{x}_k)$, with $\eta > 0$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-grad-1
+        type: choice
+        system: s1
+        prompt: |
+          $f(x, y) = x^2 + 3y$. What is $\nabla f$?
+        options: ['$(2x, 3)$', '$(2x, 3y)$', '$(x^2, 3)$', '$2x + 3$']
+        answer: 0
+        explanation: Its entries are the two partial derivatives, in order.
+    - question:
+        id: drill-grad-at
+        type: choice
+        system: s1
+        prompt: |
+          $f(x, y) = x^2 + y^2$. What is $\nabla f(3, -1)$?
+        options: ['$(6, -2)$', '$(3, -1)$', '$(9, 1)$', '$10$']
+        answer: 0
+        explanation: The gradient is twice the position vector.
+    - question:
+        id: drill-linear
+        type: choice
+        system: s1
+        prompt: |
+          $f(\mathbf{x}) = \mathbf{a} \cdot \mathbf{x}$. What is $\nabla f$?
+        options: ['$\mathbf{a}$', '$\mathbf{x}$', '$2\mathbf{a}$', '$\mathbf{0}$']
+        answer: 0
+        explanation: The partial derivatives of a linear function are its coefficients.
+    - question:
+        id: drill-length
+        type: numeric
+        system: s1
+        prompt: |
+          At a point, $\nabla f = (3, 4)$. What is the steepest rate of increase of $f$ there, per unit of distance?
+        answer: "5"
+        explanation: It is the length of the gradient.
+    - question:
+        id: drill-level
+        type: choice
+        system: s1
+        prompt: |
+          At a point, $\nabla f = (3, 4)$. A small step in which direction leaves $f$ unchanged to first order?
+        options: ['$(3, 4)$', '$(-3, -4)$', '$(4, -3)$', '$(1, 1)$']
+        answer: 2
+        explanation: Its dot product with the gradient is 12 less 12.
+    - question:
+        id: drill-down
+        type: choice
+        system: s1
+        prompt: |
+          At a point, $\nabla f = (3, 4)$. In which direction does $f$ fall fastest?
+        options: ['$(3, 4)$', '$(-3, -4)$', '$(4, -3)$', '$(-4, 3)$']
+        answer: 1
+        explanation: Fastest descent is exactly against the gradient.
+    - question:
+        id: drill-entries
+        type: numeric
+        system: s1
+        prompt: |
+          A loss depends on 1000 weights. How many entries has its gradient?
+        answer: "1000"
+        explanation: One partial derivative for each input.
+    - question:
+        id: drill-contour
+        type: choice
+        system: s1
+        prompt: |
+          How does the gradient at a point meet the level curve through that point?
+        options: ['It runs along it', 'At right angles', 'At 45°', 'It depends on the function']
+        answer: 1
+        explanation: Along the level curve the function does not change, so the dot product of that direction with the gradient is zero.
+    - question:
+        id: drill-step
+        type: choice
+        system: s1
+        prompt: |
+          One step of gradient descent from $\mathbf{x}$ with step size $\eta$ goes to which point?
+        options: ['$\mathbf{x} + \eta\,\nabla f(\mathbf{x})$', '$\mathbf{x} - \eta\,\nabla f(\mathbf{x})$', '$\eta\,\nabla f(\mathbf{x})$', '$\mathbf{x} - \nabla f(\mathbf{x}) / \eta$']
+        answer: 1
+        explanation: The step is against the gradient, scaled by the step size.
+    - question:
+        id: drill-one-step
+        type: choice
+        system: s1
+        prompt: |
+          $f(x, y) = x^2 + y^2$. One step of gradient descent from $(4, 2)$ with step size 0.25 lands where?
+        options: ['$(2, 1)$', '$(3.75, 1.75)$', '$(0, 0)$', '$(6, 3)$']
+        answer: 0
+        explanation: The gradient is (8, 4), and a quarter of it is (2, 1).
+    - question:
+        id: drill-zero
+        type: choice
+        system: s1
+        prompt: |
+          At a local minimum inside the domain of a differentiable function, what is the gradient?
+        options: ['The zero vector', 'A unit vector', 'It points straight up', 'It points at the origin']
+        answer: 0
+        explanation: Every partial derivative vanishes at a minimum.
+    - question:
+        id: drill-quadratic
+        type: choice
+        system: s1
+        prompt: |
+          $A$ is a symmetric matrix and $f(\mathbf{x}) = \mathbf{x}^{\mathsf T} A\,\mathbf{x}$. What is $\nabla f$?
+        options: ['$A\mathbf{x}$', '$2A\mathbf{x}$', '$\mathbf{x}^{\mathsf T}A$', '$2\mathbf{x}$']
+        answer: 1
+        explanation: It is the many-variable form of the derivative of a times x squared.
+    - question:
+        id: predict-zigzag
+        type: predict
+        system: s1
+        prompt: Three steps of gradient descent on $x^2 + 4y^2$ with step size 0.25. What does this show?
+        code: |
+          import numpy as np
+
+          p = np.array([1.0, 1.0])
+          for k in range(3):
+              g = np.array([2 * p[0], 8 * p[1]])
+              p = p - 0.25 * g
+              print(p.tolist())
+        output: |
+          [0.5, -1.0]
+          [0.25, 1.0]
+          [0.125, -1.0]
+        explanation: The x coordinate is multiplied by 1 less 2 times 0.25, a half, at each step. The y coordinate is multiplied by 1 less 8 times 0.25, which is minus 1, so it jumps across the valley and back without ever getting closer.
+    - question:
+        id: predict-matrix-form
+        type: predict
+        system: s1
+        prompt: The gradient of the loss in matrix form, at two lines. What does this show?
+        code: |
+          import numpy as np
+
+          X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          for theta in [np.array([2.0, 1.0]), np.array([1.0, 1.0])]:
+              g = 2 * X.T @ (X @ theta - y)
+              print(g.tolist())
+        output: |
+          [10.0, 4.0]
+          [-18.0, -8.0]
+        explanation: At slope 2 and intercept 1 the residuals are 0, 0, 1, 1, and the gradient is the pair found two lessons ago. At slope 1 and intercept 1 the line is too low at three points, with residuals 0, −1, −1, −2, so both entries are negative and both knobs should be raised.
+  work:
+    - text: Slower now. Keep two pictures in mind - the arrow on the contour map, and the dot product of that arrow with a step.
+    - question:
+        id: write-loss-gradient
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `loss_gradient(theta, X, y)` to return the gradient of $L(\boldsymbol\theta) = \lVert X\boldsymbol\theta - \mathbf{y} \rVert^2$ as an array with one entry for each entry of `theta`. `X` is a matrix with a row for each data point, and `theta` and `y` are one-dimensional arrays. Use no loop.
+        starter: |
+          import numpy as np
+
+          def loss_gradient(theta, X, y):
+              # Replace the next line with your own.
+              return np.zeros(theta.size)
+
+          X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          print(loss_gradient(np.array([2.0, 1.0]), X, y).tolist())
+        solution: |
+          import numpy as np
+
+          def loss_gradient(theta, X, y):
+              return 2 * X.T @ (X @ theta - y)
+
+          X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          print(loss_gradient(np.array([2.0, 1.0]), X, y).tolist())
+        tests: |
+          import numpy as _np
+          _X = _np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          _y = _np.array([1.0, 3.0, 4.0, 6.0])
+          _g = loss_gradient(_np.array([2.0, 1.0]), _X, _y)
+          assert _g.shape == (2,), "The gradient has one entry for each entry of theta"
+          assert _np.allclose(_g, [10.0, 4.0]), "At theta = (2, 1) the gradient is (10, 4)"
+          assert _np.allclose(loss_gradient(_np.array([1.6, 1.1]), _X, _y), [0.0, 0.0], atol=1e-9), "At the best line the gradient is zero"
+          assert _np.allclose(loss_gradient(_np.array([0.0, 0.0]), _X, _y), [-58.0, -28.0]), "At theta = 0 the gradient is (-58, -28)"
+          _rng = _np.random.default_rng(3)
+          _A = _rng.normal(size=(6, 3))
+          _b = _rng.normal(size=6)
+          _t = _rng.normal(size=3)
+          _f = lambda t: ((_A @ t - _b) ** 2).sum()
+          _num = _np.zeros(3)
+          for _i in range(3):
+              _e = _np.zeros(3)
+              _e[_i] = 1e-5
+              _num[_i] = (_f(_t + _e) - _f(_t - _e)) / 2e-5
+          assert _np.allclose(loss_gradient(_t, _A, _b), _num, atol=1e-6), "For a random problem with three knobs the gradient should match central differences"
+          assert "for " not in source, "Do it without a loop"
+          assert output.strip() == "[10.0, 4.0]", "The program should print [10.0, 4.0]"
+        wrong:
+          - |
+            import numpy as np
+
+            def loss_gradient(theta, X, y):
+                return 2 * X.T @ (y - X @ theta)
+
+            print([10.0, 4.0])
+          - |
+            import numpy as np
+
+            def loss_gradient(theta, X, y):
+                return X.T @ (X @ theta - y)
+
+            print([10.0, 4.0])
+          - |
+            import numpy as np
+
+            def loss_gradient(theta, X, y):
+                r = X @ theta - y
+                return np.array([2 * r.sum(), 2 * r.sum()])
+
+            print([10.0, 4.0])
+          - |
+            import numpy as np
+
+            def loss_gradient(theta, X, y):
+                r = X @ theta - y
+                return np.array([(2 * r * X[:, 0]).sum(), (2 * r).sum()])
+
+            print([10.0, 4.0])
+        explanation: |
+          `X @ theta - y` is the vector of residuals, with one entry for each data point. Each entry of the gradient is twice the dot product of the residuals with one **column** of `X`, and `X.T @ r` takes all those dot products at once. The shapes confirm it: `X.T` is knobs by points, the residual is points, the result is knobs. A gradient always has the shape of the thing being adjusted. Writing out the two sums by hand works for a line and fails as soon as there is a third knob, which is what the random test with three checks.
+    - question:
+        id: write-descend
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `descend(grad, start, rate, steps)`. `grad` is a function that takes a point, an array, and returns the gradient there, an array. Starting from the array `start`, take `steps` steps of gradient descent with step size `rate`, and return the final point as an array. The array `start` must be unchanged afterwards.
+        starter: |
+          import numpy as np
+
+          def descend(grad, start, rate, steps):
+              # Replace the next line with your own.
+              return start
+
+          X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          end = descend(lambda t: 2 * X.T @ (X @ t - y), np.array([2.0, 1.0]), 0.05, 300)
+          print([round(float(v), 4) for v in end])
+        solution: |
+          import numpy as np
+
+          def descend(grad, start, rate, steps):
+              p = start.copy()
+              for k in range(steps):
+                  p = p - rate * grad(p)
+              return p
+
+          X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          end = descend(lambda t: 2 * X.T @ (X @ t - y), np.array([2.0, 1.0]), 0.05, 300)
+          print([round(float(v), 4) for v in end])
+        tests: |
+          import numpy as _np
+          _s = _np.array([8.0, -4.0])
+          _e = descend(lambda v: 2 * v, _s, 0.25, 3)
+          assert _np.allclose(_e, [1.0, -0.5]), "On the squared length with rate 0.25 each step halves the point, so three steps from (8, -4) reach (1, -0.5)"
+          assert _s.tolist() == [8.0, -4.0], "The starting array must not be changed"
+          assert _np.allclose(descend(lambda v: 2 * v, _s, 0.25, 0), [8.0, -4.0]), "With no steps the result is the start"
+          _e = descend(lambda v: _np.array([2 * v[0], 8 * v[1]]), _np.array([1.0, 1.0]), 0.25, 3)
+          assert _np.allclose(_e, [0.125, -1.0]), "On x squared plus 4 y squared with rate 0.25, three steps from (1, 1) reach (0.125, -1)"
+          _X = _np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          _y = _np.array([1.0, 3.0, 4.0, 6.0])
+          _e = descend(lambda t: 2 * _X.T @ (_X @ t - _y), _np.array([2.0, 1.0]), 0.05, 300)
+          assert _np.allclose(_e, [1.6, 1.1], atol=1e-6), "On the puzzle's loss with rate 0.05, 300 steps reach the best line"
+          assert output.strip() == "[1.6, 1.1]", "The program should print [1.6, 1.1]"
+        wrong:
+          - |
+            import numpy as np
+
+            def descend(grad, start, rate, steps):
+                p = start.copy()
+                for k in range(steps):
+                    p = p + rate * grad(p)
+                return p
+
+            print([1.6, 1.1])
+          - |
+            import numpy as np
+
+            def descend(grad, start, rate, steps):
+                p = start
+                for k in range(steps):
+                    p -= rate * grad(p)
+                return p
+
+            print([1.6, 1.1])
+          - |
+            import numpy as np
+
+            def descend(grad, start, rate, steps):
+                g = grad(start)
+                p = start.copy()
+                for k in range(steps):
+                    p = p - rate * g
+                return p
+
+            print([1.6, 1.1])
+          - |
+            import numpy as np
+
+            def descend(grad, start, rate, steps):
+                p = start.copy()
+                for k in range(steps):
+                    p = p - grad(p)
+                return p
+
+            print([1.6, 1.1])
+        explanation: |
+          The loop has one line: evaluate the gradient **at the current point** and move against it. Evaluating it once at the start and reusing it walks in a straight line for ever, straight through the valley and up the other side. The gradient must be recomputed at each new point, since the whole method rests on its changing as you move. `p -= ...` on the caller's own array changes it in place, so the copy at the start matters. That four-line loop, with the gradient supplied by a program that differentiates the model automatically, is the training loop of machine learning.
+    - question:
+        id: fix-steepest
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `steepest_step(g, length)` should return the step of the given length that **lowers** the function fastest, where `g` is the gradient at the current point, an array that is not zero. For the gradient $(3, 4)$ and length 0.1 it should give $(-0.06, -0.08)$. It gives a step that is far too long. Fix it.
+        starter: |
+          import numpy as np
+
+          def steepest_step(g, length):
+              return -length * g
+
+          print([round(float(v), 4) for v in steepest_step(np.array([3.0, 4.0]), 0.1)])
+        solution: |
+          import numpy as np
+
+          def steepest_step(g, length):
+              return -length * g / np.linalg.norm(g)
+
+          print([round(float(v), 4) for v in steepest_step(np.array([3.0, 4.0]), 0.1)])
+        tests: |
+          import numpy as _np
+          _s = steepest_step(_np.array([3.0, 4.0]), 0.1)
+          assert _np.allclose(_s, [-0.06, -0.08]), "For the gradient (3, 4) and length 0.1 the step is (-0.06, -0.08)"
+          assert abs(_np.linalg.norm(_s) - 0.1) < 1e-12, "The step must have the length asked for"
+          _g = _np.array([10.0, 4.0])
+          _s = steepest_step(_g, 0.01)
+          assert abs(_np.linalg.norm(_s) - 0.01) < 1e-12, "The step must have the length asked for"
+          assert abs(_g @ _s + 0.01 * _np.linalg.norm(_g)) < 1e-12, "The change predicted by the gradient should be minus its length times the length of the step"
+          _s = steepest_step(_np.array([0.0, -2.0, 0.0]), 3.0)
+          assert _np.allclose(_s, [0.0, 3.0, 0.0]), "For the gradient (0, -2, 0) and length 3 the step is (0, 3, 0)"
+          assert output.strip() == "[-0.06, -0.08]", "The program should print [-0.06, -0.08]"
+        wrong:
+          - |
+            import numpy as np
+
+            def steepest_step(g, length):
+                return -length * g
+
+            print([-0.06, -0.08])
+          - |
+            import numpy as np
+
+            def steepest_step(g, length):
+                return length * g / np.linalg.norm(g)
+
+            print([-0.06, -0.08])
+          - |
+            import numpy as np
+
+            def steepest_step(g, length):
+                return -length * g / g.sum()
+
+            print([-0.06, -0.08])
+          - |
+            import numpy as np
+
+            def steepest_step(g, length):
+                return -length * g / (g ** 2).sum()
+
+            print([-0.06, -0.08])
+        explanation: |
+          The gradient carries two pieces of information, a direction and a length, and this question wants only the direction. Dividing by the norm leaves a unit vector, and scaling that by the length asked for gives a step of exactly that length. `-length * g` is the step of gradient descent, whose length is proportional to the steepness, and that is a different thing: right for descending, wrong when the length of the step has been fixed in advance. The puzzle's answer is this function applied to $(10, 4)$ with length 0.01, and the loss falls by about $0.01 \times \sqrt{116} \approx 0.108$ to first order.
+    - question:
+        id: work-puzzle
+        type: numeric
+        system: s2
+        prompt: |
+          In the puzzle, the gradient at the starting line is $(10, 4)$. On the compass of the starter, where 0° is the direction of increasing $w$ and 90° of increasing $b$, at what angle is the direction of steepest descent? Give it in degrees to the nearest whole number, between 0 and 360.
+        answer: "202"
+        tolerance: "1"
+        unit: "°"
+        explanation: |
+          The gradient points at the angle whose tangent is $\tfrac{4}{10}$, about 21.8°. Steepest descent is the opposite direction, 180° further round: about 201.8°. That lies between the two best trials of the starter, 180° and 225°, and nearer to 180°, as the numbers suggested. The drop along it for a step of 0.01 is 0.106, against 0.0986 for the best of the eight.
+    - question:
+        id: work-rate
+        type: choice
+        system: s2
+        prompt: |
+          Gradient descent is run on $f(x, y) = x^2 + 25y^2$ from the point $(1, 1)$. Which step sizes make it converge to the minimum?
+        options:
+          - 'Any positive step size, since the function is a bowl.'
+          - 'Step sizes below $\tfrac{1}{25} = 0.04$. A step multiplies $x$ by $1 - 2\eta$ and $y$ by $1 - 50\eta$, and the second factor is between $-1$ and 1 only when $\eta < 0.04$. At such a step size $x$ is multiplied by at least 0.92, so the shallow direction converges slowly.'
+          - 'Step sizes below 1, since $1 - 2\eta$ must be more than $-1$.'
+          - 'Only the step size 0.5, which sends $x$ to 0 in one step.'
+        answer: 1
+        explanation: |
+          The gradient is $(2x, 50y)$, so the two coordinates evolve separately, each multiplied by its own factor at every step. Convergence needs both factors to have size below 1. The steep direction, $y$, gives the binding condition. Then the gentle direction is stuck with a step far smaller than it could bear. With $\eta = 0.039$, $y$ is multiplied by $-0.95$ and $x$ by $0.922$: about 85 steps to reduce $x$ a thousand-fold. The ratio of the steepest curvature to the shallowest, here 25, measures how badly matched the two demands are. The cluster on optimisation calls it the condition number, the same idea you met for matrices.
+    - question:
+        id: work-normal
+        type: choice
+        system: s2
+        prompt: |
+          The surface $x^2 + y^2 + z^2 = 14$ is a sphere, a level set of $f(x, y, z) = x^2 + y^2 + z^2$. What is the tangent plane to it at the point $(1, 2, 3)$?
+        options:
+          - '$x + 2y + 3z = 14$, since the gradient $(2, 4, 6)$ is normal to the level set, and the plane through $(1, 2, 3)$ with that normal is $2(x - 1) + 4(y - 2) + 6(z - 3) = 0$.'
+          - '$x + y + z = 6$.'
+          - '$2x + 4y + 6z = 14$.'
+          - 'It cannot be found without solving for $z$ first.'
+        answer: 0
+        explanation: |
+          The gradient of $f$ at the point is $(2x, 2y, 2z) = (2, 4, 6)$. Every direction tangent to the level surface has zero dot product with it, so the tangent plane is the set of $\mathbf{x}$ with $\nabla f \cdot (\mathbf{x} - \mathbf{a}) = 0$. Expanding gives $2x + 4y + 6z = 28$, which is $x + 2y + 3z = 14$. The normal to a sphere at a point is the radius to that point, and the gradient $(2, 4, 6)$ is indeed twice the position vector. No formula for $z$ in terms of $x$ and $y$ was needed.
+  connections:
+    - text: |
+        From the line $w = 2$, $b = 1$, the best of eight compass directions lowered the loss by 0.0986 for a step of 0.01. The best of all directions is against the vector $(10, 4)$, at about 202°, and lowers it by 0.106.
+
+        The **gradient** $\nabla f$ is the vector of partial derivatives. Because a differentiable function changes by about $\nabla f \cdot \mathbf{h}$ over a small step, and a dot product is the product of the lengths and the cosine of the angle, three things follow. The gradient points in the direction of **steepest increase**. Its length is the rate of increase in that direction. And it is **at right angles to the level set** through the point.
+
+        The gradient of $\mathbf{a} \cdot \mathbf{x}$ is $\mathbf{a}$. Of $\mathbf{x}^{\mathsf T}A\mathbf{x}$, $(A + A^{\mathsf T})\mathbf{x}$. Of the least-squares loss $\lVert X\boldsymbol\theta - \mathbf{y} \rVert^2$, $2X^{\mathsf T}(X\boldsymbol\theta - \mathbf{y})$: the residuals, sent back through the transpose.
+
+        **Gradient descent** repeats $\mathbf{x} \leftarrow \mathbf{x} - \eta\,\nabla f(\mathbf{x})$. A small enough step always descends. The steepest direction of the bowl limits the step size, and the shallowest direction then converges slowly. The full study of that is [[m19.gradient-descent]].
+
+        The argument today used the linear approximation to say how $f$ changes along the gradient, against it, and across it. Those are three directions. What about any other? The rate of change of $f$ along an arbitrary direction, its relation to the gradient when the function is differentiable, and what is left of it when the function is not, is the next lesson, [[m12.directional-derivative]].
