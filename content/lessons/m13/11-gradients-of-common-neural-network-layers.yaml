@@ -1,0 +1,794 @@
+concept: m13.gradients-of-common-neural-network-layers
+minutes: 95
+claim: You can derive and implement the backward rule of each standard layer (the affine layer on a batch, elementwise activations, softmax with cross-entropy, sums, means and broadcasts, and the residual connection), check every rule by its shapes and by a finite difference, and chain the rules into the complete backward pass of a small network.
+recalls: [m13.implicit-differentiation-through-solvers]
+uses: [m13.derivatives-with-respect-to-matrices, m13.the-method-of-differentials, m13.jacobian-vector-and-vector-jacobian-products, m13.computational-graphs, m13.reverse-mode-differentiation-and-its-cost, m13.derivatives-with-respect-to-vectors, m12.jacobian, m12.multivariable-chain-rule, m10.derivatives-of-exp-log-and-trig, e6.tensor-valued-autograd, e6.broadcasting-in-the-backward-pass, e6.gradient-checking, e6.training-an-mlp-on-your-own-engine, e5.broadcasting, e5.axis-operations-and-reductions, e5.arrays-dtype-and-shape, e0.functions, e0.loops]
+leads: [e7.tensors-and-devices]
+starter: |
+  # Scratch space. Softmax, then the loss -log(probability of the right class).
+  import numpy as np
+
+
+  def loss(z, label):
+      p = np.exp(z) / np.exp(z).sum()
+      return -float(np.log(p[label]))
+
+
+  z = np.array([2.0, 1.0, 0.0])
+  p = np.exp(z) / np.exp(z).sum()
+  print([round(float(c), 4) for c in p])
+
+  h = 1e-6                          # the gradient with respect to z, measured
+  print([round((loss(z + h * e, 0) - loss(z - h * e, 0)) / (2 * h), 4) for e in np.eye(3)])
+parts:
+  recall:
+    - text: |
+        [[m13.implicit-differentiation-through-solvers]] completed the toolkit: even a solver has a backward rule. The cluster closes by putting the tools to their everyday use, the handful of layers from which networks are assembled. Three quick pulls first.
+  puzzle:
+    - text: |
+        A classifier ends with two steps. **Softmax** turns a vector of scores $\mathbf{z}$ into probabilities, $p_i = e^{z_i}/\sum_je^{z_j}$. The **cross-entropy** loss is then $-\log p_y$, where $y$ is the correct class.
+
+        Each step is awkward to differentiate. Every probability depends on every score, so the Jacobian of softmax is a full matrix, and the logarithm puts a $1/p_y$ in front.
+
+        The starter takes the scores $(2, 1, 0)$ with correct class 0. It prints the probabilities, and then the gradient of the loss with respect to the scores, measured by finite differences.
+
+        ```
+        [0.6652, 0.2447, 0.09]
+        [-0.3348, 0.2447, 0.09]
+        ```
+
+        The second and third entries of the gradient **are** the probabilities. The first is the probability minus 1.
+
+        **Why does the gradient of this two-step calculation come out as simply "probabilities minus the right answer"? And is every layer's backward rule as short?**
+  intuition:
+    - text: |
+        Nearly, yes. A network is built from a small set of layer types, and each has a backward rule of one or two lines. Training never needs anything else. The backward pass of the largest model is these few rules, called in reverse order.
+
+        Every rule answers the same question. The backward sweep arrives at a layer with $\bar Y$, the gradient of the loss with respect to the layer's **output**. The layer must return the gradient with respect to its **input**, to pass further back, and with respect to its own **parameters**, to hand to the optimiser. That is a VJP, and you know how to find one: write the differential of the layer and rearrange.
+
+        Two habits make the rules easy to get right.
+
+        **Shapes.** A gradient has the shape of the thing it is the gradient of. For an affine layer with input $X$ of shape $B \times n$ and weights of shape $n \times m$, the incoming $\bar Y$ is $B \times m$. The gradient for $W$ must be $n \times m$, and the only product of $X$ and $\bar Y$ with that shape is $X^\top\bar Y$. Shapes will not prove a formula, but they catch most wrong ones.
+
+        **Copies add, sums copy.** If a value is used in several places, the gradients coming back from them add up. If several values are summed into one, the gradient of the sum is copied back to each. A bias added to every row of a batch was used $B$ times, so its gradient is a sum over the $B$ rows.
+
+        As for the puzzle: the loss is $-z_y + \log\sum_je^{z_j}$. The first term has slope $-1$ at the right class. The second has slope $e^{z_i}/\sum_je^{z_j}$, which is $p_i$. The logarithm and the exponentials were made for each other, and the awkward parts cancel.
+  derivation:
+    - text: |
+        Throughout, a batch is a matrix with **one example per row**, and $\bar{\ }$ marks the gradient of the scalar loss.
+
+        **Affine layer.** $Y = XW + \mathbf{1}\mathbf{b}^\top$, with $X$ of shape $B \times n$, $W$ of shape $n \times m$, and the bias $\mathbf{b}$ added to every row. The differential is $dY = dX\,W + X\,dW + \mathbf{1}\,d\mathbf{b}^\top$. Pair it with $\bar Y$ and move factors round the trace:
+
+        $$dL = \operatorname{tr}(\bar Y^\top dY) = \operatorname{tr}\big((\bar YW^\top)^\top dX\big) + \operatorname{tr}\big((X^\top\bar Y)^\top dW\big) + (\bar Y^\top\mathbf{1})^\top d\mathbf{b}.$$
+
+        $$\bar X = \bar YW^\top, \qquad \bar W = X^\top\bar Y, \qquad \bar{\mathbf{b}} = \bar Y^\top\mathbf{1}\ \ \text{(the column sums of }\bar Y).$$
+
+        $\bar W = X^\top\bar Y$ is a sum of outer products, one per example: $\sum_i\mathbf{x}_i\bar{\mathbf{y}}_i^\top$.
+
+        **Elementwise activation.** $Y = \phi(Z)$ applied entry by entry. Each entry depends on one entry, so the Jacobian is diagonal and
+
+        $$\bar Z = \bar Y \circ \phi'(Z).$$
+
+        | $\phi$ | $\phi'$, in terms of what was stored |
+        |---|---|
+        | rectifier $\max(0, z)$ | 1 where $z > 0$, else 0 |
+        | $\tanh$ | $1 - y^2$ |
+        | sigmoid $1/(1 + e^{-z})$ | $y(1 - y)$ |
+
+        The rectifier's backward rule is a **mask**: the gradient passes where the unit was active and is blocked where it was not.
+
+        **Softmax with cross-entropy.** For one example with scores $\mathbf{z}$ and correct class $y$:
+
+        $$L = -\log\frac{e^{z_y}}{\sum_je^{z_j}} = -z_y + \log\sum_je^{z_j}, \qquad \frac{\partial L}{\partial z_i} = -[i = y] + \frac{e^{z_i}}{\sum_je^{z_j}} = p_i - [i = y].$$
+
+        With $\mathbf{y}$ the one-hot vector of the correct class: $\ \bar{\mathbf{z}} = \mathbf{p} - \mathbf{y}$. For the mean loss over a batch, $\bar Z = (P - Y)/B$.
+
+        The gradient is the **error**: what was predicted, minus what was true. It is zero only when the prediction is perfect, and its entries sum to zero.
+    - question:
+        id: derivation-uniform
+        type: numeric
+        system: s2
+        prompt: |
+          A classifier with 4 classes gives the scores $(0, 0, 0, 0)$, and the correct class is the third. What is the third entry of the gradient of the cross-entropy loss with respect to the scores?
+        answer: "-0.75"
+        explanation: |
+          Equal scores give equal probabilities, $0.25$ each. The gradient is $\mathbf{p} - \mathbf{y} = (0.25, 0.25, -0.75, 0.25)$. A step of gradient descent moves against it: the score of the correct class goes up, and the others go down by a third as much each. The four entries sum to zero, as they always do, because adding the same number to every score changes no probability.
+    - text: |
+        **Sum, mean and broadcast.** For $s = \sum_ix_i$: $\ \bar x_i = \bar s$ for every $i$. For a mean over $B$ items: $\bar x_i = \bar s/B$. In the other direction, a value that is **broadcast**, copied into many positions, receives the **sum** of the gradients of all its copies. Summing and broadcasting are transposes of each other, as you found in [[e6.broadcasting-in-the-backward-pass]]. The bias rule above is this fact.
+
+        **Fan-out.** If $\mathbf{x}$ feeds two layers, $\bar{\mathbf{x}}$ is the sum of what each sends back.
+
+        **Residual connection.** $\mathbf{y} = \mathbf{x} + f(\mathbf{x})$. The input is used twice, so
+
+        $$\bar{\mathbf{x}} = \bar{\mathbf{y}} + J_f^\top\bar{\mathbf{y}}.$$
+
+        The first term is the incoming gradient, **unchanged**. However small $J_f^\top\bar{\mathbf{y}}$ becomes, the gradient cannot vanish along this path. The layer's Jacobian is $I + J_f$, with singular values near 1 when $f$ is small: exactly the condition that [[m13.reverse-mode-differentiation-and-its-cost]] asked of deep networks.
+
+        **Softmax alone.** When softmax is not followed by cross-entropy, as inside attention, its Jacobian is needed: $\partial p_i/\partial z_j = p_i([i = j] - p_j)$, that is $J = \operatorname{diag}(\mathbf{p}) - \mathbf{p}\mathbf{p}^\top$. It is symmetric, and its VJP needs no matrix: $\ \bar{\mathbf{z}} = \mathbf{p} \circ (\bar{\mathbf{p}} - \mathbf{p} \cdot \bar{\mathbf{p}})$.
+
+        **A whole network.** For $X \to A = XW_1 + \mathbf{b}_1 \to H = \max(0, A) \to Z = HW_2 + \mathbf{b}_2 \to$ mean cross-entropy, the backward pass is the rules in reverse:
+
+        $$\bar Z = \frac{P - Y}{B}, \quad \bar W_2 = H^\top\bar Z, \quad \bar{\mathbf{b}}_2 = \bar Z^\top\mathbf{1}, \quad \bar H = \bar ZW_2^\top, \quad \bar A = \bar H \circ [A > 0], \quad \bar W_1 = X^\top\bar A, \quad \bar{\mathbf{b}}_1 = \bar A^\top\mathbf{1}.$$
+
+        Seven lines, each the cost of the matching forward line, using values the forward pass kept: $X$, $A$, $H$ and $P$.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the derivation of the gradient of softmax with cross-entropy.
+        steps:
+          - 'Write the loss as $-\log\big(e^{z_y}/\sum_je^{z_j}\big)$.'
+          - 'Split the logarithm: $L = -z_y + \log\sum_je^{z_j}$.'
+          - 'The first term has derivative $-1$ with respect to $z_y$ and 0 with respect to the other scores.'
+          - 'The second term has derivative $e^{z_i}/\sum_je^{z_j} = p_i$ with respect to $z_i$.'
+          - 'Together: $\partial L/\partial z_i = p_i - [i = y]$, the probabilities minus the one-hot vector.'
+        explanation: The logarithm undoes the exponential in the numerator, and what remains of the denominator differentiates back into softmax.
+  formal:
+    - text: |
+        Rows are examples. $\bar Y$ is the gradient with respect to the layer's output, and $\circ$ is the entrywise product.
+
+        | Layer | Forward | Backward |
+        |---|---|---|
+        | Affine | $Y = XW + \mathbf{1}\mathbf{b}^\top$ | $\bar X = \bar YW^\top$, $\ \bar W = X^\top\bar Y$, $\ \bar{\mathbf{b}} = \bar Y^\top\mathbf{1}$ |
+        | Activation | $Y = \phi(Z)$ | $\bar Z = \bar Y \circ \phi'(Z)$ |
+        | Softmax | $\mathbf{p} = \operatorname{softmax}(\mathbf{z})$ | $\bar{\mathbf{z}} = \mathbf{p} \circ (\bar{\mathbf{p}} - \mathbf{p} \cdot \bar{\mathbf{p}})$ |
+        | Softmax with cross-entropy, mean over batch | $L = -\frac1B\sum_i\log P_{i,y_i}$ | $\bar Z = (P - Y)/B$ |
+        | Squared error, mean over batch | $L = \frac1{2B}\|\hat Y - Y\|_F^2$ | $\bar{\hat Y} = (\hat Y - Y)/B$ |
+        | Sum over an axis | $\mathbf{s} = X^\top\mathbf{1}$ | $\bar X = \mathbf{1}\bar{\mathbf{s}}^\top$ |
+        | Broadcast | $X = \mathbf{1}\mathbf{b}^\top$ | $\bar{\mathbf{b}} = \bar X^\top\mathbf{1}$ |
+        | Residual | $\mathbf{y} = \mathbf{x} + f(\mathbf{x})$ | $\bar{\mathbf{x}} = \bar{\mathbf{y}} + J_f^\top\bar{\mathbf{y}}$ |
+        | Product of matrices | $Y = AB$ | $\bar A = \bar YB^\top$, $\ \bar B = A^\top\bar Y$ |
+        | Dropout with mask $M$ | $Y = X \circ M$ | $\bar X = \bar Y \circ M$ |
+        | Lookup of rows $i_1, \dots, i_B$ of $E$ | $Y_k = E_{i_k}$ | $\bar E_i = \sum_{k: i_k = i}\bar Y_k$ |
+
+        **Convolution.** A convolution is a linear map of its input, $\mathbf{y} = C_{\mathbf{w}}\mathbf{x}$, with a matrix built from shifted copies of the kernel $\mathbf{w}$. So $\bar{\mathbf{x}} = C_{\mathbf{w}}^\top\bar{\mathbf{y}}$, which is a convolution of $\bar{\mathbf{y}}$ with the reversed kernel (the transposed convolution), and $\bar{\mathbf{w}}$ is the correlation of $\mathbf{x}$ with $\bar{\mathbf{y}}$.
+
+        **Normalisation.** For $\mathbf{y} = (\mathbf{x} - \mu\mathbf{1})/\sigma$ with $\mu$, $\sigma$ the mean and standard deviation of the $n$ entries of $\mathbf{x}$:
+
+        $$\bar{\mathbf{x}} = \frac1\sigma\Big(\bar{\mathbf{y}} - \frac{\mathbf{1} \cdot \bar{\mathbf{y}}}{n}\mathbf{1} - \frac{\mathbf{y} \cdot \bar{\mathbf{y}}}{n}\mathbf{y}\Big).$$
+
+        The backward rule removes from $\bar{\mathbf{y}}$ its components along $\mathbf{1}$ and along $\mathbf{y}$, the two directions in which the layer's output cannot move.
+
+        **Softmax Jacobian.** $J = \operatorname{diag}(\mathbf{p}) - \mathbf{p}\mathbf{p}^\top$ is symmetric positive semidefinite with $J\mathbf{1} = \mathbf{0}$. It is the Hessian of $\log\sum_je^{z_j}$, which is therefore convex, and so is the cross-entropy loss as a function of the scores.
+
+        **Numerical form.** Softmax is computed after subtracting the largest score, and the loss as $\log\sum_je^{z_j - z_{\max}} + z_{\max} - z_y$, to avoid overflow and $\log 0$.
+
+        **Check.** Every rule satisfies $\langle\bar Y, dY\rangle = \langle\bar X, dX\rangle + \langle\bar W, dW\rangle + \cdots$ for all perturbations: the dot-product test of the lesson on Jacobian-vector and vector-Jacobian products.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-w
+        type: choice
+        system: s1
+        prompt: |
+          For $Y = XW + \mathbf{1}\mathbf{b}^\top$ with one example per row, $\bar W =$
+        options: ['$\bar YX^\top$', '$X^\top\bar Y$', '$X\bar Y$', '$\bar Y^\top X$']
+        answer: 1
+        explanation: The only product with the shape of $W$.
+    - question:
+        id: drill-x
+        type: choice
+        system: s1
+        prompt: |
+          For the same layer, $\bar X =$
+        options: ['$\bar YW^\top$', '$W^\top\bar Y$', '$\bar YW$', '$X^\top\bar Y$']
+        answer: 0
+        explanation: Back through the weights, transposed.
+    - question:
+        id: drill-b
+        type: choice
+        system: s1
+        prompt: |
+          For the same layer, $\bar{\mathbf{b}}$ is
+        options: ['the first row of $\bar Y$', 'the sum of the rows of $\bar Y$', 'the mean of all entries of $\bar Y$', '$\bar Y$ itself']
+        answer: 1
+        explanation: The bias was used in every row, and the gradients of the copies add.
+    - question:
+        id: drill-shape
+        type: choice
+        system: s1
+        prompt: |
+          The gradient of a scalar loss with respect to a weight matrix of shape $100 \times 10$ has shape
+        options: ['$10 \times 100$', '$100 \times 10$', '$1000 \times 1000$', '$1 \times 1$']
+        answer: 1
+        explanation: The shape of the thing differentiated.
+    - question:
+        id: drill-relu
+        type: choice
+        system: s1
+        prompt: |
+          The backward rule of the rectifier $\max(0, z)$
+        options: ['passes the gradient everywhere', 'passes the gradient where $z > 0$ and blocks it elsewhere', 'multiplies the gradient by $z$', 'reverses the sign of the gradient']
+        answer: 1
+        explanation: A mask of the active units.
+    - question:
+        id: drill-tanh
+        type: numeric
+        system: s1
+        prompt: |
+          A $\tanh$ unit has output $0.6$ and receives the gradient 2 from above. What does it pass down?
+        answer: "1.28"
+        explanation: $2 \times (1 - 0.36)$.
+    - question:
+        id: drill-sigmoid
+        type: numeric
+        system: s1
+        prompt: |
+          A sigmoid unit has output $0.5$ and receives the gradient 4 from above. What does it pass down?
+        answer: "1"
+        explanation: $4 \times 0.5 \times 0.5$.
+    - question:
+        id: drill-xent
+        type: choice
+        system: s1
+        prompt: |
+          The gradient of softmax with cross-entropy with respect to the scores, for one example, is
+        options: ['$\mathbf{y} - \mathbf{p}$', '$\mathbf{p} - \mathbf{y}$', '$-\log\mathbf{p}$', '$\mathbf{p} \circ \mathbf{y}$']
+        answer: 1
+        explanation: Predicted minus true.
+    - question:
+        id: drill-xent-number
+        type: numeric
+        system: s1
+        prompt: |
+          The probabilities are $(0.7, 0.2, 0.1)$ and the correct class is the first. What is the first entry of the gradient with respect to the scores?
+        answer: "-0.3"
+        explanation: $0.7 - 1$.
+    - question:
+        id: drill-sum-zero
+        type: numeric
+        system: s1
+        prompt: |
+          What do the entries of $\mathbf{p} - \mathbf{y}$ add up to?
+        answer: "0"
+        explanation: Both vectors sum to 1.
+    - question:
+        id: drill-sum
+        type: choice
+        system: s1
+        prompt: |
+          For $s = x_1 + x_2 + \dots + x_n$, the backward rule gives each $\bar x_i$ the value
+        options: ['$\bar s/n$', '$\bar s$', '$n\bar s$', '$x_i\bar s$']
+        answer: 1
+        explanation: A sum copies its gradient to every input.
+    - question:
+        id: drill-fan-out
+        type: choice
+        system: s1
+        prompt: |
+          A value is used by two later layers. Its gradient is
+        options: ['the larger of the two gradients sent back', 'the sum of the two gradients sent back', 'their product', 'their average']
+        answer: 1
+        explanation: Contributions along different paths add.
+    - question:
+        id: drill-residual
+        type: choice
+        system: s1
+        prompt: |
+          For $\mathbf{y} = \mathbf{x} + f(\mathbf{x})$, $\ \bar{\mathbf{x}} =$
+        options: ['$J_f^\top\bar{\mathbf{y}}$', '$\bar{\mathbf{y}} + J_f^\top\bar{\mathbf{y}}$', '$\bar{\mathbf{y}}$', '$2\bar{\mathbf{y}}$']
+        answer: 1
+        explanation: The identity path and the path through $f$.
+    - question:
+        id: predict-shapes
+        type: predict
+        system: s1
+        prompt: The shapes of the three gradients of an affine layer, for a batch of 4, 3 inputs and 5 outputs. What does this show?
+        code: |
+          import numpy as np
+
+          X = np.ones((4, 3))
+          W = np.ones((3, 5))
+          Ybar = np.ones((4, 5))
+          print((X.T @ Ybar).shape, (Ybar @ W.T).shape, Ybar.sum(axis=0).shape)
+        output: |
+          (3, 5) (4, 3) (5,)
+        explanation: The gradient for the weights has the shape of the weights, the gradient for the input the shape of the input, and the gradient for the bias one entry per output. Each product is the only way to combine the two matrices that gives the required shape.
+    - question:
+        id: predict-jacobian
+        type: predict
+        system: s1
+        prompt: The Jacobian of softmax at the scores (2, 1, 0). What does this show?
+        code: |
+          import numpy as np
+
+          z = np.array([2.0, 1.0, 0.0])
+          p = np.exp(z) / np.exp(z).sum()
+          J = np.diag(p) - np.outer(p, p)
+          print(round(float(J[0, 0]), 4), round(float(J[0, 1]), 4))
+          print([round(float(c), 4) + 0.0 for c in J.sum(axis=0)])
+        output: |
+          0.2227 -0.1628
+          [0.0, 0.0, 0.0]
+        explanation: The diagonal entry is p times one minus p for the first class, and the entry beside it is minus the product of the first two probabilities. Raising one score raises its own probability and lowers all the others. Every column sums to zero, because the probabilities always sum to 1 and so their total cannot change.
+  work:
+    - text: Slower now. First the layer every network is made of.
+    - question:
+        id: write-affine
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          An affine layer computes `Y = X @ W + b` for a batch `X` with one example per row. Write `affine_backward(X, W, Ybar)` returning the triple `(Xbar, Wbar, bbar)`: the gradients of the loss with respect to `X`, `W` and `b`, given its gradient `Ybar` with respect to `Y`.
+        starter: |
+          import numpy as np
+
+
+          def affine_backward(X, W, Ybar):
+              return X * 0.0, W * 0.0, Ybar[0] * 0.0
+
+
+          X = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+          W = np.array([[1.0, 0.0, -1.0], [2.0, 1.0, 0.0]])
+          Ybar = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0, 1.0]])
+          Xbar, Wbar, bbar = affine_backward(X, W, Ybar)
+          print(Xbar.tolist())
+          print(Wbar.tolist())
+          print(bbar.tolist())
+        solution: |
+          import numpy as np
+
+
+          def affine_backward(X, W, Ybar):
+              return Ybar @ W.T, X.T @ Ybar, Ybar.sum(axis=0)
+
+
+          X = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+          W = np.array([[1.0, 0.0, -1.0], [2.0, 1.0, 0.0]])
+          Ybar = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0, 1.0]])
+          Xbar, Wbar, bbar = affine_backward(X, W, Ybar)
+          print(Xbar.tolist())
+          print(Wbar.tolist())
+          print(bbar.tolist())
+        tests: |
+          import numpy as _np
+          _rng = _np.random.default_rng(2)
+          _X = _rng.normal(size=(4, 3))
+          _W = _rng.normal(size=(3, 5))
+          _b = _rng.normal(size=5)
+          _C = _rng.normal(size=(4, 5))
+          def _loss(X, W, b):
+              return float((_C * (X @ W + b)).sum())
+          def _num(f, P):
+              G = _np.zeros(P.shape)
+              for _i in range(P.size):
+                  E = _np.zeros(P.size)
+                  E[_i] = 1e-6
+                  E = E.reshape(P.shape)
+                  G.flat[_i] = (f(P + E) - f(P - E)) / 2e-6
+              return G
+          _Xb, _Wb, _bb = affine_backward(_X, _W, _C)
+          assert _np.shape(_Xb) == (4, 3), "Xbar has the shape of X: 4 by 3 for a batch of 4 with 3 inputs"
+          assert _np.shape(_Wb) == (3, 5), "Wbar has the shape of W: 3 by 5"
+          assert _np.shape(_bb) == (5,), "bbar has one entry per output: 5"
+          assert _np.allclose(_Wb, _num(lambda P: _loss(_X, P, _b), _W), atol=1e-6), "Wbar should agree with central differences. It is X transposed times Ybar, with no division by the batch size"
+          assert _np.allclose(_Xb, _num(lambda P: _loss(P, _W, _b), _X), atol=1e-6), "Xbar should agree with central differences. It is Ybar times W transposed"
+          assert _np.allclose(_bb, _num(lambda P: _loss(_X, _W, P), _b), atol=1e-6), "bbar should agree with central differences. It is the sum of the rows of Ybar"
+          assert output.strip() == "[[1.0, 2.0], [0.0, 1.0], [0.0, 3.0]]\n[[6.0, 8.0, 5.0], [8.0, 10.0, 6.0]]\n[2.0, 2.0, 1.0]", "The program should print [[1.0, 2.0], [0.0, 1.0], [0.0, 3.0]], then [[6.0, 8.0, 5.0], [8.0, 10.0, 6.0]], then [2.0, 2.0, 1.0]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def affine_backward(X, W, Ybar):
+                return Ybar @ W.T, X.T @ Ybar / len(X), Ybar.mean(axis=0)
+
+
+            print("[[1.0, 2.0], [0.0, 1.0], [0.0, 3.0]]\n[[6.0, 8.0, 5.0], [8.0, 10.0, 6.0]]\n[2.0, 2.0, 1.0]")
+          - |
+            import numpy as np
+
+
+            def affine_backward(X, W, Ybar):
+                return Ybar @ W.T, X.T @ Ybar, Ybar.sum()
+
+
+            print("[[1.0, 2.0], [0.0, 1.0], [0.0, 3.0]]\n[[6.0, 8.0, 5.0], [8.0, 10.0, 6.0]]\n[2.0, 2.0, 1.0]")
+          - |
+            import numpy as np
+
+
+            def affine_backward(X, W, Ybar):
+                return Ybar @ W.T, X.T @ Ybar, Ybar[0]
+
+
+            print("[[1.0, 2.0], [0.0, 1.0], [0.0, 3.0]]\n[[6.0, 8.0, 5.0], [8.0, 10.0, 6.0]]\n[2.0, 2.0, 1.0]")
+        explanation: |
+          Three products, each fixed by its shape. `Ybar @ W.T` is $B \times n$ like the input. `X.T @ Ybar` is $n \times m$ like the weights: it adds up, over the examples, the outer product of each input with the gradient at its output. `Ybar.sum(axis=0)` has one entry per output, because the bias was broadcast to all $B$ rows and the gradients of its copies add.
+
+          There is no division by the batch size here. If the loss is a mean over the batch, the factor $1/B$ entered once, at the loss, and is already inside `Ybar`. Dividing again in the layer, as the first wrong version does, shrinks every gradient by the batch size, and the network still trains, only more slowly than it should, which makes the mistake hard to see.
+    - question:
+        id: write-xent
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          `Z` holds the scores of a batch, one example per row, and `labels` is the list of correct classes. Write `softmax_xent(Z, labels)` returning the pair `(loss, Zbar)`: the mean cross-entropy loss as a float, and its gradient with respect to `Z`. Subtract the largest score of each row before exponentiating, so that large scores do not overflow, and compute the log of a probability as its shifted score minus the log of the row's sum of exponentials, so that a probability of zero never reaches the logarithm.
+        starter: |
+          import numpy as np
+
+
+          def softmax_xent(Z, labels):
+              return 0.0, Z * 0.0
+
+
+          loss, Zbar = softmax_xent(np.array([[2.0, 1.0, 0.0], [0.0, 0.0, 0.0]]), [0, 2])
+          print(round(loss, 4))
+          print([[round(float(c), 4) for c in row] for row in Zbar])
+        solution: |
+          import numpy as np
+
+
+          def softmax_xent(Z, labels):
+              B = len(labels)
+              S = Z - Z.max(axis=1, keepdims=True)
+              P = np.exp(S) / np.exp(S).sum(axis=1, keepdims=True)
+              loss = 0.0
+              Zbar = P / B
+              for i in range(B):
+                  loss -= float(S[i, labels[i]] - np.log(np.exp(S[i]).sum())) / B
+                  Zbar[i, labels[i]] -= 1 / B
+              return loss, Zbar
+
+
+          loss, Zbar = softmax_xent(np.array([[2.0, 1.0, 0.0], [0.0, 0.0, 0.0]]), [0, 2])
+          print(round(loss, 4))
+          print([[round(float(c), 4) for c in row] for row in Zbar])
+        tests: |
+          import numpy as _np
+          def _ref(Z, labels):
+              total = 0.0
+              for _i in range(len(labels)):
+                  z = Z[_i] - Z[_i].max()
+                  total -= float(z[labels[_i]] - _np.log(_np.exp(z).sum()))
+              return total / len(labels)
+          _rng = _np.random.default_rng(4)
+          _Z = _rng.normal(size=(5, 4))
+          _lab = [0, 3, 1, 1, 2]
+          _l, _g = softmax_xent(_Z, _lab)
+          assert abs(_l - _ref(_Z, _lab)) < 1e-9, "The loss is the mean over the batch of minus the log of the probability of the correct class"
+          assert _np.shape(_g) == (5, 4), "The gradient has the shape of Z"
+          _n = _np.zeros((5, 4))
+          for _i in range(5):
+              for _j in range(4):
+                  _E = _np.zeros((5, 4))
+                  _E[_i, _j] = 1e-6
+                  _n[_i, _j] = (_ref(_Z + _E, _lab) - _ref(_Z - _E, _lab)) / 2e-6
+          assert _np.allclose(_g, _n, atol=1e-6), "The gradient should agree with central differences. It is (P - Y) / B: probabilities minus one-hot labels, divided by the batch size"
+          assert _np.allclose(_np.array(_g).sum(axis=1), 0.0), "Each row of the gradient sums to zero"
+          _lb, _gb = softmax_xent(_np.array([[1000.0, 0.0], [0.0, 1000.0]]), [0, 0])
+          assert abs(_lb - 500.0) < 1e-6 and _np.allclose(_gb, [[0.0, 0.0], [-0.5, 0.5]]), "For the scores (1000, 0) and (0, 1000), both with correct class 0, the loss is 500 and the gradient rows are (0, 0) and (-0.5, 0.5). Subtract each row's largest score before exponentiating"
+          assert output.strip() == "0.7531\n[[-0.1674, 0.1224, 0.045], [0.1667, 0.1667, -0.3333]]", "The program should print 0.7531 and then [[-0.1674, 0.1224, 0.045], [0.1667, 0.1667, -0.3333]]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def softmax_xent(Z, labels):
+                B = len(labels)
+                S = Z - Z.max(axis=1, keepdims=True)
+                P = np.exp(S) / np.exp(S).sum(axis=1, keepdims=True)
+                loss = 0.0
+                Zbar = P * 1.0
+                for i in range(B):
+                    loss -= float(S[i, labels[i]] - np.log(np.exp(S[i]).sum())) / B
+                    Zbar[i, labels[i]] -= 1
+                return loss, Zbar
+
+
+            print("0.7531\n[[-0.1674, 0.1224, 0.045], [0.1667, 0.1667, -0.3333]]")
+          - |
+            import numpy as np
+
+
+            def softmax_xent(Z, labels):
+                B = len(labels)
+                S = Z - Z.max(axis=1, keepdims=True)
+                P = np.exp(S) / np.exp(S).sum(axis=1, keepdims=True)
+                loss = 0.0
+                Zbar = -P / B
+                for i in range(B):
+                    loss -= float(S[i, labels[i]] - np.log(np.exp(S[i]).sum())) / B
+                    Zbar[i, labels[i]] += 1 / B
+                return loss, Zbar
+
+
+            print("0.7531\n[[-0.1674, 0.1224, 0.045], [0.1667, 0.1667, -0.3333]]")
+          - |
+            import numpy as np
+
+
+            def softmax_xent(Z, labels):
+                B = len(labels)
+                S = Z - Z.max()
+                P = np.exp(S) / np.exp(S).sum()
+                loss = 0.0
+                Zbar = P / B
+                for i in range(B):
+                    loss -= float(S[i, labels[i]] - np.log(np.exp(S[i]).sum())) / B
+                    Zbar[i, labels[i]] -= 1 / B
+                return loss, Zbar
+
+
+            print("0.7531\n[[-0.1674, 0.1224, 0.045], [0.1667, 0.1667, -0.3333]]")
+          - |
+            import numpy as np
+
+
+            def softmax_xent(Z, labels):
+                B = len(labels)
+                S = Z
+                P = np.exp(S) / np.exp(S).sum(axis=1, keepdims=True)
+                loss = 0.0
+                Zbar = P / B
+                for i in range(B):
+                    loss -= float(S[i, labels[i]] - np.log(np.exp(S[i]).sum())) / B
+                    Zbar[i, labels[i]] -= 1 / B
+                return loss, Zbar
+
+
+            print("0.7531\n[[-0.1674, 0.1224, 0.045], [0.1667, 0.1667, -0.3333]]")
+        explanation: |
+          The gradient is $(P - Y)/B$. The code builds it without ever forming the one-hot matrix $Y$: start from $P/B$, and subtract $1/B$ at the position of each correct class.
+
+          Subtracting the row's largest score changes no probability, since it multiplies top and bottom of the softmax by the same number. It makes the largest exponent 0, so nothing overflows. The log of a probability is taken as the shifted score minus the log of the sum, which stays finite even when the probability itself rounds to zero. The last wrong version leaves this out and is correct for small scores. For a score of 1000 it computes $e^{1000}$, which is infinite, and returns `nan`.
+
+          The loss for $(1000, 0)$ with class 0 is essentially 0: confident and right. For $(0, 1000)$ with class 0 it is 1000: confident and wrong. The gradient there is $(-0.5, 0.5)$, the full error divided by the batch size of 2. However wrong the prediction, the gradient with respect to the scores never exceeds 1 in size, which is one reason this pairing of output and loss trains so reliably.
+    - question:
+        id: fix-network
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `backward` returns the gradients of the loss of a two-layer network with respect to `W1, b1, W2, b2`. The program compares them with a finite difference along a random direction in all the parameters at once, and should print `0.0`. One of the four gradients is wrong. Fix `backward`.
+        starter: |
+          import numpy as np
+
+
+          def forward(params, X, labels):
+              W1, b1, W2, b2 = params
+              A = X @ W1 + b1
+              H = np.maximum(A, 0.0)
+              Z = H @ W2 + b2
+              P = np.exp(Z) / np.exp(Z).sum(axis=1, keepdims=True)
+              loss = -float(np.mean([np.log(P[i, labels[i]]) for i in range(len(labels))]))
+              return loss, A, H, P
+
+
+          def backward(params, X, labels):
+              W1, b1, W2, b2 = params
+              loss, A, H, P = forward(params, X, labels)
+              B = len(labels)
+              Zbar = P / B
+              for i in range(B):
+                  Zbar[i, labels[i]] -= 1 / B
+              W2bar = H.T @ Zbar
+              b2bar = Zbar.sum(axis=0)
+              Hbar = Zbar @ W2.T
+              Abar = Hbar * (A > 0)
+              W1bar = X.T @ Abar
+              b1bar = Abar.mean(axis=0)
+              return [W1bar, b1bar, W2bar, b2bar]
+
+
+          rng = np.random.default_rng(0)
+          X = rng.normal(size=(4, 3))
+          labels = [0, 2, 1, 2]
+          params = [rng.normal(size=(3, 5)), rng.normal(size=5), rng.normal(size=(5, 3)), rng.normal(size=3)]
+          direction = [rng.normal(size=p.shape) for p in params]
+          h = 1e-6
+          up = forward([p + h * d for p, d in zip(params, direction)], X, labels)[0]
+          down = forward([p - h * d for p, d in zip(params, direction)], X, labels)[0]
+          predicted = sum([float((g * d).sum()) for g, d in zip(backward(params, X, labels), direction)])
+          print(round(abs(predicted - (up - down) / (2 * h)), 4))
+        solution: |
+          import numpy as np
+
+
+          def forward(params, X, labels):
+              W1, b1, W2, b2 = params
+              A = X @ W1 + b1
+              H = np.maximum(A, 0.0)
+              Z = H @ W2 + b2
+              P = np.exp(Z) / np.exp(Z).sum(axis=1, keepdims=True)
+              loss = -float(np.mean([np.log(P[i, labels[i]]) for i in range(len(labels))]))
+              return loss, A, H, P
+
+
+          def backward(params, X, labels):
+              W1, b1, W2, b2 = params
+              loss, A, H, P = forward(params, X, labels)
+              B = len(labels)
+              Zbar = P / B
+              for i in range(B):
+                  Zbar[i, labels[i]] -= 1 / B
+              W2bar = H.T @ Zbar
+              b2bar = Zbar.sum(axis=0)
+              Hbar = Zbar @ W2.T
+              Abar = Hbar * (A > 0)
+              W1bar = X.T @ Abar
+              b1bar = Abar.sum(axis=0)
+              return [W1bar, b1bar, W2bar, b2bar]
+
+
+          rng = np.random.default_rng(0)
+          X = rng.normal(size=(4, 3))
+          labels = [0, 2, 1, 2]
+          params = [rng.normal(size=(3, 5)), rng.normal(size=5), rng.normal(size=(5, 3)), rng.normal(size=3)]
+          direction = [rng.normal(size=p.shape) for p in params]
+          h = 1e-6
+          up = forward([p + h * d for p, d in zip(params, direction)], X, labels)[0]
+          down = forward([p - h * d for p, d in zip(params, direction)], X, labels)[0]
+          predicted = sum([float((g * d).sum()) for g, d in zip(backward(params, X, labels), direction)])
+          print(round(abs(predicted - (up - down) / (2 * h)), 4))
+        tests: |
+          import numpy as _np
+          def _fwd(params, X, labels):
+              W1, b1, W2, b2 = params
+              H = _np.maximum(X @ W1 + b1, 0.0)
+              Z = H @ W2 + b2
+              P = _np.exp(Z) / _np.exp(Z).sum(axis=1, keepdims=True)
+              return -float(_np.mean([_np.log(P[i, labels[i]]) for i in range(len(labels))]))
+          _rng = _np.random.default_rng(7)
+          _X = _rng.normal(size=(6, 3))
+          _lab = [0, 1, 1, 2, 0, 2]
+          _params = [_rng.normal(size=(3, 4)), _rng.normal(size=4), _rng.normal(size=(4, 3)), _rng.normal(size=3)]
+          _grads = backward(_params, _X, _lab)
+          _names = ["W1", "b1", "W2", "b2"]
+          for _k in range(4):
+              assert _np.shape(_grads[_k]) == _params[_k].shape, "The gradient for " + _names[_k] + " should have the shape of " + _names[_k]
+              _n = _np.zeros(_params[_k].size)
+              for _i in range(_params[_k].size):
+                  _E = _np.zeros(_params[_k].size)
+                  _E[_i] = 1e-6
+                  _E = _E.reshape(_params[_k].shape)
+                  _up = [p + _E if j == _k else p for j, p in enumerate(_params)]
+                  _dn = [p - _E if j == _k else p for j, p in enumerate(_params)]
+                  _n[_i] = (_fwd(_up, _X, _lab) - _fwd(_dn, _X, _lab)) / 2e-6
+              assert _np.allclose(_np.array(_grads[_k]).reshape(-1), _n, atol=1e-6), "The gradient for " + _names[_k] + " should agree with central differences. A bias is added to every row of the batch, so its gradient is a sum over the rows"
+          assert output.strip() == "0.0", "The program should print 0.0"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def forward(params, X, labels):
+                W1, b1, W2, b2 = params
+                A = X @ W1 + b1
+                H = np.maximum(A, 0.0)
+                Z = H @ W2 + b2
+                P = np.exp(Z) / np.exp(Z).sum(axis=1, keepdims=True)
+                loss = -float(np.mean([np.log(P[i, labels[i]]) for i in range(len(labels))]))
+                return loss, A, H, P
+
+
+            def backward(params, X, labels):
+                W1, b1, W2, b2 = params
+                loss, A, H, P = forward(params, X, labels)
+                B = len(labels)
+                Zbar = P / B
+                for i in range(B):
+                    Zbar[i, labels[i]] -= 1 / B
+                W2bar = H.T @ Zbar
+                b2bar = Zbar.sum(axis=0)
+                Hbar = Zbar @ W2.T
+                Abar = Hbar * (A > 0)
+                W1bar = X.T @ Abar
+                b1bar = Abar.mean(axis=0)
+                return [W1bar, b1bar, W2bar, b2bar]
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def forward(params, X, labels):
+                W1, b1, W2, b2 = params
+                A = X @ W1 + b1
+                H = np.maximum(A, 0.0)
+                Z = H @ W2 + b2
+                P = np.exp(Z) / np.exp(Z).sum(axis=1, keepdims=True)
+                loss = -float(np.mean([np.log(P[i, labels[i]]) for i in range(len(labels))]))
+                return loss, A, H, P
+
+
+            def backward(params, X, labels):
+                W1, b1, W2, b2 = params
+                loss, A, H, P = forward(params, X, labels)
+                B = len(labels)
+                Zbar = P / B
+                for i in range(B):
+                    Zbar[i, labels[i]] -= 1 / B
+                W2bar = H.T @ Zbar
+                b2bar = Zbar.mean(axis=0)
+                Hbar = Zbar @ W2.T
+                Abar = Hbar * (A > 0)
+                W1bar = X.T @ Abar
+                b1bar = Abar.mean(axis=0)
+                return [W1bar, b1bar, W2bar, b2bar]
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def forward(params, X, labels):
+                W1, b1, W2, b2 = params
+                A = X @ W1 + b1
+                H = np.maximum(A, 0.0)
+                Z = H @ W2 + b2
+                P = np.exp(Z) / np.exp(Z).sum(axis=1, keepdims=True)
+                loss = -float(np.mean([np.log(P[i, labels[i]]) for i in range(len(labels))]))
+                return loss, A, H, P
+
+
+            def backward(params, X, labels):
+                W1, b1, W2, b2 = params
+                loss, A, H, P = forward(params, X, labels)
+                B = len(labels)
+                Zbar = P / B
+                for i in range(B):
+                    Zbar[i, labels[i]] -= 1 / B
+                W2bar = H.T @ Zbar
+                b2bar = Zbar.sum(axis=0)
+                Hbar = Zbar @ W2.T
+                Abar = Hbar
+                W1bar = X.T @ Abar
+                b1bar = Abar.sum(axis=0)
+                return [W1bar, b1bar, W2bar, b2bar]
+
+
+            print("0.0")
+        explanation: |
+          `b1bar` took the **mean** of the rows of `Abar` where the rule is their **sum**. The bias is added to every row, so each row sends back a gradient and they add. The averaging over the batch was already done once, in `Zbar = P / B`, and has been carried back by every line since. Averaging again divides the gradient of this one bias by the batch size.
+
+          The other bias, `b2bar`, was right, and comparing the two lines is the quickest way to the bug. Everything else is the seven lines of the derivation, in order: the error at the scores, the two gradients of the second affine layer, back through its weights, the mask of the rectifier, and the two gradients of the first affine layer.
+
+          The program's check is worth remembering. It does not difference each of the 38 parameters in turn. It moves all of them at once along one random direction and compares the measured change in the loss with $\sum\langle\text{gradient}, \text{direction}\rangle$: two evaluations of the loss, whatever the size of the network, and any wrong gradient shows up.
+    - question:
+        id: work-shape
+        type: choice
+        system: s2
+        prompt: |
+          A layer computes $Y = XW$ with $X$ of shape $32 \times 100$ and $W$ of shape $100 \times 10$. The backward sweep delivers $\bar Y$ of shape $32 \times 10$. Which expression can be $\bar W$?
+        options:
+          - '$\bar YX^\top$'
+          - '$X^\top\bar Y$, of shape $100 \times 10$'
+          - '$X\bar Y^\top$'
+          - '$\bar Y^\top X$, of shape $10 \times 100$'
+        answer: 1
+        explanation: |
+          $\bar W$ must have the shape of $W$, $100 \times 10$. The first and third products are not even defined: their inner sizes, 10 against 100 and 100 against 10 with the wrong partners, do not match. The fourth is defined and is the transpose of the right answer, which is what you get by using the convention with examples as columns. Only $X^\top\bar Y$ has shape $100 \times 10$. Its entry $(i, j)$ is $\sum_kX_{ki}\bar Y_{kj}$: input $i$ times the gradient at output $j$, added over the batch, as the weight joining them requires.
+    - question:
+        id: work-mask
+        type: numeric
+        system: s2
+        prompt: |
+          A rectifier layer received the inputs $(-1, 2, 0.5, -3)$ on the forward pass. On the backward pass the gradient $(5, 6, 7, 8)$ arrives at its output. What is the sum of the entries of the gradient it passes down?
+        answer: "13"
+        explanation: |
+          The units with positive input, the second and third, pass their gradients through unchanged: 6 and 7. The first and fourth had negative input, output 0, and slope 0, so they pass nothing. The gradient passed down is $(0, 6, 7, 0)$, with sum 13. A unit that is inactive for every example in the data receives no gradient at all and cannot change: it is called dead. This is the mask at work, and it is why the forward pass must keep the sign of each input, or equivalently the output.
+    - question:
+        id: work-residual
+        type: choice
+        system: s2
+        prompt: |
+          A network of 100 blocks computes $\mathbf{x}_{k+1} = \mathbf{x}_k + f_k(\mathbf{x}_k)$, where each $f_k$ has a small Jacobian. A plain network computes $\mathbf{x}_{k+1} = f_k(\mathbf{x}_k)$ with the same $f_k$. What does the backward rule say about the gradient reaching the first block?
+        options:
+          - 'It is the same in both, since the functions $f_k$ are the same.'
+          - 'In the plain network it is multiplied by 100 small Jacobians and vanishes. With the connections each block passes $\bar{\mathbf{x}}_{k+1} + J_k^\top\bar{\mathbf{x}}_{k+1}$, so the gradient from the top arrives nearly unchanged, plus small corrections.'
+          - 'In the residual network it explodes, since 100 gradients are added.'
+          - 'In both it is exactly zero.'
+        answer: 1
+        explanation: |
+          The Jacobian of a residual block is $I + J_k$. A product of 100 factors each close to the identity stays of moderate size, while a product of 100 small factors is astronomically small. In terms of paths: the gradient can travel from the loss to any block along the chain of identity connections without passing through a single $f_k$. This one line of the backward rule, $\bar{\mathbf{x}} = \bar{\mathbf{y}} + J_f^\top\bar{\mathbf{y}}$, is what made networks of hundreds of layers trainable, and every transformer is built from such blocks.
+  connections:
+    - text: |
+        The gradient of softmax with cross-entropy is $\mathbf{p} - \mathbf{y}$ because the logarithm and the exponential undo each other, leaving predicted minus true. Most layers are as brief. An **affine layer** returns $\bar YW^\top$, $X^\top\bar Y$ and the column sums of $\bar Y$. An **activation** multiplies by its slope, and the rectifier masks. A **sum** copies its gradient, a **broadcast** sums it, and a **residual connection** adds the incoming gradient to what its branch returns. Each rule is fixed by a differential, confirmed by its shapes, and tested by a finite difference along one random direction.
+
+        That closes the cluster. A derivative with respect to a vector or a matrix is a gradient of the same shape, found by the method of differentials. A calculation is a graph, and its gradient is one backward sweep costing a few evaluations, at a price in memory. Forward mode, Hessian-vector products and implicit differentiation cover the cases the plain sweep does not. And a network's backward pass is a few short rules applied in reverse.
+
+        You have now written all of this by hand, and built an engine that automates it. The library used throughout the field is that engine at scale: arrays that record their own graph, a stored backward rule for every operation, and the same sweep, run on hardware that does the matrix products in parallel. It begins with its array type: [[e7.tensors-and-devices]].
