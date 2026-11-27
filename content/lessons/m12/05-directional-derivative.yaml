@@ -1,0 +1,569 @@
+concept: m12.directional-derivative
+minutes: 80
+claim: You can define the rate of change of a function along any direction as the derivative of the slice along that line, compute it as the dot product of the gradient with a unit vector when the function is differentiable, find the directions of a given slope, estimate it numerically with two evaluations whatever the number of inputs, choose the best step length along a direction, and recognise functions whose directional derivatives all exist though no gradient describes them.
+recalls: [m12.gradient]
+uses: [m12.total-derivative-as-best-linear-approximation, m12.partial-derivatives, m12.functions-of-several-variables, m4.dot-product, m4.angle-and-cosine-similarity, m4.norms-and-distance, m4.vector-addition-and-scaling, m4.projection-onto-a-vector, m5.matrix-vector-product, m10.derivative-as-slope-and-rate, m10.maxima-and-minima, m10.chain-rule, m10.limits-and-continuity, m1.quadratics, m2.trigonometric-functions-on-the-unit-circle, e5.numerical-error-analysis-in-practice, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e5.vectorisation, e5.axis-operations-and-reductions, e0.functions, e0.loops]
+leads: [m12.multivariable-chain-rule, m12.hessian-and-symmetry-of-mixed-partials, m13.jacobian-vector-and-vector-jacobian-products, m19.gradient-descent]
+starter: |
+  # Scratch space. A hill, a walker standing at (1, 1), and the slope of the
+  # ground under their feet for twelve headings round the compass.
+  import math
+
+  def height(x, y):
+      return 10 - 0.3 * x * x - 0.4 * y * y
+
+  t = 1e-5
+  for degrees in range(0, 360, 30):
+      a = math.radians(degrees)
+      ux, uy = math.cos(a), math.sin(a)
+      slope = (height(1 + t * ux, 1 + t * uy) - height(1 - t * ux, 1 - t * uy)) / (2 * t)
+      print(degrees, round(slope, 3))
+parts:
+  recall:
+    - text: |
+        [[m12.gradient]] read the linear approximation as a dot product and found three special directions at a point: along the gradient, where the function climbs fastest, against it, where it falls fastest, and across it, where it stays level. Today every other direction gets its number. Three quick pulls first.
+  puzzle:
+    - text: |
+        A hill has height $h(x, y) = 10 - 0.3x^2 - 0.4y^2$, with its summit above the origin. Heights and distances are in the same units. An engineer stands on the hillside at the point $(1, 1)$ and has to lay out a road from there towards higher ground.
+
+        Straight up the hill the slope is 1: the ground rises one metre for each metre forward, an angle of 45°. No vehicle can climb that. The rule for this road is that its slope must nowhere exceed $\tfrac12$.
+
+        So the road cannot go straight up. It must cross the hillside at a slant, gaining height more slowly. The starter measures the slope of the ground under the engineer's feet along twelve headings, 30° apart.
+
+        Run it. At a heading of 0° the slope is $-0.6$: downhill. At 240° it is 0.993, almost the full steepness. At 210° it is 0.92, at 180° it is 0.6, and at 150° it is 0.12.
+
+        Somewhere between 150° and 180° the slope passes through $\tfrac12$, and somewhere beyond 240° it must come back down through $\tfrac12$ again.
+
+        **Exactly which headings give a slope of one half? How many are there? And how could the slope along any heading be known without measuring each one?**
+  intuition:
+    - text: |
+        **A slice in any direction.** The partial derivatives came from slicing a surface along the axes. Nothing obliges a slice to run along an axis. Stand at a point, choose any heading, and walk in a straight line. The heights you pass through make an ordinary function of one variable, the distance walked. Its derivative at the start is the slope of the ground along that heading. This is the **directional derivative**.
+
+        The starter did exactly this. For each heading it took a tiny step forwards and a tiny step backwards along that line and divided the difference in height by the distance between the two points.
+
+        A partial derivative is the directional derivative along an axis. There was never anything special about the axes, except that they are the directions in which the formula for the function is written.
+
+        **From the gradient.** For a differentiable function there is no need to measure. The last lesson's argument gives every direction at once. A small step $t\mathbf{u}$ along a unit vector $\mathbf{u}$ changes the function by about $\nabla f \cdot (t\mathbf{u})$. Divide by the distance $t$:
+
+        $$\text{slope along } \mathbf{u} = \nabla f \cdot \mathbf{u}.$$
+
+        **The directional derivative is the dot product of the gradient with the direction.** In the lessons on vectors, the dot product of a vector with a unit vector had a meaning: it is how much of the first lies along the second, the length of its shadow on that line. So the slope along a heading is the shadow of the gradient on that heading. Straight along the gradient, the shadow is the whole of it. Square to the gradient, there is no shadow. In between, the shadow is the length of the gradient times the cosine of the angle between.
+
+        The figure shows a point, its gradient, and a direction you can turn. Watch the slope as the direction swings past the gradient and round to the far side.
+    - figure: contours
+      props: { surface: bowl, x: 2, y: 1, show: direction, angle: 60 }
+    - text: |
+        **The road.** On the hill, $\nabla h = (-0.6x, -0.8y)$, which at $(1, 1)$ is $(-0.6, -0.8)$. Its length is 1, the steepest slope, and it points towards the summit, at a heading of about 233°.
+
+        The slope along a heading at angle $\theta$ away from that is $1 \times \cos\theta$. A slope of $\tfrac12$ needs $\cos\theta = \tfrac12$, which is $\theta = 60°$. **There are exactly two such headings, 60° to either side of the line straight up the hill**: about 173° and about 293°. Any heading more than 60° away from straight up is gentle enough. That is why mountain roads zigzag. Each leg crosses the slope at a slant, gaining height at the permitted rate, and at the end of the leg the road turns to the heading on the other side.
+
+        The two legs gain height equally fast. A heading at right angles to the gradient, 143° or 323°, gains none: it follows the contour. And the starter's numbers are all the one formula, $-0.6\cos a - 0.8\sin a$ at compass angle $a$.
+
+        **One number, two evaluations.** Here is a fact that matters more than it looks. To find the whole gradient of a function of a million inputs by differences takes two million evaluations. To find its slope along **one chosen direction** takes two: one a little way forward along that direction, one a little way back. The dimension does not come into it. The directional derivative is the cheapest piece of derivative information there is, and several methods in machine learning are built on asking for it instead of for the whole gradient.
+  derivation:
+    - text: |
+        **Definition.** Let $f : \mathbb{R}^n \to \mathbb{R}$, let $\mathbf{a}$ be a point and $\mathbf{u}$ a unit vector. The **directional derivative of $f$ at $\mathbf{a}$ along $\mathbf{u}$** is
+
+        $$D_{\mathbf{u}} f(\mathbf{a}) = \lim_{t \to 0} \frac{f(\mathbf{a} + t\mathbf{u}) - f(\mathbf{a})}{t},$$
+
+        when the limit exists. Put $\varphi(t) = f(\mathbf{a} + t\mathbf{u})$, the slice of $f$ along the line through $\mathbf{a}$ with direction $\mathbf{u}$. Then $D_{\mathbf{u}} f(\mathbf{a}) = \varphi'(0)$. With $\mathbf{u} = \mathbf{e}_i$ it is the partial derivative $\partial f / \partial x_i$.
+
+        The direction is taken to be a **unit** vector so that $t$ measures distance and the result is a slope: rise per unit of distance. Using a vector $\mathbf{v}$ of some other length in the same formula gives $\lVert \mathbf{v} \rVert$ times the slope, the rate of change per unit of time for something moving with velocity $\mathbf{v}$. Both are useful. Be clear which you mean.
+
+        **Theorem.** If $f$ is differentiable at $\mathbf{a}$, then every directional derivative exists there and
+
+        $$D_{\mathbf{u}} f(\mathbf{a}) = \nabla f(\mathbf{a}) \cdot \mathbf{u}.$$
+
+        *Proof.* By differentiability, $f(\mathbf{a} + t\mathbf{u}) - f(\mathbf{a}) = \nabla f(\mathbf{a}) \cdot (t\mathbf{u}) + E(t\mathbf{u})$, where $|E(t\mathbf{u})| / \lVert t\mathbf{u} \rVert \to 0$. Since $\lVert t\mathbf{u} \rVert = |t|$, dividing by $t$ gives $\nabla f(\mathbf{a}) \cdot \mathbf{u}$ plus a term that tends to 0. $\blacksquare$
+
+        **What follows.** Write $\theta$ for the angle between $\mathbf{u}$ and the gradient, so that $D_{\mathbf{u}} f = \lVert \nabla f \rVert \cos\theta$.
+
+        - The greatest slope is $\lVert \nabla f \rVert$, along the gradient. The least is $-\lVert \nabla f \rVert$, against it.
+        - The slope is 0 exactly in the directions at right angles to the gradient.
+        - $D_{-\mathbf{u}} f = -D_{\mathbf{u}} f$. What rises one way falls the other.
+        - A slope $s$ between the extremes is found in the directions with $\cos\theta = s / \lVert \nabla f \rVert$. In the plane there are two of them. In space they form a cone round the gradient.
+        - As a function of $\mathbf{u}$, the slope is linear: the slope along a direction is the corresponding combination of the slopes along the axes, $D_{\mathbf{u}} f = u_1 \partial_1 f + \dots + u_n \partial_n f$.
+
+        **Numerically.** One central difference along the line:
+
+        $$D_{\mathbf{u}} f(\mathbf{a}) \approx \frac{f(\mathbf{a} + t\mathbf{u}) - f(\mathbf{a} - t\mathbf{u})}{2t}.$$
+
+        Two evaluations, for any $n$. This also gives a cheap test of a gradient you have derived or that a program has computed: pick a direction at random, compute $\nabla f \cdot \mathbf{u}$ from the claimed gradient, and compare with the central difference along $\mathbf{u}$. A gradient that is wrong in any entry will almost surely fail for a random direction.
+    - question:
+        id: derivation-shadow
+        type: choice
+        system: s2
+        prompt: |
+          At a point, $\nabla f = (0, 5)$. What is the slope of $f$ there along the direction $\mathbf{u} = (0.6, 0.8)$, and why is it less than 5?
+        options:
+          - 'It is 5, since the slope is the length of the gradient in every direction.'
+          - 'It is $0 \times 0.6 + 5 \times 0.8 = 4$. The direction is not aligned with the gradient, and only the part of the gradient that lies along the direction contributes: its length times the cosine of the angle between them, which here is 0.8.'
+          - 'It is 3, the part of the gradient across the direction.'
+          - 'It is 7, the sum of the entries of the step times 5.'
+        answer: 1
+        explanation: |
+          The function rises at 5 per unit of distance moving straight along $y$ and not at all moving along $x$. A unit step along $(0.6, 0.8)$ moves 0.8 along $y$ and 0.6 along $x$, so it gains $5 \times 0.8$. The slope along a direction is the projection of the gradient onto it. It can never exceed the length of the gradient, and equals it only when the direction is the gradient's own.
+    - text: |
+        **The best step along a line.** The slice $\varphi(t) = f(\mathbf{a} + t\mathbf{d})$ along a direction $\mathbf{d}$ is a function of one variable, and everything from single-variable calculus applies to it, including minimising. Gradient descent chooses a direction, $\mathbf{d} = -\nabla f$, and then has to choose how far to go. Instead of a fixed step size, one can ask for the $t$ that makes $\varphi$ least. This is a **line search**.
+
+        For the least-squares loss it can be done exactly. Stepping the knobs by $t\mathbf{d}$ changes the predictions by $t X\mathbf{d}$, so the residuals become $\mathbf{r} + tX\mathbf{d}$ and
+
+        $$\varphi(t) = \lVert \mathbf{r} + tX\mathbf{d} \rVert^2 = \lVert \mathbf{r} \rVert^2 + 2t\,\mathbf{r} \cdot X\mathbf{d} + t^2 \lVert X\mathbf{d} \rVert^2.$$
+
+        A parabola in $t$. Its slope at $t = 0$ is $2\,\mathbf{r} \cdot X\mathbf{d}$, which is $\nabla L \cdot \mathbf{d}$, the directional derivative, as it must be. It is lowest where $\varphi'(t) = 0$:
+
+        $$t^{*} = -\frac{\mathbf{r} \cdot X\mathbf{d}}{\lVert X\mathbf{d} \rVert^2}.$$
+
+        From the line $w = 2$, $b = 1$ with $\mathbf{d} = -\nabla L = (-10, -4)$, this gives $t^{*} = \tfrac{58}{1944} \approx 0.0298$, and the loss falls from 2 to about 0.27 in that one step, most of the way to its least value of 0.2.
+
+        **When there is no gradient to speak of.** The theorem needed $f$ to be differentiable. Without that, directional derivatives can exist and still fail to fit together. Two examples, both with value 0 at the origin.
+
+        *Slopes that are not a dot product.* $p(x, y) = \dfrac{x^2 y}{x^2 + y^2}$. Along the unit vector $(u_1, u_2)$ from the origin, $p(tu_1, tu_2) = t\,u_1^2 u_2$, so the directional derivative is $u_1^2 u_2$. Along both axes it is 0, so both partial derivatives are 0 and the gradient would be the zero vector. Yet along $(0.6, 0.8)$ the slope is $0.36 \times 0.8 = 0.288$, not 0. The slopes exist in every direction and are not given by any dot product: they are not a linear function of the direction. The surface has a straight line through the origin in every direction, each with its own tilt, and the tilts do not lie in a common plane. There is no tangent plane.
+
+        *Slopes in every direction, and not even continuous.* $q(x, y) = \dfrac{x^2 y}{x^4 + y^2}$. Along any straight line into the origin the directional derivative exists. But on the parabola $y = x^2$ the value is $\dfrac{x^4}{2x^4} = \dfrac12$, arbitrarily near the origin. Straight lines cannot see what happens along a curve.
+
+        So the hierarchy is: partial derivatives exist, which is weaker than all directional derivatives exist, which is still weaker than differentiable. Only the last means the function has a linear approximation, and only then does the gradient deserve its name. For functions with continuous partial derivatives all three hold, and the distinctions vanish.
+    - question:
+        id: order-road
+        type: order
+        system: s2
+        prompt: Put in order the reasoning that finds the headings with slope one half on the hill at the point $(1, 1)$.
+        steps:
+          - 'Compute the gradient of the height at the point: $(-0.6, -0.8)$.'
+          - 'Its length is 1, so the slope straight up the hill is 1.'
+          - 'The slope along a unit direction is the dot product with the gradient, which is $1 \times \cos\theta$ for a direction at angle $\theta$ to the gradient.'
+          - 'Set $\cos\theta = \tfrac12$, which gives $\theta = 60°$.'
+          - 'So the headings are 60° to either side of the gradient, which itself points at about 233°: about 173° and 293°.'
+        explanation: The gradient turns a question about infinitely many headings into a question about one angle. The two answers are mirror images of each other in the line of steepest ascent, which is why a road up a hill can turn back on itself and keep the same slope.
+  formal:
+    - text: |
+        **Directional derivative.** For a unit vector $\mathbf{u}$, $D_{\mathbf{u}} f(\mathbf{a}) = \lim_{t \to 0} \dfrac{f(\mathbf{a} + t\mathbf{u}) - f(\mathbf{a})}{t} = \dfrac{d}{dt} f(\mathbf{a} + t\mathbf{u}) \Big|_{t = 0}$.
+
+        **Theorem.** If $f$ is differentiable at $\mathbf{a}$, then $D_{\mathbf{u}} f(\mathbf{a}) = \nabla f(\mathbf{a}) \cdot \mathbf{u}$ for every unit vector $\mathbf{u}$. Hence $-\lVert \nabla f(\mathbf{a}) \rVert \le D_{\mathbf{u}} f(\mathbf{a}) \le \lVert \nabla f(\mathbf{a}) \rVert$, with equality on the right only for $\mathbf{u}$ along the gradient.
+
+        **Along a general vector.** For any $\mathbf{v}$, $\dfrac{d}{dt} f(\mathbf{a} + t\mathbf{v}) \Big|_{t = 0} = \nabla f(\mathbf{a}) \cdot \mathbf{v}$ when $f$ is differentiable at $\mathbf{a}$.
+
+        **Converse fails.** The existence of $D_{\mathbf{u}} f(\mathbf{a})$ for every $\mathbf{u}$ does not imply that $f$ is differentiable, or even continuous, at $\mathbf{a}$.
+  drill:
+    - text: |
+        Seconds each. Directions are unit vectors unless a question says otherwise.
+    - question:
+        id: drill-dot
+        type: numeric
+        system: s1
+        prompt: |
+          $\nabla f = (3, 4)$ at a point. What is the directional derivative along $\mathbf{u} = (1, 0)$?
+        answer: "3"
+        explanation: Along the first axis it is the first partial derivative.
+    - question:
+        id: drill-dot-2
+        type: numeric
+        system: s1
+        prompt: |
+          $\nabla f = (3, 4)$ at a point. What is the directional derivative along $\mathbf{u} = (0.6, 0.8)$?
+        answer: "5"
+        explanation: The direction is the gradient's own, so the slope is the gradient's length.
+    - question:
+        id: drill-dot-3
+        type: numeric
+        system: s1
+        prompt: |
+          $\nabla f = (3, 4)$ at a point. What is the directional derivative along $\mathbf{u} = (0.8, -0.6)$?
+        answer: "0"
+        explanation: The direction is at right angles to the gradient.
+    - question:
+        id: drill-reverse
+        type: numeric
+        system: s1
+        prompt: |
+          The slope of $f$ along $\mathbf{u}$ at a point is 2.5. What is it along $-\mathbf{u}$?
+        answer: "-2.5"
+        explanation: Turning round changes the sign of the slope.
+    - question:
+        id: drill-max
+        type: numeric
+        system: s1
+        prompt: |
+          $\nabla f = (6, 8)$ at a point. What is the largest directional derivative there?
+        answer: "10"
+        explanation: It is the length of the gradient.
+    - question:
+        id: drill-cos
+        type: numeric
+        system: s1
+        prompt: |
+          The gradient at a point has length 4. What is the slope along a direction at 60° to the gradient?
+        answer: "2"
+        explanation: Four times the cosine of 60°, which is a half.
+    - question:
+        id: drill-partial
+        type: choice
+        system: s1
+        prompt: |
+          The directional derivative along the standard basis vector $\mathbf{e}_2$ is what?
+        options: ['$\partial f / \partial x_1$', '$\partial f / \partial x_2$', 'The length of the gradient', 'Always zero']
+        answer: 1
+        explanation: A partial derivative is the directional derivative along an axis.
+    - question:
+        id: drill-unit
+        type: choice
+        system: s1
+        prompt: |
+          To find the slope of $f$ along the direction of $\mathbf{v} = (3, 4)$, which vector should the gradient be dotted with?
+        options: ['$(3, 4)$', '$(0.6, 0.8)$', '$(4, 3)$', '$(1, 1)$']
+        answer: 1
+        explanation: A slope is per unit of distance, so the direction must have length 1.
+    - question:
+        id: drill-evals
+        type: numeric
+        system: s1
+        prompt: |
+          How many evaluations of $f$ does one central-difference estimate of a directional derivative need, for a function of 1000 variables?
+        answer: "2"
+        explanation: One point ahead along the line and one behind, whatever the dimension.
+    - question:
+        id: drill-count
+        type: choice
+        system: s1
+        prompt: |
+          In the plane, the gradient at a point has length 1. How many unit directions have slope exactly $\tfrac12$?
+        options: ['One', 'Two', 'Four', 'Infinitely many']
+        answer: 1
+        explanation: One on each side of the gradient, at 60° to it.
+    - question:
+        id: drill-level
+        type: choice
+        system: s1
+        prompt: |
+          The directional derivative along the tangent to a level curve is what?
+        options: ['The length of the gradient', 'Zero', 'One', 'Undefined']
+        answer: 1
+        explanation: The function does not change along its own level curve.
+    - question:
+        id: predict-headings
+        type: predict
+        system: s1
+        prompt: The slope of the hill along three headings, from the gradient. What does this show?
+        code: |
+          import numpy as np
+
+          g = np.array([-0.6, -0.8])
+          for u in [np.array([1.0, 0.0]), np.array([-0.6, -0.8]), np.array([0.8, -0.6])]:
+              print(round(float(g @ u), 2))
+        output: |
+          -0.6
+          1.0
+          0.0
+        explanation: Due east the ground falls at 0.6. Along the gradient itself the slope is the gradient's length, 1. Along the direction at right angles the walker follows the contour and gains nothing.
+    - question:
+        id: predict-not-linear
+        type: predict
+        system: s1
+        prompt: A function with slopes in every direction at the origin that are not a dot product. What does this show?
+        code: |
+          def p(x, y):
+              return x * x * y / (x * x + y * y)
+
+          t = 1e-4
+          for ux, uy in [(1.0, 0.0), (0.0, 1.0), (0.6, 0.8)]:
+              slope = (p(t * ux, t * uy) - p(-t * ux, -t * uy)) / (2 * t)
+              print(round(slope, 4))
+        output: |
+          0.0
+          0.0
+          0.288
+        explanation: Along both axes the function is zero, so both partial derivatives are zero. If the function were differentiable, the slope along every direction would be the dot product with the zero gradient, which is zero. Along (0.6, 0.8) it is 0.36 times 0.8.
+  work:
+    - text: Slower now. For each question decide first whether the direction given is a unit vector.
+    - question:
+        id: write-directional
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `directional(f, a, v)`. `f` takes an array and returns a number, `a` is a point and `v` is a vector giving a direction. `v` is not zero and **need not have length 1**. Return the central-difference estimate, with step `1e-5` of distance, of the slope of `f` at `a` along the direction of `v`, as a float. Use two evaluations of `f`.
+        starter: |
+          import numpy as np
+
+          def directional(f, a, v):
+              # Replace the next line with your own.
+              return 0.0
+
+          hill = lambda p: 10 - 0.3 * p[0] ** 2 - 0.4 * p[1] ** 2
+          print(round(directional(hill, np.array([1.0, 1.0]), np.array([-3.0, -4.0])), 6))
+        solution: |
+          import numpy as np
+
+          def directional(f, a, v):
+              u = v / np.linalg.norm(v)
+              t = 1e-5
+              return float((f(a + t * u) - f(a - t * u)) / (2 * t))
+
+          hill = lambda p: 10 - 0.3 * p[0] ** 2 - 0.4 * p[1] ** 2
+          print(round(directional(hill, np.array([1.0, 1.0]), np.array([-3.0, -4.0])), 6))
+        tests: |
+          import numpy as _np
+          _hill = lambda p: 10 - 0.3 * p[0] ** 2 - 0.4 * p[1] ** 2
+          _a = _np.array([1.0, 1.0])
+          assert abs(directional(_hill, _a, _np.array([-3.0, -4.0])) - 1.0) < 1e-7, "Straight up the hill the slope is 1, whatever the length of the vector given"
+          assert abs(directional(_hill, _a, _np.array([-0.6, -0.8])) - 1.0) < 1e-7, "Straight up the hill the slope is 1"
+          assert abs(directional(_hill, _a, _np.array([1.0, 0.0])) + 0.6) < 1e-7, "Due east the slope is -0.6"
+          assert abs(directional(_hill, _a, _np.array([4.0, -3.0]))) < 1e-7, "Along the contour the slope is 0"
+          assert abs(directional(_hill, _a, _np.array([0.0, -10.0])) - 0.8) < 1e-7, "Due south the slope is 0.8"
+          _count = [0]
+          def _f(p):
+              _count[0] += 1
+              return float((p ** 2).sum())
+          _s = directional(_f, _np.array([1.0, 2.0, 2.0]), _np.array([1.0, 2.0, 2.0]))
+          assert abs(_s - 6.0) < 1e-6, "The squared length at (1, 2, 2) has slope 6 straight outwards"
+          assert _count[0] == 2, "Use exactly two evaluations of f"
+          assert _a.tolist() == [1.0, 1.0], "The point passed in must not be changed"
+          assert abs(float(output.strip()) - 1.0) < 1e-6, "The program should print 1.0"
+        wrong:
+          - |
+            import numpy as np
+
+            def directional(f, a, v):
+                t = 1e-5
+                return float((f(a + t * v) - f(a - t * v)) / (2 * t))
+
+            print(1.0)
+          - |
+            import numpy as np
+
+            def directional(f, a, v):
+                u = v / np.linalg.norm(v)
+                t = 1e-5
+                return float((f(a + t * u) - f(a)) / (2 * t))
+
+            print(1.0)
+          - |
+            import numpy as np
+
+            def directional(f, a, v):
+                u = v / v.sum()
+                t = 1e-5
+                return float((f(a + t * u) - f(a - t * u)) / (2 * t))
+
+            print(1.0)
+          - |
+            import numpy as np
+
+            def directional(f, a, v):
+                u = v / np.linalg.norm(v)
+                g = np.zeros(a.size)
+                for i in range(a.size):
+                    e = np.zeros(a.size)
+                    e[i] = 1e-5
+                    g[i] = (f(a + e) - f(a - e)) / 2e-5
+                return float(g @ u)
+
+            print(1.0)
+        explanation: |
+          Make the direction a unit vector first, by dividing by its length. Then step a distance $t$ forwards and backwards along it and divide by the distance between the two points. Without the normalising, a vector of length 5 gives five times the slope: a rate per unit of $t$ and not per unit of distance. The last wrong version is correct in value and misses the point of the question. It finds the whole gradient with two evaluations for each coordinate and then projects it, where two evaluations in all would do. For three inputs the waste is small. For a million it is the difference between possible and not.
+    - question:
+        id: write-line-search
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `best_step(theta, d, X, y)` for the least-squares loss $L(\boldsymbol\theta) = \lVert X\boldsymbol\theta - \mathbf{y} \rVert^2$. Return the number $t$ that makes $L(\boldsymbol\theta + t\mathbf{d})$ least, as a float. `d` is a direction for which $X\mathbf{d}$ is not zero. Use the formula from the lesson. No loop and no trial of several values of $t$.
+        starter: |
+          import numpy as np
+
+          def best_step(theta, d, X, y):
+              # Replace the next line with your own.
+              return 0.0
+
+          X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          theta = np.array([2.0, 1.0])
+          t = best_step(theta, np.array([-10.0, -4.0]), X, y)
+          end = theta + t * np.array([-10.0, -4.0])
+          print(round(t, 6), round(float(((X @ end - y) ** 2).sum()), 6))
+        solution: |
+          import numpy as np
+
+          def best_step(theta, d, X, y):
+              r = X @ theta - y
+              Xd = X @ d
+              return float(-(r @ Xd) / (Xd @ Xd))
+
+          X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          theta = np.array([2.0, 1.0])
+          t = best_step(theta, np.array([-10.0, -4.0]), X, y)
+          end = theta + t * np.array([-10.0, -4.0])
+          print(round(t, 6), round(float(((X @ end - y) ** 2).sum()), 6))
+        tests: |
+          import numpy as _np
+          _X = _np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          _y = _np.array([1.0, 3.0, 4.0, 6.0])
+          _th = _np.array([2.0, 1.0])
+          _t = best_step(_th, _np.array([-10.0, -4.0]), _X, _y)
+          assert abs(_t - 58.0 / 1944.0) < 1e-12, "Against the gradient from (2, 1) the best step is 58/1944"
+          assert abs(best_step(_th, _np.array([10.0, 4.0]), _X, _y) + 58.0 / 1944.0) < 1e-12, "Along the gradient the best step is the same size and negative"
+          assert abs(best_step(_th, _np.array([-0.4, 0.1]), _X, _y) - 1.0) < 1e-9, "From (2, 1) along (-0.4, 0.1) the best step is 1, which lands on the best line"
+          assert abs(best_step(_np.array([1.6, 1.1]), _np.array([1.0, 0.0]), _X, _y)) < 1e-9, "At the best line no step improves it"
+          _L = lambda p: float(((_X @ p - _y) ** 2).sum())
+          _d = _np.array([1.0, -2.0])
+          _t = best_step(_th, _d, _X, _y)
+          assert _L(_th + _t * _d) <= _L(_th + (_t + 1e-3) * _d) and _L(_th + _t * _d) <= _L(_th + (_t - 1e-3) * _d), "The loss at the best step should be lower than a little further and a little nearer"
+          assert _th.tolist() == [2.0, 1.0], "theta must not be changed"
+          assert output.strip() == "0.029835 0.269547", "The program should print 0.029835 0.269547"
+        wrong:
+          - |
+            import numpy as np
+
+            def best_step(theta, d, X, y):
+                r = X @ theta - y
+                Xd = X @ d
+                return float((r @ Xd) / (Xd @ Xd))
+
+            print("0.029835 0.269547")
+          - |
+            import numpy as np
+
+            def best_step(theta, d, X, y):
+                r = X @ theta - y
+                Xd = X @ d
+                return float(-(r @ Xd) / (d @ d))
+
+            print("0.029835 0.269547")
+          - |
+            import numpy as np
+
+            def best_step(theta, d, X, y):
+                r = X @ theta - y
+                Xd = X @ d
+                return float(-2 * (r @ Xd) / (Xd @ Xd))
+
+            print("0.029835 0.269547")
+        explanation: |
+          Along the line, the residuals are $\mathbf{r} + tX\mathbf{d}$: the current misses, plus $t$ times the change in the predictions per unit step. The squared length of that is a parabola in $t$ with slope $2\,\mathbf{r} \cdot X\mathbf{d}$ at 0 and curvature $2\lVert X\mathbf{d} \rVert^2$, lowest at $t = -\mathbf{r} \cdot X\mathbf{d} / \lVert X\mathbf{d} \rVert^2$. The curvature along the line comes from $X\mathbf{d}$, how far the predictions move, and not from $\mathbf{d}$ itself. From the starting line, one exactly measured step against the gradient takes the loss from 2 to 0.27. It does not reach 0.2, because steepest descent does not point at the minimum. The direction $(-0.4, 0.1)$ does, and along it the best step lands there.
+    - question:
+        id: fix-check
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `agrees(f, grad, a, v)` should test a claimed gradient function `grad` against `f` at the point `a`: it compares the slope along the direction of `v` predicted by the gradient with a central difference along that direction, and returns `True` when they agree to within `1e-6`. `v` need not be a unit vector. It reports that the correct gradient of the squared length is wrong. Fix it.
+        starter: |
+          import numpy as np
+
+          def agrees(f, grad, a, v):
+              u = v / np.linalg.norm(v)
+              t = 1e-5
+              measured = (f(a + t * u) - f(a - t * u)) / (2 * t)
+              predicted = grad(a) @ v
+              return abs(measured - predicted) < 1e-6
+
+          f = lambda p: (p ** 2).sum()
+          print(agrees(f, lambda p: 2 * p, np.array([1.0, 2.0, 3.0]), np.array([2.0, -1.0, 2.0])))
+        solution: |
+          import numpy as np
+
+          def agrees(f, grad, a, v):
+              u = v / np.linalg.norm(v)
+              t = 1e-5
+              measured = (f(a + t * u) - f(a - t * u)) / (2 * t)
+              predicted = grad(a) @ u
+              return abs(measured - predicted) < 1e-6
+
+          f = lambda p: (p ** 2).sum()
+          print(agrees(f, lambda p: 2 * p, np.array([1.0, 2.0, 3.0]), np.array([2.0, -1.0, 2.0])))
+        tests: |
+          import numpy as _np
+          _f = lambda p: (p ** 2).sum()
+          _a = _np.array([1.0, 2.0, 3.0])
+          assert bool(agrees(_f, lambda p: 2 * p, _a, _np.array([2.0, -1.0, 2.0]))) is True, "The gradient of the squared length is twice the point, and should pass along (2, -1, 2)"
+          assert bool(agrees(_f, lambda p: 2 * p, _a, _np.array([0.0, 0.0, 7.0]))) is True, "The correct gradient should pass along any direction"
+          assert bool(agrees(_f, lambda p: p, _a, _np.array([2.0, -1.0, 2.0]))) is False, "A gradient that is half the right one should fail"
+          assert bool(agrees(_f, lambda p: 2 * p + _np.array([0.0, 0.0, 0.5]), _a, _np.array([0.0, 0.0, 2.0]))) is False, "A gradient wrong in its third entry should fail along the third axis"
+          assert bool(agrees(_f, lambda p: 2 * p + _np.array([0.0, 0.0, 0.5]), _a, _np.array([3.0, 4.0, 0.0]))) is True, "A gradient wrong only in its third entry passes along a direction with no third part, which is why one direction is not proof"
+          _g = lambda p: p[0] * p[1]
+          assert bool(agrees(_g, lambda p: _np.array([p[1], p[0]]), _np.array([2.0, 5.0]), _np.array([1.0, 1.0]))) is True, "The gradient of xy is (y, x)"
+          assert bool(agrees(_g, lambda p: _np.array([p[0], p[1]]), _np.array([2.0, 5.0]), _np.array([1.0, 0.0]))) is False, "The gradient of xy is not (x, y)"
+          assert output.strip() == "True", "The program should print True"
+        wrong:
+          - |
+            import numpy as np
+
+            def agrees(f, grad, a, v):
+                u = v / np.linalg.norm(v)
+                t = 1e-5
+                measured = (f(a + t * u) - f(a - t * u)) / (2 * t)
+                predicted = grad(a) @ v
+                return abs(measured - predicted) < 1e-6
+
+            print(True)
+          - |
+            import numpy as np
+
+            def agrees(f, grad, a, v):
+                return True
+
+            print(True)
+          - |
+            import numpy as np
+
+            def agrees(f, grad, a, v):
+                u = v / np.linalg.norm(v)
+                t = 1e-5
+                measured = (f(a + t * u) - f(a)) / t
+                predicted = grad(a) @ u
+                return abs(measured - predicted) < 1e-6
+
+            print(True)
+        explanation: |
+          The measurement was made along the unit vector `u`, a slope per unit of distance. The prediction was made with `v`, three times as long, so it was three times the slope. The two sides of a comparison must describe the same quantity: dot the gradient with the same unit vector that was stepped along. The fifth test is worth a second look. A gradient that is wrong in one entry agrees perfectly along any direction with no component in that entry. One direction tests one combination of the entries. A direction chosen at random has a part along every axis, so it catches an error in any entry, and a few random directions leave very little room for a wrong gradient to hide.
+    - question:
+        id: work-headings
+        type: numeric
+        system: s2
+        prompt: |
+          On the hill, at $(1, 1)$, the gradient is $(-0.6, -0.8)$ with length 1. The engineer decides the road may have slope at most 0.8. What is the smallest angle, in degrees to the nearest whole number, that the road must make with the line straight up the hill?
+        answer: "37"
+        tolerance: "1"
+        unit: "°"
+        explanation: |
+          The slope at angle $\theta$ to the gradient is $\cos\theta$, since the gradient has length 1. $\cos\theta = 0.8$ gives $\theta \approx 36.9°$. Any heading at least that far from straight up is gentle enough. One such heading is due south, $(0, -1)$: its dot product with the gradient is exactly 0.8, and it makes the angle whose cosine is 0.8 with $(-0.6, -0.8)$.
+    - question:
+        id: work-all-directions
+        type: choice
+        system: s2
+        prompt: |
+          $q(x, y) = \dfrac{x^2 y}{x^4 + y^2}$ away from the origin, and $q(0, 0) = 0$. Along every straight line through the origin, $q$ has a directional derivative there. Is $q$ differentiable at the origin?
+        options:
+          - 'Yes. A function with a slope in every direction has a tangent plane.'
+          - 'No. On the parabola $y = x^2$, $q = \dfrac{x^4}{x^4 + x^4} = \dfrac12$ at points as near the origin as you like, while $q(0, 0) = 0$. So $q$ is not continuous at the origin, and a differentiable function is continuous.'
+          - 'Yes, because both partial derivatives are 0 there.'
+          - 'No, because the directional derivatives do not exist along the axes.'
+        answer: 1
+        explanation: |
+          Directional derivatives examine the function along straight lines through the point, each on its own. A straight line $y = mx$ into the origin eventually lies well away from the parabola $y = x^2$, so on each line the function settles down. But the parabola itself approaches the origin tangent to the $x$-axis and carries the value $\tfrac12$ all the way in. Differentiability is a statement about all nearby points at once, with the error controlled by the distance alone. No collection of one-dimensional slices, however complete, can substitute for it. For formulas with continuous partial derivatives none of this arises.
+    - question:
+        id: work-random-direction
+        type: choice
+        system: s2
+        prompt: |
+          A program computes the gradient of a function of 10 000 variables. You want to check it. Comparing every entry with a central difference costs 20 000 evaluations. What does a check along one random unit direction $\mathbf{u}$ cost, and what does it establish?
+        options:
+          - 'It costs 20 000 evaluations as well, and establishes that every entry is right.'
+          - 'It costs two evaluations. It compares the single number $\nabla f \cdot \mathbf{u}$ with the measured slope along $\mathbf{u}$. Agreement does not prove every entry right, but a random direction has a part along every axis, so an error in any entry shows up unless it is cancelled by coincidence.'
+          - 'It costs two evaluations and proves the gradient is exactly right.'
+          - 'It cannot be done, since a directional derivative needs the gradient first.'
+        answer: 1
+        explanation: |
+          The measured slope along $\mathbf{u}$ needs only $f$ at two points. The predicted slope is one dot product with the gradient under test. If the gradient has an error vector $\mathbf{e}$, the two differ by $\mathbf{e} \cdot \mathbf{u}$, which is zero only if the error happens to be at right angles to the direction chosen. For a random direction that has probability zero. Repeating with a few independent directions makes an accidental pass even less likely. This is the standard quick check on a hand-written or machine-computed gradient.
+  connections:
+    - text: |
+        On the hill, the slope under the engineer's feet depended on the heading: 1 straight up, 0 along the contour, and one half along the two headings 60° to either side of straight up, at about 173° and 293°.
+
+        The **directional derivative** $D_{\mathbf{u}} f(\mathbf{a})$ is the derivative of the slice of $f$ along the line through $\mathbf{a}$ with unit direction $\mathbf{u}$. Partial derivatives are the special case of the axes. When $f$ is differentiable, $D_{\mathbf{u}} f = \nabla f \cdot \mathbf{u}$: the shadow of the gradient on the direction, $\lVert \nabla f \rVert \cos\theta$.
+
+        It costs two evaluations to estimate, whatever the number of inputs, and a random direction gives a cheap test of a whole gradient. The slice along a direction can also be minimised, which chooses the length of a descent step: for least squares, $t^{*} = -\mathbf{r} \cdot X\mathbf{d} / \lVert X\mathbf{d} \rVert^2$.
+
+        Without differentiability, slopes can exist in every direction and fail to be a dot product, or even coexist with a jump. Slices along straight lines do not capture a function. The linear approximation does.
+
+        Every slice today was along a straight line, $\mathbf{a} + t\mathbf{u}$. But the engineer's finished road is not straight. It curves as the hillside curves. A weight in a network does not reach the loss directly: it passes through layer after layer first. What is the rate of change of $f$ along a **curved** path, or through a chain of intermediate quantities, each depending on the one before? That is the rule on which all of machine learning's differentiation rests, and it is the next lesson, [[m12.multivariable-chain-rule]].
