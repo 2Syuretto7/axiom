@@ -1,0 +1,614 @@
+concept: m12.jacobian
+minutes: 90
+claim: You can write the Jacobian matrix of a function with several inputs and several outputs, read its rows as gradients of the outputs and its columns as the effect of each input, use it as the matrix of the best linear approximation, compute it numerically one column at a time, multiply Jacobians to differentiate a composition, interpret its determinant as the local factor by which the function scales area, and use it to solve a system of nonlinear equations by Newton's method.
+recalls: [m12.multivariable-chain-rule]
+uses: [m12.total-derivative-as-best-linear-approximation, m12.gradient, m12.partial-derivatives, m12.directional-derivative, m12.functions-of-several-variables, m5.determinant, m5.matrices-as-linear-maps, m5.matrix-vector-product, m5.matrix-multiplication-as-composition, m5.identity-and-inverse, m5.transpose, m5.elimination-and-linear-systems, m10.taylor-approximation, m10.derivatives-of-exp-log-and-trig, m2.trigonometric-functions-on-the-unit-circle, m2.the-exponential-and-e, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e5.indexing-and-slicing, e5.reshaping-views-and-copies, e5.vectorisation, e5.broadcasting, e5.einsum, e5.axis-operations-and-reductions, e5.numerical-error-analysis-in-practice, e5.log-sum-exp-and-stable-formulations, e0.functions, e0.loops]
+leads: [m12.hessian-and-symmetry-of-mixed-partials, m12.inverse-and-implicit-function-theorems, m12.multiple-integrals-and-change-of-variables, m13.jacobian-vector-and-vector-jacobian-products, e6.tensor-valued-autograd]
+starter: |
+  # Scratch space. The map from polar coordinates (r, angle) to the point (x, y).
+  # Take a tiny square of side h in the (r, angle) plane, with a corner at
+  # (r, 0.5), and see what area its image has.
+  import numpy as np
+
+  def polar(p):
+      return np.array([p[0] * np.cos(p[1]), p[0] * np.sin(p[1])])
+
+  h = 0.01
+  for r in [1.0, 2.0, 3.0]:
+      corner = np.array([r, 0.5])
+      side1 = polar(corner + np.array([h, 0.0])) - polar(corner)
+      side2 = polar(corner + np.array([0.0, h])) - polar(corner)
+      area = abs(side1[0] * side2[1] - side1[1] * side2[0])
+      print(r, round(float(area / (h * h)), 3))
+parts:
+  recall:
+    - text: |
+        [[m12.multivariable-chain-rule]] ended by writing the derivative of a composition as a product of two matrices, each the matrix of a linear approximation. Today that matrix is studied for itself. Three quick pulls first.
+  puzzle:
+    - text: |
+        A radar reports where an aircraft is by two numbers: its distance $r$ and its bearing $\theta$. To put the aircraft on a map you convert:
+
+        $$x = r\cos\theta, \qquad y = r\sin\theta.$$
+
+        This is a function with two inputs and two outputs. It is not linear: double the angle and the point does not move twice as far.
+
+        The radar is accurate to within a small amount $h$ in distance and a small amount $h$ in bearing. So what it really reports is a tiny square in the plane of $(r, \theta)$, of area $h^2$. On the map, that square becomes a small patch of uncertainty, in which the aircraft could be. **How big is the patch?**
+
+        The starter works it out for a square at distance 1, at distance 2 and at distance 3, all at the same bearing, by sending three corners of the square through the conversion and measuring the parallelogram they make.
+
+        Run it. At distance 1 the patch has the same area as the square. At distance 2 it has twice the area. At distance 3, three times.
+
+        **Why should the same small error in the readings make a patch three times as large when the aircraft is three times as far away? What, exactly, does a function that is not linear do to a small square? And where does the factor $r$ come from?**
+  intuition:
+    - text: |
+        You know what a **linear** map does to a square. It sends it to a parallelogram, whose sides are the columns of the matrix scaled by the sides of the square, and whose area is the area of the square times the determinant. That was the last lesson of the cluster on matrices.
+
+        The conversion from polar coordinates is not linear. But it is differentiable, and three lessons ago you learnt what that means: **near any point it is very nearly linear.** Zoom in on a small enough square and the curved map looks like a matrix acting on it. So the patch is very nearly a parallelogram, and its area is very nearly the area of the square times a determinant.
+
+        Which matrix? The one whose entries say how each output responds to each input. There are two outputs and two inputs, so there are four partial derivatives, and they arrange themselves into a table with a row for each output and a column for each input:
+
+        $$J = \begin{pmatrix} \dfrac{\partial x}{\partial r} & \dfrac{\partial x}{\partial \theta} \\[2mm] \dfrac{\partial y}{\partial r} & \dfrac{\partial y}{\partial \theta} \end{pmatrix} = \begin{pmatrix} \cos\theta & -r\sin\theta \\ \sin\theta & r\cos\theta \end{pmatrix}.$$
+
+        This is the **Jacobian matrix** of the conversion. Read its columns, as you learnt to read the columns of any matrix: each is where a basis vector goes.
+
+        The first column, $(\cos\theta, \sin\theta)$, is what a small increase in $r$ does to the point: it moves it straight outwards, one unit of distance for each unit of $r$.
+
+        The second column, $(-r\sin\theta, r\cos\theta)$, is what a small increase in $\theta$ does: it moves the point sideways, round the circle, and **$r$ units of distance for each unit of angle.** The further out the aircraft is, the further a given swing of the bearing carries it.
+
+        So the tiny square of side $h$ becomes a tiny patch with one side of length $h$, pointing outwards, and the other of length $rh$, pointing round the circle. Its area is $rh^2$. The factor is $r$, and it is the determinant of the Jacobian: $\cos\theta \cdot r\cos\theta + r\sin\theta \cdot \sin\theta = r$.
+
+        The figure shows the patch. Change the distance and watch one side of it grow.
+    - figure: polar-cell
+      props: { r: 2 }
+    - text: |
+        That is the whole idea of this lesson, said twice. **The Jacobian is the matrix that a function looks like when you zoom in.** Everything you know about matrices then applies locally. Its columns say what each input does. Its rows say what each output listens to. Its determinant says how areas are scaled near the point. Whether it has an inverse says whether the function can be undone near the point. And the product of two Jacobians is the Jacobian of doing one function after the other.
+
+        A function of one variable had, at each point, one number that summarised it: its slope. A scalar function of several variables had a vector, its gradient. A function with several inputs **and** several outputs has a matrix. The slope and the gradient are the cases where the matrix has one entry or one row.
+  derivation:
+    - text: |
+        **Definition.** Let $\mathbf{f} : \mathbb{R}^n \to \mathbb{R}^m$ have component functions $f_1, \dots, f_m$. Its **Jacobian matrix** at $\mathbf{a}$ is the $m$ by $n$ matrix of all first partial derivatives:
+
+        $$J_{\mathbf{f}}(\mathbf{a}) = \begin{pmatrix} \dfrac{\partial f_1}{\partial x_1} & \cdots & \dfrac{\partial f_1}{\partial x_n} \\ \vdots & & \vdots \\ \dfrac{\partial f_m}{\partial x_1} & \cdots & \dfrac{\partial f_m}{\partial x_n} \end{pmatrix}, \qquad J_{ij} = \frac{\partial f_i}{\partial x_j}.$$
+
+        **Outputs down, inputs across.** It has as many rows as outputs and as many columns as inputs, so that it can multiply a step in the inputs and give a change in the outputs.
+
+        - **Row $i$** is the gradient of the output $f_i$.
+        - **Column $j$** is $\partial \mathbf{f} / \partial x_j$: the velocity of the output as input $j$ alone is increased.
+
+        When $\mathbf{f}$ is differentiable, the Jacobian is the matrix of its total derivative, and
+
+        $$\mathbf{f}(\mathbf{a} + \mathbf{h}) \approx \mathbf{f}(\mathbf{a}) + J_{\mathbf{f}}(\mathbf{a})\,\mathbf{h}.$$
+
+        For $m = 1$ the Jacobian is a single row, the gradient laid on its side.
+
+        **Three Jacobians to know.**
+
+        *A linear map.* $\mathbf{f}(\mathbf{x}) = A\mathbf{x}$. Output $i$ is $\sum_j a_{ij} x_j$, whose partial derivative with respect to $x_j$ is $a_{ij}$. So $J = A$, at every point. A linear map is its own linear approximation.
+
+        *An elementwise function.* Apply one function $\sigma$ of one variable to every entry: $f_i(\mathbf{x}) = \sigma(x_i)$. Output $i$ depends on input $i$ and on no other, so the Jacobian is **diagonal**, with entries $\sigma'(x_i)$. For $\tanh$ it is the diagonal matrix of $1 - \tanh^2 x_i$. Nobody stores such a matrix. Multiplying by it is multiplying entry by entry.
+
+        *Softmax.* $p_i = \dfrac{e^{s_i}}{\sum_k e^{s_k}}$ turns scores into probabilities. Every output depends on every score, through the sum on the bottom. Differentiating with the quotient rule,
+
+        $$\frac{\partial p_i}{\partial s_j} = p_i\,(\delta_{ij} - p_j), \qquad\text{that is,}\qquad J = \operatorname{diag}(\mathbf{p}) - \mathbf{p}\,\mathbf{p}^{\mathsf T},$$
+
+        where $\delta_{ij}$ is 1 if $i = j$ and 0 otherwise. Raising a score raises its own probability, the diagonal term, and lowers all the others, since the probabilities must still add up to 1. For that reason every column of this Jacobian sums to 0.
+
+        **Numerically.** Column $j$ is a partial derivative of the whole output vector, so one central difference gives a whole column:
+
+        $$\text{column } j \approx \frac{\mathbf{f}(\mathbf{a} + h\mathbf{e}_j) - \mathbf{f}(\mathbf{a} - h\mathbf{e}_j)}{2h}.$$
+
+        The full Jacobian costs $2n$ evaluations, whatever the number of outputs.
+    - question:
+        id: derivation-columns
+        type: choice
+        system: s2
+        prompt: |
+          For the polar conversion at $r = 3$, $\theta = 0$, the Jacobian is $\begin{pmatrix} 1 & 0 \\ 0 & 3 \end{pmatrix}$. The radar's bearing is off by a small angle $\varepsilon$ and its distance is exact. Where does the map put the aircraft, relative to where it is?
+        options:
+          - 'About $\varepsilon$ too far out, along the $x$-axis.'
+          - 'About $3\varepsilon$ to the side, along the $y$-axis. The error in the inputs is the step $(0, \varepsilon)$, and the Jacobian sends it to $3\varepsilon$ times the second basis vector: the second column says what a change of bearing does.'
+          - 'About $\varepsilon$ to the side, along the $y$-axis.'
+          - 'Exactly where it is, since the distance is right.'
+        answer: 1
+        explanation: |
+          The error in the output is approximately the Jacobian applied to the error in the input: $J\,(0, \varepsilon)^{\mathsf T} = (0, 3\varepsilon)^{\mathsf T}$. The second column of the Jacobian is the response to the second input. At bearing 0 a change in bearing swings the point sideways, in the $y$ direction, and at distance 3 an angle $\varepsilon$ subtends an arc of length $3\varepsilon$. This is error propagation, as in the lesson on the total derivative, for several outputs at once.
+    - text: |
+        **The chain rule.** In this notation the last lesson's theorem is
+
+        $$J_{\mathbf{f} \circ \mathbf{g}}(\mathbf{a}) = J_{\mathbf{f}}(\mathbf{g}(\mathbf{a}))\;J_{\mathbf{g}}(\mathbf{a}).$$
+
+        The shapes must chain: if $\mathbf{g}$ goes from $k$ inputs to $n$ and $\mathbf{f}$ from $n$ to $m$, the product is $(m \times n)(n \times k) = m \times k$. A network of layers has a Jacobian that is the product of the Jacobians of its layers. For a layer $\mathbf{x} \mapsto \tanh(W\mathbf{x})$ it is a diagonal matrix times $W$.
+
+        **The determinant.** When $m = n$ the Jacobian is square and has a determinant, called the **Jacobian determinant** or simply "the Jacobian". Since $\mathbf{f}$ acts on a small region near $\mathbf{a}$ approximately as the linear map $J$, and a linear map multiplies every area by the absolute value of its determinant:
+
+        $$\text{area of the image of a small region near } \mathbf{a} \;\approx\; |\det J_{\mathbf{f}}(\mathbf{a})| \times \text{area of the region}.$$
+
+        In three dimensions read volume for area. **The Jacobian determinant is the local magnification of the map.** For polar coordinates it is $r$. Its sign says whether the map keeps the orientation of small figures or mirrors them.
+
+        Where the determinant is zero, the map squashes small regions flat, at least to first order. For polar coordinates that happens at $r = 0$: the whole edge $r = 0$ of the $(r, \theta)$ plane, every bearing at distance zero, is sent to the single point at the origin. At such a point the map cannot be undone, since the bearing cannot be recovered. Where the determinant is not zero, the linear approximation has an inverse, and the next lesson but two shows that the map itself then has one nearby.
+
+        **Newton's method for systems.** In one variable, Newton's method solved $f(x) = 0$ by replacing $f$ with its tangent line and solving that instead. The same idea solves $n$ equations in $n$ unknowns, $\mathbf{F}(\mathbf{x}) = \mathbf{0}$. Near the current guess, $\mathbf{F}(\mathbf{x} + \mathbf{d}) \approx \mathbf{F}(\mathbf{x}) + J\mathbf{d}$. Ask for the step that makes the approximation zero:
+
+        $$J(\mathbf{x})\,\mathbf{d} = -\mathbf{F}(\mathbf{x}), \qquad \mathbf{x} \leftarrow \mathbf{x} + \mathbf{d}.$$
+
+        Each step is one linear system, solved with `np.linalg.solve`. For example, to find where the circle $x^2 + y^2 = 4$ meets the line $y = x$, take $\mathbf{F}(x, y) = (x^2 + y^2 - 4,\ x - y)$, with Jacobian $\begin{pmatrix} 2x & 2y \\ 1 & -1 \end{pmatrix}$. From the guess $(2, 1)$, where $\mathbf{F} = (1, 1)$, the system $4d_1 + 2d_2 = -1$, $d_1 - d_2 = -1$ gives $\mathbf{d} = (-0.5, 0.5)$ and the new guess $(1.5, 1.5)$. One more step gives $(1.4167, 1.4167)$, and the answer is $(\sqrt2, \sqrt2) \approx (1.4142, 1.4142)$. Near a solution the number of correct digits roughly doubles at each step, as it did in one variable.
+    - question:
+        id: order-newton
+        type: order
+        system: s2
+        prompt: Put in order one step of Newton's method for a system $\mathbf{F}(\mathbf{x}) = \mathbf{0}$.
+        steps:
+          - 'Evaluate $\mathbf{F}$ at the current guess.'
+          - 'Evaluate the Jacobian of $\mathbf{F}$ at the current guess.'
+          - 'Solve the linear system $J\mathbf{d} = -\mathbf{F}$ for the step $\mathbf{d}$.'
+          - 'Add the step to the guess.'
+          - 'Check whether $\mathbf{F}$ at the new guess is close enough to zero, and if not, repeat.'
+        explanation: Both the value and the Jacobian are taken at the current guess, since the linear approximation is only good near the point where it was made. The step solves the approximate problem exactly. Because the approximation improves as the guesses close in, each step is better than the last.
+  formal:
+    - text: |
+        **Jacobian.** For $\mathbf{f} : D \to \mathbb{R}^m$, $D \subseteq \mathbb{R}^n$, the Jacobian at $\mathbf{a}$ is the $m \times n$ matrix $J_{\mathbf{f}}(\mathbf{a})$ with entries $\dfrac{\partial f_i}{\partial x_j}(\mathbf{a})$. If $\mathbf{f}$ is differentiable at $\mathbf{a}$, then $D\mathbf{f}(\mathbf{a})\,\mathbf{h} = J_{\mathbf{f}}(\mathbf{a})\,\mathbf{h}$.
+
+        **Relation to the gradient.** For $m = 1$, $J_f = (\nabla f)^{\mathsf T}$.
+
+        **Chain rule.** $J_{\mathbf{f} \circ \mathbf{g}}(\mathbf{a}) = J_{\mathbf{f}}(\mathbf{g}(\mathbf{a}))\,J_{\mathbf{g}}(\mathbf{a})$.
+
+        **Standard Jacobians.** For $\mathbf{f}(\mathbf{x}) = A\mathbf{x} + \mathbf{b}$, $J = A$. For $f_i(\mathbf{x}) = \sigma(x_i)$, $J = \operatorname{diag}(\sigma'(x_1), \dots, \sigma'(x_n))$. For softmax, $J = \operatorname{diag}(\mathbf{p}) - \mathbf{p}\mathbf{p}^{\mathsf T}$.
+
+        **Jacobian determinant.** For $m = n$, $\det J_{\mathbf{f}}(\mathbf{a})$ is the factor by which $\mathbf{f}$ scales signed volume to first order at $\mathbf{a}$. By the chain rule and the product rule for determinants, $\det J_{\mathbf{f} \circ \mathbf{g}} = \det J_{\mathbf{f}} \cdot \det J_{\mathbf{g}}$.
+
+        **Newton's method.** $\mathbf{x}_{k+1} = \mathbf{x}_k - J_{\mathbf{F}}(\mathbf{x}_k)^{-1}\,\mathbf{F}(\mathbf{x}_k)$.
+  drill:
+    - text: |
+        Seconds each. Outputs down, inputs across.
+    - question:
+        id: drill-shape
+        type: choice
+        system: s1
+        prompt: |
+          $\mathbf{f} : \mathbb{R}^3 \to \mathbb{R}^2$. What is the shape of its Jacobian?
+        options: ['2 by 3', '3 by 2', '3 by 3', '2 by 2']
+        answer: 0
+        explanation: Two rows for the outputs and three columns for the inputs.
+    - question:
+        id: drill-shape-2
+        type: choice
+        system: s1
+        prompt: |
+          A layer takes a vector of 100 numbers to a vector of 10. What is the shape of its Jacobian?
+        options: ['100 by 10', '10 by 100', '10 by 10', '110 by 1']
+        answer: 1
+        explanation: Ten outputs down and a hundred inputs across.
+    - question:
+        id: drill-row
+        type: choice
+        system: s1
+        prompt: |
+          What is row $i$ of a Jacobian?
+        options: ['The gradient of output $i$', 'The effect of input $i$ on every output', 'The $i$-th input', 'Always a unit vector']
+        answer: 0
+        explanation: It lists the partial derivatives of one output with respect to every input.
+    - question:
+        id: drill-column
+        type: choice
+        system: s1
+        prompt: |
+          What is column $j$ of a Jacobian?
+        options: ['The gradient of output $j$', 'The rate of change of the whole output vector as input $j$ alone increases', 'The $j$-th output', 'The determinant']
+        answer: 1
+        explanation: It lists the partial derivatives of every output with respect to one input.
+    - question:
+        id: drill-linear
+        type: choice
+        system: s1
+        prompt: |
+          $\mathbf{f}(\mathbf{x}) = A\mathbf{x}$. What is its Jacobian?
+        options: ['$A$', '$A^{\mathsf T}$', '$A\mathbf{x}$', 'The identity']
+        answer: 0
+        explanation: A linear map is its own best linear approximation.
+    - question:
+        id: drill-entry
+        type: numeric
+        system: s1
+        prompt: |
+          $\mathbf{f}(x, y) = (x^2 y,\ x + y)$. What is the entry in row 1, column 2 of its Jacobian at $(3, 5)$? Rows and columns are counted from 1.
+        answer: "9"
+        explanation: It is the partial derivative of the first output with respect to y, which is x squared.
+    - question:
+        id: drill-entry-2
+        type: numeric
+        system: s1
+        prompt: |
+          $\mathbf{f}(x, y) = (x^2 y,\ x + y)$. What is the entry in row 1, column 1 of its Jacobian at $(3, 5)$?
+        answer: "30"
+        explanation: It is the partial derivative of the first output with respect to x, which is 2xy.
+    - question:
+        id: drill-diagonal
+        type: choice
+        system: s1
+        prompt: |
+          A function applies $\tanh$ to each entry of a vector separately. What kind of matrix is its Jacobian?
+        options: ['Diagonal', 'Symmetric with no zeros', 'The zero matrix', 'A single row']
+        answer: 0
+        explanation: Each output depends on its own input only.
+    - question:
+        id: drill-det-polar
+        type: numeric
+        system: s1
+        prompt: |
+          What is the Jacobian determinant of the polar conversion $(r, \theta) \mapsto (r\cos\theta, r\sin\theta)$ at $r = 4$, $\theta = 1$?
+        answer: "4"
+        explanation: The determinant is r, whatever the angle.
+    - question:
+        id: drill-area
+        type: numeric
+        system: s1
+        prompt: |
+          At a point, a map from the plane to the plane has Jacobian determinant $-3$. A small region of area 0.01 near the point is sent to a region of about what area?
+        answer: "0.03"
+        tolerance: "0.0001"
+        explanation: Areas are multiplied by the absolute value of the determinant.
+    - question:
+        id: drill-chain
+        type: choice
+        system: s1
+        prompt: |
+          What is the Jacobian of $\mathbf{f} \circ \mathbf{g}$ at $\mathbf{a}$?
+        options: ['$J_{\mathbf{g}}(\mathbf{a})\,J_{\mathbf{f}}(\mathbf{a})$', '$J_{\mathbf{f}}(\mathbf{g}(\mathbf{a}))\,J_{\mathbf{g}}(\mathbf{a})$', '$J_{\mathbf{f}}(\mathbf{a}) + J_{\mathbf{g}}(\mathbf{a})$', '$J_{\mathbf{f}}(\mathbf{a})\,J_{\mathbf{g}}(\mathbf{g}(\mathbf{a}))$']
+        answer: 1
+        explanation: The outer function is differentiated where the inner one sends the point, and its matrix goes on the left.
+    - question:
+        id: drill-softmax
+        type: numeric
+        system: s1
+        prompt: |
+          Each column of the Jacobian of softmax sums to what number?
+        answer: "0"
+        explanation: The probabilities always add up to 1, so a change in any score changes their total by nothing.
+    - question:
+        id: predict-polar
+        type: predict
+        system: s1
+        prompt: The Jacobian of the polar conversion at distance 2 and bearing 0. What does this show?
+        code: |
+          import numpy as np
+
+          r, t = 2.0, 0.0
+          J = np.array([[np.cos(t), -r * np.sin(t)], [np.sin(t), r * np.cos(t)]])
+          print(J.tolist())
+          print(float(np.linalg.det(J)))
+          print((J @ np.array([0.0, 0.1])).tolist())
+        output: |
+          [[1.0, -0.0], [0.0, 2.0]]
+          2.0
+          [0.0, 0.2]
+        explanation: At bearing 0, a change in distance moves the point along x, and a change in bearing moves it along y at 2 units of distance per unit of angle. The determinant is the distance, 2. An error of 0.1 in the bearing becomes a sideways error of 0.2.
+    - question:
+        id: predict-softmax
+        type: predict
+        system: s1
+        prompt: The Jacobian of softmax at equal scores. What does this show?
+        code: |
+          import numpy as np
+
+          p = np.array([0.25, 0.25, 0.25, 0.25])
+          J = np.diag(p) - p[:, np.newaxis] * p[np.newaxis, :]
+          print(J.shape, float(J[0, 0]), float(J[0, 1]))
+          print(J.sum(axis=0).tolist())
+        output: |
+          (4, 4) 0.1875 -0.0625
+          [0.0, 0.0, 0.0, 0.0]
+        explanation: Four scores and four probabilities give a 4 by 4 matrix. The diagonal entry is a quarter less a sixteenth, and each off-diagonal entry is minus a sixteenth. Raising one score takes three sixteenths for itself and one sixteenth from each of the other three, so each column sums to zero.
+  work:
+    - text: Slower now. Fix the shape of each Jacobian before filling in any entry.
+    - question:
+        id: write-jacobian
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `jacobian(f, a)`. `f` takes a one-dimensional array of length $n$ and returns a one-dimensional array of length $m$. Return the $m$ by $n$ array of central-difference estimates of its Jacobian at `a`, with step `1e-5`. Use $2n$ evaluations of `f`, and leave `a` unchanged.
+        starter: |
+          import numpy as np
+
+          def jacobian(f, a):
+              # Replace the next line with your own.
+              return np.zeros((f(a).size, a.size))
+
+          polar = lambda p: np.array([p[0] * np.cos(p[1]), p[0] * np.sin(p[1])])
+          J = jacobian(polar, np.array([2.0, 0.0]))
+          print([[round(float(v), 4) + 0.0 for v in row] for row in J])
+        solution: |
+          import numpy as np
+
+          def jacobian(f, a):
+              h = 1e-5
+              columns = []
+              for j in range(a.size):
+                  step = np.zeros(a.size)
+                  step[j] = h
+                  columns.append((f(a + step) - f(a - step)) / (2 * h))
+              return np.stack(columns, axis=1)
+
+          polar = lambda p: np.array([p[0] * np.cos(p[1]), p[0] * np.sin(p[1])])
+          J = jacobian(polar, np.array([2.0, 0.0]))
+          print([[round(float(v), 4) + 0.0 for v in row] for row in J])
+        tests: |
+          import numpy as _np
+          _polar = lambda p: _np.array([p[0] * _np.cos(p[1]), p[0] * _np.sin(p[1])])
+          _a = _np.array([2.0, 0.0])
+          _J = jacobian(_polar, _a)
+          assert _J.shape == (2, 2), "Two outputs and two inputs give a 2 by 2 matrix"
+          assert _np.allclose(_J, [[1.0, 0.0], [0.0, 2.0]], atol=1e-7), "At r = 2 and angle 0 the Jacobian is [[1, 0], [0, 2]]"
+          assert _a.tolist() == [2.0, 0.0], "The point passed in must not be changed"
+          _b = _np.array([3.0, 0.5])
+          assert _np.allclose(jacobian(_polar, _b), [[_np.cos(0.5), -3 * _np.sin(0.5)], [_np.sin(0.5), 3 * _np.cos(0.5)]], atol=1e-7), "At r = 3 and angle 0.5 it should match the formula"
+          _f = lambda v: _np.array([v[0] * v[1], v[1] * v[2], v[0] + v[2], v[0] ** 2])
+          _J = jacobian(_f, _np.array([1.0, 2.0, 3.0]))
+          assert _J.shape == (4, 3), "Four outputs and three inputs give a 4 by 3 matrix: outputs down, inputs across"
+          assert _np.allclose(_J, [[2.0, 1.0, 0.0], [0.0, 3.0, 2.0], [1.0, 0.0, 1.0], [2.0, 0.0, 0.0]], atol=1e-7), "Entry [i, j] is the partial derivative of output i with respect to input j"
+          _A = _np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+          assert _np.allclose(jacobian(lambda v: _A @ v, _np.array([0.3, -0.7])), _A, atol=1e-7), "The Jacobian of a linear map is its matrix"
+          _n = [0]
+          def _g(v):
+              _n[0] += 1
+              return _np.array([v.sum(), (v ** 2).sum()])
+          jacobian(_g, _np.array([1.0, 2.0, 3.0, 4.0, 5.0]))
+          assert _n[0] == 10, "Use two evaluations of f for each input"
+          assert output.strip() == "[[1.0, 0.0], [0.0, 2.0]]", "The program should print [[1.0, 0.0], [0.0, 2.0]]"
+        wrong:
+          - |
+            import numpy as np
+
+            def jacobian(f, a):
+                h = 1e-5
+                columns = []
+                for j in range(a.size):
+                    step = np.zeros(a.size)
+                    step[j] = h
+                    columns.append((f(a + step) - f(a - step)) / (2 * h))
+                return np.stack(columns, axis=0)
+
+            print([[1.0, 0.0], [0.0, 2.0]])
+          - |
+            import numpy as np
+
+            def jacobian(f, a):
+                h = 1e-5
+                columns = []
+                for j in range(a.size):
+                    step = np.zeros(a.size)
+                    step[j] = h
+                    columns.append((f(a + step) - f(a)) / (2 * h))
+                return np.stack(columns, axis=1)
+
+            print([[1.0, 0.0], [0.0, 2.0]])
+          - |
+            import numpy as np
+
+            def jacobian(f, a):
+                h = 1e-5
+                columns = []
+                for j in range(a.size):
+                    columns.append((f(a + h) - f(a - h)) / (2 * h))
+                return np.stack(columns, axis=1)
+
+            print([[1.0, 0.0], [0.0, 2.0]])
+        explanation: |
+          Stepping input $j$ and differencing the **whole output vector** gives every entry of column $j$ at once, so the loop is over inputs, and the results are stacked side by side as columns, along axis 1. Stacking them along axis 0 makes them rows, which is the transpose. For a square matrix that mistake keeps the right shape and is easy to miss, which is why the tests use a function from three inputs to four outputs. The cost is two evaluations for each input and does not depend on the number of outputs.
+    - question:
+        id: write-newton
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `newton(F, J, x, steps)`. `F` takes a point (an array of length $n$) and returns an array of length $n$, and `J` takes a point and returns the $n$ by $n$ Jacobian of `F` there. Starting from the array `x`, take `steps` steps of Newton's method for solving $\mathbf{F}(\mathbf{x}) = \mathbf{0}$ and return the final point. Do not compute an inverse matrix, and leave `x` unchanged.
+        starter: |
+          import numpy as np
+
+          def newton(F, J, x, steps):
+              # Replace the next line with your own.
+              return x
+
+          F = lambda p: np.array([p[0] ** 2 + p[1] ** 2 - 4, p[0] - p[1]])
+          J = lambda p: np.array([[2 * p[0], 2 * p[1]], [1.0, -1.0]])
+          print([round(float(v), 6) for v in newton(F, J, np.array([2.0, 1.0]), 5)])
+        solution: |
+          import numpy as np
+
+          def newton(F, J, x, steps):
+              p = x.copy()
+              for k in range(steps):
+                  p = p + np.linalg.solve(J(p), -F(p))
+              return p
+
+          F = lambda p: np.array([p[0] ** 2 + p[1] ** 2 - 4, p[0] - p[1]])
+          J = lambda p: np.array([[2 * p[0], 2 * p[1]], [1.0, -1.0]])
+          print([round(float(v), 6) for v in newton(F, J, np.array([2.0, 1.0]), 5)])
+        tests: |
+          import numpy as _np
+          _F = lambda p: _np.array([p[0] ** 2 + p[1] ** 2 - 4, p[0] - p[1]])
+          _J = lambda p: _np.array([[2 * p[0], 2 * p[1]], [1.0, -1.0]])
+          _s = _np.array([2.0, 1.0])
+          assert _np.allclose(newton(_F, _J, _s, 1), [1.5, 1.5]), "One step from (2, 1) lands on (1.5, 1.5)"
+          assert _s.tolist() == [2.0, 1.0], "The starting array must not be changed"
+          assert _np.allclose(newton(_F, _J, _s, 2), [17.0 / 12.0, 17.0 / 12.0]), "Two steps land on (17/12, 17/12)"
+          assert float(abs(newton(_F, _J, _s, 6) - _np.sqrt(2.0)).max()) < 1e-12, "Six steps reach the square root of 2 in both coordinates, to twelve places"
+          assert _np.allclose(newton(_F, _J, _s, 0), [2.0, 1.0]), "With no steps the result is the start"
+          _A = _np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 4.0]])
+          _b = _np.array([1.0, 2.0, 3.0])
+          _r = newton(lambda p: _A @ p - _b, lambda p: _A, _np.zeros(3), 1)
+          assert _np.allclose(_A @ _r, _b), "For a linear system one step gives the exact solution"
+          assert "inv" not in source, "Solve the linear system and do not form an inverse"
+          assert output.strip() == "[1.414214, 1.414214]", "The program should print [1.414214, 1.414214]"
+        wrong:
+          - |
+            import numpy as np
+
+            def newton(F, J, x, steps):
+                p = x.copy()
+                for k in range(steps):
+                    p = p + np.linalg.solve(J(p), F(p))
+                return p
+
+            print([1.414214, 1.414214])
+          - |
+            import numpy as np
+
+            def newton(F, J, x, steps):
+                p = x.copy()
+                J0 = J(p)
+                for k in range(steps):
+                    p = p + np.linalg.solve(J0, -F(p))
+                return p
+
+            print([1.414214, 1.414214])
+          - |
+            import numpy as np
+
+            def newton(F, J, x, steps):
+                p = x.copy()
+                for k in range(steps):
+                    p = p - J(p).T @ F(p)
+                return p
+
+            print([1.414214, 1.414214])
+        explanation: |
+          At each guess, the function is replaced by its linear approximation, $\mathbf{F}(\mathbf{p}) + J\mathbf{d}$, and the step is the $\mathbf{d}$ that makes that zero: the solution of $J\mathbf{d} = -\mathbf{F}$. `np.linalg.solve` finds it by elimination, which is both cheaper and more accurate than forming the inverse, as you saw in the lesson on linear algebra routines. The Jacobian must be evaluated afresh at every guess. Keeping the first one still converges here, and far more slowly: after six steps it is right to about eight places, where the true method was right to sixteen after five. For a function that is already linear, the approximation is exact and one step solves the system.
+    - question:
+        id: fix-layer
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          A layer computes $\mathbf{y} = \tanh(W\mathbf{x})$. `layer_jacobian(W, x)` should return its Jacobian with respect to $\mathbf{x}$: one row for each output and one column for each input. It should agree with central differences, and the program prints `False`. Fix `layer_jacobian`.
+        starter: |
+          import numpy as np
+
+          def layer_jacobian(W, x):
+              y = np.tanh(W @ x)
+              return W * (1 - y * y)
+
+          W = np.array([[1.0, 2.0, 0.0], [0.0, -1.0, 1.0]])
+          x = np.array([0.5, -0.2, 0.3])
+          h = 1e-5
+          numeric = np.stack([(np.tanh(W @ (x + h * e)) - np.tanh(W @ (x - h * e))) / (2 * h) for e in np.eye(3)], axis=1)
+          print(np.allclose(layer_jacobian(W, x), numeric, atol=1e-8))
+        solution: |
+          import numpy as np
+
+          def layer_jacobian(W, x):
+              y = np.tanh(W @ x)
+              return (1 - y * y)[:, np.newaxis] * W
+
+          W = np.array([[1.0, 2.0, 0.0], [0.0, -1.0, 1.0]])
+          x = np.array([0.5, -0.2, 0.3])
+          h = 1e-5
+          numeric = np.stack([(np.tanh(W @ (x + h * e)) - np.tanh(W @ (x - h * e))) / (2 * h) for e in np.eye(3)], axis=1)
+          print(np.allclose(layer_jacobian(W, x), numeric, atol=1e-8))
+        tests: |
+          import numpy as _np
+          def _num(W, x):
+              h = 1e-5
+              return _np.stack([(_np.tanh(W @ (x + h * e)) - _np.tanh(W @ (x - h * e))) / (2 * h) for e in _np.eye(x.size)], axis=1)
+          _W = _np.array([[1.0, 2.0, 0.0], [0.0, -1.0, 1.0]])
+          _x = _np.array([0.5, -0.2, 0.3])
+          _J = layer_jacobian(_W, _x)
+          assert _J.shape == (2, 3), "Two outputs and three inputs give a 2 by 3 matrix"
+          assert _np.allclose(_J, _num(_W, _x), atol=1e-8), "It should agree with central differences"
+          _rng = _np.random.default_rng(5)
+          _W2 = _rng.normal(size=(3, 3))
+          _x2 = _rng.normal(size=3)
+          assert _np.allclose(layer_jacobian(_W2, _x2), _num(_W2, _x2), atol=1e-8), "It should agree with central differences for a square layer too"
+          _W3 = _rng.normal(size=(4, 2))
+          _x3 = _rng.normal(size=2)
+          assert _np.allclose(layer_jacobian(_W3, _x3), _num(_W3, _x3), atol=1e-8), "It should agree for a layer with more outputs than inputs"
+          assert _np.allclose(layer_jacobian(_W, _np.zeros(3)), _W), "At x = 0 the tanh has slope 1 everywhere and the Jacobian is W"
+          assert output.strip() == "True", "The program should print True"
+        wrong:
+          - |
+            import numpy as np
+
+            def layer_jacobian(W, x):
+                y = np.tanh(W @ x)
+                return W * (1 - y * y)[np.newaxis, :]
+
+            print(True)
+          - |
+            import numpy as np
+
+            def layer_jacobian(W, x):
+                y = np.tanh(W @ x)
+                return (1 - y)[:, np.newaxis] * W
+
+            print(True)
+          - |
+            import numpy as np
+
+            def layer_jacobian(W, x):
+                return W
+
+            print(True)
+        explanation: |
+          The layer is a composition: the linear map $W$, then $\tanh$ on each entry. By the chain rule its Jacobian is the diagonal matrix of $1 - y_i^2$ times $W$. Multiplying by a diagonal matrix **on the left** scales the **rows**: row $i$ of $W$, which produces output $i$, is scaled by the slope of the tanh at output $i$. The slopes are one for each output, so they must be lined up with the rows, as a column of shape `(2, 1)`. `W * (1 - y * y)` tries to line them up with the last axis, the columns: for this 2 by 3 matrix the shapes do not broadcast, and for a square matrix they do and silently scale the wrong way, which is the multiplication by the diagonal matrix on the right. The square test is there for that.
+    - question:
+        id: work-patch
+        type: choice
+        system: s2
+        prompt: |
+          In the puzzle, the same small square of readings gave a patch on the map three times as large at distance 3 as at distance 1. Why?
+        options:
+          - 'Because errors always grow with the size of the numbers.'
+          - 'Near each point the conversion acts as its Jacobian. One column, the response to distance, has length 1. The other, the response to bearing, has length $r$, since a given angle sweeps an arc proportional to the distance. The columns are at right angles, so the patch is close to a rectangle of sides $h$ and $rh$, and its area is $r$ times that of the square: the determinant.'
+          - 'Because the conversion is linear and has determinant 3.'
+          - 'Because the radar is less accurate at long range.'
+        answer: 1
+        explanation: |
+          The radar's accuracy, in its own readings, was the same at every range: that was given. The patch grows because of what the conversion does with an error in angle. The Jacobian's columns show it directly, and its determinant, $r$, is the factor on area. The conversion is not linear, so there is no single determinant: it has a different linear approximation at every point, and the magnification varies from place to place. This factor $r$ is the same one that will appear in integrals over a disc, three lessons from now.
+    - question:
+        id: work-chain-shapes
+        type: numeric
+        system: s2
+        prompt: |
+          A network is $\mathbf{x} \mapsto \mathbf{f}_3(\mathbf{f}_2(\mathbf{f}_1(\mathbf{x})))$, where $\mathbf{f}_1 : \mathbb{R}^{784} \to \mathbb{R}^{100}$, $\mathbf{f}_2 : \mathbb{R}^{100} \to \mathbb{R}^{10}$ and $\mathbf{f}_3 : \mathbb{R}^{10} \to \mathbb{R}$. How many entries has the Jacobian of the whole network?
+        answer: "784"
+        explanation: |
+          The Jacobians of the three layers have shapes 100 by 784, 10 by 100 and 1 by 10. Their product, in the order $J_3 J_2 J_1$, has shape 1 by 784: one output and 784 inputs. It is the gradient of the single output, laid on its side. The largest matrix in the chain has 78 400 entries, and whether it ever needs to be formed depends on the order in which the product is worked out. Starting from the left, $J_3 J_2$ is a row of 100, and that times $J_1$ is a row of 784: only rows are ever held.
+    - question:
+        id: work-singular
+        type: choice
+        system: s2
+        prompt: |
+          $\mathbf{f}(x, y) = (x^2 - y^2,\ 2xy)$. Its Jacobian is $\begin{pmatrix} 2x & -2y \\ 2y & 2x \end{pmatrix}$. Where is the Jacobian determinant zero, and what does the map do to a small disc of radius $\varepsilon$ around that point?
+        options:
+          - 'Nowhere. The map scales every small region by the same factor.'
+          - 'Only at the origin, since the determinant is $4x^2 + 4y^2$. There the linear approximation is the zero matrix, and the map sends the disc of radius $\varepsilon$ to a disc of radius $\varepsilon^2$: far smaller than any linear map with an inverse would.'
+          - 'Along the line $y = x$.'
+          - 'Everywhere, since the two rows are the same.'
+        answer: 1
+        explanation: |
+          $\det J = (2x)(2x) - (-2y)(2y) = 4(x^2 + y^2)$, zero only at the origin. Elsewhere small areas are multiplied by $4(x^2 + y^2)$, which grows with the distance from the origin. At the origin every entry of the Jacobian is zero, and the map is purely second order: a point at distance $\varepsilon$ goes to a point at distance $\varepsilon^2$. The map also wraps the plane twice round the origin, sending $(x, y)$ and $(-x, -y)$ to the same place, so it has no inverse near the origin. Away from the origin, where the determinant is not zero, it can be undone locally.
+    - question:
+        id: work-softmax-direction
+        type: choice
+        system: s2
+        prompt: |
+          The Jacobian of softmax is $J = \operatorname{diag}(\mathbf{p}) - \mathbf{p}\mathbf{p}^{\mathsf T}$. What is $J\mathbf{1}$, where $\mathbf{1}$ is the vector of all ones, and what does it mean?
+        options:
+          - '$\mathbf{p}$, meaning that adding 1 to every score adds the probabilities to themselves.'
+          - '$\mathbf{0}$. Row $i$ sums to $p_i - p_i \sum_j p_j = 0$. The step $\mathbf{1}$ adds the same amount to every score, and softmax depends only on the differences between scores, so the output does not change.'
+          - '$\mathbf{1}$, meaning that the output moves by as much as the input.'
+          - 'It is not defined, since the matrix has no inverse.'
+        answer: 1
+        explanation: |
+          $J\mathbf{1} = \mathbf{p} - \mathbf{p}(\mathbf{p}^{\mathsf T}\mathbf{1}) = \mathbf{p} - \mathbf{p} = \mathbf{0}$, because the probabilities sum to 1. The Jacobian applied to a direction is the rate of change of the output along that direction, and shifting every score equally changes nothing. This is the invariance the log-sum-exp lesson exploited when it subtracted the largest score. It also means the vector of ones is in the null space of $J$, so this Jacobian is never invertible: the scores cannot be recovered from the probabilities, only their differences.
+  connections:
+    - text: |
+        A square of readings in distance and bearing became a patch on the map $r$ times as large. Near each point the conversion acts as a matrix, with one column of length 1 for the response to distance and one of length $r$ for the response to bearing, and the determinant of that matrix is $r$.
+
+        The **Jacobian** of a function from $n$ inputs to $m$ outputs is the $m$ by $n$ matrix of its partial derivatives, outputs down and inputs across. Its rows are the gradients of the outputs. Its columns are the responses to each input. It is the matrix of the best linear approximation: $\mathbf{f}(\mathbf{a} + \mathbf{h}) \approx \mathbf{f}(\mathbf{a}) + J\mathbf{h}$.
+
+        A linear map has itself as Jacobian. An elementwise function has a diagonal one. Softmax has $\operatorname{diag}(\mathbf{p}) - \mathbf{p}\mathbf{p}^{\mathsf T}$. A composition has the **product** of the Jacobians.
+
+        For a square Jacobian, the **determinant** is the local magnification of area or volume, and where it is zero the map cannot be undone. Solving $J\mathbf{d} = -\mathbf{F}$ repeatedly is Newton's method for a system of equations.
+
+        The Jacobian is a first derivative: it records slopes. Slopes found the candidates for a minimum, the stationary points, and could not tell a bowl from a saddle. For that, in one variable, you needed the second derivative. A function of several variables has a first derivative that is itself a function with several outputs, the gradient. Take the Jacobian of **that**, and you have a matrix of second derivatives. It is the next lesson, [[m12.hessian-and-symmetry-of-mixed-partials]].
