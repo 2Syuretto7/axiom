@@ -1,0 +1,1033 @@
+concept: m13.forward-mode-and-dual-numbers
+minutes: 85
+claim: You can compute with dual numbers, in which a new symbol has square zero, show that evaluating a function at such a number returns its value and its derivative together, implement them by operator overloading, recognise the second component as the tangent of the forward recursion, obtain a Jacobian-vector product in one pass with no stored values, count the passes a gradient or a Jacobian needs, and choose between forward and reverse mode from the numbers of inputs and outputs.
+recalls: [m13.reverse-mode-differentiation-and-its-cost]
+uses: [m13.computational-graphs, m13.jacobian-vector-and-vector-jacobian-products, m10.differentiation-rules, m10.chain-rule, m10.taylor-approximation, m10.derivatives-of-exp-log-and-trig, m12.directional-derivative, m12.jacobian, e1.classes-and-objects, e1.special-methods-and-operator-overloading, e6.scalar-computational-graph, e6.gradient-checking, e0.functions, e0.loops]
+leads: [m13.hessian-vector-products]
+starter: |
+  # Scratch space. A number a + b*eps, where eps * eps counts as 0.
+  class Dual:
+      def __init__(self, a, b):
+          self.a = a
+          self.b = b
+
+      def __add__(self, other):
+          return Dual(self.a + other.a, self.b + other.b)
+
+      def __mul__(self, other):
+          return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+
+  x = Dual(2.0, 1.0)
+  y = x * x * x + x + x
+  print(y.a, y.b)
+parts:
+  recall:
+    - text: |
+        [[m13.reverse-mode-differentiation-and-its-cost]] priced the backward sweep: a few evaluations for a whole gradient, paid for in memory. It left the mirror case, few inputs and many outputs, to the forward recursion. Today that recursion gets an implementation of a dozen lines. Three quick pulls first.
+  puzzle:
+    - text: |
+        Invent a new number $\varepsilon$ with one rule: $\varepsilon^2 = 0$, although $\varepsilon$ itself is not 0. Compute with it as with any symbol.
+
+        Take $f(x) = x^3 + 2x$ and evaluate it at $2 + \varepsilon$:
+
+        $$(2 + \varepsilon)^3 + 2(2 + \varepsilon) = 8 + 12\varepsilon + 6\varepsilon^2 + \varepsilon^3 + 4 + 2\varepsilon = 12 + 14\varepsilon.$$
+
+        Now $f(2) = 12$, and $f'(x) = 3x^2 + 2$ gives $f'(2) = 14$. Both numbers are sitting in the answer.
+
+        The starter does the same with a class of twelve lines that knows only how to add and to multiply.
+
+        ```
+        12.0 14.0
+        ```
+
+        Nobody told the class the rule for differentiating a cube, or any rule of calculus at all.
+
+        **Why does the coefficient of $\varepsilon$ come out as the derivative? And will it for every function, not only this polynomial?**
+  intuition:
+    - text: |
+        A derivative answers the question: if the input moves by a tiny amount, how much does the output move, **to first order**? "To first order" means that the square of the tiny amount, and every higher power, is thrown away.
+
+        The rule $\varepsilon^2 = 0$ does that throwing away automatically. Think of $\varepsilon$ as a nudge so small that its square is not worth recording. Then $a + b\varepsilon$ is a value $a$ together with a note saying "and I am moving at rate $b$". Arithmetic on such pairs keeps exact account of the first-order movement and discards the rest, at every step.
+
+        Look at the product. $(a + b\varepsilon)(c + d\varepsilon) = ac + (ad + bc)\varepsilon + bd\,\varepsilon^2$, and the last term is zero. The coefficient $ad + bc$ **is the product rule**. Nobody put it there. It fell out of ordinary multiplication and the one new rule. The sum rule falls out of addition in the same way.
+
+        Since every calculation is built from sums, products and a few simple functions, a program run on these pairs carries the derivative along beside the value, step by step, in the same order as the calculation.
+
+        You have met the quantity in the second slot. It is the **tangent** $\dot v$ of [[m13.computational-graphs]]: the rate of each intermediate value with respect to the input that was nudged. Dual numbers are the forward recursion, implemented by changing what a number is.
+
+        Compare with reverse mode. Nothing is stored for later, because each tangent is computed at the moment its value is. There is no tape and no backward sweep. The price is that one run follows **one** nudge: one direction in the space of inputs.
+  derivation:
+    - text: |
+        **Dual numbers.** A dual number is $a + b\varepsilon$ with real $a$, $b$, and $\varepsilon^2 = 0$. Call $a$ the **value** and $b$ the **tangent**.
+
+        $$(a + b\varepsilon) + (c + d\varepsilon) = (a + c) + (b + d)\varepsilon, \qquad (a + b\varepsilon)(c + d\varepsilon) = ac + (ad + bc)\varepsilon.$$
+
+        **Division.** Multiply top and bottom by $c - d\varepsilon$, since $(c + d\varepsilon)(c - d\varepsilon) = c^2$:
+
+        $$\frac{a + b\varepsilon}{c + d\varepsilon} = \frac ac + \frac{bc - ad}{c^2}\,\varepsilon \qquad (c \ne 0).$$
+
+        That is the quotient rule.
+
+        **Theorem.** For every polynomial $p$: $\;p(a + b\varepsilon) = p(a) + p'(a)\,b\,\varepsilon$.
+
+        *Proof.* It holds for constants and for $p(x) = x$. If it holds for $p$ and $q$, it holds for $p + q$ by the sum formula, and for $pq$:
+
+        $$\big(p(a) + p'(a)b\varepsilon\big)\big(q(a) + q'(a)b\varepsilon\big) = p(a)q(a) + \big(p(a)q'(a) + p'(a)q(a)\big)b\,\varepsilon = (pq)(a) + (pq)'(a)\,b\,\varepsilon.$$
+
+        Every polynomial is built from constants and $x$ by sums and products. $\blacksquare$
+
+        **Other functions.** For a differentiable $f$, the Taylor expansion $f(a + h) = f(a) + f'(a)h + \tfrac12f''(a)h^2 + \dots$ with $h = b\varepsilon$ loses every term from $h^2$ on. So we **define**
+
+        $$f(a + b\varepsilon) = f(a) + f'(a)\,b\,\varepsilon,$$
+
+        for example $e^{a + b\varepsilon} = e^a + e^ab\,\varepsilon$, $\ \sin(a + b\varepsilon) = \sin a + b\cos a\ \varepsilon$, $\ \tanh(a + b\varepsilon) = \tanh a + (1 - \tanh^2a)\,b\,\varepsilon$.
+
+        **The chain rule comes free.** $g(f(a + b\varepsilon)) = g\big(f(a) + f'(a)b\varepsilon\big) = g(f(a)) + g'(f(a))\,f'(a)\,b\,\varepsilon$. So the rule $F(a + b\varepsilon) = F(a) + F'(a)b\varepsilon$ survives composition, and therefore holds for any program built from the elementary operations.
+
+        **Reading off a derivative.** Seed the tangent with 1: $f(a + \varepsilon) = f(a) + f'(a)\varepsilon$.
+    - question:
+        id: derivation-product
+        type: numeric
+        system: s2
+        prompt: |
+          Multiply out $(3 + \varepsilon)(2 + 5\varepsilon)$. What is the coefficient of $\varepsilon$?
+        answer: "17"
+        explanation: |
+          $3 \cdot 2 + (3 \cdot 5 + 1 \cdot 2)\varepsilon + 5\varepsilon^2 = 6 + 17\varepsilon$. The value is the product of the values, and the tangent is "first value times second tangent, plus first tangent times second value", which is the product rule for two quantities moving at rates 1 and 5.
+    - text: |
+        **Several inputs.** For $F: \mathbb{R}^n \to \mathbb{R}^m$, give input $i$ the dual number $x_i + v_i\varepsilon$. Then
+
+        $$F(\mathbf{x} + \mathbf{v}\varepsilon) = F(\mathbf{x}) + J_F(\mathbf{x})\mathbf{v}\ \varepsilon.$$
+
+        The tangents of the outputs are the **Jacobian-vector product** $J\mathbf{v}$, for whatever direction $\mathbf{v}$ was seeded. With $\mathbf{v} = \mathbf{e}_i$ this is column $i$ of the Jacobian. With $m = 1$ it is the directional derivative $\nabla f \cdot \mathbf{v}$.
+
+        **Cost.** Each elementary operation on dual numbers does a bounded amount of extra arithmetic, so one pass costs at most about 3 evaluations of $F$, and in practice nearer 2. Memory is twice that of $F$: one tangent beside each live value. **Nothing is kept for later.**
+
+        **How many passes.**
+
+        | Wanted | Forward mode | Reverse mode |
+        |---|---|---|
+        | $J\mathbf{v}$ | 1 pass | $m$ sweeps |
+        | $\mathbf{u}^\top J$ | $n$ passes | 1 sweep |
+        | Full Jacobian | $n$ passes | $m$ sweeps |
+        | Gradient ($m = 1$) | $n$ passes | 1 sweep |
+
+        So forward mode is the choice when inputs are few, and reverse mode when outputs are few. For one input and a thousand outputs, such as the sensitivity of a whole simulation to one design parameter, forward mode needs one pass and no tape.
+
+        **Compared with finite differences.** Both follow one direction per evaluation. But the dual number involves no step size and no subtraction of nearly equal values, so the result is exact to rounding. $\varepsilon$ is not a small number such as $10^{-8}$. It is a symbol, and $\varepsilon^2$ is exactly zero.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the argument that a program run on dual numbers returns the derivative of the function it computes.
+        steps:
+          - 'Adding two dual numbers adds their tangents: the sum rule.'
+          - 'Multiplying two dual numbers gives the tangent $ad + bc$, because $\varepsilon^2 = 0$: the product rule.'
+          - 'Each elementary function is defined on dual numbers by $f(a + b\varepsilon) = f(a) + f''(a)b\varepsilon$.'
+          - 'Composing two operations that obey this rule gives one that obeys it: the chain rule.'
+          - 'A program is a composition of such operations, so seeded with tangent 1 it returns $F(a) + F''(a)\varepsilon$.'
+        explanation: Each step of the program obeys the rule, and the rule survives composition.
+  formal:
+    - text: |
+        **The algebra.** The dual numbers are $\mathbb{R}[\varepsilon]/(\varepsilon^2)$: a commutative ring, two-dimensional as a real vector space, with basis $1, \varepsilon$. It is **not a field**: $b\varepsilon$ has no inverse, and $\varepsilon \cdot \varepsilon = 0$ with $\varepsilon \ne 0$. $a + b\varepsilon$ is invertible exactly when $a \ne 0$.
+
+        **Matrix model.** $a + b\varepsilon \mapsto \begin{pmatrix} a & b \\ 0 & a \end{pmatrix}$ respects sums and products, with $\varepsilon \mapsto N = \begin{pmatrix} 0 & 1 \\ 0 & 0 \end{pmatrix}$, $N^2 = 0$. The matrix is a Jordan block, and $p\begin{pmatrix} a & 1 \\ 0 & a \end{pmatrix} = \begin{pmatrix} p(a) & p'(a) \\ 0 & p(a) \end{pmatrix}$.
+
+        **Extension.** For $f$ differentiable at $a$: $f(a + b\varepsilon) := f(a) + f'(a)b\,\varepsilon$. For $F: \mathbb{R}^n \to \mathbb{R}^m$ differentiable at $\mathbf{x}$: $F(\mathbf{x} + \mathbf{v}\varepsilon) := F(\mathbf{x}) + DF(\mathbf{x})[\mathbf{v}]\,\varepsilon$. The chain rule is the statement that this extension respects composition.
+
+        **Forward mode.** Running a trace on dual numbers is the tangent recursion $\dot v_i = \sum_{j \in \operatorname{pa}(i)}\frac{\partial\phi_i}{\partial v_j}\dot v_j$. $\operatorname{ops}(F, J_F\mathbf{v}) \le 3\operatorname{ops}(F)$, and memory at most twice that of $F$.
+
+        **Vector tangents.** Carrying $k$ tangents at once, $a + \sum_{i=1}^kb_i\varepsilon_i$ with $\varepsilon_i\varepsilon_j = 0$, gives $k$ directions in one pass for about $1 + k$ times the cost. With $k = n$ and seeds $\mathbf{e}_i$ the whole Jacobian comes in one pass.
+
+        **Higher order.** With $\varepsilon^{k+1} = 0$ in place of $\varepsilon^2 = 0$, $f(a + \varepsilon) = \sum_{j \le k}\frac{f^{(j)}(a)}{j!}\varepsilon^j$: truncated Taylor arithmetic. With two independent symbols, $\varepsilon_1^2 = \varepsilon_2^2 = 0$ and $\varepsilon_1\varepsilon_2 \ne 0$, the coefficient of $\varepsilon_1\varepsilon_2$ in $f(a + \varepsilon_1 + \varepsilon_2)$ is $f''(a)$.
+
+        **Complex step.** For real-analytic $f$: $\ f'(a) = \operatorname{Im} f(a + ih)/h + O(h^2)$ with no subtraction, so $h = 10^{-20}$ is usable. It is dual arithmetic in which $i^2 = -1$ approximates $\varepsilon^2 = 0$.
+
+        **Branches.** A program with tests on values is differentiated along the branch taken. The result is the derivative of that branch, which is the derivative of the function wherever the function agrees with the branch near the point.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-square
+        type: numeric
+        system: s1
+        prompt: |
+          In the dual numbers, what is $\varepsilon \cdot \varepsilon$?
+        answer: "0"
+        explanation: The defining rule.
+    - question:
+        id: drill-sum
+        type: choice
+        system: s1
+        prompt: |
+          $(a + b\varepsilon) + (c + d\varepsilon) =$
+        options: ['$(a + c) + (b + d)\varepsilon$', '$(a + c) + bd\,\varepsilon$', '$ac + (b + d)\varepsilon$', '$(a + b) + (c + d)\varepsilon$']
+        answer: 0
+        explanation: Values add and tangents add.
+    - question:
+        id: drill-product
+        type: choice
+        system: s1
+        prompt: |
+          $(a + b\varepsilon)(c + d\varepsilon) =$
+        options: ['$ac + bd\,\varepsilon$', '$ac + (ad + bc)\varepsilon$', '$ac + (ac + bd)\varepsilon$', '$(a + c) + (b + d)\varepsilon$']
+        answer: 1
+        explanation: The term in $\varepsilon^2$ vanishes, leaving the product rule.
+    - question:
+        id: drill-two-squared
+        type: numeric
+        system: s1
+        prompt: |
+          $(2 + \varepsilon)^2 = 4 + k\varepsilon$. What is $k$?
+        answer: "4"
+        explanation: $2 \cdot 2$, the derivative of $x^2$ at 2.
+    - question:
+        id: drill-rule
+        type: choice
+        system: s1
+        prompt: |
+          For a differentiable $f$, $\ f(a + b\varepsilon) =$
+        options: ['$f(a) + f(b)\varepsilon$', '$f(a) + f''(a)\,b\,\varepsilon$', '$f(a) + f''(b)\varepsilon$', '$f''(a) + f(a)\,b\,\varepsilon$']
+        answer: 1
+        explanation: The Taylor expansion, cut after the first-order term.
+    - question:
+        id: drill-seed
+        type: numeric
+        system: s1
+        prompt: |
+          To read $f'(a)$ off $f(a + b\varepsilon)$, what value of $b$ do you seed?
+        answer: "1"
+        explanation: The input moves at rate 1 with respect to itself.
+    - question:
+        id: drill-tangent
+        type: choice
+        system: s1
+        prompt: |
+          The coefficient of $\varepsilon$ carried by each intermediate value is the quantity that the lesson on computational graphs called
+        options: ['the adjoint', 'the tangent', 'the tape', 'the seed']
+        answer: 1
+        explanation: The rate of the value with respect to the nudged input.
+    - question:
+        id: drill-tape
+        type: choice
+        system: s1
+        prompt: |
+          Compared with the function alone, forward mode needs
+        options: ['a tape of every intermediate value', 'about twice the memory and no tape', 'memory proportional to the number of inputs squared', 'no memory at all']
+        answer: 1
+        explanation: One tangent beside each live value.
+    - question:
+        id: drill-gradient-passes
+        type: numeric
+        system: s1
+        prompt: |
+          A scalar function has 50 inputs. How many forward-mode passes give its whole gradient?
+        answer: "50"
+        explanation: One per input.
+    - question:
+        id: drill-one-input
+        type: numeric
+        system: s1
+        prompt: |
+          A function has 1 input and 1000 outputs. How many forward-mode passes give all 1000 derivatives?
+        answer: "1"
+        explanation: One nudged input, and every output carries its own tangent.
+    - question:
+        id: drill-sin
+        type: choice
+        system: s1
+        prompt: |
+          $\sin(a + b\varepsilon) =$
+        options: ['$\sin a + \sin b\ \varepsilon$', '$\sin a + b\cos a\ \varepsilon$', '$\cos a + b\sin a\ \varepsilon$', '$\sin a - b\cos a\ \varepsilon$']
+        answer: 1
+        explanation: The value, and the slope times the incoming tangent.
+    - question:
+        id: drill-jvp
+        type: choice
+        system: s1
+        prompt: |
+          Seeding the inputs of $F$ with the tangents $\mathbf{v}$, one pass on dual numbers returns
+        options: ['$J\mathbf{v}$', '$\mathbf{v}^\top J$', '$J^\top\mathbf{v}$', 'the whole Jacobian']
+        answer: 0
+        explanation: A Jacobian-vector product.
+    - question:
+        id: drill-exact
+        type: choice
+        system: s1
+        prompt: |
+          Compared with a finite difference, the derivative from dual numbers
+        options: ['depends on a well-chosen step size', 'is exact to rounding, with no step size', 'is exact only for polynomials', 'needs two evaluations']
+        answer: 1
+        explanation: The symbol is not a small number, and its square is exactly zero.
+    - question:
+        id: predict-pairs
+        type: predict
+        system: s1
+        prompt: Dual numbers as plain pairs, with only the product. What does this show?
+        code: |
+          def mul(p, q):
+              return (p[0] * q[0], p[0] * q[1] + p[1] * q[0])
+
+
+          x = (3.0, 1.0)
+          y = mul(x, x)
+          z = mul(y, x)
+          print(y)
+          print(z)
+        output: |
+          (9.0, 6.0)
+          (27.0, 27.0)
+        explanation: The pair for the square holds 9 and the slope 6 of the square at 3. The pair for the cube holds 27 and the slope of the cube at 3, which is 3 times 9, again 27. Each product applied the product rule to the tangents it was given.
+    - question:
+        id: predict-matrix
+        type: predict
+        system: s1
+        prompt: The same number as a 2 by 2 matrix. What does this show?
+        code: |
+          import numpy as np
+
+
+          def as_matrix(a, b):
+              return np.array([[a, b], [0.0, a]])
+
+
+          X = as_matrix(3.0, 1.0)
+          E = as_matrix(0.0, 1.0)
+          print(X @ X @ X)
+          print(E @ E)
+        output: |
+          [[27. 27.]
+           [ 0. 27.]]
+          [[0. 0.]
+           [0. 0.]]
+        explanation: The matrix with a on the diagonal and b above it multiplies exactly as the dual number does. Its cube holds the cube of 3 on the diagonal and the derivative 27 in the corner. The matrix standing for the new symbol is not zero, and its square is.
+  work:
+    - text: Slower now. First the class itself.
+    - question:
+        id: write-dual
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Complete the class `Dual` so that sums and products work between two dual numbers and between a dual number and a plain number on either side. Then write `derivative(f, x)` returning $f'(x)$ for a function `f` built from sums and products.
+        starter: |
+          class Dual:
+              def __init__(self, a, b=0.0):
+                  self.a = a
+                  self.b = b
+
+              def __add__(self, other):
+                  return self
+
+              def __mul__(self, other):
+                  return self
+
+              def __radd__(self, other):
+                  return self + other
+
+              def __rmul__(self, other):
+                  return self * other
+
+
+          def derivative(f, x):
+              return 0.0
+
+
+          print(derivative(lambda x: x * x * x + 2 * x, 2.0))
+          print(derivative(lambda x: (x + 1) * (x + 1) * 0.5, 3.0))
+        solution: |
+          class Dual:
+              def __init__(self, a, b=0.0):
+                  self.a = a
+                  self.b = b
+
+              def __add__(self, other):
+                  if not isinstance(other, Dual):
+                      other = Dual(other)
+                  return Dual(self.a + other.a, self.b + other.b)
+
+              def __mul__(self, other):
+                  if not isinstance(other, Dual):
+                      other = Dual(other)
+                  return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+              def __radd__(self, other):
+                  return self + other
+
+              def __rmul__(self, other):
+                  return self * other
+
+
+          def derivative(f, x):
+              return f(Dual(x, 1.0)).b
+
+
+          print(derivative(lambda x: x * x * x + 2 * x, 2.0))
+          print(derivative(lambda x: (x + 1) * (x + 1) * 0.5, 3.0))
+        tests: |
+          _y = Dual(2.0, 3.0) * Dual(5.0, 7.0)
+          assert (_y.a, _y.b) == (10.0, 29.0), "(2 + 3 eps)(5 + 7 eps) is 10 + 29 eps: the tangent is 2 * 7 + 3 * 5"
+          _s = Dual(2.0, 3.0) + 1.5
+          assert (_s.a, _s.b) == (3.5, 3.0), "Adding the plain number 1.5 to 2 + 3 eps gives 3.5 + 3 eps. A plain number has tangent 0"
+          _t = 4 * Dual(2.0, 3.0)
+          assert (_t.a, _t.b) == (8.0, 12.0), "4 times 2 + 3 eps is 8 + 12 eps"
+          assert derivative(lambda x: x * x, 3.0) == 6.0, "The derivative of x squared at 3 is 6"
+          assert derivative(lambda x: 3 * x + 1, 7.0) == 3.0, "The derivative of 3x + 1 is 3 everywhere"
+          assert derivative(lambda x: x * x * x + 2 * x, 2.0) == 14.0, "The derivative of x cubed plus 2x at 2 is 14. Seed the tangent with 1 and read the tangent of the result"
+          assert derivative(lambda x: (x * x + 1) * (x * x * x + x), 1.0) == 12.0, "The derivative of (x^2 + 1)(x^3 + x) at 1 is 12"
+          assert output.strip() == "14.0\n4.0", "The program should print 14.0 and then 4.0"
+        wrong:
+          - |
+            class Dual:
+                def __init__(self, a, b=0.0):
+                    self.a = a
+                    self.b = b
+
+                def __add__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a + other.a, self.b + other.b)
+
+                def __mul__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a * other.a, self.b * other.b)
+
+                def __radd__(self, other):
+                    return self + other
+
+                def __rmul__(self, other):
+                    return self * other
+
+
+            def derivative(f, x):
+                return f(Dual(x, 1.0)).b
+
+
+            print("14.0\n4.0")
+          - |
+            class Dual:
+                def __init__(self, a, b=0.0):
+                    self.a = a
+                    self.b = b
+
+                def __add__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a + other.a, self.b + other.b)
+
+                def __mul__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+                def __radd__(self, other):
+                    return self + other
+
+                def __rmul__(self, other):
+                    return self * other
+
+
+            def derivative(f, x):
+                return f(Dual(x)).b
+
+
+            print("14.0\n4.0")
+          - |
+            class Dual:
+                def __init__(self, a, b=0.0):
+                    self.a = a
+                    self.b = b
+
+                def __add__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a + other.a, self.b + other.b)
+
+                def __mul__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a * other.a, self.a * other.b)
+
+                def __radd__(self, other):
+                    return self + other
+
+                def __rmul__(self, other):
+                    return self * other
+
+
+            def derivative(f, x):
+                return f(Dual(x, 1.0)).b
+
+
+            print("14.0\n4.0")
+          - |
+            class Dual:
+                def __init__(self, a, b=0.0):
+                    self.a = a
+                    self.b = b
+
+                def __add__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other, 1.0)
+                    return Dual(self.a + other.a, self.b + other.b)
+
+                def __mul__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other, 1.0)
+                    return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+                def __radd__(self, other):
+                    return self + other
+
+                def __rmul__(self, other):
+                    return self * other
+
+
+            def derivative(f, x):
+                return f(Dual(x, 1.0)).b
+
+
+            print("14.0\n4.0")
+        explanation: |
+          A plain number is a constant: it does not move when the input is nudged, so it is lifted to a dual number with tangent 0. After that, the two formulas are all there is. `derivative` seeds the input with tangent 1, runs the function as it stands, and reads the tangent of the result.
+
+          The function `f` was written for ordinary numbers. It works on dual numbers without change, because Python asks the objects themselves what `+` and `*` mean. This is **operator overloading**, the same mechanism your autograd engine used, but here each operation finishes its derivative work on the spot and leaves nothing behind.
+
+          The first wrong version multiplies the tangents, which would say that the derivative of a product is the product of the derivatives. The second seeds the input with tangent 0, so it differentiates with respect to nothing and gets 0. The last gives constants a tangent of 1, as if they moved with the input.
+    - question:
+        id: write-jvp
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          The class and a dual version of `tanh` are given. A function `f` takes a list of numbers and returns one number. Write `jvp(f, x, v)` returning the directional derivative of `f` at the list `x` along the list `v`, in **one** call of `f`. Then write `gradient(f, x)` returning the list of partial derivatives, using `jvp` once for each input.
+        starter: |
+          import numpy as np
+
+
+          class Dual:
+              def __init__(self, a, b=0.0):
+                  self.a = a
+                  self.b = b
+
+              def __add__(self, other):
+                  if not isinstance(other, Dual):
+                      other = Dual(other)
+                  return Dual(self.a + other.a, self.b + other.b)
+
+              def __mul__(self, other):
+                  if not isinstance(other, Dual):
+                      other = Dual(other)
+                  return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+              def __radd__(self, other):
+                  return self + other
+
+              def __rmul__(self, other):
+                  return self * other
+
+
+          def tanh(x):
+              t = float(np.tanh(x.a))
+              return Dual(t, (1 - t * t) * x.b)
+
+
+          def jvp(f, x, v):
+              return 0.0
+
+
+          def gradient(f, x):
+              return [0.0 for value in x]
+
+
+          def f(x):
+              return tanh(x[0] * x[1]) + x[1] * x[2] * x[2]
+
+
+          print(round(jvp(f, [0.5, 1.0, 2.0], [1.0, 0.0, -1.0]), 4))
+          print([round(g, 4) for g in gradient(f, [0.5, 1.0, 2.0])])
+        solution: |
+          import numpy as np
+
+
+          class Dual:
+              def __init__(self, a, b=0.0):
+                  self.a = a
+                  self.b = b
+
+              def __add__(self, other):
+                  if not isinstance(other, Dual):
+                      other = Dual(other)
+                  return Dual(self.a + other.a, self.b + other.b)
+
+              def __mul__(self, other):
+                  if not isinstance(other, Dual):
+                      other = Dual(other)
+                  return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+              def __radd__(self, other):
+                  return self + other
+
+              def __rmul__(self, other):
+                  return self * other
+
+
+          def tanh(x):
+              t = float(np.tanh(x.a))
+              return Dual(t, (1 - t * t) * x.b)
+
+
+          def jvp(f, x, v):
+              return f([Dual(x[i], v[i]) for i in range(len(x))]).b
+
+
+          def gradient(f, x):
+              grad = []
+              for i in range(len(x)):
+                  v = [0.0 for value in x]
+                  v[i] = 1.0
+                  grad.append(jvp(f, x, v))
+              return grad
+
+
+          def f(x):
+              return tanh(x[0] * x[1]) + x[1] * x[2] * x[2]
+
+
+          print(round(jvp(f, [0.5, 1.0, 2.0], [1.0, 0.0, -1.0]), 4))
+          print([round(g, 4) for g in gradient(f, [0.5, 1.0, 2.0])])
+        tests: |
+          _calls = []
+          def _g(x):
+              _calls.append(1)
+              return x[0] * x[1] + 3 * x[2] + x[0] * x[0] * x[2]
+          assert abs(jvp(_g, [2.0, 5.0, 1.0], [1.0, 0.0, 0.0]) - 9.0) < 1e-12, "For x0*x1 + 3*x2 + x0^2*x2 at (2, 5, 1), the derivative along (1, 0, 0) is 5 + 2*2*1 = 9"
+          assert len(_calls) == 1, "jvp should call f exactly once"
+          assert abs(jvp(_g, [2.0, 5.0, 1.0], [1.0, -1.0, 2.0]) - 21.0) < 1e-12, "At (2, 5, 1) the gradient is (9, 2, 7), so the derivative along (1, -1, 2) is 9 - 2 + 14 = 21"
+          _calls.clear()
+          _gr = gradient(_g, [2.0, 5.0, 1.0])
+          assert [abs(_gr[i] - [9.0, 2.0, 7.0][i]) < 1e-12 for i in range(3)] == [True, True, True], "At (2, 5, 1) the gradient is (9, 2, 7). Seed one input at a time with tangent 1"
+          assert len(_calls) == 3, "gradient should call f once for each of the 3 inputs"
+          assert output.strip() == "-3.2136\n[0.7864, 4.3932, 4.0]", "The program should print -3.2136 and then [0.7864, 4.3932, 4.0]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            class Dual:
+                def __init__(self, a, b=0.0):
+                    self.a = a
+                    self.b = b
+
+                def __add__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a + other.a, self.b + other.b)
+
+                def __mul__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+                def __radd__(self, other):
+                    return self + other
+
+                def __rmul__(self, other):
+                    return self * other
+
+
+            def tanh(x):
+                t = float(np.tanh(x.a))
+                return Dual(t, (1 - t * t) * x.b)
+
+
+            def jvp(f, x, v):
+                return f([Dual(x[i], v[i]) for i in range(len(x))]).a
+
+
+            def gradient(f, x):
+                grad = []
+                for i in range(len(x)):
+                    v = [0.0 for value in x]
+                    v[i] = 1.0
+                    grad.append(jvp(f, x, v))
+                return grad
+
+
+            def f(x):
+                return tanh(x[0] * x[1]) + x[1] * x[2] * x[2]
+
+
+            print("-3.2136\n[0.7864, 4.3932, 4.0]")
+          - |
+            import numpy as np
+
+
+            class Dual:
+                def __init__(self, a, b=0.0):
+                    self.a = a
+                    self.b = b
+
+                def __add__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a + other.a, self.b + other.b)
+
+                def __mul__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+                def __radd__(self, other):
+                    return self + other
+
+                def __rmul__(self, other):
+                    return self * other
+
+
+            def tanh(x):
+                t = float(np.tanh(x.a))
+                return Dual(t, (1 - t * t) * x.b)
+
+
+            def jvp(f, x, v):
+                return f([Dual(x[i], v[i]) for i in range(len(x))]).b
+
+
+            def gradient(f, x):
+                grad = []
+                for i in range(len(x)):
+                    v = [1.0 for value in x]
+                    grad.append(jvp(f, x, v))
+                return grad
+
+
+            def f(x):
+                return tanh(x[0] * x[1]) + x[1] * x[2] * x[2]
+
+
+            print("-3.2136\n[0.7864, 4.3932, 4.0]")
+          - |
+            import numpy as np
+
+
+            class Dual:
+                def __init__(self, a, b=0.0):
+                    self.a = a
+                    self.b = b
+
+                def __add__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a + other.a, self.b + other.b)
+
+                def __mul__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+                def __radd__(self, other):
+                    return self + other
+
+                def __rmul__(self, other):
+                    return self * other
+
+
+            def tanh(x):
+                t = float(np.tanh(x.a))
+                return Dual(t, (1 - t * t) * x.b)
+
+
+            def jvp(f, x, v):
+                total = 0.0
+                for i in range(len(x)):
+                    seed = [Dual(x[j], 1.0 if j == i else 0.0) for j in range(len(x))]
+                    total += v[i] * f(seed).b
+                return total
+
+
+            def gradient(f, x):
+                grad = []
+                for i in range(len(x)):
+                    v = [0.0 for value in x]
+                    v[i] = 1.0
+                    grad.append(jvp(f, x, v))
+                return grad
+
+
+            def f(x):
+                return tanh(x[0] * x[1]) + x[1] * x[2] * x[2]
+
+
+            print("-3.2136\n[0.7864, 4.3932, 4.0]")
+          - |
+            import numpy as np
+
+
+            class Dual:
+                def __init__(self, a, b=0.0):
+                    self.a = a
+                    self.b = b
+
+                def __add__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a + other.a, self.b + other.b)
+
+                def __mul__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+                def __radd__(self, other):
+                    return self + other
+
+                def __rmul__(self, other):
+                    return self * other
+
+
+            def tanh(x):
+                t = float(np.tanh(x.a))
+                return Dual(t, (1 - t * t) * x.b)
+
+
+            def jvp(f, x, v):
+                return f([Dual(x[i], 1.0) for i in range(len(x))]).b
+
+
+            def gradient(f, x):
+                grad = []
+                for i in range(len(x)):
+                    v = [0.0 for value in x]
+                    v[i] = 1.0
+                    grad.append(jvp(f, x, v))
+                return grad
+
+
+            def f(x):
+                return tanh(x[0] * x[1]) + x[1] * x[2] * x[2]
+
+
+            print("-3.2136\n[0.7864, 4.3932, 4.0]")
+        explanation: |
+          `jvp` turns each input into a dual number whose tangent is the matching entry of `v`, calls `f` once, and reads the tangent of the result. That tangent is $\nabla f \cdot \mathbf{v}$: the sum, over the inputs, of each partial derivative times the rate at which that input was told to move.
+
+          `gradient` cannot do better than one pass per input, because one pass answers for one direction. Seeding $\mathbf{e}_i$ picks out the $i$-th partial derivative. For the three inputs here that is three calls. For a network with a million weights it would be a million, against one backward sweep.
+
+          The third wrong version returns the right number, and calls `f` three times to get what one call provides. Seeding the whole direction at once is the point of a Jacobian-vector product.
+    - question:
+        id: fix-quotient
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          Division has been added to the class. The program should print the derivative of $x/(1 + x^2)$ at $x = 2$, which is $(1 - x^2)/(1 + x^2)^2 = -0.12$. It prints something else. Fix the class.
+        starter: |
+          class Dual:
+              def __init__(self, a, b=0.0):
+                  self.a = a
+                  self.b = b
+
+              def __add__(self, other):
+                  if not isinstance(other, Dual):
+                      other = Dual(other)
+                  return Dual(self.a + other.a, self.b + other.b)
+
+              def __mul__(self, other):
+                  if not isinstance(other, Dual):
+                      other = Dual(other)
+                  return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+              def __truediv__(self, other):
+                  if not isinstance(other, Dual):
+                      other = Dual(other)
+                  return Dual(self.a / other.a, (self.b * other.a + self.a * other.b) / (other.a * other.a))
+
+              def __radd__(self, other):
+                  return self + other
+
+              def __rmul__(self, other):
+                  return self * other
+
+
+          x = Dual(2.0, 1.0)
+          y = x / (1 + x * x)
+          print(round(y.b, 4))
+        solution: |
+          class Dual:
+              def __init__(self, a, b=0.0):
+                  self.a = a
+                  self.b = b
+
+              def __add__(self, other):
+                  if not isinstance(other, Dual):
+                      other = Dual(other)
+                  return Dual(self.a + other.a, self.b + other.b)
+
+              def __mul__(self, other):
+                  if not isinstance(other, Dual):
+                      other = Dual(other)
+                  return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+              def __truediv__(self, other):
+                  if not isinstance(other, Dual):
+                      other = Dual(other)
+                  return Dual(self.a / other.a, (self.b * other.a - self.a * other.b) / (other.a * other.a))
+
+              def __radd__(self, other):
+                  return self + other
+
+              def __rmul__(self, other):
+                  return self * other
+
+
+          x = Dual(2.0, 1.0)
+          y = x / (1 + x * x)
+          print(round(y.b, 4))
+        tests: |
+          _q = Dual(1.0, 0.0) / Dual(2.0, 1.0)
+          assert (_q.a, _q.b) == (0.5, -0.25), "1 / (2 + eps) is 0.5 - 0.25 eps: the derivative of 1/x at 2 is -1/4"
+          _r = Dual(6.0, 1.0) / 3.0
+          assert _r.a == 2.0 and abs(_r.b - 1 / 3) < 1e-12, "(6 + eps) / 3 is 2 + eps / 3"
+          _p = Dual(3.0, 2.0) / Dual(3.0, 2.0)
+          assert (_p.a, _p.b) == (1.0, 0.0), "A dual number divided by itself is 1, with tangent 0"
+          _m = Dual(2.0, 3.0) * Dual(5.0, 7.0)
+          assert (_m.a, _m.b) == (10.0, 29.0), "The product should be left as it was: (2 + 3 eps)(5 + 7 eps) is 10 + 29 eps"
+          assert output.strip() == "-0.12", "The program should print -0.12"
+        wrong:
+          - |
+            class Dual:
+                def __init__(self, a, b=0.0):
+                    self.a = a
+                    self.b = b
+
+                def __add__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a + other.a, self.b + other.b)
+
+                def __mul__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+                def __truediv__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a / other.a, (self.b * other.a + self.a * other.b) / (other.a * other.a))
+
+                def __radd__(self, other):
+                    return self + other
+
+                def __rmul__(self, other):
+                    return self * other
+
+            print("-0.12")
+          - |
+            class Dual:
+                def __init__(self, a, b=0.0):
+                    self.a = a
+                    self.b = b
+
+                def __add__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a + other.a, self.b + other.b)
+
+                def __mul__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+                def __truediv__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a / other.a, (self.a * other.b - self.b * other.a) / (other.a * other.a))
+
+                def __radd__(self, other):
+                    return self + other
+
+                def __rmul__(self, other):
+                    return self * other
+
+            print("-0.12")
+          - |
+            class Dual:
+                def __init__(self, a, b=0.0):
+                    self.a = a
+                    self.b = b
+
+                def __add__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a + other.a, self.b + other.b)
+
+                def __mul__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+                def __truediv__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a / other.a, (self.b * other.a - self.a * other.b) / other.a)
+
+                def __radd__(self, other):
+                    return self + other
+
+                def __rmul__(self, other):
+                    return self * other
+
+            print("-0.12")
+        explanation: |
+          The tangent of a quotient is $(bc - ad)/c^2$, the quotient rule, and the class had a plus sign where the minus belongs. It had copied the shape of the product rule.
+
+          The minus sign can be checked without calculus: a dual number divided by itself must be exactly 1, with tangent 0, and $(bc - ad)/c^2$ with $a = c$, $b = d$ is 0. With the plus sign it is $2b/c$.
+
+          Each elementary operation needs its rule written once, in one place. After that every function built from the operations is differentiated correctly, and a wrong rule makes every such function wrong, which is why a library tests each rule against finite differences.
+    - question:
+        id: work-which-mode
+        type: choice
+        system: s2
+        prompt: |
+          A simulation takes 3 design parameters and returns the temperature at 10 000 points. Its full Jacobian is wanted. Which mode, and how many passes?
+        options:
+          - 'Reverse mode, 1 sweep, since reverse mode is always cheaper.'
+          - 'Forward mode, 3 passes: one per input, each giving a whole column of 10 000 derivatives, and no tape.'
+          - 'Reverse mode, 3 sweeps.'
+          - 'Forward mode, 10 000 passes.'
+        answer: 1
+        explanation: |
+          Forward mode costs one pass per **input** and reverse mode one sweep per **output**. Here that is 3 against 10 000. Reverse mode's reputation comes from training, where the output is a single loss. With few inputs the count goes the other way, and forward mode has the further advantage of storing nothing, which matters for a long simulation. Rule of thumb: compare $n$ with $m$ and differentiate from the smaller side.
+    - question:
+        id: work-reciprocal
+        type: numeric
+        system: s2
+        prompt: |
+          Compute $\dfrac{1}{2 + \varepsilon}$ as a dual number $a + b\varepsilon$. What is $b$?
+        answer: "-0.25"
+        explanation: |
+          Multiply top and bottom by $2 - \varepsilon$: the bottom becomes $4 - \varepsilon^2 = 4$, and the top is $2 - \varepsilon$, so the quotient is $0.5 - 0.25\varepsilon$. The value is $1/2$ and the tangent is the derivative of $1/x$ at 2, which is $-1/4$. Notice that the trick worked only because the value 2 is not zero: $1/\varepsilon$ does not exist, so the dual numbers are not a field.
+    - question:
+        id: work-branch
+        type: choice
+        system: s2
+        prompt: |
+          A program computes `x if x != 1.0 else 1.0`. As a function it is simply $f(x) = x$, with derivative 1 everywhere. What derivative does a run on dual numbers return at $x = 1$?
+        options:
+          - '1, since the function is $x$.'
+          - '0, because at $x = 1$ the program takes the branch that returns a constant, and a constant has tangent 0.'
+          - 'An error, since the function has a test in it.'
+          - '0.5, the average of the two branches.'
+        answer: 1
+        explanation: |
+          Automatic differentiation differentiates the **steps the program took**, not the function the program represents. At $x = 1$ those steps were "return the constant 1.0", whose tangent is 0. The same happens in reverse mode. The answer is right whenever the branch taken agrees with the function on a whole neighbourhood of the point, and can be wrong at the isolated points where a special case is handled separately. It is the reason a rectifier is given the slope 0 or 1 at exactly zero by convention, and a reason to be wary of hand-written special cases inside code that will be differentiated.
+  connections:
+    - text: |
+        The coefficient of $\varepsilon$ is the derivative because $\varepsilon^2 = 0$ discards exactly what a derivative discards: everything beyond first order. Ordinary addition and multiplication of **dual numbers** $a + b\varepsilon$ are the sum and product rules, composition is the chain rule, and so any program run on them carries its derivative along. The second component is the tangent of the forward recursion.
+
+        One pass gives a **Jacobian-vector product**, exactly, at about twice the cost of the function and with nothing stored. A gradient needs one pass per input, so forward mode suits few inputs and reverse mode few outputs.
+
+        The two modes can also be combined. A gradient computed by reverse mode is itself a function of the inputs, and nudging those inputs with dual numbers differentiates it once more, in one direction. That gives the second derivative of a function of a million variables along any direction, without ever writing down its million-by-million Hessian: [[m13.hessian-vector-products]].
