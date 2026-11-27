@@ -3867,6 +3867,200 @@ function FloatGaps(props: Props) {
   );
 }
 
+/* Functions of two variables are drawn as a map of level curves, on the same scale as the vector figures. */
+type Surface = { name: string; f: (x: number, y: number) => number; grad: (x: number, y: number) => Pair; bend: [number, number, number]; gap: number; shape: string };
+const SURFACES: Record<string, Surface> = {
+  bowl: {
+    name: "f(x, y) = x² + y²",
+    f: (x, y) => x * x + y * y,
+    grad: (x, y) => [2 * x, 2 * y],
+    bend: [2, 0, 2],
+    gap: 2,
+    shape: "The level curves are circles round the origin, and they crowd together where the bowl is steep.",
+  },
+  saddle: {
+    name: "f(x, y) = x² − y²",
+    f: (x, y) => x * x - y * y,
+    grad: (x, y) => [2 * x, -2 * y],
+    bend: [2, 0, -2],
+    gap: 2,
+    shape: "The level curves are hyperbolas, and the two straight lines y = x and y = −x are the level curve at height 0.",
+  },
+  twist: {
+    name: "f(x, y) = x² + 3xy + y²",
+    f: (x, y) => x * x + 3 * x * y + y * y,
+    grad: (x, y) => [2 * x + 3 * y, 3 * x + 2 * y],
+    bend: [2, 3, 2],
+    gap: 4,
+    shape: "The level curves are hyperbolas, turned through 45°, though both slices along the axes are bowls.",
+  },
+};
+
+/** The curve f = level inside the window, found one small square at a time. */
+function levelPath(f: (x: number, y: number) => number, level: number) {
+  const step = 0.125;
+  const out: string[] = [];
+  for (let i = 0; i < 76; i++) {
+    for (let j = 0; j < 48; j++) {
+      const [x0, y0] = [-4.75 + i * step, -3 + j * step];
+      const corners: Pair[] = [
+        [x0, y0],
+        [x0 + step, y0],
+        [x0 + step, y0 + step],
+        [x0, y0 + step],
+      ];
+      const values = corners.map(([x, y]) => f(x, y) - level);
+      const cuts: string[] = [];
+      for (let k = 0; k < 4; k++) {
+        const [a, b] = [values[k], values[(k + 1) % 4]];
+        if (a > 0 === b > 0) continue;
+        const t = a / (a - b);
+        const [p, q] = [corners[k], corners[(k + 1) % 4]];
+        cuts.push(`${gx(p[0] + t * (q[0] - p[0])).toFixed(1)} ${gy(p[1] + t * (q[1] - p[1])).toFixed(1)}`);
+      }
+      for (let k = 0; k + 1 < cuts.length; k += 2) out.push(`M${cuts[k]}L${cuts[k + 1]}`);
+    }
+  }
+  return out.join("");
+}
+const levelMaps = new Map<string, string>();
+function levelMap(key: string) {
+  const known = levelMaps.get(key);
+  if (known !== undefined) return known;
+  const s = SURFACES[key];
+  const drawn = Array.from({ length: 41 }, (_, i) => (i - 10) * s.gap)
+    .map((level) => levelPath(s.f, level))
+    .join("");
+  levelMaps.set(key, drawn);
+  return drawn;
+}
+const tidy = (v: number) => (Math.abs(v) < 1e-9 ? 0 : Math.round(v * 1e6) / 1e6);
+const CONTOUR_SHOWS = ["value", "partials", "gradient", "direction", "bend"];
+
+/** A function of two variables as a map of level curves, with its slices, its gradient and its slope in a chosen direction. */
+function Contours(props: Props) {
+  const key = typeof props.surface === "string" && props.surface in SURFACES ? props.surface : "bowl";
+  const show = typeof props.show === "string" && CONTOUR_SHOWS.includes(props.show) ? props.show : "value";
+  const s = SURFACES[key];
+  const [x, setX] = useState(clamp(Math.round(num(props.x, 2) * 2) / 2, -3, 3));
+  const [y, setY] = useState(clamp(Math.round(num(props.y, 1) * 2) / 2, -2, 2));
+  const [angle, setAngle] = useState(clamp(Math.round(num(props.angle, 0) / 15) * 15, 0, 345));
+  const turns = show === "direction" || show === "bend";
+  const at: Pair = [x, y];
+  const value = s.f(x, y);
+  const g = s.grad(x, y);
+  const steep = Math.hypot(g[0], g[1]);
+  const u: Pair = [tidy(Math.cos((angle * Math.PI) / 180)), tidy(Math.sin((angle * Math.PI) / 180))];
+  const along = tidy(dot(g, u));
+  const bend = tidy(s.bend[0] * u[0] * u[0] + 2 * s.bend[1] * u[0] * u[1] + s.bend[2] * u[1] * u[1]);
+  const here = `At the point ${pair(at)} the value is ${dp(value)}.`;
+  const flat = steep === 0;
+  const detail =
+    show === "partials"
+      ? `The slice with y held at ${dp(y)} runs left and right through the point, and its slope there is ∂f/∂x = ${dp(g[0])}. The slice with x held at ${dp(x)} runs up and down, and its slope there is ∂f/∂y = ${dp(g[1])}.`
+      : show === "gradient"
+        ? flat
+          ? "The gradient is (0, 0): the ground is level in every direction here, and there is no uphill to point to."
+          : `The gradient is ${pair(g)}, of length ${dp(steep)}, which is the steepest slope at the point. It crosses the level curve through the point at right angles and points towards higher ground. The arrow is drawn at a quarter of its length.`
+        : show === "direction"
+          ? `The gradient is ${pair(g)}. The direction at ${angle}° is u = ${pair(u)}. The slope along it is ${dp(g[0])} × ${u[0] < 0 ? `(${dp(u[0])})` : dp(u[0])} ${g[1] * u[1] < 0 ? "−" : "+"} ${dp(Math.abs(g[1]))} × ${dp(Math.abs(u[1]))} = ${dp(along)}. ${
+              flat
+                ? "With no gradient, the slope is 0 in every direction."
+                : along === 0
+                  ? "The direction runs along the level curve, at right angles to the gradient, so the ground neither rises nor falls."
+                  : `That is the length of the gradient, ${dp(steep)}, times ${dp(along / steep)}, the cosine of the angle between the two arrows. The ground ${along > 0 ? "rises" : "falls"} this way.`
+            }`
+          : show === "bend"
+            ? `The slice through the point in the direction at ${angle}°, u = ${pair(u)}, has slope ${dp(along)} and second derivative ${dp(bend)} there. ${
+                bend > 0 ? "It bends upwards, like a bowl." : bend < 0 ? "It bends downwards, like a dome." : "It does not bend: along this line the surface is straight."
+              }`
+            : `The heavy curve is the level curve through the point: everywhere on it the value is ${dp(value)}. ${s.shape}`;
+  const quarter: Pair = [x + g[0] / 4, y + g[1] / 4];
+  return (
+    <Frame
+      title="A map of level curves"
+      summary={`${s.name}, with a level curve every ${s.gap} units of height. ${here} ${detail}`}
+      controls={
+        <>
+          <Slider label="x" value={x} onChange={setX} min={-3} max={3} step={0.5} />
+          <Slider label="y" value={y} onChange={setY} min={-2} max={2} step={0.5} />
+          {turns ? <Stepper label="direction in steps of 15°" value={angle / 15} onChange={(v) => setAngle(v * 15)} min={0} max={23} /> : null}
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`Level curves of ${s.name}, with the point ${pair(at)} marked`}>
+        <defs>
+          <clipPath id="contour-clip">
+            <rect x={gx(-4.75)} y={gy(3)} width={380} height={240} />
+          </clipPath>
+        </defs>
+        <line x1={gx(-4.75)} x2={gx(4.75)} y1={gy(0)} y2={gy(0)} className="fig-axis" />
+        <line x1={gx(0)} x2={gx(0)} y1={gy(-3)} y2={gy(3)} className="fig-axis" />
+        <text x={gx(4.75) - 4} y={gy(0) - 5} textAnchor="end" className="fig-small">
+          x
+        </text>
+        <text x={gx(0) + 6} y={gy(3) + 10} className="fig-small">
+          y
+        </text>
+        <g clipPath="url(#contour-clip)">
+          <path d={levelMap(key)} className="fig-line" style={{ strokeWidth: 1 }} />
+          <path d={levelPath(s.f, value)} className="fig-accent-line" fill="none" style={{ strokeWidth: 2 }} />
+          {show === "partials" ? (
+            <>
+              <line x1={gx(-4.75)} x2={gx(4.75)} y1={gy(y)} y2={gy(y)} className="fig-guide" />
+              <line x1={gx(x)} x2={gx(x)} y1={gy(-3)} y2={gy(3)} className="fig-guide" />
+            </>
+          ) : null}
+          {show === "bend" ? <line x1={gx(x - 8 * u[0])} y1={gy(y - 8 * u[1])} x2={gx(x + 8 * u[0])} y2={gy(y + 8 * u[1])} className="fig-guide" /> : null}
+          {show === "gradient" && !flat ? <Arrow from={at} to={quarter} accent name="∇f" /> : null}
+          {show === "direction" && !flat ? <Arrow from={at} to={quarter} name="∇f" /> : null}
+          {turns ? <Arrow from={at} to={[x + u[0], y + u[1]]} accent name="u" /> : null}
+        </g>
+        <circle cx={gx(x)} cy={gy(y)} r="5" className="fig-accent" />
+      </svg>
+    </Frame>
+  );
+}
+
+/** One cell of polar coordinates: a fixed step in distance and in angle covers more ground the further out it is. */
+function PolarCell(props: Props) {
+  const [r, setR] = useState(clamp(Math.round(num(props.r, 2) * 2) / 2, 0.5, 2.5));
+  const [turn, setTurn] = useState(clamp(Math.round(num(props.angle, 30) / 15), 0, 23));
+  const [dr, dt] = [0.5, Math.PI / 12];
+  const t0 = turn * dt;
+  const spot = (radius: number, t: number) => `${gx(radius * Math.cos(t)).toFixed(1)} ${gy(radius * Math.sin(t)).toFixed(1)}`;
+  const cell = `M${spot(r, t0)}L${spot(r + dr, t0)}A${(r + dr) * 40} ${(r + dr) * 40} 0 0 0 ${spot(r + dr, t0 + dt)}L${spot(r, t0 + dt)}A${r * 40} ${r * 40} 0 0 1 ${spot(r, t0)}Z`;
+  const flatArea = dr * dt;
+  return (
+    <Frame
+      title="A cell of polar coordinates"
+      summary={`The cell runs from distance r = ${dp(r)} to ${dp(r + dr)} and from the angle ${turn * 15}° to ${turn * 15 + 15}°. A step of 15° is ${dp(dt)} radians. Its straight sides have length ${dp(dr)}. Its inner curved side has length r × ${dp(dt)} = ${dp(r * dt)}, which grows with r. So its area is about ${dp(dr)} × ${dp(r * dt)} = ${dp(r * flatArea)}, which is r = ${dp(r)} times the ${dp(flatArea)} that the same steps in r and θ would cover if they were sides of a rectangle. Its exact area is ${dp((r + dr / 2) * flatArea)}, a little more because the outer side is longer than the inner one, and the two agree better the smaller the cell. Turning the cell round the origin changes neither.`}
+      controls={
+        <>
+          <Slider label="distance r" value={r} onChange={setR} min={0.5} max={2.5} step={0.5} />
+          <Stepper label="angle in steps of 15°" value={turn} onChange={setTurn} min={0} max={23} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`Circles and rays about the origin, with the cell from r = ${dp(r)} to ${dp(r + dr)} and from ${turn * 15}° to ${turn * 15 + 15}° shaded`}>
+        {[0.5, 1, 1.5, 2, 2.5, 3].map((radius) => (
+          <circle key={radius} cx={gx(0)} cy={gy(0)} r={radius * 40} className="fig-grid" fill="none" />
+        ))}
+        {Array.from({ length: 24 }, (_, i) => (
+          <line key={i} x1={gx(0)} y1={gy(0)} x2={gx(3 * Math.cos(i * dt))} y2={gy(3 * Math.sin(i * dt))} className={i % 6 === 0 ? "fig-axis" : "fig-grid"} />
+        ))}
+        <path d={cell} className="fig-accent" />
+        <text x={gx(3) + 6} y={gy(0) + 4} className="fig-small">
+          x
+        </text>
+        <text x={gx(0) + 6} y={gy(3) - 4} className="fig-small">
+          y
+        </text>
+      </svg>
+    </Frame>
+  );
+}
+
 const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "place-value": PlaceValue,
   "number-line": NumberLine,
@@ -3939,6 +4133,8 @@ const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "random-samples": RandomSamples,
   "log-sum-exp": LogSumExp,
   "float-gaps": FloatGaps,
+  contours: Contours,
+  "polar-cell": PolarCell,
 };
 
 export function Figure({ name, props }: { name: string; props?: Props }) {

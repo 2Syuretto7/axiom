@@ -381,6 +381,16 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   await expect(gaps).toContainText("Adding 1 to 10,00,00,000 changes nothing");
   await press(gaps, "Switch float32");
   await expect(gaps).toContainText("neighbouring float64 values are 1.5 × 10^−8 apart.");
+  const levels = fig("A map of level curves");
+  await expect(levels).toContainText("f(x, y) = x² + y², with a level curve every 2 units of height. At the point (2, 1) the value is 5. The gradient is (4, 2). The direction at 60° is u = (0.5, 0.866). The slope along it is 4 × 0.5 + 2 × 0.866 = 3.7321.");
+  await press(levels, "Increase direction in steps of 15°", 5);
+  await expect(levels).toContainText("The direction at 135° is u = (−0.7071, 0.7071). The slope along it is 4 × (−0.7071) + 2 × 0.7071 = −1.4142. That is the length of the gradient, 4.4721, times −0.3162, the cosine of the angle between the two arrows. The ground falls this way.");
+  const polar = fig("A cell of polar coordinates");
+  await expect(polar).toContainText("The cell runs from distance r = 2 to 2.5 and from the angle 30° to 45°.");
+  await expect(polar).toContainText("So its area is about 0.5 × 0.5236 = 0.2618, which is r = 2 times the 0.1309");
+  await press(polar, "Increase angle in steps of 15°");
+  await expect(polar).toContainText("from the angle 45° to 60°");
+  await expect(polar).toContainText("Its exact area is 0.2945");
   await expect(page.locator(".prose-lesson img")).toHaveCount(0);
 
   // Wrong, then right. There is no hint ladder: hints come from the tutor. Fractions and words are handled by the grader.
