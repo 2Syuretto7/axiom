@@ -1,0 +1,623 @@
+concept: m8.operator-and-frobenius-norms
+minutes: 85
+claim: You can define a matrix norm and the operator norm induced by a vector norm, compute the induced 1-norm, infinity-norm and spectral norm and the Frobenius norm of a matrix, use the inequalities that make norms useful, which are the bound on a product and the bound on the image of a vector, relate the spectral and Frobenius norms through the singular values, distinguish all of them from the spectral radius, and choose the right norm for bounding the stretch of a layer or penalising the size of its weights.
+recalls: [m8.pca-as-svd]
+uses: [m8.eckart-young-theorem, m8.singular-value-decomposition, m8.eigenvalues-and-eigenvectors, m8.quadratic-forms-and-the-rayleigh-quotient, m6.cauchy-schwarz-and-the-triangle-inequality, m6.inner-product-spaces, m7.conditioning, m4.norms-and-distance, m5.matrix-multiplication-as-composition, m5.identity-and-inverse, e5.linear-algebra-routines, e5.axis-operations-and-reductions, e5.einsum, e0.functions, e0.loops]
+leads: [m8.jordan-form-and-the-matrix-exponential]
+starter: |
+  # Scratch space. Four ways to say how big one matrix is.
+  import numpy as np
+
+  A = np.array([[3.0, 0.0], [4.0, 5.0]])
+  print(float(np.abs(A).sum(axis=0).max()))
+  print(float(np.abs(A).sum(axis=1).max()))
+  print(round(float(np.linalg.svd(A, compute_uv=False)[0]), 4))
+  print(round(float(np.sqrt((A ** 2).sum())), 4))
+parts:
+  recall:
+    - text: |
+        [[m8.pca-as-svd]] measured reconstruction error by the root of a sum of squares, and the lessons before it measured the largest stretch. Both are ways of giving a matrix a size. Today they get names, rules, and company. Three quick pulls first.
+  puzzle:
+    - text: |
+        A sensor reading $\mathbf{x}$ passes through the matrix $A = \begin{pmatrix} 3 & 0 \\ 4 & 5 \end{pmatrix}$. The reading is uncertain by a small error $\mathbf{e}$. The output is then uncertain by $A\mathbf{e}$. How much bigger than $\mathbf{e}$ can $A\mathbf{e}$ be?
+
+        Three engineers answer.
+
+        - The first measures a vector by its ordinary length, and says: at most $6.71$ times.
+        - The second measures a vector by its largest entry, since each entry must stay within a tolerance. She says: at most $9$ times.
+        - The third measures a vector by the sum of the sizes of its entries, a total error budget. He says: at most $7$ times.
+
+        A fourth adds up the squares of all entries of $A$, takes the root, and says $7.07$.
+
+        The starter prints all four numbers.
+
+        ```
+        7.0
+        9.0
+        6.7082
+        7.0711
+        ```
+
+        **Who is right? Where do 9 and 7 come from, which are suspiciously easy to read off the matrix? And is the fourth number a largest stretch of anything?**
+  intuition:
+    - text: |
+        The first three engineers are all right, because they are answering different questions. "How much can $A$ enlarge a vector" depends on how vectors are measured. Each way of measuring vectors gives its own largest stretch, and that largest stretch is a way of measuring the matrix.
+
+        Measure by ordinary length and the largest stretch is $\sigma_1 = 6.7082$, as the singular value decomposition showed.
+
+        Measure by the **largest entry**. The worst input has every entry at full size, $\pm 1$, with signs chosen to make one output entry as big as possible. That output entry is then the sum of the absolute values along a row. The best row here is $4 + 5 = 9$.
+
+        Measure by the **sum of entries**. The worst input puts its whole budget on a single coordinate, and the output is then one column of $A$. The largest column, measured the same way, is $3 + 4 = 7$.
+
+        So: largest row sum, largest column sum, largest singular value. Each is an **operator norm**: the greatest factor by which the matrix can enlarge a vector, in some way of measuring.
+
+        The fourth number is different in kind. It treats the matrix as a list of four numbers and takes its ordinary length: $\sqrt{9 + 0 + 16 + 25} = \sqrt{50}$. It is not the largest stretch in any measure. It is easy to compute and easy to differentiate, and it never underestimates the true stretch $\sigma_1$. This is the **Frobenius norm**.
+  derivation:
+    - text: |
+        **Matrix norms.** A norm on matrices is a function $\|\cdot\|$ with the same three properties as a vector norm: $\|A\| \ge 0$ with equality only for $A = 0$; $\|cA\| = |c|\|A\|$; and $\|A + B\| \le \|A\| + \|B\|$.
+
+        **Induced norms.** Fix a vector norm. The **operator norm** it induces is
+
+        $$\|A\| = \max_{\mathbf{x} \ne \mathbf{0}} \frac{\|A\mathbf{x}\|}{\|\mathbf{x}\|}.$$
+
+        Two inequalities follow at once and are the reason norms are used.
+
+        $$\|A\mathbf{x}\| \le \|A\|\,\|\mathbf{x}\|, \qquad \|AB\| \le \|A\|\,\|B\|.$$
+
+        The first is the definition rearranged. For the second: $\|AB\mathbf{x}\| \le \|A\|\|B\mathbf{x}\| \le \|A\|\|B\|\|\mathbf{x}\|$ for every $\mathbf{x}$. A norm with the second property is called **submultiplicative**. Also $\|I\| = 1$ for every induced norm.
+
+        **The three standard ones.**
+
+        - From $\|\mathbf{x}\|_1 = \sum|x_i|$: $\ \|A\|_1 = \max_j \sum_i |a_{ij}|$, the largest **column** sum.
+        - From $\|\mathbf{x}\|_\infty = \max|x_i|$: $\ \|A\|_\infty = \max_i \sum_j |a_{ij}|$, the largest **row** sum.
+        - From $\|\mathbf{x}\|_2$: $\ \|A\|_2 = \sigma_1(A)$, the **spectral norm**.
+
+        *Why the column sum.* Write $A\mathbf{x} = \sum_j x_j\mathbf{a}_j$ with $\mathbf{a}_j$ the columns. By the triangle inequality $\|A\mathbf{x}\|_1 \le \sum_j |x_j|\|\mathbf{a}_j\|_1 \le \big(\max_j\|\mathbf{a}_j\|_1\big)\|\mathbf{x}\|_1$. Taking $\mathbf{x} = \mathbf{e}_j$ for the largest column gives equality.
+
+        **The Frobenius norm.**
+
+        $$\|A\|_F = \sqrt{\sum_{i,j} a_{ij}^2} = \sqrt{\operatorname{tr}(A^\top A)} = \sqrt{\sigma_1^2 + \dots + \sigma_r^2}.$$
+
+        It comes from an inner product on matrices, $\langle A, B\rangle = \operatorname{tr}(A^\top B) = \sum a_{ij}b_{ij}$, so Cauchy-Schwarz and Pythagoras hold for it. It is submultiplicative, and $\|A\mathbf{x}\|_2 \le \|A\|_F\|\mathbf{x}\|_2$. It is **not** induced by any vector norm, since $\|I\|_F = \sqrt n$, not 1.
+
+        *The puzzle.* $\|A\|_1 = 7$, $\|A\|_\infty = 9$, $\|A\|_2 = 6.7082$, $\|A\|_F = 7.0711$. Each engineer quoted the operator norm that matches the way they measure vectors, and the fourth quoted the Frobenius norm, an upper bound for the first engineer's answer.
+    - question:
+        id: derivation-one-norm
+        type: numeric
+        system: s2
+        prompt: |
+          What is $\|A\|_1$ for $A = \begin{pmatrix} 1 & -2 \\ 3 & 4 \end{pmatrix}$?
+        answer: "6"
+        explanation: |
+          The column sums of absolute values are $1 + 3 = 4$ and $2 + 4 = 6$, so $\|A\|_1 = 6$, attained at $\mathbf{x} = (0, 1)$. The row sums are 3 and 7, so $\|A\|_\infty = 7$, attained at $\mathbf{x} = (1, 1)$. The signs of the entries do not matter for either, because the worst input can choose its own signs. A way to keep the two apart: the 1-norm is tall, a column, like the digit 1.
+    - text: |
+        **Spectral against Frobenius.** Both are functions of the singular values. With $r = \operatorname{rank}A$,
+
+        $$\|A\|_2 \le \|A\|_F \le \sqrt r\,\|A\|_2.$$
+
+        They are equal exactly when the rank is 1. They are furthest apart when all singular values are equal, as for an orthogonal matrix, with $\|Q\|_2 = 1$ and $\|Q\|_F = \sqrt n$. The ratio $\|A\|_F^2/\|A\|_2^2$ is called the **stable rank**: a number between 1 and $r$ that says how many directions the matrix effectively uses.
+
+        Both are unchanged by orthogonal factors: $\|QAP\| = \|A\|$.
+
+        **A cheap bound.** $\|A\|_2 \le \sqrt{\|A\|_1\|A\|_\infty}$. For the puzzle, $\sqrt{63} = 7.94 \ge 6.71$. No decomposition is needed.
+
+        **Spectral radius.** $\rho(A) = \max|\lambda_i|$ is **not** a norm. The matrix $\begin{pmatrix} 0 & 1 \\ 0 & 0 \end{pmatrix}$ is not zero and has $\rho = 0$. What holds is
+
+        $$\rho(A) \le \|A\| \quad\text{for every induced norm},$$
+
+        since $\|A\|\|\mathbf{v}\| \ge \|A\mathbf{v}\| = |\lambda|\|\mathbf{v}\|$ for an eigenvector. The norm bounds one application: $\|A\mathbf{x}\| \le \|A\|\|\mathbf{x}\|$. The spectral radius decides the long run: $A^k \to 0$ exactly when $\rho(A) < 1$. For symmetric matrices $\rho(A) = \|A\|_2$ and there is no gap.
+
+        **Condition number.** For any submultiplicative norm $\kappa(A) = \|A\|\|A^{-1}\|$, and $1 = \|I\| \le \|A\|\|A^{-1}\|$ shows $\kappa \ge 1$. In the spectral norm it is $\sigma_1/\sigma_n$.
+
+        **In machine learning.** The spectral norm of a weight matrix is the Lipschitz constant of the linear layer: outputs differ by at most $\|W\|_2$ times the difference of the inputs. For a stack of layers the constants multiply, by submultiplicativity. The squared Frobenius norm is the **weight decay** penalty $\sum w_{ij}^2$, chosen because its gradient is simply $2W$.
+
+        **In NumPy.** `np.linalg.norm(A)` with no second argument is the **Frobenius** norm. The others are `norm(A, 2)`, `norm(A, 1)` and `norm(A, np.inf)`.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the proof that an induced norm satisfies the product inequality.
+        steps:
+          - 'Take any vector $\mathbf{x}$ and write $AB\mathbf{x} = A(B\mathbf{x})$.'
+          - 'Apply the bound for $A$ to the vector $B\mathbf{x}$: $\|AB\mathbf{x}\| \le \|A\|\,\|B\mathbf{x}\|$.'
+          - 'Apply the bound for $B$: $\|B\mathbf{x}\| \le \|B\|\,\|\mathbf{x}\|$.'
+          - 'Combine: $\|AB\mathbf{x}\|/\|\mathbf{x}\| \le \|A\|\,\|B\|$ for every nonzero $\mathbf{x}$.'
+          - 'Take the maximum over $\mathbf{x}$: $\|AB\| \le \|A\|\,\|B\|$.'
+        explanation: The bound on the image of a vector is used twice, and then the maximum is taken.
+  formal:
+    - text: |
+        **Matrix norm.** $\|\cdot\| : \mathbb{R}^{m \times n} \to [0, \infty)$, definite, absolutely homogeneous, satisfying the triangle inequality. **Submultiplicative** if $\|AB\| \le \|A\|\|B\|$ whenever the product is defined.
+
+        **Induced norm.** $\|A\|_{p} = \max_{\|\mathbf{x}\|_p = 1}\|A\mathbf{x}\|_p$. Every induced norm is submultiplicative and has $\|I\| = 1$.
+
+        **Formulas.** $\|A\|_1 = \max_j\sum_i|a_{ij}|$. $\|A\|_\infty = \max_i\sum_j|a_{ij}| = \|A^\top\|_1$. $\|A\|_2 = \sigma_1(A) = \sqrt{\lambda_{\max}(A^\top A)}$.
+
+        **Frobenius.** $\|A\|_F = \sqrt{\operatorname{tr}(A^\top A)}$, from $\langle A, B\rangle_F = \operatorname{tr}(A^\top B)$. $\|AB\|_F \le \|A\|_2\|B\|_F \le \|A\|_F\|B\|_F$.
+
+        **Schatten norms.** $\|A\|_{S_p} = \big(\sum_i\sigma_i^p\big)^{1/p}$: nuclear norm ($p = 1$), Frobenius ($p = 2$), spectral ($p = \infty$). All are orthogonally invariant.
+
+        **Comparisons** for $A \in \mathbb{R}^{m \times n}$ of rank $r$:
+
+        $$\|A\|_2 \le \|A\|_F \le \sqrt r\|A\|_2, \qquad \tfrac{1}{\sqrt n}\|A\|_\infty \le \|A\|_2 \le \sqrt m\|A\|_\infty, \qquad \|A\|_2^2 \le \|A\|_1\|A\|_\infty.$$
+
+        All norms on $\mathbb{R}^{m \times n}$ are equivalent: each is bounded by a constant multiple of any other.
+
+        **Spectral radius.** $\rho(A) \le \|A\|$ for every submultiplicative norm. Gelfand: $\rho(A) = \lim_{k \to \infty}\|A^k\|^{1/k}$.
+
+        **Neumann series.** If $\|E\| < 1$ in a submultiplicative norm then $I - E$ is invertible, $(I - E)^{-1} = \sum_{k \ge 0}E^k$, and $\|(I - E)^{-1}\| \le 1/(1 - \|E\|)$.
+
+        **Duality.** $\|A\|_2 = \max_{\|\mathbf{x}\| = \|\mathbf{y}\| = 1}\mathbf{y}^\top A\mathbf{x}$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-induced
+        type: choice
+        system: s1
+        prompt: |
+          The operator norm of $A$ induced by a vector norm is
+        options: ['the largest entry of $A$', 'the largest value of $\|A\mathbf{x}\|/\|\mathbf{x}\|$', 'the sum of the entries of $A$', 'the largest eigenvalue of $A$']
+        answer: 1
+        explanation: The greatest factor by which a vector can be enlarged.
+    - question:
+        id: drill-one
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\|A\|_1$ for $\begin{pmatrix} 2 & -6 \\ 1 & 3 \end{pmatrix}$?
+        answer: "9"
+        explanation: The largest column sum of absolute values, $6 + 3$.
+    - question:
+        id: drill-inf
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\|A\|_\infty$ for $\begin{pmatrix} 2 & -6 \\ 1 & 3 \end{pmatrix}$?
+        answer: "8"
+        explanation: The largest row sum of absolute values, $2 + 6$.
+    - question:
+        id: drill-spectral
+        type: numeric
+        system: s1
+        prompt: |
+          What is the spectral norm of $\begin{pmatrix} -7 & 0 \\ 0 & 3 \end{pmatrix}$?
+        answer: "7"
+        explanation: The largest singular value, which for a symmetric matrix is the largest absolute eigenvalue.
+    - question:
+        id: drill-frobenius
+        type: numeric
+        system: s1
+        prompt: |
+          What is the Frobenius norm of $\begin{pmatrix} 1 & 1 \\ 1 & 1 \end{pmatrix}$?
+        answer: "2"
+        explanation: $\sqrt{1 + 1 + 1 + 1}$.
+    - question:
+        id: drill-fro-sv
+        type: numeric
+        system: s1
+        prompt: |
+          A matrix has singular values 12 and 5. What is its Frobenius norm?
+        answer: "13"
+        explanation: $\sqrt{144 + 25}$.
+    - question:
+        id: drill-identity
+        type: numeric
+        system: s1
+        prompt: |
+          What is the spectral norm of the $9 \times 9$ identity matrix?
+        answer: "1"
+        explanation: Every induced norm of the identity is 1. Its Frobenius norm is 3.
+    - question:
+        id: drill-product
+        type: numeric
+        system: s1
+        prompt: |
+          $\|A\|_2 = 2$ and $\|B\|_2 = 3$. What is the largest that $\|AB\|_2$ can be?
+        answer: "6"
+        explanation: $\|AB\| \le \|A\|\|B\|$.
+    - question:
+        id: drill-vector
+        type: numeric
+        system: s1
+        prompt: |
+          $\|A\|_2 = 4$ and $\|\mathbf{x}\| = 0.5$. What is the largest that $\|A\mathbf{x}\|$ can be?
+        answer: "2"
+        explanation: $\|A\mathbf{x}\| \le \|A\|\|\mathbf{x}\|$.
+    - question:
+        id: drill-compare
+        type: choice
+        system: s1
+        prompt: |
+          Which always holds?
+        options: ['$\|A\|_F \le \|A\|_2$', '$\|A\|_2 \le \|A\|_F$', '$\|A\|_2 = \|A\|_F$', '$\|A\|_F \le \rho(A)$']
+        answer: 1
+        explanation: The largest singular value is at most the root of the sum of all their squares.
+    - question:
+        id: drill-rank-one
+        type: choice
+        system: s1
+        prompt: |
+          The spectral and Frobenius norms of a nonzero matrix are equal exactly when
+        options: ['the matrix is symmetric', 'the matrix has rank 1', 'the matrix is square', 'the matrix is orthogonal']
+        answer: 1
+        explanation: Then there is only one nonzero singular value.
+    - question:
+        id: drill-not-norm
+        type: choice
+        system: s1
+        prompt: |
+          Which of these is **not** a norm on matrices?
+        options: ['The spectral norm', 'The Frobenius norm', 'The spectral radius', 'The largest row sum']
+        answer: 2
+        explanation: A nonzero matrix can have all eigenvalues zero.
+    - question:
+        id: drill-numpy
+        type: choice
+        system: s1
+        prompt: |
+          For a 2-D array `A`, `np.linalg.norm(A)` with no other argument returns
+        options: ['the spectral norm', 'the Frobenius norm', 'the largest entry', 'the determinant']
+        answer: 1
+        explanation: The spectral norm needs `np.linalg.norm(A, 2)`.
+    - question:
+        id: predict-four
+        type: predict
+        system: s1
+        prompt: Four norms of the puzzle's matrix through NumPy. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[3.0, 0.0], [4.0, 5.0]])
+          print(float(np.linalg.norm(A, 1)), float(np.linalg.norm(A, np.inf)))
+          print(round(float(np.linalg.norm(A, 2)), 4), round(float(np.linalg.norm(A)), 4))
+          print(round(float(np.sqrt(np.trace(A.T @ A))), 4))
+        output: |
+          7.0 9.0
+          6.7082 7.0711
+          7.0711
+        explanation: The largest column sum is 7 and the largest row sum is 9. The spectral norm is the largest singular value, and the default is the Frobenius norm, which is also the root of the trace of A transpose A.
+    - question:
+        id: predict-product
+        type: predict
+        system: s1
+        prompt: The norm of a product against the product of the norms, and the same for the identity in two norms. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[3.0, 0.0], [4.0, 5.0]])
+          B = np.array([[1.0, -2.0], [3.0, 4.0]])
+          left = float(np.linalg.norm(A @ B, 2))
+          right = float(np.linalg.norm(A, 2) * np.linalg.norm(B, 2))
+          print(round(left, 4), round(right, 4), left <= right)
+          I = np.eye(4)
+          print(float(np.linalg.norm(I, 2)), float(np.linalg.norm(I)))
+        output: |
+          22.4831 34.3237 True
+          1.0 2.0
+        explanation: The norm of the product is below the product of the norms, and here well below, since the direction B stretches most is not the one A stretches most. The identity has spectral norm 1 and Frobenius norm root 4.
+  work:
+    - text: Slower now. The first task computes two norms from their formulas.
+    - question:
+        id: write-induced
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `induced_norms(A)` returning the pair `(one, infinity)`: the operator norms of `A` induced by the 1-norm and by the infinity-norm, as floats. Use the column-sum and row-sum formulas, and do not call anything from `np.linalg`.
+        starter: |
+          import numpy as np
+
+
+          def induced_norms(A):
+              return 0.0, 0.0
+
+
+          print(induced_norms(np.array([[3.0, 0.0], [4.0, 5.0]])))
+          print(induced_norms(np.array([[1.0, -2.0, 3.0], [-4.0, 5.0, -6.0]])))
+        solution: |
+          import numpy as np
+
+
+          def induced_norms(A):
+              sizes = np.abs(A)
+              return float(sizes.sum(axis=0).max()), float(sizes.sum(axis=1).max())
+
+
+          print(induced_norms(np.array([[3.0, 0.0], [4.0, 5.0]])))
+          print(induced_norms(np.array([[1.0, -2.0, 3.0], [-4.0, 5.0, -6.0]])))
+        tests: |
+          import numpy as _np
+          assert "linalg" not in source, "Use the column-sum and row-sum formulas, without np.linalg"
+          _out = induced_norms(_np.array([[3.0, 0.0], [4.0, 5.0]]))
+          assert isinstance(_out, tuple) and len(_out) == 2, "induced_norms should return the pair (one, infinity)"
+          assert abs(_out[0] - 7.0) < 1e-12 and abs(_out[1] - 9.0) < 1e-12, "For [[3, 0], [4, 5]] the largest column sum is 7 and the largest row sum is 9"
+          _B = _np.array([[1.0, -2.0, 3.0], [-4.0, 5.0, -6.0]])
+          _out = induced_norms(_B)
+          assert abs(_out[0] - 9.0) < 1e-12, "For [[1, -2, 3], [-4, 5, -6]] the column sums of absolute values are 5, 7 and 9, so the 1-norm is 9"
+          assert abs(_out[1] - 15.0) < 1e-12, "For [[1, -2, 3], [-4, 5, -6]] the row sums of absolute values are 6 and 15, so the infinity-norm is 15"
+          _C = _np.random.default_rng(0).normal(size=(5, 7))
+          _out = induced_norms(_C)
+          assert abs(_out[0] - _np.linalg.norm(_C, 1)) < 1e-9 and abs(_out[1] - _np.linalg.norm(_C, _np.inf)) < 1e-9, "For a random 5 by 7 matrix the results should agree with NumPy's norms"
+          assert output.strip() == "(7.0, 9.0)\n(9.0, 15.0)", "The program should print (7.0, 9.0) and then (9.0, 15.0)"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def induced_norms(A):
+                sizes = np.abs(A)
+                return float(sizes.sum(axis=1).max()), float(sizes.sum(axis=0).max())
+
+
+            print("(7.0, 9.0)\n(9.0, 15.0)")
+          - |
+            import numpy as np
+
+
+            def induced_norms(A):
+                return float(np.abs(A.sum(axis=0)).max()), float(np.abs(A.sum(axis=1)).max())
+
+
+            print("(7.0, 9.0)\n(9.0, 15.0)")
+          - |
+            import numpy as np
+
+
+            def induced_norms(A):
+                sizes = np.abs(A)
+                return float(sizes.max(axis=0).sum()), float(sizes.max(axis=1).sum())
+
+
+            print("(7.0, 9.0)\n(9.0, 15.0)")
+          - |
+            import numpy as np
+
+
+            def induced_norms(A):
+                sizes = np.abs(A)
+                return float(sizes.sum()), float(sizes.max())
+
+
+            print("(7.0, 9.0)\n(9.0, 15.0)")
+        explanation: |
+          `sum(axis=0)` adds down each column and `sum(axis=1)` adds along each row. The absolute values must be taken **before** adding. The second wrong version adds first, so entries of opposite sign cancel: for the second matrix it reports a 1-norm of 3 where the truth is 9. The worst input chooses its signs to prevent any cancellation.
+
+          These two norms cost one pass over the entries. The spectral norm costs a singular value decomposition, or an iteration. That is why error bounds in numerical work are so often stated in the 1-norm or the infinity-norm, and why $\sqrt{\|A\|_1\|A\|_\infty}$ is a popular cheap bound for $\|A\|_2$.
+    - question:
+        id: write-lipschitz
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A stack of linear layers applies the matrices in the list `weights` one after another, the first in the list first. Write `lipschitz_bound(weights)` returning the pair `(bound, actual)`: the product of the spectral norms of the layers, and the spectral norm of the matrix of the whole stack. Both as floats.
+        starter: |
+          import numpy as np
+
+
+          def lipschitz_bound(weights):
+              return 1.0, 1.0
+
+
+          W1 = np.array([[1.0, 2.0], [0.0, 1.0], [1.0, 0.0]])
+          W2 = np.array([[1.0, 0.0, 1.0], [0.0, 2.0, 0.0]])
+          bound, actual = lipschitz_bound([W1, W2])
+          print(round(bound, 4), round(actual, 4))
+        solution: |
+          import numpy as np
+
+
+          def lipschitz_bound(weights):
+              bound = 1.0
+              whole = np.eye(weights[0].shape[1])
+              for W in weights:
+                  bound = bound * float(np.linalg.norm(W, 2))
+                  whole = W @ whole
+              return bound, float(np.linalg.norm(whole, 2))
+
+
+          W1 = np.array([[1.0, 2.0], [0.0, 1.0], [1.0, 0.0]])
+          W2 = np.array([[1.0, 0.0, 1.0], [0.0, 2.0, 0.0]])
+          bound, actual = lipschitz_bound([W1, W2])
+          print(round(bound, 4), round(actual, 4))
+        tests: |
+          import numpy as _np
+          _W1 = _np.array([[1.0, 2.0], [0.0, 1.0], [1.0, 0.0]])
+          _W2 = _np.array([[1.0, 0.0, 1.0], [0.0, 2.0, 0.0]])
+          _out = lipschitz_bound([_W1, _W2])
+          assert isinstance(_out, tuple) and len(_out) == 2, "lipschitz_bound should return the pair (bound, actual)"
+          assert abs(_out[0] - 6 ** 0.5 * 2.0) < 1e-9, "The spectral norms of the two layers are sqrt 6 and 2, so the bound is about 4.899. Remember that np.linalg.norm needs the argument 2 for the spectral norm"
+          assert abs(_out[1] - 3.2360679775) < 1e-8, "The whole stack is W2 @ W1 = [[2, 2], [0, 2]], with spectral norm about 3.2361. The first layer in the list is applied first, so it stands on the right of the product"
+          _out = lipschitz_bound([_W1])
+          assert abs(_out[0] - 6 ** 0.5) < 1e-9 and abs(_out[1] - 6 ** 0.5) < 1e-9, "For a single layer the bound and the actual norm are both the spectral norm of that layer"
+          _Q = _np.linalg.qr(_np.random.default_rng(0).normal(size=(4, 4)))[0]
+          _out = lipschitz_bound([_Q, 2.0 * _Q, _Q])
+          assert abs(_out[0] - 2.0) < 1e-9 and abs(_out[1] - 2.0) < 1e-9, "For orthogonal layers, one of them doubled, the bound and the actual norm are both 2"
+          _rng = _np.random.default_rng(1)
+          _Ws = [_rng.normal(size=(5, 3)), _rng.normal(size=(4, 5)), _rng.normal(size=(2, 4))]
+          _out = lipschitz_bound(_Ws)
+          assert abs(_out[1] - _np.linalg.norm(_Ws[2] @ _Ws[1] @ _Ws[0], 2)) < 1e-9 and _out[1] <= _out[0] + 1e-12, "For three random layers the actual norm should be that of W3 @ W2 @ W1, and it should not exceed the bound"
+          assert output.strip() == "4.899 3.2361", "The program should print 4.899 3.2361"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def lipschitz_bound(weights):
+                bound = 1.0
+                whole = np.eye(weights[0].shape[1])
+                for W in weights:
+                    bound = bound * float(np.linalg.norm(W))
+                    whole = W @ whole
+                return bound, float(np.linalg.norm(whole))
+
+
+            print("4.899 3.2361")
+          - |
+            import numpy as np
+
+
+            def lipschitz_bound(weights):
+                bound = 0.0
+                whole = np.eye(weights[0].shape[1])
+                for W in weights:
+                    bound = bound + float(np.linalg.norm(W, 2))
+                    whole = W @ whole
+                return bound, float(np.linalg.norm(whole, 2))
+
+
+            print("4.899 3.2361")
+          - |
+            import numpy as np
+
+
+            def lipschitz_bound(weights):
+                bound = 1.0
+                whole = np.eye(weights[0].shape[0])
+                for W in weights:
+                    bound = bound * float(np.linalg.norm(W, 2))
+                    whole = whole @ W
+                return bound, float(np.linalg.norm(whole, 2))
+
+
+            print("4.899 3.2361")
+          - |
+            import numpy as np
+
+
+            def lipschitz_bound(weights):
+                bound = 1.0
+                whole = np.eye(weights[0].shape[1])
+                for W in weights:
+                    bound = bound * float(np.linalg.norm(W, 2))
+                    whole = W @ whole
+                return bound, bound
+
+
+            print("4.899 3.2361")
+        explanation: |
+          Applying $W_1$ first and $W_2$ second is the matrix $W_2W_1$, so each new layer multiplies on the **left**. The bound is the product inequality used once per layer.
+
+          The bound is $4.90$ and the truth is $3.24$. The bound would be attained only if the direction the first layer stretches most came out exactly along the direction the second layer stretches most. In general the layers are not aligned in that way, and the product of the norms overestimates, sometimes by a great deal for deep stacks. It is still the standard tool, because it needs only one number per layer. Methods that keep each layer's spectral norm near 1 use it to keep the whole network from amplifying small changes of its input.
+
+          The first wrong version leaves out the `2`, and gets Frobenius norms. Those are also valid upper bounds on the stretch, but looser, and they are not what was asked.
+    - question:
+        id: fix-contraction
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `is_contraction(A)` should return `True` exactly when `A` makes every nonzero vector strictly shorter. The program should print `False True`: the first matrix sends $(0, 1)$ to a vector of length about 3. It prints `True True`. Fix it.
+        starter: |
+          import numpy as np
+
+
+          def is_contraction(A):
+              return float(np.abs(np.linalg.eigvals(A)).max()) < 1.0
+
+
+          print(is_contraction(np.array([[0.5, 3.0], [0.0, 0.5]])), is_contraction(0.8 * np.eye(2)))
+        solution: |
+          import numpy as np
+
+
+          def is_contraction(A):
+              return float(np.linalg.norm(A, 2)) < 1.0
+
+
+          print(is_contraction(np.array([[0.5, 3.0], [0.0, 0.5]])), is_contraction(0.8 * np.eye(2)))
+        tests: |
+          import numpy as _np
+          assert is_contraction(_np.array([[0.5, 3.0], [0.0, 0.5]])) == False, "[[0.5, 3], [0, 0.5]] has both eigenvalues 0.5, and still sends (0, 1) to a vector of length about 3. One application is governed by the spectral norm, not by the eigenvalues"
+          assert is_contraction(0.8 * _np.eye(2)) == True, "0.8 times the identity shortens every vector"
+          assert is_contraction(_np.eye(3)) == False, "The identity keeps every length, so it does not make vectors strictly shorter"
+          assert is_contraction(_np.array([[0.6, 0.6], [0.6, 0.6]])) == False, "[[0.6, 0.6], [0.6, 0.6]] sends (1, 1) to (1.2, 1.2), which is longer"
+          assert is_contraction(_np.array([[0.0, 0.9], [0.0, 0.0]])) == True, "[[0, 0.9], [0, 0]] has spectral norm 0.9 and shortens every vector"
+          assert is_contraction(_np.array([[0.5, 0.0, 0.0], [0.0, 0.7, 0.0]])) == True, "A 2 by 3 matrix with singular values 0.7 and 0.5 shortens every vector, and the function should accept matrices that are not square"
+          assert output.strip() == "False True", "The program should print False True"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def is_contraction(A):
+                return float(np.abs(np.linalg.eigvals(A)).max()) < 1.0
+
+
+            print("False True")
+          - |
+            import numpy as np
+
+
+            def is_contraction(A):
+                return float(np.linalg.norm(A)) < 1.0
+
+
+            print("False True")
+          - |
+            import numpy as np
+
+
+            def is_contraction(A):
+                return float(np.abs(A).max()) < 1.0
+
+
+            print("False True")
+          - |
+            import numpy as np
+
+
+            def is_contraction(A):
+                return float(np.linalg.norm(A, 2)) <= 1.0
+
+
+            print("False True")
+        explanation: |
+          The function tested the spectral radius. Both eigenvalues of the first matrix are $0.5$, so its powers do go to zero in the end. But one application can treble a vector, because its largest singular value is about $3.08$. "Makes every vector shorter" is the statement $\|A\mathbf{x}\| < \|\mathbf{x}\|$ for all $\mathbf{x} \ne \mathbf{0}$, which is $\|A\|_2 < 1$.
+
+          The other wrong versions fail in the other directions. The Frobenius norm of $0.8I$ is $1.13$, so that test rejects a true contraction: it is sufficient and not necessary. The largest entry of the matrix of $0.6$s is below 1 while its norm is $1.2$.
+
+          The eigenvalue test also cannot be applied to a matrix that is not square. The norm can.
+    - question:
+        id: work-decay
+        type: choice
+        system: s2
+        prompt: |
+          Weight decay adds $\mu\|W\|_F^2$ to a training loss. In terms of the singular values of $W$, what is being penalised, and how does that differ from penalising $\|W\|_2$?
+        options:
+          - 'Only the largest singular value is penalised in both cases.'
+          - 'The Frobenius penalty is $\mu\sum_i\sigma_i^2$, so every singular value is pulled towards zero, in proportion to its size. A spectral-norm penalty acts only on the largest one and leaves the rest alone.'
+          - 'The Frobenius penalty acts on the eigenvalues and the spectral penalty on the singular values.'
+          - 'They are the same penalty up to a constant.'
+        answer: 1
+        explanation: |
+          $\|W\|_F^2 = \sum\sigma_i^2$. Its gradient is $2W$, which shrinks every singular direction at the same relative rate. That is why it is so convenient, and why it is called decay. A penalty on $\|W\|_2 = \sigma_1$ controls the worst-case stretch of the layer directly, and is harder to differentiate, since it needs the top singular vectors. A third choice, the nuclear norm $\sum\sigma_i$, pulls all singular values down by the same **absolute** amount, which drives small ones to exactly zero and favours low rank.
+    - question:
+        id: work-range
+        type: numeric
+        system: s2
+        prompt: |
+          A matrix of rank 4 has spectral norm 3. What is the largest value its Frobenius norm could have?
+        answer: "6"
+        explanation: |
+          $\|A\|_F = \sqrt{\sigma_1^2 + \dots + \sigma_4^2} \le \sqrt{4 \times 9} = 6$, attained when all four singular values equal 3. The smallest possible value is 3 itself, approached as the other three singular values go to zero. So knowing one norm confines the other to the range $[\,\|A\|_2, \sqrt r\,\|A\|_2\,]$, and where it falls in that range says how evenly the matrix uses its directions.
+    - question:
+        id: work-kappa
+        type: choice
+        system: s2
+        prompt: |
+          Why is the condition number $\kappa(A) = \|A\|\,\|A^{-1}\|$ at least 1, in every induced norm?
+        options:
+          - 'Because norms are positive.'
+          - 'Because $1 = \|I\| = \|AA^{-1}\| \le \|A\|\,\|A^{-1}\|$, by the product inequality.'
+          - 'Because the determinant of $A$ times the determinant of its inverse is 1.'
+          - 'It is not: orthogonal matrices have condition number 0.'
+        answer: 1
+        explanation: |
+          One line, from the two facts that $\|I\| = 1$ and that the norm of a product is at most the product of the norms. Equality holds for multiples of orthogonal matrices in the spectral norm. The same style of argument gives most perturbation bounds. For example if $A\mathbf{x} = \mathbf{b}$ and $A(\mathbf{x} + \delta\mathbf{x}) = \mathbf{b} + \delta\mathbf{b}$, then $\|\delta\mathbf{x}\| \le \|A^{-1}\|\|\delta\mathbf{b}\|$ and $\|\mathbf{b}\| \le \|A\|\|\mathbf{x}\|$, and multiplying gives the relative error bound with $\kappa(A)$ that the lesson on conditioning stated.
+  connections:
+    - text: |
+        All three engineers were right. Each quoted the **operator norm** induced by the way they measured vectors: the largest column sum $\|A\|_1 = 7$, the largest row sum $\|A\|_\infty = 9$, and the largest singular value $\|A\|_2 = 6.71$. The fourth number, the **Frobenius norm** $\sqrt{\sum a_{ij}^2} = \sqrt{\sum\sigma_i^2}$, is not a largest stretch, but it bounds $\|A\|_2$ from above and is the easiest to compute and to differentiate.
+
+        Norms earn their place through two inequalities, $\|A\mathbf{x}\| \le \|A\|\|\mathbf{x}\|$ and $\|AB\| \le \|A\|\|B\|$. And none of them is the spectral radius: a norm governs one application of the matrix, and the eigenvalues govern the long run.
+
+        That long run has a loose end. The matrix $\begin{pmatrix} 0.5 & 3 \\ 0 & 0.5 \end{pmatrix}$ of the last task has a repeated eigenvalue and only one eigenvector, so it cannot be diagonalised, and the formula $PD^kP^{-1}$ for its powers is not available. What replaces the diagonal form for such matrices, and what happens when a matrix is applied not $k$ times but continuously in time: [[m8.jordan-form-and-the-matrix-exponential]].
