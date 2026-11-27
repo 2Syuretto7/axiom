@@ -1,0 +1,594 @@
+concept: m13.computational-graphs
+minutes: 85
+claim: You can write any calculation as a list of elementary steps and as a directed acyclic graph, state the chain rule on such a graph as a sum over all paths of the products of the local derivatives, show that the number of paths can grow exponentially, replace the sum over paths by a recursion over the nodes that runs either from the inputs or from the output, and say why a value that is used twice has its contributions added.
+recalls: [m13.jacobian-vector-and-vector-jacobian-products]
+uses: [m13.the-method-of-differentials, m13.derivatives-with-respect-to-vectors, m12.multivariable-chain-rule, m12.partial-derivatives, m10.chain-rule, e6.scalar-computational-graph, e6.reverse-mode-on-scalars, e6.topological-ordering-of-the-graph, e3.graphs-and-traversal, e3.topological-sort, e3.dynamic-programming, e1.comprehensions-and-iterators, e1.complexity-and-big-o, e5.arrays-dtype-and-shape, e0.functions, e0.loops, e0.lists-and-tuples]
+leads: [m13.reverse-mode-differentiation-and-its-cost, m13.forward-mode-and-dual-numbers]
+starter: |
+  # Scratch space. f = (x1 x2 + x1) * (x1 x2), written as a list of steps.
+  # parents[i] are the steps that step i reads. partials[i] are its local slopes.
+  x1, x2 = 2.0, 3.0
+  v = [x1, x2]
+  v.append(v[0] * v[1])   # v2
+  v.append(v[2] + v[0])   # v3
+  v.append(v[3] * v[2])   # v4, the output
+  parents = [[], [], [0, 1], [2, 0], [3, 2]]
+  partials = [[], [], [v[1], v[0]], [1.0, 1.0], [v[2], v[3]]]
+  print(v)
+
+  # Three paths lead from v0 to v4. Multiply along each and add.
+  print(3.0 * 8.0 + 3.0 * 1.0 * 6.0 + 1.0 * 6.0)
+parts:
+  recall:
+    - text: |
+        [[m13.jacobian-vector-and-vector-jacobian-products]] passed vectors through chains of functions, forward and backward, and ended by noting that real computations are not chains. Today's object is what they are. Three quick pulls first.
+  puzzle:
+    - text: |
+        Take $f(x_1, x_2) = (x_1x_2 + x_1)\cdot(x_1x_2)$ at $x_1 = 2$, $x_2 = 3$. As a list of single operations:
+
+        $$v_0 = x_1, \quad v_1 = x_2, \quad v_2 = v_0v_1, \quad v_3 = v_2 + v_0, \quad v_4 = v_3v_2.$$
+
+        The product $v_2$ is computed once and used twice, and so is $v_0$. Draw an arrow from each value to every value computed from it, and write on each arrow the local slope. The derivative of the output with respect to $x_1$ is then found by multiplying the slopes along every route from $v_0$ to $v_4$, and adding the routes. There are three routes, and the starter adds them.
+
+        ```
+        [2.0, 3.0, 6.0, 8.0, 48.0]
+        48.0
+        ```
+
+        So $\partial f/\partial x_1 = 48$. Three routes are no trouble.
+
+        Now take a function made of 30 steps, each of which multiplies the previous value by itself: $v_i = v_{i-1} \cdot v_{i-1}$. Each step reads the previous value **twice**, so there are two arrows from each value to the next, and the number of routes from the input to the output is $2^{30}$, about a thousand million.
+
+        The engine written earlier in this course differentiates that function with 30 steps of work, not a thousand million.
+
+        **How can a sum over a thousand million routes be computed in 30 steps? And what exactly is the object, with its values, arrows and routes, on which this is done?**
+  intuition:
+    - text: |
+        The object is a **computational graph**. Its nodes are the values $v_0, v_1, \dots$ of a calculation. There is an arrow from $v_j$ to $v_i$ whenever $v_i$ is computed directly from $v_j$, and the arrow carries the local slope $\partial v_i/\partial v_j$. Because each value is computed only from earlier ones, the arrows never form a cycle.
+
+        The chain rule of several variables, applied again and again, says: the derivative of one node with respect to another is the **sum over all paths** between them of the **product of the slopes along the path**. That is correct, and it can be hopeless, because paths multiply. Whenever two routes part and meet again, the count doubles.
+
+        The way out is the oldest trick in algorithms. Many of those paths share long stretches. All the paths from $v_0$ to the output that pass through $v_2$ end with the same collection of routes from $v_2$ onwards. So compute once, for each node, the total over all routes **from that node to the output**. Call it the node's **adjoint**, $\bar v_i = \partial(\text{output})/\partial v_i$.
+
+        The adjoint of a node follows from the adjoints of the nodes it feeds:
+
+        $$\bar v_j = \sum_{i \text{ reads } j}\bar v_i\,\frac{\partial v_i}{\partial v_j}.$$
+
+        Every route from $v_j$ to the output begins with one arrow, to some $v_i$, and continues with a route from $v_i$. Summing over the first arrow, with the rest already totalled, gives the formula. Start with the output, whose adjoint is 1, and work backwards. Each **arrow** is used exactly once.
+
+        For the 30 squarings there are 60 arrows, so 60 multiplications. The $2^{30}$ paths are all still accounted for. They are summed in bulk, a factor at a time: $\bar v_{i-1} = \bar v_i\,v_{i-1} + \bar v_i\,v_{i-1}$.
+
+        And the sum in the formula is why a value used twice **adds** its two contributions: it lies on two families of routes.
+  derivation:
+    - text: |
+        **Evaluation trace.** A calculation with inputs $x_1, \dots, x_n$ is a list
+
+        $$v_i = \phi_i\big(v_j : j \in \operatorname{pa}(i)\big), \qquad i = n, n + 1, \dots, N,$$
+
+        where $v_0, \dots, v_{n-1}$ are the inputs, each $\phi_i$ is an elementary operation with known partial derivatives, and $\operatorname{pa}(i)$, the **parents** of $i$, are indices smaller than $i$. The last value is the output. Such a list is also called a Wengert list, or a tape.
+
+        **The graph.** Nodes $0, \dots, N$, with an arrow $j \to i$ for each $j \in \operatorname{pa}(i)$, labelled $d_{ij} = \partial\phi_i/\partial v_j$ evaluated at the current values. It is a directed acyclic graph, and the order of the list is a topological order: every node comes after its parents. If $\phi_i$ reads the same value twice, as in $v \cdot v$, there are two arrows.
+
+        **Chain rule on the graph.**
+
+        $$\frac{\partial v_N}{\partial v_j} = \sum_{\text{paths } j \to \dots \to N}\ \prod_{\text{arrows on the path}} d.$$
+
+        *Why.* Induction on the list: $v_N$ depends on $v_j$ through each of its parents, and the chain rule for several intermediate variables adds one term for each.
+
+        **Paths can explode.** With $k$ squarings $v_i = v_{i-1}v_{i-1}$ there are $2^k$ paths. More generally a graph with $N$ nodes can have a number of paths exponential in $N$.
+
+        **Two recursions.** Both replace the sum over paths by a pass over the nodes.
+
+        *Backward, adjoints.* Define $\bar v_i = \partial v_N/\partial v_i$. Then $\bar v_N = 1$ and
+
+        $$\bar v_j = \sum_{i:\,j \in \operatorname{pa}(i)}\bar v_i\,d_{ij},$$
+
+        computed for $j = N - 1, N - 2, \dots, 0$. At the end $\bar v_0, \dots, \bar v_{n-1}$ are **all** the partial derivatives of the output.
+
+        *Forward, tangents.* Choose one input $x_k$ and define $\dot v_i = \partial v_i/\partial x_k$. Then $\dot v_k = 1$, the other inputs have $\dot v = 0$, and
+
+        $$\dot v_i = \sum_{j \in \operatorname{pa}(i)}d_{ij}\,\dot v_j,$$
+
+        computed for $i = n, \dots, N$. At the end $\dot v_N$ is **one** partial derivative.
+
+        Each recursion uses every arrow once. Their cost is proportional to the number of arrows, which is the cost of the calculation itself.
+
+        *The puzzle.* Adjoints, backwards: $\bar v_4 = 1$. $\bar v_3 = 1 \cdot 6 = 6$. $\bar v_2 = 1 \cdot 8 + 6 \cdot 1 = 14$, two contributions, since $v_2$ is read by $v_4$ and by $v_3$. $\bar v_1 = 14 \cdot 2 = 28$. $\bar v_0 = 14 \cdot 3 + 6 \cdot 1 = 48$. Both partial derivatives, $48$ and $28$, from one pass.
+    - question:
+        id: derivation-adjoint
+        type: numeric
+        system: s2
+        prompt: |
+          $v_0 = a = 2$, $v_1 = b = 3$, $v_2 = v_0 + v_1$, $v_3 = v_2 \cdot v_0$. What is the adjoint $\bar v_0$, the derivative of the output with respect to $a$?
+        answer: "7"
+        explanation: |
+          $\bar v_3 = 1$. The product $v_3 = v_2v_0$ has local slopes $v_0 = 2$ towards $v_2$ and $v_2 = 5$ towards $v_0$. So $\bar v_2 = 2$. The node $v_0$ is read twice, by $v_2$ with slope 1 and by $v_3$ with slope 5, so $\bar v_0 = 2 \cdot 1 + 1 \cdot 5 = 7$. Check: the function is $(a + b)a = a^2 + ab$, with derivative $2a + b = 7$. And $\bar v_1 = 2 \cdot 1 = 2 = a$.
+    - text: |
+        **Vector nodes.** Nothing changes if a node holds a vector or a matrix. The label on an arrow becomes a Jacobian, the forward recursion applies JVPs, $\dot{\mathbf{v}}_i = \sum_jJ_{ij}\dot{\mathbf{v}}_j$, and the backward recursion applies VJPs, $\bar{\mathbf{v}}_j = \sum_iJ_{ij}^\top\bar{\mathbf{v}}_i$. The Jacobians are never formed. A chain is the special case in which every node has one parent and one child.
+
+        **Fan-out and fan-in.**
+
+        - A node with several children, *fan-out*: backward, its adjoint is the **sum** of what the children send. Forward, its tangent is simply read by each child.
+        - A node with several parents, *fan-in*: forward, its tangent is the **sum** of the contributions of the parents. Backward, its adjoint is sent to each parent, multiplied by that parent's slope.
+
+        The two recursions are mirror images, with the roles of adding and copying exchanged.
+
+        **What the graph depends on.** The graph records the operations that were actually carried out, for the given inputs. A program with a loop gives a graph as long as the loop ran. A program with a branch gives the graph of the branch taken. The derivative obtained is that of the straight-line calculation that happened. It is the derivative of the program wherever the same operations would be carried out for all nearby inputs.
+
+        **Three ways to differentiate a program.**
+
+        - *Numerical:* finite differences. Approximate, and one or two evaluations per input.
+        - *Symbolic:* manipulate the formula. Exact, but a formula written as a tree repeats every shared subexpression, and its derivative can swell enormously.
+        - *Automatic:* apply the chain rule to the **values** on the graph, by one of the two recursions. Exact to rounding, and its cost is tied to that of the calculation. It is neither of the other two.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the argument that turns the sum over paths into the backward recursion.
+        steps:
+          - 'The derivative of the output with respect to a node is the sum, over all paths from the node to the output, of the products of the slopes.'
+          - 'Every such path begins with one arrow, from the node to one of the nodes that read it.'
+          - 'Group the paths by that first arrow.'
+          - 'Within a group, the remaining stretches are all the paths from the reading node to the output, whose total is that node''s adjoint.'
+          - 'So the adjoint of the node is the sum, over the nodes that read it, of the slope of the arrow times the adjoint of the reader.'
+        explanation: Paths are grouped by their first step, and what follows the first step has already been totalled.
+  formal:
+    - text: |
+        **Trace.** $v_i = \phi_i(v_{\operatorname{pa}(i)})$ for $i = n, \dots, N$, with $v_0, \dots, v_{n-1}$ inputs and $v_{N-m+1}, \dots, v_N$ outputs. $\operatorname{ch}(j) = \{i : j \in \operatorname{pa}(i)\}$ are the children of $j$.
+
+        **As one equation.** Stack all values in $\mathbf{v} \in \mathbb{R}^{N+1}$ and let $L$ be the strictly lower triangular matrix with $L_{ij} = \partial\phi_i/\partial v_j$. Differentiating the trace, $d\mathbf{v} = L\,d\mathbf{v} + d\mathbf{x}$ (with $d\mathbf{x}$ supported on the inputs), so
+
+        $$d\mathbf{v} = (I - L)^{-1}d\mathbf{x}, \qquad (I - L)^{-1} = I + L + L^2 + \dots + L^N.$$
+
+        The entry $(i, j)$ of $L^k$ is the sum over paths of length $k$ from $j$ to $i$ of the products of the slopes: the path formula. The forward recursion is the solution of the triangular system $(I - L)\dot{\mathbf{v}} = \mathbf{e}_k$ by forward substitution. The backward recursion is the solution of $(I - L)^\top\bar{\mathbf{v}} = \mathbf{e}_N$ by back substitution.
+
+        **Forward.** $\dot v_i = \sum_{j \in \operatorname{pa}(i)}\frac{\partial\phi_i}{\partial v_j}\dot v_j$, in increasing $i$.
+
+        **Backward.** $\bar v_j = \sum_{i \in \operatorname{ch}(j)}\bar v_i\frac{\partial\phi_i}{\partial v_j}$, in decreasing $j$.
+
+        **Cost.** Each recursion performs one multiplication and one addition per arrow: $O(E)$ for $E$ arrows, and $E \le cN$ when every elementary operation has at most $c$ arguments.
+
+        **Number of paths.** If $P_i$ is the number of paths from a source to node $i$, then $P_i = \sum_{j \in \operatorname{pa}(i)}P_j$, counted with multiplicity. For the squaring chain $P_k = 2^k$.
+
+        **Validity.** If every $\phi_i$ is differentiable at its arguments, the composite is differentiable and both recursions return its exact partial derivatives. Where a branch condition is an equality, or an operation such as $|x|$ or $\max$ is evaluated at a kink, the result is the derivative of one of the smooth pieces.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-node
+        type: choice
+        system: s1
+        prompt: |
+          A node of a computational graph is
+        options: ['a value computed during the calculation', 'a line of source code', 'a partial derivative', 'a loop']
+        answer: 0
+        explanation: Inputs, intermediate results and the output.
+    - question:
+        id: drill-arrow
+        type: choice
+        system: s1
+        prompt: |
+          An arrow from $v_j$ to $v_i$ means that
+        options: ['$v_i$ is computed directly from $v_j$', '$v_j$ is larger than $v_i$', '$v_i$ was computed before $v_j$', '$v_i = v_j$']
+        answer: 0
+        explanation: It carries the local slope $\partial v_i/\partial v_j$.
+    - question:
+        id: drill-acyclic
+        type: choice
+        system: s1
+        prompt: |
+          The graph has no cycles because
+        options: ['each value is computed only from earlier values', 'it has few nodes', 'all slopes are positive', 'the output is a number']
+        answer: 0
+        explanation: The order of computation is a topological order.
+    - question:
+        id: drill-path-rule
+        type: choice
+        system: s1
+        prompt: |
+          The derivative of the output with respect to a node is found by
+        options: ['adding the slopes along one path', 'multiplying along each path and adding over the paths', 'multiplying all slopes in the graph', 'taking the largest slope']
+        answer: 1
+        explanation: The chain rule for several intermediate variables.
+    - question:
+        id: drill-product-slope
+        type: numeric
+        system: s1
+        prompt: |
+          $v_2 = v_0 \cdot v_1$ with $v_0 = 4$ and $v_1 = 7$. What is the slope on the arrow from $v_0$ to $v_2$?
+        answer: "7"
+        explanation: The derivative of a product with respect to one factor is the other factor.
+    - question:
+        id: drill-sum-slope
+        type: numeric
+        system: s1
+        prompt: |
+          $v_2 = v_0 + v_1$ with $v_0 = 4$ and $v_1 = 7$. What is the slope on the arrow from $v_0$ to $v_2$?
+        answer: "1"
+        explanation: A sum passes changes through unchanged.
+    - question:
+        id: drill-paths
+        type: numeric
+        system: s1
+        prompt: |
+          Each of 10 steps multiplies the previous value by itself. How many paths lead from the input to the output?
+        answer: "1024"
+        explanation: Two arrows per step, $2^{10}$.
+    - question:
+        id: drill-adjoint
+        type: choice
+        system: s1
+        prompt: |
+          The adjoint $\bar v_i$ of a node is
+        options: ['the derivative of $v_i$ with respect to an input', 'the derivative of the output with respect to $v_i$', 'the value of $v_i$', 'the number of paths through $v_i$']
+        answer: 1
+        explanation: The total over all routes from the node to the output.
+    - question:
+        id: drill-tangent
+        type: choice
+        system: s1
+        prompt: |
+          The tangent $\dot v_i$ of a node is
+        options: ['the derivative of $v_i$ with respect to a chosen input', 'the derivative of the output with respect to $v_i$', 'the value of $v_i$', 'always 1']
+        answer: 0
+        explanation: The total over all routes from the chosen input to the node.
+    - question:
+        id: drill-seed
+        type: numeric
+        system: s1
+        prompt: |
+          In the backward recursion, what is the adjoint of the output node?
+        answer: "1"
+        explanation: The derivative of the output with respect to itself.
+    - question:
+        id: drill-fan-out
+        type: choice
+        system: s1
+        prompt: |
+          A value is read by three later steps. In the backward recursion its adjoint is
+        options: ['the largest of the three contributions', 'the sum of the three contributions', 'the product of the three contributions', 'the last contribution to arrive']
+        answer: 1
+        explanation: It lies on three families of paths.
+    - question:
+        id: drill-cost
+        type: choice
+        system: s1
+        prompt: |
+          The cost of either recursion is proportional to
+        options: ['the number of paths', 'the number of arrows', 'the square of the number of nodes', 'the number of inputs times the number of outputs']
+        answer: 1
+        explanation: Each arrow is used once.
+    - question:
+        id: drill-kind
+        type: choice
+        system: s1
+        prompt: |
+          Automatic differentiation is
+        options: ['finite differences with a small step', 'manipulation of formulas', 'the chain rule applied to the values of a calculation, step by step', 'an approximation by a Taylor series']
+        answer: 2
+        explanation: Exact to rounding, and neither numerical nor symbolic.
+    - question:
+        id: predict-adjoints
+        type: predict
+        system: s1
+        prompt: The backward recursion on the graph of the puzzle. What does this show?
+        code: |
+          v = [2.0, 3.0]
+          v.append(v[0] * v[1])
+          v.append(v[2] + v[0])
+          v.append(v[3] * v[2])
+          parents = [[], [], [0, 1], [2, 0], [3, 2]]
+          partials = [[], [], [v[1], v[0]], [1.0, 1.0], [v[2], v[3]]]
+          bar = [0.0, 0.0, 0.0, 0.0, 1.0]
+          for i in [4, 3, 2]:
+              for j, d in zip(parents[i], partials[i]):
+                  bar[j] += bar[i] * d
+          print(bar)
+        output: |
+          [48.0, 28.0, 14.0, 6.0, 1.0]
+        explanation: One pass from the output gives the adjoint of every node. The first two are the partial derivatives with respect to the two inputs, 48 and 28. The node v2 received two contributions, 8 from v4 and 6 from v3.
+    - question:
+        id: predict-squarings
+        type: predict
+        system: s1
+        prompt: Five squarings of 1.1, the number of paths, and the derivative by the backward recursion against the formula for x to the power 32. What does this show?
+        code: |
+          x = 1.1
+          v = [x]
+          for step in range(5):
+              v.append(v[-1] * v[-1])
+          paths = 1
+          bar = 1.0
+          for i in [5, 4, 3, 2, 1]:
+              paths = paths * 2
+              bar = bar * v[i - 1] + bar * v[i - 1]
+          print(paths, round(bar, 4), round(32 * x ** 31, 4))
+        output: |
+          32 614.219 614.219
+        explanation: There are 32 paths, and the backward recursion sums them all with ten multiplications, two per step. The result is the derivative of x to the power 32.
+  work:
+    - text: Slower now. The first task counts what the recursions avoid.
+    - question:
+        id: write-count
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A graph is given as `parents`, where `parents[i]` lists the nodes that node `i` reads, all with smaller index, with a node listed twice if it is read twice. Write `count_paths(parents, source)` returning a list whose entry `i` is the number of paths from `source` to node `i`. The number of paths from a node to itself is 1.
+        starter: |
+          def count_paths(parents, source):
+              return [0 for node in parents]
+
+
+          print(count_paths([[], [], [0, 1], [2, 0], [3, 2]], 0))
+          print(count_paths([[]] + [[i, i] for i in range(30)], 0)[-1])
+        solution: |
+          def count_paths(parents, source):
+              count = [0 for node in parents]
+              count[source] = 1
+              for i in range(source + 1, len(parents)):
+                  count[i] = sum(count[j] for j in parents[i])
+              return count
+
+
+          print(count_paths([[], [], [0, 1], [2, 0], [3, 2]], 0))
+          print(count_paths([[]] + [[i, i] for i in range(30)], 0)[-1])
+        tests: |
+          _g = [[], [], [0, 1], [2, 0], [3, 2]]
+          assert count_paths(_g, 0) == [1, 0, 1, 2, 3], "From v0 in the graph of the puzzle there is 1 path to v2, 2 to v3 and 3 to v4, and none to the other input"
+          assert count_paths(_g, 1) == [0, 1, 1, 1, 2], "From v1 there is 1 path to v2, 1 to v3 and 2 to v4"
+          assert count_paths(_g, 2) == [0, 0, 1, 1, 2], "From v2 there are 2 paths to the output, and none to the nodes before it"
+          assert count_paths([[], [0], [1], [2]], 0) == [1, 1, 1, 1], "In a chain there is exactly one path to each node"
+          assert count_paths([[]] + [[i, i] for i in range(10)], 0)[-1] == 1024, "Ten squarings give 2 to the power 10 paths. A node read twice counts twice"
+          assert count_paths([[], [0], [0], [1, 2], [3], [3], [4, 5]], 0)[-1] == 4, "Two diamonds in a row give 2 times 2 paths"
+          assert output.strip() == "[1, 0, 1, 2, 3]\n1073741824", "The program should print [1, 0, 1, 2, 3] and then 1073741824"
+        wrong:
+          - |
+            def count_paths(parents, source):
+                count = [0 for node in parents]
+                count[source] = 1
+                for i in range(source + 1, len(parents)):
+                    count[i] = sum(count[j] for j in set(parents[i]))
+                return count
+
+            print("[1, 0, 1, 2, 3]\n1073741824")
+          - |
+            def count_paths(parents, source):
+                count = [0 for node in parents]
+                count[source] = 1
+                for i in range(source + 1, len(parents)):
+                    count[i] = len(parents[i])
+                return count
+
+            print("[1, 0, 1, 2, 3]\n1073741824")
+          - |
+            def count_paths(parents, source):
+                count = [1 for node in parents]
+                for i in range(source + 1, len(parents)):
+                    count[i] = sum(count[j] for j in parents[i])
+                return count
+
+            print("[1, 0, 1, 2, 3]\n1073741824")
+        explanation: |
+          A path to node $i$ arrives through one of its parents, so the number of paths to $i$ is the sum of the numbers of paths to its parents. One pass in the order of the list fills the table. This is the forward recursion with every slope replaced by 1.
+
+          The second printed number is $2^{30}$: more than a thousand million paths through a graph of 31 nodes and 60 arrows. The function counted them in 30 additions, by the same sharing of work that lets a derivative be computed without visiting them one by one.
+
+          The first wrong version uses a set, which drops the repeated parent. Then a squaring looks like a single arrow, and the derivative of $v \cdot v$ would come out as $v$ in place of $2v$.
+    - question:
+        id: write-backward
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `adjoints(parents, partials)`. `parents[i]` lists the nodes that node `i` reads, and `partials[i]` the local slopes of node `i` with respect to each of them, in the same order. The last node is the output. Return the list of adjoints of all nodes: the derivative of the output with respect to each.
+        starter: |
+          def adjoints(parents, partials):
+              return [0.0 for node in parents]
+
+
+          v = [2.0, 3.0]
+          v.append(v[0] * v[1])
+          v.append(v[2] + v[0])
+          v.append(v[3] * v[2])
+          print(adjoints([[], [], [0, 1], [2, 0], [3, 2]], [[], [], [v[1], v[0]], [1.0, 1.0], [v[2], v[3]]]))
+        solution: |
+          def adjoints(parents, partials):
+              bar = [0.0 for node in parents]
+              bar[-1] = 1.0
+              for i in range(len(parents) - 1, -1, -1):
+                  for j, d in zip(parents[i], partials[i]):
+                      bar[j] += bar[i] * d
+              return bar
+
+
+          v = [2.0, 3.0]
+          v.append(v[0] * v[1])
+          v.append(v[2] + v[0])
+          v.append(v[3] * v[2])
+          print(adjoints([[], [], [0, 1], [2, 0], [3, 2]], [[], [], [v[1], v[0]], [1.0, 1.0], [v[2], v[3]]]))
+        tests: |
+          _p = [[], [], [0, 1], [2, 0], [3, 2]]
+          _d = [[], [], [3.0, 2.0], [1.0, 1.0], [6.0, 8.0]]
+          assert adjoints(_p, _d) == [48.0, 28.0, 14.0, 6.0, 1.0], "For the graph of the puzzle the adjoints are 48, 28, 14, 6, 1. Start with 1 at the output and work backwards, adding one contribution per arrow"
+          assert adjoints([[], [0], [1], [2]], [[], [2.0], [3.0], [5.0]]) == [30.0, 15.0, 5.0, 1.0], "In a chain the adjoints are the running products of the slopes from the output back"
+          _x = 1.1
+          _v = [_x]
+          for _k in range(5):
+              _v.append(_v[-1] * _v[-1])
+          _b = adjoints([[]] + [[i, i] for i in range(5)], [[]] + [[_v[i], _v[i]] for i in range(5)])
+          assert abs(_b[0] - 32 * _x ** 31) < 1e-9, "For five squarings the adjoint of the input should be the derivative of x to the power 32. A node read twice receives two contributions"
+          assert adjoints([[], [0], [0], [1, 2]], [[], [2.0], [3.0], [1.0, 1.0]]) == [5.0, 1.0, 1.0, 1.0], "For v3 = 2 v0 + 3 v0 the adjoint of v0 is 5: the two routes are added"
+          assert output.strip() == "[48.0, 28.0, 14.0, 6.0, 1.0]", "The program should print [48.0, 28.0, 14.0, 6.0, 1.0]"
+        wrong:
+          - |
+            def adjoints(parents, partials):
+                bar = [0.0 for node in parents]
+                bar[-1] = 1.0
+                for i in range(len(parents) - 1, -1, -1):
+                    for j, d in zip(parents[i], partials[i]):
+                        bar[j] = bar[i] * d
+                return bar
+
+            print("[48.0, 28.0, 14.0, 6.0, 1.0]")
+          - |
+            def adjoints(parents, partials):
+                bar = [0.0 for node in parents]
+                bar[-1] = 1.0
+                for i in range(len(parents)):
+                    for j, d in zip(parents[i], partials[i]):
+                        bar[j] += bar[i] * d
+                return bar
+
+            print("[48.0, 28.0, 14.0, 6.0, 1.0]")
+          - |
+            def adjoints(parents, partials):
+                bar = [1.0 for node in parents]
+                for i in range(len(parents) - 1, -1, -1):
+                    for j, d in zip(parents[i], partials[i]):
+                        bar[j] += bar[i] * d
+                return bar
+
+            print("[48.0, 28.0, 14.0, 6.0, 1.0]")
+          - |
+            def adjoints(parents, partials):
+                bar = [0.0 for node in parents]
+                bar[-1] = 1.0
+                for i in range(len(parents) - 1, -1, -1):
+                    for j, d in zip(parents[i], partials[i]):
+                        bar[j] += d
+                return bar
+
+            print("[48.0, 28.0, 14.0, 6.0, 1.0]")
+        explanation: |
+          Five lines hold the whole of reverse-mode differentiation for scalars. The adjoints start at zero, the output starts at one, and the nodes are visited from the last to the first. Each node hands to each parent its own adjoint times the local slope, and the parent **accumulates**.
+
+          Visiting in reverse order of the list guarantees that when a node is reached, every node that reads it has already been visited, so its adjoint is complete before it is passed on. That is the property of a reversed topological order.
+
+          The function knows nothing about what the operations were. It sees only the shape of the graph and a number on each arrow. Everything specific to an operation is in its local slopes, which were computed on the way forward.
+    - question:
+        id: fix-direction
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `tangents(parents, partials, k)` should return, for every node, its derivative with respect to input `k`, by the forward recursion. For the graph of the puzzle and `k = 0` it should print `[1.0, 0.0, 3.0, 4.0, 48.0]`. Fix it.
+        starter: |
+          def tangents(parents, partials, k):
+              dot = [0.0 for node in parents]
+              dot[k] = 1.0
+              for i in range(len(parents) - 1, -1, -1):
+                  for j, d in zip(parents[i], partials[i]):
+                      dot[i] += d * dot[j]
+              return dot
+
+
+          print(tangents([[], [], [0, 1], [2, 0], [3, 2]], [[], [], [3.0, 2.0], [1.0, 1.0], [6.0, 8.0]], 0))
+        solution: |
+          def tangents(parents, partials, k):
+              dot = [0.0 for node in parents]
+              dot[k] = 1.0
+              for i in range(len(parents)):
+                  for j, d in zip(parents[i], partials[i]):
+                      dot[i] += d * dot[j]
+              return dot
+
+
+          print(tangents([[], [], [0, 1], [2, 0], [3, 2]], [[], [], [3.0, 2.0], [1.0, 1.0], [6.0, 8.0]], 0))
+        tests: |
+          _p = [[], [], [0, 1], [2, 0], [3, 2]]
+          _d = [[], [], [3.0, 2.0], [1.0, 1.0], [6.0, 8.0]]
+          assert tangents(_p, _d, 0) == [1.0, 0.0, 3.0, 4.0, 48.0], "With respect to the first input the tangents are 1, 0, 3, 4, 48. A node's tangent needs the tangents of its parents, so the nodes must be visited in the order of the calculation"
+          assert tangents(_p, _d, 1) == [0.0, 1.0, 2.0, 2.0, 28.0], "With respect to the second input the tangents are 0, 1, 2, 2, 28"
+          assert tangents([[], [0], [1], [2]], [[], [2.0], [3.0], [5.0]], 0) == [1.0, 2.0, 6.0, 30.0], "In a chain the tangents are the running products of the slopes from the input on"
+          assert output.strip() == "[1.0, 0.0, 3.0, 4.0, 48.0]", "The program should print [1.0, 0.0, 3.0, 4.0, 48.0]"
+        wrong:
+          - |
+            def tangents(parents, partials, k):
+                dot = [0.0 for node in parents]
+                dot[k] = 1.0
+                for i in range(len(parents) - 1, -1, -1):
+                    for j, d in zip(parents[i], partials[i]):
+                        dot[i] += d * dot[j]
+                return dot
+
+            print("[1.0, 0.0, 3.0, 4.0, 48.0]")
+          - |
+            def tangents(parents, partials, k):
+                dot = [0.0 for node in parents]
+                dot[k] = 1.0
+                for i in range(len(parents)):
+                    for j, d in zip(parents[i], partials[i]):
+                        dot[i] = d * dot[j]
+                return dot
+
+            print("[1.0, 0.0, 3.0, 4.0, 48.0]")
+          - |
+            def tangents(parents, partials, k):
+                dot = [0.0 for node in parents]
+                dot[k] = 1.0
+                for i in range(len(parents)):
+                    for j, d in zip(parents[i], partials[i]):
+                        dot[j] += d * dot[i]
+                return dot
+
+            print("[1.0, 0.0, 3.0, 4.0, 48.0]")
+          - |
+            def tangents(parents, partials, k):
+                dot = [1.0 for node in parents]
+                for i in range(len(parents)):
+                    for j, d in zip(parents[i], partials[i]):
+                        dot[i] += d * dot[j]
+                return dot
+
+            print("[1.0, 0.0, 3.0, 4.0, 48.0]")
+        explanation: |
+          The forward recursion computes each node's tangent from its **parents'** tangents, so the parents must be finished first. That is the order of the list. The code visited the nodes from the last to the first, so each node read tangents that were still zero, apart from direct arrows from the input.
+
+          The two recursions use the same arrows with the same slopes. The forward one visits nodes in order and writes into the node that **reads**. The backward one visits them in reverse and writes into the nodes that **are read**. Mixing the order of one with the direction of the other gives numbers that are wrong but not obviously absurd.
+
+          The last entry, 48, is the same partial derivative that the backward pass delivered as $\bar v_0$. The forward pass also found how every intermediate value depends on $x_1$. The backward pass found how the output depends on every intermediate value. Each computes one of the two things for all nodes.
+    - question:
+        id: work-shared
+        type: choice
+        system: s2
+        prompt: |
+          In a network the same weight matrix $W$ is applied at three different places, as in a recurrent network unrolled for three steps. How is the gradient of the loss with respect to $W$ obtained?
+        options:
+          - 'From the last place where $W$ is used, since later uses override earlier ones.'
+          - 'As the sum of three terms, one for each use. $W$ is a node with three children, and its adjoint is the sum of what each child sends back.'
+          - 'As the product of the three contributions.'
+          - 'It is undefined, since a variable may be used only once.'
+        answer: 1
+        explanation: |
+          Fan-out adds. Each use of $W$ lies on its own family of paths to the loss, and the derivative is the sum over all paths. In practice each use computes its "error times input" outer product and they are accumulated into one gradient. The same rule covers a bias added to every position, a filter applied at every location of an image, and an embedding looked up several times. Sharing a parameter in the forward calculation means adding its gradients in the backward one.
+    - question:
+        id: work-count-arrows
+        type: numeric
+        system: s2
+        prompt: |
+          A calculation has 5 inputs and performs 1000 elementary operations, each with two arguments. How many multiplications does the backward recursion perform, at one per arrow?
+        answer: "2000"
+        explanation: |
+          Each operation has two parents, so there are $2 \times 1000 = 2000$ arrows, and the backward pass does one multiply-and-add for each. The number of inputs does not enter: all 5 partial derivatives, or 5 million, come out of the same pass. The forward recursion also does 2000 multiplications, but delivers the derivative with respect to one input only, so all 5 would cost 10 000.
+    - question:
+        id: work-branch
+        type: choice
+        system: s2
+        prompt: |
+          A program computes `y = x * x if x > 0 else -x`. It is differentiated automatically at `x = 3`, and then at `x = -2`. What comes out, and what is the caveat?
+        options:
+          - 'An error, since programs with branches cannot be differentiated.'
+          - 'At 3 the graph is that of `x * x`, giving 6. At -2 the graph is that of `-x`, giving -1. Each is the derivative of the piece that was executed, which is the derivative of the program wherever nearby inputs take the same branch. At `x = 0`, where the branch switches and the function jumps in slope, the answer is that of whichever piece ran.'
+          - 'The average of the two derivatives in both cases.'
+          - 'Zero in both cases, since a condition has no derivative.'
+        answer: 1
+        explanation: |
+          The graph records what happened, and a comparison is not an arithmetic operation, so it leaves no arrow. Away from the switching point the program agrees with one smooth piece on a whole neighbourhood, and the derivative of the piece is the derivative of the program. At the switching point the program may not be differentiable at all, and the tool reports a one-sided answer without warning. The rectifier $\max(0, x)$ at exactly 0 is the everyday example. In practice such points are hit with probability zero and the convention chosen there does not matter.
+  connections:
+    - text: |
+        A calculation is a list of elementary steps, and a **computational graph**: values as nodes, an arrow wherever one value is read to compute another, the local slope on each arrow, and no cycles. The derivative of the output with respect to any node is the sum over all paths of the products of the slopes, and the paths can number $2^{30}$ for 30 steps.
+
+        The sum is never taken path by path. A recursion over the nodes shares the work. Backward, the **adjoint** of a node is the sum, over the nodes that read it, of slope times adjoint. Forward, the **tangent** of a node is the sum, over the nodes it reads, of slope times tangent. Each uses every arrow once. A value used twice adds its contributions, because it lies on two families of paths.
+
+        Both recursions cost the same per pass. They differ in what a pass delivers: the backward one gives the derivative of one output with respect to everything, and the forward one gives the derivative of everything with respect to one input. Exactly how much the backward pass costs compared with the calculation itself, in time and above all in memory, decides what can be trained and what cannot: [[m13.reverse-mode-differentiation-and-its-cost]].

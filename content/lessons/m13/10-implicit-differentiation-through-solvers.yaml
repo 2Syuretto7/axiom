@@ -1,0 +1,729 @@
+concept: m13.implicit-differentiation-through-solvers
+minutes: 90
+claim: You can differentiate a quantity that is defined only as the solution of an equation, by differentiating the equation itself and solving one linear system, apply this to the solution of a linear system, to a fixed point and to the minimiser of a loss, obtain the gradient of a scalar loss through a solver with a single extra solve with the transposed matrix, explain why this needs no record of the solver's iterations, and say when the derivative fails to exist.
+recalls: [m13.hessian-vector-products]
+uses: [m13.trace-identities-determinant-and-inverse-derivatives, m13.the-method-of-differentials, m13.jacobian-vector-and-vector-jacobian-products, m13.reverse-mode-differentiation-and-its-cost, m13.derivatives-with-respect-to-matrices, m12.inverse-and-implicit-function-theorems, m12.jacobian, m12.multivariable-chain-rule, m7.least-squares-and-the-normal-equations, m7.conditioning, m8.eigenvalues-and-eigenvectors, m8.spectral-theorem, m8.operator-and-frobenius-norms, e6.gradient-checking, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e0.functions, e0.loops]
+leads: [m13.gradients-of-common-neural-network-layers]
+starter: |
+  # Scratch space. x(theta) is the solution of x**3 + x = theta, found by iteration.
+  def solve(theta):
+      x = 1.0
+      for step in range(50):
+          x = x - (x ** 3 + x - theta) / (3 * x ** 2 + 1)
+      return x
+
+
+  x = solve(10.0)
+  print(x)
+
+  h = 1e-6                          # nudge theta and solve again, twice
+  print(round((solve(10.0 + h) - solve(10.0 - h)) / (2 * h), 6))
+
+  print(round(1 / (3 * x ** 2 + 1), 6))   # one line, using only the solution
+parts:
+  recall:
+    - text: |
+        [[m13.hessian-vector-products]] ended on the Newton step, a vector defined not by a formula but as the solution of an equation. Everything differentiated so far was a list of explicit operations. Today the thing to differentiate is whatever comes out of a solver. Three quick pulls first.
+  puzzle:
+    - text: |
+        The equation $x^3 + x = \theta$ has exactly one real solution for each $\theta$, because the left side always increases. Call it $x(\theta)$. There is no convenient formula for it. The starter finds it by an iteration of 50 steps, and for $\theta = 10$ gets $x = 2$.
+
+        How fast does the solution move when $\theta$ changes? The starter answers twice. First by nudging $\theta$ and running the whole solver again. Then by one line that uses nothing except the solution itself.
+
+        ```
+        2.0
+        0.076923
+        0.076923
+        ```
+
+        The second answer never looked inside the solver. It would be the same whether the solution had been found by 50 steps of this iteration, by bisection, or by a lucky guess.
+
+        **Where does $1/(3x^2 + 1)$ come from? And how can the derivative of a solver's output not depend on the solver?**
+  intuition:
+    - text: |
+        The solver is a means. What **defines** $x(\theta)$ is the equation: for every $\theta$,
+
+        $$x(\theta)^3 + x(\theta) = \theta.$$
+
+        That is an identity between two functions of $\theta$. So their derivatives agree as well. Differentiate both sides, with the chain rule on the left: $3x^2\,x' + x' = 1$, so $x' = \dfrac{1}{3x^2 + 1}$. At $x = 2$ that is $1/13 = 0.076923$.
+
+        The unknown derivative $x'$ appears **linearly** in the differentiated equation, however nonlinear the equation itself was. This is the general pattern. Differentiating an equation that defines $x$ gives a linear equation for the derivative of $x$. You have done this already: differentiating $XX^{-1} = I$ gave $d(X^{-1})$, and differentiating $A\mathbf{x} = \mathbf{b}$ gave $d\mathbf{x}$, in [[m13.trace-identities-determinant-and-inverse-derivatives]].
+
+        Compare the alternative. A solver is a program, so reverse mode can differentiate it step by step: record all 50 iterations and sweep back through them. That costs memory in proportion to the number of iterations, and it differentiates the **approximation** the solver stopped at, by a route that depends on its starting guess and its step rule. Differentiating the equation needs only the answer, costs one linear solve, and gives the derivative of the true solution.
+
+        The solver is a black box. Its output satisfies an equation, and the equation is all you differentiate.
+  derivation:
+    - text: |
+        **Setting.** Let $\mathbf{x}^\star(\boldsymbol\theta) \in \mathbb{R}^n$ be defined by $n$ equations
+
+        $$F(\mathbf{x}^\star(\boldsymbol\theta), \boldsymbol\theta) = \mathbf{0}, \qquad F: \mathbb{R}^n \times \mathbb{R}^p \to \mathbb{R}^n.$$
+
+        Write $F_{\mathbf{x}}$ for the $n \times n$ Jacobian of $F$ with respect to $\mathbf{x}$, and $F_{\boldsymbol\theta}$ for the $n \times p$ Jacobian with respect to $\boldsymbol\theta$, both at the solution.
+
+        **Differentiate the identity.** By the chain rule, $F_{\mathbf{x}}\,d\mathbf{x}^\star + F_{\boldsymbol\theta}\,d\boldsymbol\theta = \mathbf{0}$. If $F_{\mathbf{x}}$ is invertible,
+
+        $$\frac{d\mathbf{x}^\star}{d\boldsymbol\theta} = -F_{\mathbf{x}}^{-1}F_{\boldsymbol\theta}.$$
+
+        This is the implicit function theorem of [[m12.inverse-and-implicit-function-theorems]], used as a tool for computing.
+
+        **Through a scalar loss.** Usually $\mathbf{x}^\star$ feeds a loss $L$, and the backward sweep arrives with $\bar{\mathbf{x}} = \partial L/\partial\mathbf{x}^\star$. The VJP of the solver is
+
+        $$\bar{\boldsymbol\theta} = -F_{\boldsymbol\theta}^\top F_{\mathbf{x}}^{-\top}\bar{\mathbf{x}}.$$
+
+        Compute it in two steps:
+
+        1. Solve $F_{\mathbf{x}}^\top\boldsymbol\lambda = \bar{\mathbf{x}}$ for $\boldsymbol\lambda$. This is the **adjoint equation**.
+        2. $\bar{\boldsymbol\theta} = -F_{\boldsymbol\theta}^\top\boldsymbol\lambda$.
+
+        One linear solve, with the **transposed** matrix, gives the gradient with respect to all $p$ parameters. The forward direction would need one solve per parameter. It is the same asymmetry as before.
+
+        **Linear systems.** $\mathbf{x} = A^{-1}\mathbf{b}$, that is $F = A\mathbf{x} - \mathbf{b}$, so $F_{\mathbf{x}} = A$. The differential is $A\,d\mathbf{x} + dA\,\mathbf{x} - d\mathbf{b} = \mathbf{0}$. The adjoint equation is $A^\top\boldsymbol\lambda = \bar{\mathbf{x}}$, and
+
+        $$\bar{\mathbf{b}} = \boldsymbol\lambda, \qquad \bar A = -\boldsymbol\lambda\,\mathbf{x}^\top.$$
+
+        To differentiate through one solve, do one more solve.
+    - question:
+        id: derivation-cubic
+        type: numeric
+        system: s2
+        prompt: |
+          $x(\theta)$ solves $x^3 + x = \theta$. At $\theta = 2$ the solution is $x = 1$. What is $dx/d\theta$ there?
+        answer: "0.25"
+        explanation: |
+          Differentiating the equation gives $(3x^2 + 1)\,x' = 1$, and at $x = 1$ that is $4x' = 1$. Here $F(x, \theta) = x^3 + x - \theta$, so $F_x = 3x^2 + 1 = 4$ and $F_\theta = -1$, and the formula $-F_x^{-1}F_\theta$ gives $1/4$. Only the solution $x = 1$ was needed, and no way of finding it was mentioned.
+    - text: |
+        **Fixed points.** Let $\mathbf{x}^\star = g(\mathbf{x}^\star, \boldsymbol\theta)$, with $J = \partial g/\partial\mathbf{x}$ at the fixed point. Then $F = \mathbf{x} - g$, $F_{\mathbf{x}} = I - J$, and
+
+        $$\frac{d\mathbf{x}^\star}{d\boldsymbol\theta} = (I - J)^{-1}\frac{\partial g}{\partial\boldsymbol\theta}.$$
+
+        If $\|J\|_2 < 1$, then $(I - J)^{-1} = I + J + J^2 + \cdots$. The term $J^k\,\partial g/\partial\boldsymbol\theta$ is the influence of $\boldsymbol\theta$ that entered $k$ iterations ago. So differentiating through more and more iterations of $\mathbf{x} \leftarrow g(\mathbf{x}, \boldsymbol\theta)$ adds up this series term by term, and the implicit formula is its exact sum: backpropagation through infinitely many steps, at the cost of one solve.
+
+        **Minimisers.** Let $\mathbf{x}^\star(\boldsymbol\theta)$ minimise $f(\mathbf{x}, \boldsymbol\theta)$ over $\mathbf{x}$. The equation it satisfies is $\nabla_{\mathbf{x}}f = \mathbf{0}$. So $F = \nabla_{\mathbf{x}}f$, and $F_{\mathbf{x}}$ is the **Hessian** $H$ of $f$ in $\mathbf{x}$:
+
+        $$\frac{d\mathbf{x}^\star}{d\boldsymbol\theta} = -H^{-1}\frac{\partial}{\partial\boldsymbol\theta}\nabla_{\mathbf{x}}f.$$
+
+        The adjoint equation is $H\boldsymbol\lambda = \bar{\mathbf{x}}$, which for a large model is solved by conjugate gradients using only Hessian-vector products.
+
+        *Example.* Ridge regression: $\mathbf{w}^\star$ minimises $\tfrac12\|X\mathbf{w} - \mathbf{y}\|^2 + \tfrac12\lambda\|\mathbf{w}\|^2$, so $(X^\top X + \lambda I)\mathbf{w}^\star = X^\top\mathbf{y}$. Differentiating in $\lambda$: $\ \mathbf{w}^\star + (X^\top X + \lambda I)\,\dfrac{d\mathbf{w}^\star}{d\lambda} = \mathbf{0}$, so
+
+        $$\frac{d\mathbf{w}^\star}{d\lambda} = -(X^\top X + \lambda I)^{-1}\mathbf{w}^\star.$$
+
+        This is the derivative of trained weights with respect to a hyperparameter, and with it a validation loss can be differentiated with respect to $\lambda$.
+
+        **When it fails.** If $F_{\mathbf{x}}$ is singular at the solution, the formula has no meaning, and generally neither has the derivative. For $x^2 = \theta$: $x' = 1/(2x)$, which blows up as $\theta \to 0$, where two solutions merge and then vanish. Close to such a point $F_{\mathbf{x}}$ is ill-conditioned and the derivative is huge.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the calculation of the gradient of a loss with respect to the parameters of an equation whose solution the loss depends on.
+        steps:
+          - 'Run any solver to find $\mathbf{x}^\star$ with $F(\mathbf{x}^\star, \boldsymbol\theta) = \mathbf{0}$.'
+          - 'Evaluate the loss, and obtain $\bar{\mathbf{x}}$, its gradient with respect to $\mathbf{x}^\star$.'
+          - 'Solve the adjoint equation $F_{\mathbf{x}}^\top\boldsymbol\lambda = \bar{\mathbf{x}}$, a single linear system.'
+          - 'Form $\bar{\boldsymbol\theta} = -F_{\boldsymbol\theta}^\top\boldsymbol\lambda$.'
+          - 'Pass $\bar{\boldsymbol\theta}$ on to whatever produced the parameters.'
+        explanation: The solver runs forward as a black box, and one linear solve stands in for its whole backward sweep.
+  formal:
+    - text: |
+        **Implicit function theorem.** Let $F: \mathbb{R}^n \times \mathbb{R}^p \to \mathbb{R}^n$ be $C^1$ near $(\mathbf{x}_0, \boldsymbol\theta_0)$ with $F(\mathbf{x}_0, \boldsymbol\theta_0) = \mathbf{0}$ and $F_{\mathbf{x}}(\mathbf{x}_0, \boldsymbol\theta_0)$ invertible. Then there are neighbourhoods of $\boldsymbol\theta_0$ and $\mathbf{x}_0$ and a unique $C^1$ function $\mathbf{x}^\star$ between them with $F(\mathbf{x}^\star(\boldsymbol\theta), \boldsymbol\theta) = \mathbf{0}$, and
+
+        $$D\mathbf{x}^\star(\boldsymbol\theta) = -F_{\mathbf{x}}^{-1}F_{\boldsymbol\theta}.$$
+
+        **JVP and VJP of a solver.** $\ \dot{\mathbf{x}} = -F_{\mathbf{x}}^{-1}\big(F_{\boldsymbol\theta}\dot{\boldsymbol\theta}\big)$: one solve with $F_{\mathbf{x}}$. $\ \bar{\boldsymbol\theta} = -F_{\boldsymbol\theta}^\top\boldsymbol\lambda$ with $F_{\mathbf{x}}^\top\boldsymbol\lambda = \bar{\mathbf{x}}$: one solve with $F_{\mathbf{x}}^\top$. Neither depends on how $\mathbf{x}^\star$ was computed. Memory is independent of the number of solver iterations.
+
+        **Linear solve.** For $\mathbf{x} = A^{-1}\mathbf{b}$: $\ \bar{\mathbf{b}} = A^{-\top}\bar{\mathbf{x}}$, $\ \bar A = -\bar{\mathbf{b}}\,\mathbf{x}^\top$. A factorisation of $A$ computed for the forward solve also solves the transposed system.
+
+        **Fixed point.** For $\mathbf{x}^\star = g(\mathbf{x}^\star, \boldsymbol\theta)$ with $\rho(J) < 1$: $\ \boldsymbol\lambda = (I - J^\top)^{-1}\bar{\mathbf{x}}$ is itself the fixed point of $\boldsymbol\lambda \leftarrow J^\top\boldsymbol\lambda + \bar{\mathbf{x}}$, an iteration of VJPs. Models whose layer is defined as such a fixed point are called deep equilibrium models.
+
+        **Minimiser.** For $\mathbf{x}^\star = \arg\min_{\mathbf{x}}f(\mathbf{x}, \boldsymbol\theta)$ with $H = \nabla^2_{\mathbf{x}\mathbf{x}}f$ positive definite: $D\mathbf{x}^\star = -H^{-1}\nabla^2_{\mathbf{x}\boldsymbol\theta}f$. For an outer loss $L(\mathbf{x}^\star(\boldsymbol\theta), \boldsymbol\theta)$ (bilevel optimisation):
+
+        $$\frac{dL}{d\boldsymbol\theta} = \frac{\partial L}{\partial\boldsymbol\theta} - \big(\nabla^2_{\mathbf{x}\boldsymbol\theta}f\big)^{\!\top}H^{-1}\frac{\partial L}{\partial\mathbf{x}}.$$
+
+        **Simple eigenvalue.** For symmetric $A$ with a simple eigenvalue $\lambda$ and unit eigenvector $\mathbf{v}$, differentiating $A\mathbf{v} = \lambda\mathbf{v}$ and $\mathbf{v}^\top\mathbf{v} = 1$ gives $d\lambda = \mathbf{v}^\top dA\,\mathbf{v}$, so $\partial\lambda/\partial A = \mathbf{v}\mathbf{v}^\top$.
+
+        **Differential equations.** For $\dot{\mathbf{x}} = f(\mathbf{x}, \boldsymbol\theta)$ the same idea gives the adjoint equation $\dot{\boldsymbol\lambda} = -f_{\mathbf{x}}^\top\boldsymbol\lambda$, integrated backwards in time.
+
+        **Sensitivity.** $\|D\mathbf{x}^\star\| \le \|F_{\mathbf{x}}^{-1}\|\,\|F_{\boldsymbol\theta}\|$. The derivative is large where $F_{\mathbf{x}}$ is nearly singular. An inexact $\mathbf{x}^\star$ gives an inexact gradient, with error proportional to the residual of the solve.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-what
+        type: choice
+        system: s1
+        prompt: |
+          Implicit differentiation differentiates
+        options: ['every step the solver took', 'the equation that the solution satisfies', 'the starting guess of the solver', 'the number of iterations']
+        answer: 1
+        explanation: The solver is only a means of finding the solution.
+    - question:
+        id: drill-formula
+        type: choice
+        system: s1
+        prompt: |
+          If $F(\mathbf{x}^\star(\boldsymbol\theta), \boldsymbol\theta) = \mathbf{0}$, then $d\mathbf{x}^\star/d\boldsymbol\theta =$
+        options: ['$-F_{\mathbf{x}}^{-1}F_{\boldsymbol\theta}$', '$F_{\mathbf{x}}^{-1}F_{\boldsymbol\theta}$', '$-F_{\boldsymbol\theta}^{-1}F_{\mathbf{x}}$', '$F_{\mathbf{x}}F_{\boldsymbol\theta}$']
+        answer: 0
+        explanation: From $F_{\mathbf{x}}\,d\mathbf{x} + F_{\boldsymbol\theta}\,d\boldsymbol\theta = \mathbf{0}$.
+    - question:
+        id: drill-square
+        type: numeric
+        system: s1
+        prompt: |
+          $x(\theta)$ is the positive solution of $x^2 = \theta$. What is $dx/d\theta$ at $x = 0.5$?
+        answer: "1"
+        explanation: $2x\,x' = 1$, so $x' = 1/(2x)$.
+    - question:
+        id: drill-db
+        type: choice
+        system: s1
+        prompt: |
+          $A\mathbf{x} = \mathbf{b}$, and $\mathbf{b}$ changes by $d\mathbf{b}$ with $A$ fixed. Then $d\mathbf{x} =$
+        options: ['$A\,d\mathbf{b}$', '$A^{-1}d\mathbf{b}$', '$-A^{-1}d\mathbf{b}$', '$d\mathbf{b}$']
+        answer: 1
+        explanation: The solution is linear in the right side.
+    - question:
+        id: drill-da
+        type: choice
+        system: s1
+        prompt: |
+          $A\mathbf{x} = \mathbf{b}$, and $A$ changes by $dA$ with $\mathbf{b}$ fixed. Then $d\mathbf{x} =$
+        options: ['$A^{-1}dA\,\mathbf{x}$', '$-A^{-1}dA\,\mathbf{x}$', '$-dA\,A^{-1}\mathbf{x}$', '$dA\,\mathbf{x}$']
+        answer: 1
+        explanation: From $dA\,\mathbf{x} + A\,d\mathbf{x} = \mathbf{0}$.
+    - question:
+        id: drill-transpose
+        type: choice
+        system: s1
+        prompt: |
+          The backward step through $\mathbf{x} = A^{-1}\mathbf{b}$ needs one linear solve with
+        options: ['$A$', '$A^\top$', '$A^2$', '$A^{-1}$']
+        answer: 1
+        explanation: The adjoint equation $A^\top\boldsymbol\lambda = \bar{\mathbf{x}}$.
+    - question:
+        id: drill-solves
+        type: numeric
+        system: s1
+        prompt: |
+          A scalar loss depends on the solution of an equation with $10^6$ parameters. How many adjoint solves give its gradient with respect to all of them?
+        answer: "1"
+        explanation: One solve with the transposed Jacobian.
+    - question:
+        id: drill-fixed
+        type: choice
+        system: s1
+        prompt: |
+          For a fixed point $\mathbf{x}^\star = g(\mathbf{x}^\star, \boldsymbol\theta)$ with $J = \partial g/\partial\mathbf{x}$, $\ d\mathbf{x}^\star/d\boldsymbol\theta =$
+        options: ['$J\,\partial g/\partial\boldsymbol\theta$', '$(I - J)^{-1}\,\partial g/\partial\boldsymbol\theta$', '$(I + J)^{-1}\,\partial g/\partial\boldsymbol\theta$', '$\partial g/\partial\boldsymbol\theta$']
+        answer: 1
+        explanation: Here $F = \mathbf{x} - g$, so $F_{\mathbf{x}} = I - J$.
+    - question:
+        id: drill-scalar-fixed
+        type: numeric
+        system: s1
+        prompt: |
+          $x$ is the fixed point of $x = 0.5x + \theta$. What is $dx/d\theta$?
+        answer: "2"
+        explanation: $1/(1 - 0.5)$. Indeed $x = 2\theta$.
+    - question:
+        id: drill-minimiser
+        type: choice
+        system: s1
+        prompt: |
+          To differentiate a minimiser $\mathbf{x}^\star(\boldsymbol\theta)$ of $f(\mathbf{x}, \boldsymbol\theta)$, the equation to differentiate is
+        options: ['$f = 0$', '$\nabla_{\mathbf{x}}f = \mathbf{0}$', '$\nabla_{\boldsymbol\theta}f = \mathbf{0}$', '$\mathbf{x} = \boldsymbol\theta$']
+        answer: 1
+        explanation: The condition that the minimiser satisfies.
+    - question:
+        id: drill-hessian
+        type: choice
+        system: s1
+        prompt: |
+          For a minimiser, the matrix in the adjoint equation is
+        options: ['the Jacobian of the loss', 'the Hessian of $f$ in $\mathbf{x}$', 'the identity', 'the matrix of parameters']
+        answer: 1
+        explanation: It is the Jacobian of $\nabla_{\mathbf{x}}f$.
+    - question:
+        id: drill-exists
+        type: choice
+        system: s1
+        prompt: |
+          The implicit derivative exists when $F_{\mathbf{x}}$ at the solution is
+        options: ['zero', 'invertible', 'symmetric', 'diagonal']
+        answer: 1
+        explanation: The condition of the implicit function theorem.
+    - question:
+        id: drill-memory
+        type: choice
+        system: s1
+        prompt: |
+          A solver takes 1000 iterations. The memory needed to differentiate its result implicitly
+        options: ['grows with the 1000 iterations', 'does not depend on the number of iterations', 'is 1000 times that of one iteration', 'is zero']
+        answer: 1
+        explanation: Only the solution is used.
+    - question:
+        id: predict-series
+        type: predict
+        system: s1
+        prompt: The derivative of the fixed point of x = 0.5 x + theta, through 1, 2 and 10 unrolled iterations, and implicitly. What does this show?
+        code: |
+          d = 0.0
+          for k in range(1, 11):
+              d = 0.5 * d + 1.0
+              if k in [1, 2, 10]:
+                  print(k, round(d, 4))
+          print(1 / (1 - 0.5))
+        output: |
+          1 1.0
+          2 1.5
+          10 1.998
+          2.0
+        explanation: Differentiating through k iterations gives the sum 1 + 0.5 + 0.25 and so on, up to k terms. It creeps towards 2 and never reaches it. The implicit formula gives the whole sum at once, from the slope 0.5 at the fixed point.
+    - question:
+        id: predict-eigenvalue
+        type: predict
+        system: s1
+        prompt: The largest eigenvalue of a symmetric matrix, differentiated with respect to its middle entry by a finite difference and by a formula. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          E = np.zeros((3, 3))
+          E[1, 1] = 1.0
+          h = 1e-6
+          up = float(np.linalg.eigvalsh(A + h * E)[-1])
+          down = float(np.linalg.eigvalsh(A - h * E)[-1])
+          print(round((up - down) / (2 * h), 4))
+          v = np.array([1.0, 2.0, 1.0]) / np.sqrt(6)
+          print(round(float(v @ E @ v), 4))
+        output: |
+          0.6667
+          0.6667
+        explanation: The largest eigenvalue is 4, with unit eigenvector (1, 2, 1) over root 6. An eigenvalue is defined by an equation, and differentiating that equation gives its change as v transposed, times the change in the matrix, times v. For the middle entry that is the square of the middle component of v, which is 4 over 6. No eigenvalue routine was differentiated.
+  work:
+    - text: Slower now. First the backward step of a linear solve.
+    - question:
+        id: write-solve
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A loss depends on $\mathbf{x} = A^{-1}\mathbf{b}$, and `xbar` is the gradient of the loss with respect to $\mathbf{x}$. Write `grad_solve(A, b, xbar)` returning the pair `(Abar, bbar)`, the gradients of the loss with respect to $A$ and $\mathbf{b}$. Use one solve for $\mathbf{x}$ and one solve with the transposed matrix.
+        starter: |
+          import numpy as np
+
+
+          def grad_solve(A, b, xbar):
+              return A * 0.0, b * 0.0
+
+
+          A = np.array([[2.0, 1.0], [0.0, 4.0]])
+          Abar, bbar = grad_solve(A, np.array([4.0, 4.0]), np.array([1.0, 0.0]))
+          print([round(float(c), 4) for c in bbar])
+          print([[round(float(c), 4) for c in row] for row in Abar])
+        solution: |
+          import numpy as np
+
+
+          def grad_solve(A, b, xbar):
+              x = np.linalg.solve(A, b)
+              lam = np.linalg.solve(A.T, xbar)
+              return -np.outer(lam, x), lam
+
+
+          A = np.array([[2.0, 1.0], [0.0, 4.0]])
+          Abar, bbar = grad_solve(A, np.array([4.0, 4.0]), np.array([1.0, 0.0]))
+          print([round(float(c), 4) for c in bbar])
+          print([[round(float(c), 4) for c in row] for row in Abar])
+        tests: |
+          import numpy as _np
+          _rng = _np.random.default_rng(3)
+          _A = _rng.normal(size=(3, 3)) + 3 * _np.eye(3)
+          _b = _rng.normal(size=3)
+          _c = _rng.normal(size=3)
+          def _loss(A, b):
+              return float(_c @ _np.linalg.solve(A, b))
+          _Ab, _bb = grad_solve(_A, _b, _c)
+          assert _np.shape(_Ab) == (3, 3) and _np.shape(_bb) == (3,), "Return a matrix of the shape of A and a vector of the shape of b"
+          _nb = _np.array([(_loss(_A, _b + 1e-6 * e) - _loss(_A, _b - 1e-6 * e)) / 2e-6 for e in _np.eye(3)])
+          assert _np.allclose(_bb, _nb, atol=1e-6), "bbar should agree with central differences. It is the solution of the system with A transposed and right side xbar"
+          _nA = _np.zeros((3, 3))
+          for _i in range(3):
+              for _j in range(3):
+                  _E = _np.zeros((3, 3))
+                  _E[_i, _j] = 1e-6
+                  _nA[_i, _j] = (_loss(_A + _E, _b) - _loss(_A - _E, _b)) / 2e-6
+          assert _np.allclose(_Ab, _nA, atol=1e-6), "Abar should agree with central differences. It is minus the outer product of bbar with the solution x"
+          assert output.strip() == "[0.5, -0.125]\n[[-0.75, -0.5], [0.1875, 0.125]]", "The program should print [0.5, -0.125] and then [[-0.75, -0.5], [0.1875, 0.125]]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def grad_solve(A, b, xbar):
+                x = np.linalg.solve(A, b)
+                lam = np.linalg.solve(A, xbar)
+                return -np.outer(lam, x), lam
+
+
+            print("[0.5, -0.125]\n[[-0.75, -0.5], [0.1875, 0.125]]")
+          - |
+            import numpy as np
+
+
+            def grad_solve(A, b, xbar):
+                x = np.linalg.solve(A, b)
+                lam = np.linalg.solve(A.T, xbar)
+                return np.outer(lam, x), lam
+
+
+            print("[0.5, -0.125]\n[[-0.75, -0.5], [0.1875, 0.125]]")
+          - |
+            import numpy as np
+
+
+            def grad_solve(A, b, xbar):
+                x = np.linalg.solve(A, b)
+                lam = np.linalg.solve(A.T, xbar)
+                return -np.outer(x, lam), lam
+
+
+            print("[0.5, -0.125]\n[[-0.75, -0.5], [0.1875, 0.125]]")
+        explanation: |
+          Differentiate $A\mathbf{x} = \mathbf{b}$: $\ d\mathbf{x} = A^{-1}(d\mathbf{b} - dA\,\mathbf{x})$. The change in the loss is $\bar{\mathbf{x}}^\top d\mathbf{x} = (A^{-\top}\bar{\mathbf{x}})^\top(d\mathbf{b} - dA\,\mathbf{x})$. Name the vector $\boldsymbol\lambda = A^{-\top}\bar{\mathbf{x}}$, found by one solve with $A^\top$. Then the change is $\boldsymbol\lambda^\top d\mathbf{b} - \boldsymbol\lambda^\top dA\,\mathbf{x}$, and reading off the gradients as in the method of differentials: $\bar{\mathbf{b}} = \boldsymbol\lambda$ and $\bar A = -\boldsymbol\lambda\mathbf{x}^\top$.
+
+          The gradient with respect to all $n^2$ entries of $A$ came from one extra solve and one outer product. Nothing about how `np.linalg.solve` works inside was used.
+
+          The first wrong version solves with $A$ where $A^\top$ belongs. For a symmetric matrix that would pass unnoticed, which is why the test matrix is not symmetric.
+    - question:
+        id: write-fixed-point
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          `fixed_point(W, b)` returns the vector with $\mathbf{x} = \tanh(W\mathbf{x} + \mathbf{b})$. Write `jacobian_b(W, b)` returning the matrix $d\mathbf{x}/d\mathbf{b}$ at the fixed point, from the implicit formula: with $D$ the diagonal matrix of $1 - x_i^2$, it is $(I - DW)^{-1}D$. Call `fixed_point` once and solve one linear system.
+        starter: |
+          import numpy as np
+
+
+          def fixed_point(W, b):
+              x = np.zeros(len(b))
+              for step in range(200):
+                  x = np.tanh(W @ x + b)
+              return x
+
+
+          def jacobian_b(W, b):
+              return np.eye(len(b))
+
+
+          W = np.array([[0.5, -0.3], [0.2, 0.4]])
+          print([[round(float(c), 4) for c in row] for row in jacobian_b(W, np.array([0.3, -0.1]))])
+        solution: |
+          import numpy as np
+
+
+          def fixed_point(W, b):
+              x = np.zeros(len(b))
+              for step in range(200):
+                  x = np.tanh(W @ x + b)
+              return x
+
+
+          def jacobian_b(W, b):
+              x = fixed_point(W, b)
+              D = np.diag(1 - x ** 2)
+              return np.linalg.solve(np.eye(len(b)) - D @ W, D)
+
+
+          W = np.array([[0.5, -0.3], [0.2, 0.4]])
+          print([[round(float(c), 4) for c in row] for row in jacobian_b(W, np.array([0.3, -0.1]))])
+        tests: |
+          import numpy as _np
+          def _fp(W, b):
+              x = _np.zeros(len(b))
+              for _s in range(400):
+                  x = _np.tanh(W @ x + b)
+              return x
+          def _num(W, b):
+              return _np.stack([(_fp(W, b + 1e-6 * e) - _fp(W, b - 1e-6 * e)) / 2e-6 for e in _np.eye(len(b))]).T
+          _W = _np.array([[0.5, -0.3], [0.2, 0.4]])
+          _b = _np.array([0.3, -0.1])
+          _J = jacobian_b(_W, _b)
+          assert _np.shape(_J) == (2, 2), "The Jacobian is a 2 by 2 matrix here"
+          assert _np.allclose(_J, _num(_W, _b), atol=1e-6), "The Jacobian should agree with central differences of the fixed point. Solve (I - D W) J = D, with D built from the fixed point"
+          _W3 = _np.array([[0.2, 0.3, -0.1], [-0.4, 0.1, 0.2], [0.3, -0.2, 0.3]])
+          _b3 = _np.array([0.5, -0.4, 0.2])
+          assert _np.allclose(jacobian_b(_W3, _b3), _num(_W3, _b3), atol=1e-6), "For a 3 by 3 example the Jacobian should agree with central differences of the fixed point"
+          assert output.strip() == "[[1.0699, -0.535], [0.3566, 1.4883]]", "The program should print [[1.0699, -0.535], [0.3566, 1.4883]]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def fixed_point(W, b):
+                x = np.zeros(len(b))
+                for step in range(200):
+                    x = np.tanh(W @ x + b)
+                return x
+
+
+            def jacobian_b(W, b):
+                x = fixed_point(W, b)
+                return np.diag(1 - x ** 2)
+
+
+            print("[[1.0699, -0.535], [0.3566, 1.4883]]")
+          - |
+            import numpy as np
+
+
+            def fixed_point(W, b):
+                x = np.zeros(len(b))
+                for step in range(200):
+                    x = np.tanh(W @ x + b)
+                return x
+
+
+            def jacobian_b(W, b):
+                x = fixed_point(W, b)
+                D = np.diag(1 - x ** 2)
+                return np.linalg.solve(np.eye(len(b)) - W @ D, D)
+
+
+            print("[[1.0699, -0.535], [0.3566, 1.4883]]")
+          - |
+            import numpy as np
+
+
+            def fixed_point(W, b):
+                x = np.zeros(len(b))
+                for step in range(200):
+                    x = np.tanh(W @ x + b)
+                return x
+
+
+            def jacobian_b(W, b):
+                x = fixed_point(W, b)
+                D = np.diag(1 - x ** 2)
+                return np.linalg.solve(np.eye(len(b)) + D @ W, D)
+
+
+            print("[[1.0699, -0.535], [0.3566, 1.4883]]")
+          - |
+            import numpy as np
+
+
+            def fixed_point(W, b):
+                x = np.zeros(len(b))
+                for step in range(200):
+                    x = np.tanh(W @ x + b)
+                return x
+
+
+            def jacobian_b(W, b):
+                x = np.tanh(b)
+                D = np.diag(1 - x ** 2)
+                return np.linalg.solve(np.eye(len(b)) - D @ W, D)
+
+
+            print("[[1.0699, -0.535], [0.3566, 1.4883]]")
+        explanation: |
+          Differentiate $\mathbf{x} = \tanh(W\mathbf{x} + \mathbf{b})$ on both sides: $d\mathbf{x} = D(W\,d\mathbf{x} + d\mathbf{b})$, with $D$ the slopes of $\tanh$ at the fixed point. Collect $d\mathbf{x}$: $(I - DW)\,d\mathbf{x} = D\,d\mathbf{b}$. One solve with the matrix $I - DW$ gives the Jacobian.
+
+          The 200 iterations of `fixed_point` are not differentiated and leave no trace. If the fixed point were found by a faster method, the derivative would be computed by the same three lines.
+
+          The first wrong version returns $D$ alone. That is the derivative through a single application of the layer, with the incoming $\mathbf{x}$ held constant: the first term of the series $D + DWD + DWDWD + \cdots$ whose sum is $(I - DW)^{-1}D$. Stopping the series early is what differentiating through a few unrolled iterations amounts to.
+    - question:
+        id: fix-hyper
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          Ridge regression fits weights $\mathbf{w}$ with $(X^\top X + \lambda I)\mathbf{w} = X^\top\mathbf{y}$, and is judged by the loss $\tfrac12\|X_v\mathbf{w} - \mathbf{y}_v\|^2$ on validation data. `dval_dlam` should return the derivative of that validation loss with respect to $\lambda$, by differentiating the equation for $\mathbf{w}$. The program prints its distance from a central difference, which should be `0.0`. Fix `dval_dlam`.
+        starter: |
+          import numpy as np
+
+
+          def fit(X, y, lam):
+              return np.linalg.solve(X.T @ X + lam * np.eye(X.shape[1]), X.T @ y)
+
+
+          def val_loss(X, y, Xv, yv, lam):
+              r = Xv @ fit(X, y, lam) - yv
+              return 0.5 * float(r @ r)
+
+
+          def dval_dlam(X, y, Xv, yv, lam):
+              w = fit(X, y, lam)
+              wbar = Xv.T @ (Xv @ w - yv)
+              return -float(wbar @ w)
+
+
+          rng = np.random.default_rng(0)
+          X = rng.normal(size=(8, 3))
+          y = rng.normal(size=8)
+          Xv = rng.normal(size=(5, 3))
+          yv = rng.normal(size=5)
+          h = 1e-6
+          measured = (val_loss(X, y, Xv, yv, 0.5 + h) - val_loss(X, y, Xv, yv, 0.5 - h)) / (2 * h)
+          print(round(abs(dval_dlam(X, y, Xv, yv, 0.5) - measured), 4))
+        solution: |
+          import numpy as np
+
+
+          def fit(X, y, lam):
+              return np.linalg.solve(X.T @ X + lam * np.eye(X.shape[1]), X.T @ y)
+
+
+          def val_loss(X, y, Xv, yv, lam):
+              r = Xv @ fit(X, y, lam) - yv
+              return 0.5 * float(r @ r)
+
+
+          def dval_dlam(X, y, Xv, yv, lam):
+              w = fit(X, y, lam)
+              wbar = Xv.T @ (Xv @ w - yv)
+              M = X.T @ X + lam * np.eye(X.shape[1])
+              return -float(wbar @ np.linalg.solve(M, w))
+
+
+          rng = np.random.default_rng(0)
+          X = rng.normal(size=(8, 3))
+          y = rng.normal(size=8)
+          Xv = rng.normal(size=(5, 3))
+          yv = rng.normal(size=5)
+          h = 1e-6
+          measured = (val_loss(X, y, Xv, yv, 0.5 + h) - val_loss(X, y, Xv, yv, 0.5 - h)) / (2 * h)
+          print(round(abs(dval_dlam(X, y, Xv, yv, 0.5) - measured), 4))
+        tests: |
+          import numpy as _np
+          def _fit(X, y, lam):
+              return _np.linalg.solve(X.T @ X + lam * _np.eye(X.shape[1]), X.T @ y)
+          def _val(X, y, Xv, yv, lam):
+              r = Xv @ _fit(X, y, lam) - yv
+              return 0.5 * float(r @ r)
+          _rng = _np.random.default_rng(5)
+          for _lam in [0.1, 1.0, 4.0]:
+              _X = _rng.normal(size=(10, 4))
+              _y = _rng.normal(size=10)
+              _Xv = _rng.normal(size=(6, 4))
+              _yv = _rng.normal(size=6)
+              _m = (_val(_X, _y, _Xv, _yv, _lam + 1e-6) - _val(_X, _y, _Xv, _yv, _lam - 1e-6)) / 2e-6
+              assert abs(dval_dlam(_X, _y, _Xv, _yv, _lam) - _m) < 1e-6, "The derivative should agree with a central difference of the validation loss. Differentiating the equation for w gives dw/dlam = -(X^T X + lam I)^(-1) w, which needs a solve"
+          assert output.strip() == "0.0", "The program should print 0.0"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def fit(X, y, lam):
+                return np.linalg.solve(X.T @ X + lam * np.eye(X.shape[1]), X.T @ y)
+
+
+            def val_loss(X, y, Xv, yv, lam):
+                r = Xv @ fit(X, y, lam) - yv
+                return 0.5 * float(r @ r)
+
+
+            def dval_dlam(X, y, Xv, yv, lam):
+                w = fit(X, y, lam)
+                wbar = Xv.T @ (Xv @ w - yv)
+                return -float(wbar @ w)
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def fit(X, y, lam):
+                return np.linalg.solve(X.T @ X + lam * np.eye(X.shape[1]), X.T @ y)
+
+
+            def val_loss(X, y, Xv, yv, lam):
+                r = Xv @ fit(X, y, lam) - yv
+                return 0.5 * float(r @ r)
+
+
+            def dval_dlam(X, y, Xv, yv, lam):
+                w = fit(X, y, lam)
+                wbar = Xv.T @ (Xv @ w - yv)
+                M = X.T @ X + lam * np.eye(X.shape[1])
+                return float(wbar @ np.linalg.solve(M, w))
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def fit(X, y, lam):
+                return np.linalg.solve(X.T @ X + lam * np.eye(X.shape[1]), X.T @ y)
+
+
+            def val_loss(X, y, Xv, yv, lam):
+                r = Xv @ fit(X, y, lam) - yv
+                return 0.5 * float(r @ r)
+
+
+            def dval_dlam(X, y, Xv, yv, lam):
+                w = fit(X, y, lam)
+                wbar = Xv.T @ (Xv @ w - yv)
+                M = X.T @ X + lam * np.eye(X.shape[1])
+                return -float(wbar @ np.linalg.solve(M, wbar))
+
+
+            print("0.0")
+        explanation: |
+          Write $M = X^\top X + \lambda I$. The weights satisfy $M\mathbf{w} = X^\top\mathbf{y}$. Differentiate in $\lambda$: the right side does not depend on it, and $dM/d\lambda = I$, so $\mathbf{w} + M\,\dfrac{d\mathbf{w}}{d\lambda} = \mathbf{0}$ and
+
+          $$\frac{d\mathbf{w}}{d\lambda} = -M^{-1}\mathbf{w}.$$
+
+          The code had $-\mathbf{w}$: it differentiated the equation and then forgot to solve it. The derivative of the loss is $\bar{\mathbf{w}} \cdot d\mathbf{w}/d\lambda = -\bar{\mathbf{w}}^\top M^{-1}\mathbf{w}$.
+
+          This number is the gradient of a validation loss with respect to a **hyperparameter**, through a complete training run, which here is one linear solve. With it $\lambda$ can be tuned by gradient descent, where a grid search would refit the model once for each candidate. For a network, $M$ becomes the Hessian of the training loss, and the solve is done with Hessian-vector products.
+    - question:
+        id: work-quadratic
+        type: numeric
+        system: s2
+        prompt: |
+          $x(\theta)$ is the positive solution of $x^2 + \theta x - 6 = 0$. At $\theta = 1$ it is $x = 2$. What is $dx/d\theta$ there?
+        answer: "-0.4"
+        explanation: |
+          Differentiate the equation with both $x$ and $\theta$ moving: $2x\,x' + x + \theta x' = 0$, so $x' = -\dfrac{x}{2x + \theta} = -\dfrac{2}{5}$. In the notation of the lesson, $F_x = 2x + \theta = 5$ and $F_\theta = x = 2$. The term $x$ comes from the product $\theta x$, and is the one most easily forgotten: the parameter appears in the equation multiplied by the unknown. As a check, the quadratic formula gives $x = \tfrac12(-\theta + \sqrt{\theta^2 + 24})$, whose derivative at $\theta = 1$ is $\tfrac12(-1 + \tfrac15) = -0.4$.
+    - question:
+        id: work-unroll
+        type: choice
+        system: s2
+        prompt: |
+          A layer's output is the fixed point of an iteration that takes about 500 steps to converge. Its gradient can be found by reverse mode through all 500 steps, or implicitly. Which comparison is right?
+        options:
+          - 'They cost the same, since both compute the same gradient.'
+          - 'Unrolling stores the state of all 500 steps and returns the derivative of the approximate answer. The implicit method stores only the fixed point, costs one linear solve, and returns the derivative of the exact fixed point, provided the forward solve was accurate.'
+          - 'The implicit method stores 500 states and unrolling stores one.'
+          - 'Unrolling is exact and the implicit method is an approximation that ignores the iterations.'
+        answer: 1
+        explanation: |
+          The memory of reverse mode grows with the length of the calculation, and a solver is a long calculation whose intermediate states are of no interest. The implicit method replaces its backward sweep by the adjoint equation at the solution. The proviso matters: the formula is the derivative at an exact solution, so a carelessly converged forward solve gives a gradient that is off by an amount proportional to the residual. In return, the forward solver can be anything, including one that is not differentiable step by step.
+    - question:
+        id: work-singular
+        type: choice
+        system: s2
+        prompt: |
+          For $x^2 = \theta$ the implicit derivative is $1/(2x)$. What happens as $\theta$ decreases to 0, and why?
+        options:
+          - 'The derivative tends to 0, since the solution tends to 0.'
+          - 'The derivative grows without bound. At $\theta = 0$ the two solutions $\pm\sqrt\theta$ merge and $F_x = 2x$ is zero, so the condition of the implicit function theorem fails. Below 0 there is no real solution to differentiate.'
+          - 'Nothing special: the formula holds for all $\theta$.'
+          - 'The derivative becomes negative.'
+        answer: 1
+        explanation: |
+          $F_x$ measures how firmly the equation pins down $x$. When it is invertible, a small change in the parameters is answered by a small, definite change in the solution. When it is singular the solution is no longer isolated, and it may split, merge or disappear. Near such a point the adjoint system is ill-conditioned and the gradients are enormous. A solver that is differentiated implicitly should therefore watch the condition number of $F_{\mathbf{x}}$, and for a fixed-point layer that means keeping the norm of its Jacobian safely below 1.
+  connections:
+    - text: |
+        $1/(3x^2 + 1)$ came from differentiating the equation $x^3 + x = \theta$ itself. A solution is defined by its equation, so its derivative is too: $d\mathbf{x}^\star/d\boldsymbol\theta = -F_{\mathbf{x}}^{-1}F_{\boldsymbol\theta}$, a **linear** system however nonlinear $F$ is, and with no reference to the solver. The gradient of a loss through the solver costs one **adjoint solve** with $F_{\mathbf{x}}^\top$.
+
+        The same three lines cover a linear system, where $F_{\mathbf{x}} = A$, a fixed point, where it is $I - J$, and a minimiser, where it is the Hessian. Memory does not grow with the iterations, and the derivative exists as long as $F_{\mathbf{x}}$ is invertible.
+
+        You now have every tool of this cluster: gradients with respect to vectors and matrices, differentials, traces, the two kinds of product, graphs, both modes, second order, and solvers. What remains is to apply them where they are used every day. Each layer of a neural network is a small function with its own backward rule, and those rules, derived once and stored in a library, are all that training ever calls: [[m13.gradients-of-common-neural-network-layers]].

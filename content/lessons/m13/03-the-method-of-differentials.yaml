@@ -1,0 +1,702 @@
+concept: m13.the-method-of-differentials
+minutes: 85
+claim: You can compute derivatives of functions of vectors and matrices by taking differentials, using the rules for sums, products in which the order of the factors is kept, transposes, traces, elementwise functions and quotients, then bring the result to the form of a vector dotted with dx or a trace of a matrix times dX and read off the gradient, and apply this to the Rayleigh quotient and to a network of two linear layers.
+recalls: [m13.derivatives-with-respect-to-matrices]
+uses: [m13.derivatives-with-respect-to-vectors, m12.total-derivative-as-best-linear-approximation, m12.multivariable-chain-rule, m12.gradient, m10.differentiation-rules, m10.chain-rule, m8.quadratic-forms-and-the-rayleigh-quotient, m8.eigenvalues-and-eigenvectors, m8.spectral-theorem, m5.matrix-multiplication-as-composition, m5.transpose, e6.gradient-checking, e5.linear-algebra-routines, e5.einsum, e5.arrays-dtype-and-shape, e0.functions, e0.loops]
+leads: [m13.trace-identities-determinant-and-inverse-derivatives, m13.jacobian-vector-and-vector-jacobian-products]
+starter: |
+  # Scratch space. The Rayleigh quotient of a symmetric matrix, and its measured slopes.
+  import numpy as np
+
+  A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+
+
+  def rho(x):
+      return float(x @ A @ x) / float(x @ x)
+
+
+  h = 1e-6
+  for x in [np.array([1.0, 0.0, 0.0]), np.array([1.0, 2.0, 1.0]), np.array([1.0, 0.0, -1.0])]:
+      slopes = [(rho(x + h * e) - rho(x - h * e)) / (2 * h) for e in np.eye(3)]
+      print(round(rho(x), 4), [round(float(v), 4) + 0.0 for v in slopes])
+parts:
+  recall:
+    - text: |
+        [[m13.derivatives-with-respect-to-matrices]] found each gradient by expanding the function at a displaced point and discarding the higher-order terms by hand. Today that labour is replaced by a small set of rules. Three quick pulls first.
+  puzzle:
+    - text: |
+        The Rayleigh quotient of a symmetric matrix $A$ is
+
+        $$\rho(\mathbf{x}) = \frac{\mathbf{x}^\top A\mathbf{x}}{\mathbf{x}^\top\mathbf{x}}.$$
+
+        The starter measures its gradient by central differences at three points, for the matrix with eigenvalues 4, 2 and 1 that ran through the last cluster. Each line shows the value of $\rho$ and then the three slopes.
+
+        ```
+        2.0 [0.0, 2.0, 0.0]
+        4.0 [0.0, 0.0, 0.0]
+        2.0 [0.0, 0.0, 0.0]
+        ```
+
+        At $(1, 0, 0)$ the quotient is 2 and its gradient is $(0, 2, 0)$. At $(1, 2, 1)$ and at $(1, 0, -1)$ the gradient vanishes. Those two points are eigenvectors of $A$, and the values 4 and 2 are their eigenvalues.
+
+        It looks as though the Rayleigh quotient is stationary exactly at the eigenvectors. To prove it, a formula for the gradient is needed. Expanding $\rho(\mathbf{x} + \mathbf{h})$ means dividing one expansion by another and sorting out the first-order terms of the quotient, which is unpleasant.
+
+        **What is the gradient of the Rayleigh quotient? And is there a way to differentiate expressions like this by rule, as one does in ordinary calculus, without expanding anything?**
+  intuition:
+    - text: |
+        In one variable nobody expands $f(x + h)$. One applies the sum rule, the product rule, the quotient rule and the chain rule, and the answer falls out. The same can be done for vectors and matrices. Only one thing needs care: matrices do not commute, so the rules must never reorder a product.
+
+        The device is the **differential**. Write $d\mathbf{x}$ for a small displacement of the variable. For any quantity $F$ that depends on $\mathbf{x}$, write $dF$ for the resulting change in $F$, **to first order**: the part of $F(\mathbf{x} + d\mathbf{x}) - F(\mathbf{x})$ that is linear in $d\mathbf{x}$. That is exactly the piece the last two lessons kept after expanding.
+
+        Differentials obey the familiar rules. For a product,
+
+        $$(X + dX)(Y + dY) = XY + dX\,Y + X\,dY + dX\,dY,$$
+
+        and the last term is second order, so
+
+        $$d(XY) = dX\,Y + X\,dY.$$
+
+        This is the product rule, with each factor differentiated in turn **while staying in its place**.
+
+        A calculation then has three stages.
+
+        1. Take $d$ of the expression, pushing it through with the rules until it lands on the variable.
+        2. Rearrange the result into a standard form: $df = \mathbf{g}^\top d\mathbf{x}$ for a vector variable, $df = \operatorname{tr}(G^\top dX)$ for a matrix variable.
+        3. Read off the gradient: $\mathbf{g}$, or $G$.
+
+        For the puzzle, with $u = \mathbf{x}^\top A\mathbf{x}$ and $v = \mathbf{x}^\top\mathbf{x}$, both of them numbers, the ordinary quotient rule applies: $d(u/v) = (v\,du - u\,dv)/v^2$. With $du = 2(A\mathbf{x})^\top d\mathbf{x}$ and $dv = 2\mathbf{x}^\top d\mathbf{x}$ this is
+
+        $$d\rho = \frac{2}{\mathbf{x}^\top\mathbf{x}}\big(A\mathbf{x} - \rho\,\mathbf{x}\big)^\top d\mathbf{x}.$$
+
+        The gradient is $\frac{2}{\mathbf{x}^\top\mathbf{x}}(A\mathbf{x} - \rho\mathbf{x})$. It vanishes exactly when $A\mathbf{x} = \rho\mathbf{x}$: at the eigenvectors, where $\rho$ is the eigenvalue.
+  derivation:
+    - text: |
+        **Definition.** If $F$ is differentiable at $X$, its differential $dF$ is the linear function of $dX$ with $F(X + dX) = F(X) + dF + o(\|dX\|)$. It is the total derivative, applied to the displacement $dX$. $F$ may be a number, a vector or a matrix, and $dF$ has the same shape as $F$.
+
+        **Rules.** $A, B$ constant, $X, Y$ depending on the variable.
+
+        | | |
+        |---|---|
+        | Constant | $dA = 0$ |
+        | Linearity | $d(X + Y) = dX + dY$, $\quad d(AXB) = A\,dX\,B$ |
+        | Product | $d(XY) = dX\,Y + X\,dY$ |
+        | Transpose | $d(X^\top) = (dX)^\top$ |
+        | Trace | $d\operatorname{tr}(X) = \operatorname{tr}(dX)$ |
+        | Elementwise function | $d\phi(\mathbf{x}) = \phi'(\mathbf{x}) \odot d\mathbf{x}$ |
+        | Scalar chain rule | $d\,g(u) = g'(u)\,du$ for a number $u$ |
+        | Scalar quotient | $d(u/v) = (v\,du - u\,dv)/v^2$ |
+
+        $\odot$ is the entry-by-entry product. The product rule holds for every kind of product that is linear in each factor: matrix times matrix, matrix times vector, dot product, entry-by-entry product.
+
+        **Reading off.**
+
+        $$df = \mathbf{g}^\top d\mathbf{x} \ \Rightarrow\ \nabla f = \mathbf{g}, \qquad df = \operatorname{tr}(G^\top dX) \ \Rightarrow\ \nabla_Xf = G, \qquad d\mathbf{F} = J\,d\mathbf{x} \ \Rightarrow\ J_{\mathbf{F}} = J.$$
+
+        **Tools for rearranging.** A number equals its transpose and its trace. Factors cycle inside a trace. And for the entry-by-entry product, $\mathbf{a}^\top(\mathbf{b} \odot \mathbf{c}) = (\mathbf{a} \odot \mathbf{b})^\top\mathbf{c}$, since both are $\sum_ia_ib_ic_i$.
+
+        **Example 1, the quadratic form.** $d(\mathbf{x}^\top A\mathbf{x}) = d\mathbf{x}^\top A\mathbf{x} + \mathbf{x}^\top A\,d\mathbf{x} = (A\mathbf{x})^\top d\mathbf{x} + (A^\top\mathbf{x})^\top d\mathbf{x}$. Gradient $(A + A^\top)\mathbf{x}$. Two lines, with nothing expanded.
+
+        **Example 2, the Rayleigh quotient.** As in the intuition, for symmetric $A$:
+
+        $$\nabla\rho(\mathbf{x}) = \frac{2}{\mathbf{x}^\top\mathbf{x}}\big(A\mathbf{x} - \rho(\mathbf{x})\,\mathbf{x}\big).$$
+
+        At $\mathbf{x} = (1, 0, 0)$ of the puzzle: $A\mathbf{x} = (2, 1, 0)$, $\rho = 2$, so the gradient is $2\big((2, 1, 0) - (2, 0, 0)\big) = (0, 2, 0)$, as measured. Note also $\mathbf{x}^\top\nabla\rho = 0$ always: $\rho$ does not change when $\mathbf{x}$ is rescaled, so its gradient has no component along $\mathbf{x}$.
+    - question:
+        id: derivation-product
+        type: numeric
+        system: s2
+        prompt: |
+          $f(\mathbf{x}) = (\mathbf{a}^\top\mathbf{x})(\mathbf{b}^\top\mathbf{x})$ with $\mathbf{a} = (1, 0)$ and $\mathbf{b} = (0, 1)$. What is the first entry of $\nabla f$ at $\mathbf{x} = (2, 3)$?
+        answer: "3"
+        explanation: |
+          By the product rule $df = (\mathbf{a}^\top d\mathbf{x})(\mathbf{b}^\top\mathbf{x}) + (\mathbf{a}^\top\mathbf{x})(\mathbf{b}^\top d\mathbf{x})$, so $\nabla f = (\mathbf{b}^\top\mathbf{x})\mathbf{a} + (\mathbf{a}^\top\mathbf{x})\mathbf{b} = 3(1, 0) + 2(0, 1) = (3, 2)$. Here $f = x_1x_2$, and its partial derivatives are indeed $x_2 = 3$ and $x_1 = 2$. The factors $\mathbf{b}^\top\mathbf{x}$ and $\mathbf{a}^\top\mathbf{x}$ are numbers, so they may be moved freely. Only matrices and vectors must keep their places.
+    - text: |
+        **Example 3, two linear layers.** $f(W_1, W_2) = \tfrac12\|W_2W_1\mathbf{x} - \mathbf{t}\|^2$. Let $\mathbf{r} = W_2W_1\mathbf{x} - \mathbf{t}$. Then $df = \mathbf{r}^\top d\mathbf{r}$, and by the product rule
+
+        $$d\mathbf{r} = dW_2\,W_1\mathbf{x} + W_2\,dW_1\,\mathbf{x}.$$
+
+        So $df = \mathbf{r}^\top dW_2\,(W_1\mathbf{x}) + (W_2^\top\mathbf{r})^\top dW_1\,\mathbf{x}$. Each term is a bilinear form $\mathbf{a}^\top dW\,\mathbf{b}$, whose gradient is $\mathbf{a}\mathbf{b}^\top$:
+
+        $$\nabla_{W_2}f = \mathbf{r}\,(W_1\mathbf{x})^\top, \qquad \nabla_{W_1}f = (W_2^\top\mathbf{r})\,\mathbf{x}^\top.$$
+
+        Both are "error at the layer's output times the layer's input". For the second layer the input is $W_1\mathbf{x}$. For the first layer the error is $\mathbf{r}$ brought back through $W_2^\top$. One differential gave both gradients at once: when a function has several variables, $df$ is a sum with one term per variable, and each term is read off separately.
+
+        **Example 4, a nonlinearity.** $f(\mathbf{w}) = \mathbf{c}^\top\phi(X\mathbf{w})$ with $\phi$ applied entry by entry. With $\mathbf{z} = X\mathbf{w}$: $df = \mathbf{c}^\top(\phi'(\mathbf{z}) \odot d\mathbf{z}) = (\mathbf{c} \odot \phi'(\mathbf{z}))^\top X\,d\mathbf{w}$. Gradient $X^\top(\mathbf{c} \odot \phi'(\mathbf{z}))$.
+
+        **Why it is legitimate.** Nothing is being approximated. $dF$ is by definition the linear part, and the rules are the sum, product and chain rules for total derivatives, stated for displacements. The terms dropped, such as $dX\,dY$, are exactly those that the definition of a derivative excludes.
+
+        **Second derivatives** are obtained by taking the differential of the gradient: $d(\nabla f) = H\,d\mathbf{x}$ gives the Hessian $H$.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the calculation of the gradients of a network of two linear layers by differentials.
+        steps:
+          - 'Name the residual $\mathbf{r} = W_2W_1\mathbf{x} - \mathbf{t}$, so that $f = \tfrac12\mathbf{r}^\top\mathbf{r}$ and $df = \mathbf{r}^\top d\mathbf{r}$.'
+          - 'Apply the product rule: $d\mathbf{r} = dW_2\,W_1\mathbf{x} + W_2\,dW_1\,\mathbf{x}$.'
+          - 'Substitute: $df = \mathbf{r}^\top dW_2\,(W_1\mathbf{x}) + \mathbf{r}^\top W_2\,dW_1\,\mathbf{x}$.'
+          - 'Recognise each term as a bilinear form $\mathbf{a}^\top dW\,\mathbf{b}$, with gradient $\mathbf{a}\mathbf{b}^\top$.'
+          - 'Read off $\nabla_{W_2}f = \mathbf{r}(W_1\mathbf{x})^\top$ and $\nabla_{W_1}f = (W_2^\top\mathbf{r})\mathbf{x}^\top$.'
+        explanation: Differentiate, substitute, bring each term to a standard form, and read off one gradient per variable.
+  formal:
+    - text: |
+        **Differential.** For $F: U \subseteq \mathbb{R}^{m \times n} \to \mathbb{R}^{p \times q}$ differentiable at $X$, $dF = DF(X)[dX]$, where $DF(X)$ is the linear map with $F(X + H) = F(X) + DF(X)[H] + o(\|H\|)$.
+
+        **Chain rule.** $d(G \circ F) = DG(F(X))\big[DF(X)[dX]\big]$: substitute $dF$ for the displacement of the inner variable.
+
+        **Product rule.** For any bilinear map $\beta$: $d\,\beta(X, Y) = \beta(dX, Y) + \beta(X, dY)$.
+
+        **Identification theorems.**
+
+        - $f: \mathbb{R}^n \to \mathbb{R}$: $\ df = \mathbf{g}^\top d\mathbf{x} \iff \nabla f = \mathbf{g}$.
+        - $f: \mathbb{R}^{m \times n} \to \mathbb{R}$: $\ df = \operatorname{tr}(G^\top dX) \iff \nabla_Xf = G$.
+        - $\mathbf{F}: \mathbb{R}^n \to \mathbb{R}^m$: $\ d\mathbf{F} = J\,d\mathbf{x} \iff J_{\mathbf{F}} = J$.
+        - $f: \mathbb{R}^n \to \mathbb{R}$ twice differentiable: $\ d(\nabla f) = H\,d\mathbf{x} \iff H_f = H$, and $d^2f = d\mathbf{x}^\top H\,d\mathbf{x}$.
+
+        **Useful differentials.**
+
+        | $F$ | $dF$ |
+        |---|---|
+        | $\mathbf{x}^\top\mathbf{x}$ | $2\mathbf{x}^\top d\mathbf{x}$ |
+        | $\lVert\mathbf{x}\rVert$ | $\mathbf{x}^\top d\mathbf{x}/\lVert\mathbf{x}\rVert$ |
+        | $X^\top X$ | $dX^\top X + X^\top dX$ |
+        | $X^2$ | $dX\,X + X\,dX$ |
+        | $\operatorname{tr}(X^\top X)$ | $2\operatorname{tr}(X^\top dX)$ |
+        | $\mathbf{a} \odot \mathbf{x}$ | $\mathbf{a} \odot d\mathbf{x}$ |
+        | $\log\sum_ie^{x_i}$ | $\operatorname{softmax}(\mathbf{x})^\top d\mathbf{x}$ |
+
+        **Hadamard identities.** $\mathbf{a}^\top(\mathbf{b} \odot \mathbf{c}) = (\mathbf{a} \odot \mathbf{b})^\top\mathbf{c}$. $\ \operatorname{tr}\big(A^\top(B \odot C)\big) = \operatorname{tr}\big((A \odot B)^\top C\big)$. $\ \mathbf{b} \odot \mathbf{c} = \operatorname{diag}(\mathbf{b})\mathbf{c}$.
+
+        **Rayleigh quotient.** For symmetric $A$: $\nabla\rho = \frac{2}{\mathbf{x}^\top\mathbf{x}}(A\mathbf{x} - \rho\mathbf{x})$. Its stationary points are the eigenvectors, and its stationary values the eigenvalues.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-meaning
+        type: choice
+        system: s1
+        prompt: |
+          The differential $dF$ is
+        options: ['the whole change $F(X + dX) - F(X)$', 'the part of that change that is linear in $dX$', 'the second-order part of that change', 'always zero']
+        answer: 1
+        explanation: The first-order change.
+    - question:
+        id: drill-constant
+        type: choice
+        system: s1
+        prompt: |
+          For a constant matrix $A$, $dA$ is
+        options: ['$A$', '$0$', '$I$', '$dX$']
+        answer: 1
+        explanation: A constant does not change.
+    - question:
+        id: drill-linear
+        type: choice
+        system: s1
+        prompt: |
+          For constant $A$ and $B$, $d(AXB)$ is
+        options: ['$A\,dX\,B$', '$dX\,AB$', '$AB\,dX$', '$0$']
+        answer: 0
+        explanation: Constants stay where they are.
+    - question:
+        id: drill-product
+        type: choice
+        system: s1
+        prompt: |
+          $d(XY)$ is
+        options: ['$dX\,dY$', '$dX\,Y + X\,dY$', '$Y\,dX + X\,dY$', '$dX\,Y + dY\,X$']
+        answer: 1
+        explanation: Each factor is differentiated in its own place.
+    - question:
+        id: drill-square
+        type: choice
+        system: s1
+        prompt: |
+          For a square matrix $X$, $d(X^2)$ is
+        options: ['$2X\,dX$', '$dX\,X + X\,dX$', '$2\,dX\,X$', '$(dX)^2$']
+        answer: 1
+        explanation: $X$ and $dX$ need not commute, so the two terms cannot be merged.
+    - question:
+        id: drill-transpose
+        type: choice
+        system: s1
+        prompt: |
+          $d(X^\top)$ is
+        options: ['$(dX)^\top$', '$-(dX)^\top$', '$dX$', '$0$']
+        answer: 0
+        explanation: Transposing is linear.
+    - question:
+        id: drill-trace
+        type: choice
+        system: s1
+        prompt: |
+          $d\operatorname{tr}(X)$ is
+        options: ['$\operatorname{tr}(X)\,dX$', '$\operatorname{tr}(dX)$', '$dX$', '$1$']
+        answer: 1
+        explanation: The trace is linear.
+    - question:
+        id: drill-elementwise
+        type: choice
+        system: s1
+        prompt: |
+          For $\phi$ applied entry by entry, $d\phi(\mathbf{x})$ is
+        options: ['$\phi(d\mathbf{x})$', '$\phi''(\mathbf{x}) \odot d\mathbf{x}$', '$\phi''(\mathbf{x})^\top d\mathbf{x}$', '$\phi(\mathbf{x})\,d\mathbf{x}$']
+        answer: 1
+        explanation: Each entry changes by its own scalar derivative times its own displacement.
+    - question:
+        id: drill-read-vector
+        type: choice
+        system: s1
+        prompt: |
+          If $df = \mathbf{g}^\top d\mathbf{x}$, then $\nabla f$ is
+        options: ['$\mathbf{g}$', '$\mathbf{g}^\top$', '$d\mathbf{x}$', '$\mathbf{g}^\top\mathbf{g}$']
+        answer: 0
+        explanation: The vector paired with the displacement.
+    - question:
+        id: drill-read-matrix
+        type: choice
+        system: s1
+        prompt: |
+          If $df = \operatorname{tr}(M\,dX)$, then $\nabla_Xf$ is
+        options: ['$M$', '$M^\top$', '$\operatorname{tr}(M)$', '$dX$']
+        answer: 1
+        explanation: The standard form is $\operatorname{tr}(G^\top dX)$, so $G = M^\top$.
+    - question:
+        id: drill-norm-squared
+        type: choice
+        system: s1
+        prompt: |
+          $d(\mathbf{x}^\top\mathbf{x})$ is
+        options: ['$\mathbf{x}^\top d\mathbf{x}$', '$2\mathbf{x}^\top d\mathbf{x}$', '$d\mathbf{x}^\top d\mathbf{x}$', '$2\mathbf{x}$']
+        answer: 1
+        explanation: Two equal terms from the product rule.
+    - question:
+        id: drill-stationary
+        type: choice
+        system: s1
+        prompt: |
+          The gradient of the Rayleigh quotient of a symmetric matrix vanishes at
+        options: ['every vector', 'the eigenvectors', 'the zero vector only', 'the vectors of unit length']
+        answer: 1
+        explanation: Where $A\mathbf{x} = \rho\mathbf{x}$.
+    - question:
+        id: drill-hadamard
+        type: choice
+        system: s1
+        prompt: |
+          $\mathbf{a}^\top(\mathbf{b} \odot \mathbf{c})$ equals
+        options: ['$(\mathbf{a} \odot \mathbf{b})^\top\mathbf{c}$', '$(\mathbf{a}^\top\mathbf{b})\mathbf{c}$', '$\mathbf{a}\mathbf{b}^\top\mathbf{c}$', '$\mathbf{a} \odot \mathbf{b} \odot \mathbf{c}$']
+        answer: 0
+        explanation: Both are $\sum_ia_ib_ic_i$.
+    - question:
+        id: predict-rayleigh
+        type: predict
+        system: s1
+        prompt: The formula for the gradient of the Rayleigh quotient at the three points of the puzzle. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          for x in [np.array([1.0, 0.0, 0.0]), np.array([1.0, 2.0, 1.0]), np.array([1.0, 0.0, -1.0])]:
+              rho = float(x @ A @ x) / float(x @ x)
+              g = 2 * (A @ x - rho * x) / float(x @ x)
+              print(rho, [round(float(v), 4) + 0.0 for v in g], round(float(g @ x), 4) + 0.0)
+        output: |
+          2.0 [0.0, 2.0, 0.0] 0.0
+          4.0 [0.0, 0.0, 0.0] 0.0
+          2.0 [0.0, 0.0, 0.0] 0.0
+        explanation: The formula reproduces the measured slopes. The gradient is zero at the two eigenvectors, and it is always perpendicular to x, because rescaling x does not change the quotient.
+    - question:
+        id: predict-second-order
+        type: predict
+        system: s1
+        prompt: The true change of a matrix product, minus the product-rule differential, for a displacement of size about 0.001. What does this show?
+        code: |
+          import numpy as np
+
+          X = np.array([[1.0, 2.0], [3.0, 4.0]])
+          Y = np.array([[0.0, 1.0], [1.0, 1.0]])
+          dX = 0.001 * np.array([[1.0, -1.0], [2.0, 0.0]])
+          dY = 0.001 * np.array([[0.0, 3.0], [1.0, 1.0]])
+          true_change = (X + dX) @ (Y + dY) - X @ Y
+          differential = dX @ Y + X @ dY
+          print(np.allclose(true_change - differential, dX @ dY))
+          print(round(float(np.abs(differential).max()), 6), round(float(np.abs(true_change - differential).max()), 6))
+        output: |
+          True
+          0.015 6e-06
+        explanation: What the product rule leaves out is exactly dX times dY. For displacements of size one thousandth it is of size one millionth, negligible against the differential, and it vanishes in the limit.
+  work:
+    - text: Slower now. The first task is the formula the puzzle asked for.
+    - question:
+        id: write-rayleigh
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `grad_rayleigh(A, x)` returning the gradient with respect to `x` of the Rayleigh quotient $\mathbf{x}^\top A\mathbf{x}/\mathbf{x}^\top\mathbf{x}$, for a symmetric matrix `A`.
+        starter: |
+          import numpy as np
+
+
+          def grad_rayleigh(A, x):
+              return x * 0.0 + 1.0
+
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          print([round(float(v), 4) + 0.0 for v in grad_rayleigh(A, np.array([1.0, 0.0, 0.0]))])
+          print([round(float(v), 4) + 0.0 for v in grad_rayleigh(A, np.array([1.0, 1.0, 0.0]))])
+        solution: |
+          import numpy as np
+
+
+          def grad_rayleigh(A, x):
+              length = float(x @ x)
+              rho = float(x @ A @ x) / length
+              return 2 * (A @ x - rho * x) / length
+
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          print([round(float(v), 4) + 0.0 for v in grad_rayleigh(A, np.array([1.0, 0.0, 0.0]))])
+          print([round(float(v), 4) + 0.0 for v in grad_rayleigh(A, np.array([1.0, 1.0, 0.0]))])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          assert _np.allclose(grad_rayleigh(_A, _np.array([1.0, 0.0, 0.0])), [0.0, 2.0, 0.0]), "At (1, 0, 0) the quotient is 2 and the gradient is 2 (A x - 2 x) = (0, 2, 0)"
+          assert _np.allclose(grad_rayleigh(_A, _np.array([1.0, 2.0, 1.0])), 0.0), "At the eigenvector (1, 2, 1) the gradient is zero"
+          assert _np.allclose(grad_rayleigh(_A, _np.array([1.0, -1.0, 1.0])), 0.0), "At the eigenvector (1, -1, 1) the gradient is zero"
+          _rho = lambda x: float(x @ _A @ x) / float(x @ x)
+          _x = _np.array([1.0, 1.0, 0.0])
+          _num = _np.array([(_rho(_x + 1e-6 * _e) - _rho(_x - 1e-6 * _e)) / 2e-6 for _e in _np.eye(3)])
+          assert _np.allclose(grad_rayleigh(_A, _x), _num, atol=1e-6), "At (1, 1, 0), which is not of unit length, the gradient should agree with central differences. Divide by x^T x"
+          _y = _np.array([0.3, -2.0, 1.5])
+          _num = _np.array([(_rho(_y + 1e-6 * _e) - _rho(_y - 1e-6 * _e)) / 2e-6 for _e in _np.eye(3)])
+          assert _np.allclose(grad_rayleigh(_A, _y), _num, atol=1e-6), "At (0.3, -2, 1.5) the gradient should agree with central differences"
+          assert abs(float(grad_rayleigh(_A, _y) @ _y)) < 1e-9, "The gradient should be perpendicular to x, since rescaling x does not change the quotient"
+          assert output.strip() == "[0.0, 2.0, 0.0]\n[-0.5, 0.5, 1.0]", "The program should print [0.0, 2.0, 0.0] and then [-0.5, 0.5, 1.0]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def grad_rayleigh(A, x):
+                length = float(x @ x)
+                rho = float(x @ A @ x) / length
+                return 2 * (A @ x - rho * x)
+
+
+            print("[0.0, 2.0, 0.0]\n[-0.5, 0.5, 1.0]")
+          - |
+            import numpy as np
+
+
+            def grad_rayleigh(A, x):
+                length = float(x @ x)
+                return 2 * A @ x / length
+
+
+            print("[0.0, 2.0, 0.0]\n[-0.5, 0.5, 1.0]")
+          - |
+            import numpy as np
+
+
+            def grad_rayleigh(A, x):
+                length = float(x @ x)
+                rho = float(x @ A @ x) / length
+                return (A @ x - rho * x) / length
+
+
+            print("[0.0, 2.0, 0.0]\n[-0.5, 0.5, 1.0]")
+          - |
+            import numpy as np
+
+
+            def grad_rayleigh(A, x):
+                length = float(x @ x)
+                rho = float(x @ A @ x)
+                return 2 * (A @ x - rho * x) / length
+
+
+            print("[0.0, 2.0, 0.0]\n[-0.5, 0.5, 1.0]")
+        explanation: |
+          The quotient rule on two numbers, $u = \mathbf{x}^\top A\mathbf{x}$ and $v = \mathbf{x}^\top\mathbf{x}$, gives $(v\,du - u\,dv)/v^2$, and with $du = 2(A\mathbf{x})^\top d\mathbf{x}$ and $dv = 2\mathbf{x}^\top d\mathbf{x}$ this simplifies to $\frac2v(A\mathbf{x} - \rho\mathbf{x})$.
+
+          The first wrong version leaves out the division by $\mathbf{x}^\top\mathbf{x}$. On unit vectors it is correct, which is why the test at $(1, 1, 0)$ matters.
+
+          The formula says something about algorithms. $A\mathbf{x} - \rho\mathbf{x}$ is the **residual** of $\mathbf{x}$ as an eigenvector. Gradient ascent on the Rayleigh quotient moves $\mathbf{x}$ along that residual, and comes to rest only at an eigenvector. Power iteration, which replaces $\mathbf{x}$ by $A\mathbf{x}$, is a step in nearly the same direction.
+    - question:
+        id: write-two-layer
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `grad_two_layer(W1, W2, x, t)` for the loss $\tfrac12\|W_2W_1\mathbf{x} - \mathbf{t}\|^2$. Return the pair `(grad_W1, grad_W2)`, each in the shape of its matrix.
+        starter: |
+          import numpy as np
+
+
+          def grad_two_layer(W1, W2, x, t):
+              return W1 * 0.0, W2 * 0.0
+
+
+          W1 = np.array([[1.0, 0.0, 1.0], [0.0, 2.0, 0.0]])
+          W2 = np.array([[1.0, 1.0], [0.0, 1.0]])
+          g1, g2 = grad_two_layer(W1, W2, np.array([1.0, 1.0, 2.0]), np.array([4.0, 4.0]))
+          print([[float(v) for v in row] for row in g1])
+          print([[float(v) for v in row] for row in g2])
+        solution: |
+          import numpy as np
+
+
+          def grad_two_layer(W1, W2, x, t):
+              hidden = W1 @ x
+              r = W2 @ hidden - t
+              return np.outer(W2.T @ r, x), np.outer(r, hidden)
+
+
+          W1 = np.array([[1.0, 0.0, 1.0], [0.0, 2.0, 0.0]])
+          W2 = np.array([[1.0, 1.0], [0.0, 1.0]])
+          g1, g2 = grad_two_layer(W1, W2, np.array([1.0, 1.0, 2.0]), np.array([4.0, 4.0]))
+          print([[float(v) for v in row] for row in g1])
+          print([[float(v) for v in row] for row in g2])
+        tests: |
+          import numpy as _np
+          _W1 = _np.array([[1.0, 0.0, 1.0], [0.0, 2.0, 0.0]])
+          _W2 = _np.array([[1.0, 1.0], [0.0, 1.0]])
+          _x = _np.array([1.0, 1.0, 2.0])
+          _t = _np.array([4.0, 4.0])
+          _out = grad_two_layer(_W1, _W2, _x, _t)
+          assert isinstance(_out, tuple) and len(_out) == 2, "grad_two_layer should return the pair (grad_W1, grad_W2)"
+          _g1, _g2 = _out
+          assert _np.shape(_g1) == (2, 3) and _np.shape(_g2) == (2, 2), "Each gradient has the shape of its own matrix"
+          assert _np.allclose(_g2, [[3.0, 2.0], [-6.0, -4.0]]), "The hidden vector is W1 x = (3, 2) and the error is (1, -2), so the gradient for W2 is their outer product, error first"
+          assert _np.allclose(_g1, [[1.0, 1.0, 2.0], [-1.0, -1.0, -2.0]]), "The error brought back through W2^T is (1, -1), and the gradient for W1 is its outer product with x = (1, 1, 2)"
+          _rng = _np.random.default_rng(0)
+          _A, _B, _y, _s = _rng.normal(size=(4, 3)), _rng.normal(size=(2, 4)), _rng.normal(size=3), _rng.normal(size=2)
+          _L = lambda A, B: 0.5 * float(((B @ A @ _y - _s) ** 2).sum())
+          _nA = _np.zeros((4, 3))
+          for _i in range(4):
+              for _j in range(3):
+                  _E = _np.zeros((4, 3))
+                  _E[_i, _j] = 1e-6
+                  _nA[_i, _j] = (_L(_A + _E, _B) - _L(_A - _E, _B)) / 2e-6
+          _nB = _np.zeros((2, 4))
+          for _i in range(2):
+              for _j in range(4):
+                  _E = _np.zeros((2, 4))
+                  _E[_i, _j] = 1e-6
+                  _nB[_i, _j] = (_L(_A, _B + _E) - _L(_A, _B - _E)) / 2e-6
+          _g1, _g2 = grad_two_layer(_A, _B, _y, _s)
+          assert _np.allclose(_g1, _nA, atol=1e-6), "For random layers of shapes 4 by 3 and 2 by 4 the gradient for W1 should agree with central differences"
+          assert _np.allclose(_g2, _nB, atol=1e-6), "For random layers of shapes 4 by 3 and 2 by 4 the gradient for W2 should agree with central differences"
+          assert output.strip() == "[[1.0, 1.0, 2.0], [-1.0, -1.0, -2.0]]\n[[3.0, 2.0], [-6.0, -4.0]]", "The program should print [[1.0, 1.0, 2.0], [-1.0, -1.0, -2.0]] and then [[3.0, 2.0], [-6.0, -4.0]]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def grad_two_layer(W1, W2, x, t):
+                hidden = W1 @ x
+                r = W2 @ hidden - t
+                return np.outer(r, x), np.outer(r, hidden)
+
+
+            print("[[1.0, 1.0, 2.0], [-1.0, -1.0, -2.0]]\n[[3.0, 2.0], [-6.0, -4.0]]")
+          - |
+            import numpy as np
+
+
+            def grad_two_layer(W1, W2, x, t):
+                hidden = W1 @ x
+                r = W2 @ hidden - t
+                return np.outer(W2 @ r, x), np.outer(r, hidden)
+
+
+            print("[[1.0, 1.0, 2.0], [-1.0, -1.0, -2.0]]\n[[3.0, 2.0], [-6.0, -4.0]]")
+          - |
+            import numpy as np
+
+
+            def grad_two_layer(W1, W2, x, t):
+                hidden = W1 @ x
+                r = W2 @ hidden - t
+                return np.outer(W2.T @ r, x), np.outer(hidden, r)
+
+
+            print("[[1.0, 1.0, 2.0], [-1.0, -1.0, -2.0]]\n[[3.0, 2.0], [-6.0, -4.0]]")
+        explanation: |
+          A forward pass computes the hidden vector and the error. A backward pass uses them: the gradient for $W_2$ is the error times the hidden vector, and the gradient for $W_1$ is the error, brought back through $W_2^\top$, times the input.
+
+          Everything needed came from the single line $d\mathbf{r} = dW_2\,W_1\mathbf{x} + W_2\,dW_1\,\mathbf{x}$. In the first term $dW_2$ has $W_1\mathbf{x}$ on its right, which becomes the right factor of the outer product. In the second, $dW_1$ has $W_2$ on its left, which comes out transposed onto the error.
+
+          In the program the second layer is square, so `W2 @ r` runs without complaint and gives the wrong answer $(-1, -2)$ in place of $(1, -1)$. The test with shapes $4 \times 3$ and $2 \times 4$ is where such a version fails loudly.
+    - question:
+        id: fix-commute
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `grad(A, X)` should return the gradient with respect to the square matrix `X` of $f(X) = \operatorname{tr}(XAX)$. The author reasoned that $d(XAX)$ is "$2XA\,dX$". The program prints the largest difference from central differences, which should be `0.0`. Fix `grad`.
+        starter: |
+          import numpy as np
+
+
+          def f(A, X):
+              return float(np.trace(X @ A @ X))
+
+
+          def grad(A, X):
+              return 2 * (X @ A).T
+
+
+          A = np.array([[1.0, 2.0], [0.0, 1.0]])
+          X = np.array([[1.0, 0.0], [3.0, 2.0]])
+          h = 1e-6
+          measured = np.zeros((2, 2))
+          for i in range(2):
+              for j in range(2):
+                  E = np.zeros((2, 2))
+                  E[i, j] = h
+                  measured[i, j] = (f(A, X + E) - f(A, X - E)) / (2 * h)
+          print(round(float(np.abs(grad(A, X) - measured).max()), 4))
+        solution: |
+          import numpy as np
+
+
+          def f(A, X):
+              return float(np.trace(X @ A @ X))
+
+
+          def grad(A, X):
+              return (A @ X + X @ A).T
+
+
+          A = np.array([[1.0, 2.0], [0.0, 1.0]])
+          X = np.array([[1.0, 0.0], [3.0, 2.0]])
+          h = 1e-6
+          measured = np.zeros((2, 2))
+          for i in range(2):
+              for j in range(2):
+                  E = np.zeros((2, 2))
+                  E[i, j] = h
+                  measured[i, j] = (f(A, X + E) - f(A, X - E)) / (2 * h)
+          print(round(float(np.abs(grad(A, X) - measured).max()), 4))
+        tests: |
+          import numpy as _np
+          _A = _np.array([[1.0, 2.0], [0.0, 1.0]])
+          _X = _np.array([[1.0, 0.0], [3.0, 2.0]])
+          assert _np.allclose(grad(_A, _X), (_A @ _X + _X @ _A).T), "d tr(X A X) = tr(dX A X) + tr(X A dX) = tr((A X + X A) dX), so the gradient is (A X + X A)^T. X and A do not commute, so the two terms differ"
+          _rng = _np.random.default_rng(0)
+          _B, _Y = _rng.normal(size=(3, 3)), _rng.normal(size=(3, 3))
+          _num = _np.zeros((3, 3))
+          for _i in range(3):
+              for _j in range(3):
+                  _E = _np.zeros((3, 3))
+                  _E[_i, _j] = 1e-6
+                  _num[_i, _j] = (float(_np.trace((_Y + _E) @ _B @ (_Y + _E))) - float(_np.trace((_Y - _E) @ _B @ (_Y - _E)))) / 2e-6
+          assert _np.allclose(grad(_B, _Y), _num, atol=1e-6), "For random 3 by 3 matrices the gradient should agree with central differences"
+          assert _np.allclose(grad(_np.eye(2), _X), 2 * _X.T), "For A = I the function is tr(X^2), whose gradient is 2 X^T"
+          assert output.strip() == "0.0", "The program should print 0.0"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def f(A, X):
+                return float(np.trace(X @ A @ X))
+
+
+            def grad(A, X):
+                return 2 * (X @ A).T
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def f(A, X):
+                return float(np.trace(X @ A @ X))
+
+
+            def grad(A, X):
+                return A @ X + X @ A
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def f(A, X):
+                return float(np.trace(X @ A @ X))
+
+
+            def grad(A, X):
+                return 2 * (A @ X).T
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def f(A, X):
+                return float(np.trace(X @ A @ X))
+
+
+            def grad(A, X):
+                return (X @ A).T
+
+
+            print("0.0")
+        explanation: |
+          $d(XAX) = dX\,AX + XA\,dX$. The two terms have $dX$ in different places, and they cannot be merged into "$2XA\,dX$", because that would move $dX$ past $AX$. Under the trace, cycling brings $dX$ to the end of each: $\operatorname{tr}(dX\,AX) = \operatorname{tr}(AX\,dX)$. So $df = \operatorname{tr}\big((AX + XA)\,dX\big)$, and the gradient is the transpose of $AX + XA$.
+
+          The second wrong version has the right matrix and forgets that $\operatorname{tr}(M\,dX)$ gives the gradient $M^\top$, not $M$. Both slips come from treating matrices as numbers.
+
+          With $A = I$ every version but one passes: $\operatorname{tr}(X^2)$ has gradient $2X^\top$, and when the matrices commute the shortcut is correct. That is what makes it tempting.
+    - question:
+        id: work-order
+        type: choice
+        system: s2
+        prompt: |
+          For numbers, $d(x^3) = 3x^2\,dx$. What is $d(X^3)$ for a square matrix $X$, and when does it reduce to $3X^2\,dX$?
+        options:
+          - 'It is always $3X^2\,dX$.'
+          - 'It is $dX\,X^2 + X\,dX\,X + X^2\,dX$: three terms, with $dX$ taking each of the three places in turn. They can be merged only when $dX$ commutes with $X$, or under a trace, where $\operatorname{tr}(d(X^3)) = 3\operatorname{tr}(X^2\,dX)$.'
+          - 'It is $3\,dX\,X^2$.'
+          - 'It is $(dX)^3$.'
+        answer: 1
+        explanation: |
+          The product rule applied to three factors gives one term for each. In general $X\,dX\,X \ne X^2\,dX$. Inside a trace the factors can be cycled, so all three terms become $\operatorname{tr}(X^2\,dX)$, and $\nabla\operatorname{tr}(X^3) = 3(X^2)^\top$, looking just like the scalar formula. This is the usual situation: the differential of a matrix function is a sum with $dX$ in the middle of things, and it is only the trace, at the stage of reading off a gradient of a scalar, that lets the terms be tidied.
+    - question:
+        id: work-relu-layer
+        type: choice
+        system: s2
+        prompt: |
+          $f(W) = \mathbf{c}^\top\phi(W\mathbf{x})$, with $\phi$ applied entry by entry and $\mathbf{z} = W\mathbf{x}$. Which is the gradient with respect to $W$?
+        options:
+          - '$\mathbf{c}\,\mathbf{x}^\top$'
+          - '$(\mathbf{c} \odot \phi''(\mathbf{z}))\,\mathbf{x}^\top$'
+          - '$\phi''(\mathbf{z})\,\mathbf{c}^\top\mathbf{x}$'
+          - '$\mathbf{x}\,(\mathbf{c} \odot \phi''(\mathbf{z}))^\top$'
+        answer: 1
+        explanation: |
+          $df = \mathbf{c}^\top\big(\phi'(\mathbf{z}) \odot d\mathbf{z}\big) = (\mathbf{c} \odot \phi'(\mathbf{z}))^\top d\mathbf{z}$, moving the entry-by-entry factor across the dot product. Then $d\mathbf{z} = dW\,\mathbf{x}$, so $df = \boldsymbol\delta^\top dW\,\mathbf{x}$ with $\boldsymbol\delta = \mathbf{c} \odot \phi'(\mathbf{z})$, a bilinear form with gradient $\boldsymbol\delta\mathbf{x}^\top$. The nonlinearity only rescales each entry of the error before the outer product is taken. For a rectifier, $\phi'$ is 0 or 1, and the rows of the gradient belonging to inactive units are zero.
+    - question:
+        id: work-hessian
+        type: numeric
+        system: s2
+        prompt: |
+          $f(\mathbf{x}) = \tfrac13\sum_ix_i^3 + \mathbf{x}^\top\mathbf{x}$. Its gradient is $\mathbf{x} \odot \mathbf{x} + 2\mathbf{x}$. Taking the differential of the gradient gives the Hessian. What is the entry in row 2, column 2 of the Hessian at $\mathbf{x} = (1, 4)$?
+        answer: "10"
+        explanation: |
+          $d(\mathbf{x} \odot \mathbf{x} + 2\mathbf{x}) = 2\mathbf{x} \odot d\mathbf{x} + 2\,d\mathbf{x} = \big(2\operatorname{diag}(\mathbf{x}) + 2I\big)d\mathbf{x}$. So the Hessian is $2\operatorname{diag}(\mathbf{x}) + 2I$, which at $(1, 4)$ is $\operatorname{diag}(4, 10)$. The off-diagonal entries are zero because each term of $f$ involves one coordinate only. The step $\mathbf{a} \odot d\mathbf{x} = \operatorname{diag}(\mathbf{a})\,d\mathbf{x}$ is how an entry-by-entry product is turned into a matrix when a Jacobian or Hessian has to be read off.
+  connections:
+    - text: |
+        The gradient of the Rayleigh quotient is $\frac{2}{\mathbf{x}^\top\mathbf{x}}(A\mathbf{x} - \rho\mathbf{x})$, and it vanishes exactly at the eigenvectors. It came from the quotient rule in three lines.
+
+        The **method of differentials**: write $dF$ for the first-order change of $F$, push $d$ through the expression with the sum, product, transpose, trace and chain rules, never reordering a matrix product, then bring the result to $\mathbf{g}^\top d\mathbf{x}$ or $\operatorname{tr}(G^\top dX)$ and read off the gradient. A function of several variables gives a sum with one term per variable, and so all its gradients at once, as for the two layers.
+
+        The rules so far cover sums, products, and functions applied entry by entry. Two functions of a matrix that matter a great deal are not of that kind: the **inverse** and the **determinant**. Both appear in the density of a Gaussian, and so in every model built on one. Their differentials are short, and neither is what a guess from scalar calculus would suggest: [[m13.trace-identities-determinant-and-inverse-derivatives]].

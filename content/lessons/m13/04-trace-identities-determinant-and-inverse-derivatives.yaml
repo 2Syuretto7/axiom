@@ -1,0 +1,653 @@
+concept: m13.trace-identities-determinant-and-inverse-derivatives
+minutes: 85
+claim: You can derive the differential of a matrix inverse from the identity that defines it, derive the differential of the determinant and of its logarithm, read off the gradients of the determinant, the log-determinant, and scalar functions of an inverse, use the standard trace identities to bring any such differential to a form from which the gradient is read, and compute these gradients with linear solves in place of explicit inverses.
+recalls: [m13.the-method-of-differentials]
+uses: [m13.derivatives-with-respect-to-matrices, m13.derivatives-with-respect-to-vectors, m8.characteristic-polynomial, m8.eigenvalues-and-eigenvectors, m8.positive-definite-matrices-and-cholesky, m8.operator-and-frobenius-norms, m5.determinant, m5.identity-and-inverse, m5.transpose, m1.logarithms, m10.derivatives-of-exp-log-and-trig, e6.gradient-checking, e5.linear-algebra-routines, e5.einsum, e5.arrays-dtype-and-shape, e0.functions, e0.loops]
+leads: [m13.jacobian-vector-and-vector-jacobian-products, m13.implicit-differentiation-through-solvers]
+starter: |
+  # Scratch space. Nudge each entry of X and measure the slope of the determinant.
+  import numpy as np
+
+  X = np.array([[2.0, 1.0], [3.0, 2.0]])
+  h = 1e-6
+  G = np.zeros((2, 2))
+  for i in range(2):
+      for j in range(2):
+          E = np.zeros((2, 2))
+          E[i, j] = h
+          G[i, j] = (np.linalg.det(X + E) - np.linalg.det(X - E)) / (2 * h)
+  print([[round(float(v), 4) for v in row] for row in G])
+  print([[round(float(v), 4) for v in row] for row in np.linalg.inv(X)])
+parts:
+  recall:
+    - text: |
+        [[m13.the-method-of-differentials]] gave rules for sums, products and entry-by-entry functions, and left out two functions of a matrix that are neither: the inverse and the determinant. Today they get their rules. Three quick pulls first.
+  puzzle:
+    - text: |
+        The determinant of $X = \begin{pmatrix} 2 & 1 \\ 3 & 2 \end{pmatrix}$ is 1. The starter nudges each of its four entries in turn, measures how fast the determinant changes, and lays the four slopes out in the shape of $X$. Below that it prints the inverse of $X$.
+
+        ```
+        [[2.0, -3.0], [-1.0, 2.0]]
+        [[2.0, -1.0], [-3.0, 2.0]]
+        ```
+
+        The table of slopes of the determinant is the **inverse**, with rows and columns exchanged.
+
+        Nothing about a determinant suggests an inverse. One measures volume, and the other undoes a map.
+
+        **Why does the gradient of the determinant contain the inverse? And what is the derivative of the inverse itself, the matrix version of the rule that $1/x$ has derivative $-1/x^2$?**
+  intuition:
+    - text: |
+        **The inverse first.** There is no formula for $X^{-1}$ to differentiate. But there is an equation it satisfies:
+
+        $$X\,X^{-1} = I.$$
+
+        Take the differential of both sides. The right side is constant. The left is a product:
+
+        $$dX\,X^{-1} + X\,d(X^{-1}) = 0.$$
+
+        Solve for the unknown differential by moving the first term over and multiplying by $X^{-1}$ on the left:
+
+        $$d(X^{-1}) = -X^{-1}\,dX\,X^{-1}.$$
+
+        For numbers this is $-dx/x^2$, the familiar rule. For matrices the two inverse factors sit on **either side** of $dX$ and cannot be gathered into $X^{-2}$.
+
+        **The determinant.** Start near the identity. The determinant of $I + E$, for small $E$, is a sum of products of entries, one from each row and column. The product of the diagonal entries is $(1 + e_{11})(1 + e_{22})\cdots = 1 + (e_{11} + e_{22} + \dots) + \text{smaller}$. Every other product contains at least two off-diagonal entries of $E$, so it is second order. Hence
+
+        $$\det(I + E) \approx 1 + \operatorname{tr}(E).$$
+
+        Near the identity, the determinant changes by the trace. A small stretch along each axis changes the volume by the sum of the stretches.
+
+        Now move to any invertible $X$ by factoring: $X + dX = X(I + X^{-1}dX)$. The determinant of a product is the product of the determinants, so
+
+        $$\det(X + dX) \approx \det(X)\big(1 + \operatorname{tr}(X^{-1}dX)\big).$$
+
+        There is the inverse: it is what converts a displacement of $X$ into a displacement **relative to** $X$. And in the standard form $\operatorname{tr}(G^\top dX)$ the gradient is $G = \det(X)\,X^{-\top}$, the inverse transposed, as the starter found.
+  derivation:
+    - text: |
+        **Inverse.** For invertible $X$,
+
+        $$d(X^{-1}) = -X^{-1}\,dX\,X^{-1}.$$
+
+        *Proof.* Differentiate $XX^{-1} = I$ by the product rule, as above. $\blacksquare$
+
+        **Determinant (Jacobi's formula).**
+
+        $$d\det(X) = \det(X)\operatorname{tr}(X^{-1}dX), \qquad \nabla_X\det(X) = \det(X)\,X^{-\top}.$$
+
+        *Proof.* $\det(X + dX) = \det(X)\det(I + X^{-1}dX)$ and $\det(I + E) = 1 + \operatorname{tr}(E) + O(\|E\|^2)$. For the last: if $E$ has eigenvalues $\mu_i$ then $I + E$ has eigenvalues $1 + \mu_i$, and $\prod(1 + \mu_i) = 1 + \sum\mu_i + \dots$ $\blacksquare$
+
+        The matrix $\det(X)X^{-\top}$ is the matrix of cofactors. So this formula is the expansion of a determinant along a row, differentiated: the slope with respect to $X_{ij}$ is its cofactor.
+
+        **Log-determinant.** By the scalar chain rule, for $\det X > 0$,
+
+        $$d\log\det(X) = \frac{d\det X}{\det X} = \operatorname{tr}(X^{-1}dX), \qquad \nabla_X\log\det(X) = X^{-\top}.$$
+
+        The factor $\det X$ has cancelled. This is the cleanest of the three, and the one used in practice. For symmetric $X$ the gradient is simply $X^{-1}$.
+
+        **Scalar functions of an inverse.** Combine the inverse rule with the trace.
+
+        - $f = \mathbf{a}^\top X^{-1}\mathbf{b}$: $\ df = -\mathbf{a}^\top X^{-1}dX\,X^{-1}\mathbf{b} = -\mathbf{u}^\top dX\,\mathbf{v}$ with $\mathbf{u} = X^{-\top}\mathbf{a}$ and $\mathbf{v} = X^{-1}\mathbf{b}$. A bilinear form, so $\nabla_Xf = -\mathbf{u}\mathbf{v}^\top = -X^{-\top}\mathbf{a}\mathbf{b}^\top X^{-\top}$.
+        - $f = \operatorname{tr}(X^{-1}C)$: $\ df = -\operatorname{tr}(X^{-1}dX\,X^{-1}C) = -\operatorname{tr}(X^{-1}CX^{-1}dX)$, so $\nabla_Xf = -(X^{-1}CX^{-1})^\top$.
+
+        *The puzzle.* $\det X = 1$ and $X^{-1} = \begin{pmatrix} 2 & -1 \\ -3 & 2 \end{pmatrix}$, so the gradient is $X^{-\top} = \begin{pmatrix} 2 & -3 \\ -1 & 2 \end{pmatrix}$. Directly, $\det X = x_{11}x_{22} - x_{12}x_{21}$, with partial derivatives $x_{22}, -x_{21}, -x_{12}, x_{11}$, which are $2, -3, -1, 2$.
+    - question:
+        id: derivation-det-slope
+        type: numeric
+        system: s2
+        prompt: |
+          $X = \begin{pmatrix} 2 & 0 \\ 0 & 5 \end{pmatrix}$. What is the slope of $\log\det X$ with respect to the entry $X_{11}$?
+        answer: "0.5"
+        explanation: |
+          $\nabla\log\det X = X^{-\top} = \operatorname{diag}(\tfrac12, \tfrac15)$, so the slope is $0.5$. Directly: $\log\det X = \log x_{11} + \log x_{22}$ for a diagonal matrix, with derivative $1/x_{11}$. The slope of the determinant itself would be $\det(X)/x_{11} = 5$, the other diagonal entry. The off-diagonal slopes are zero here: to first order, turning on $x_{12}$ alone does not change the determinant of a diagonal matrix.
+    - text: |
+        **The trace identities,** collected. Each is the rearrangement that brings a differential to the form $\operatorname{tr}(G^\top dX)$.
+
+        | $f(X)$ | $\nabla_Xf$ |
+        |---|---|
+        | $\operatorname{tr}(AX)$ | $A^\top$ |
+        | $\operatorname{tr}(AXB)$ | $A^\top B^\top$ |
+        | $\operatorname{tr}(X^\top AX)$ | $(A + A^\top)X$ |
+        | $\operatorname{tr}(X^k)$ | $k(X^{k-1})^\top$ |
+        | $\operatorname{tr}(AX^{-1})$ | $-X^{-\top}A^\top X^{-\top}$ |
+        | $\det X$ | $\det(X)\,X^{-\top}$ |
+        | $\log\det X$ | $X^{-\top}$ |
+
+        **An application.** Given a symmetric positive definite matrix $C$, consider
+
+        $$f(S) = \log\det S + \operatorname{tr}(S^{-1}C)$$
+
+        over symmetric positive definite $S$. Then $df = \operatorname{tr}(S^{-1}dS) - \operatorname{tr}(S^{-1}CS^{-1}dS)$, so
+
+        $$\nabla f = S^{-1} - S^{-1}CS^{-1}.$$
+
+        Setting this to zero and multiplying by $S$ on both sides gives $S = C$. This function, up to constants, is the negative log-likelihood of a Gaussian model with covariance $S$ for data with sample covariance $C$. The calculation is the proof that the best-fitting covariance is the sample covariance.
+
+        **The solution of a linear system.** If $\mathbf{x} = A^{-1}\mathbf{b}$, then $d\mathbf{x} = -A^{-1}dA\,A^{-1}\mathbf{b} + A^{-1}d\mathbf{b} = A^{-1}(d\mathbf{b} - dA\,\mathbf{x})$. The change of the solution is itself the solution of a system with the same matrix.
+
+        **Computing.** None of these formulas should be coded with an explicit inverse. $X^{-1}\mathbf{b}$ is `np.linalg.solve(X, b)`, and $X^{-\top}\mathbf{a}$ is `np.linalg.solve(X.T, a)`. And $\log\det$ should not be computed as the logarithm of a determinant, which overflows or underflows for matrices of even moderate size. For positive definite $X = LL^\top$, $\log\det X = 2\sum_i\log L_{ii}$.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the derivation of the differential of the inverse of a matrix.
+        steps:
+          - 'Start from the identity $X\,X^{-1} = I$.'
+          - 'Take differentials: the right side gives $0$.'
+          - 'Apply the product rule to the left side: $dX\,X^{-1} + X\,d(X^{-1}) = 0$.'
+          - 'Move the first term to the other side: $X\,d(X^{-1}) = -dX\,X^{-1}$.'
+          - 'Multiply on the left by $X^{-1}$: $d(X^{-1}) = -X^{-1}\,dX\,X^{-1}$.'
+        explanation: The inverse is differentiated through the equation that defines it, not through a formula for it.
+  formal:
+    - text: |
+        **Inverse.** On the open set of invertible matrices, $X \mapsto X^{-1}$ is differentiable with $D(X^{-1})[H] = -X^{-1}HX^{-1}$. Second order: $(X + H)^{-1} = X^{-1} - X^{-1}HX^{-1} + X^{-1}HX^{-1}HX^{-1} - \dots$ (Neumann series, for $\|X^{-1}H\| < 1$).
+
+        **Jacobi's formula.** $d\det X = \operatorname{tr}(\operatorname{adj}(X)\,dX)$ for every square $X$, where $\operatorname{adj}(X)$ is the adjugate, the transpose of the cofactor matrix. For invertible $X$, $\operatorname{adj}(X) = \det(X)X^{-1}$.
+
+        **Expansion.** $\det(I + tA) = 1 + t\operatorname{tr}A + \tfrac{t^2}{2}\big((\operatorname{tr}A)^2 - \operatorname{tr}(A^2)\big) + O(t^3)$. $\ \det(e^{A}) = e^{\operatorname{tr}A}$.
+
+        **Log-determinant.** $d\log|\det X| = \operatorname{tr}(X^{-1}dX)$. On symmetric positive definite matrices $\log\det$ is concave, with $\nabla\log\det X = X^{-1}$ and second differential $d^2\log\det X = -\operatorname{tr}(X^{-1}dX\,X^{-1}dX)$.
+
+        **Inverse forms.**
+
+        - $\nabla_X(\mathbf{a}^\top X^{-1}\mathbf{b}) = -X^{-\top}\mathbf{a}\mathbf{b}^\top X^{-\top}$.
+        - $\nabla_X\operatorname{tr}(AX^{-1}B) = -(X^{-1}BAX^{-1})^\top$.
+        - $\nabla_X\|X^{-1}\|_F^2 = -2X^{-\top}X^{-1}X^{-\top}$.
+
+        **Eigenvalues.** For symmetric $X$ with a simple eigenvalue $\lambda$ and unit eigenvector $\mathbf{q}$: $d\lambda = \mathbf{q}^\top dX\,\mathbf{q}$, so $\nabla_X\lambda = \mathbf{q}\mathbf{q}^\top$.
+
+        **Symmetric variables.** The formulas above treat all entries of $X$ as independent. If $X$ is constrained to be symmetric, only symmetric displacements are allowed, and the gradient within that space is the symmetric part $\tfrac12(G + G^\top)$ of the unconstrained gradient $G$.
+
+        **Matrix determinant lemma.** $\det(X + \mathbf{u}\mathbf{v}^\top) = \det(X)(1 + \mathbf{v}^\top X^{-1}\mathbf{u})$, exactly. Its first-order part is Jacobi's formula for a rank-one displacement.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-inverse
+        type: choice
+        system: s1
+        prompt: |
+          $d(X^{-1})$ is
+        options: ['$-X^{-2}\,dX$', '$-X^{-1}\,dX\,X^{-1}$', '$X^{-1}\,dX\,X^{-1}$', '$(dX)^{-1}$']
+        answer: 1
+        explanation: An inverse on each side of the displacement, and a minus sign.
+    - question:
+        id: drill-from
+        type: choice
+        system: s1
+        prompt: |
+          The differential of the inverse is derived by differentiating
+        options: ['a formula for the inverse', 'the identity $XX^{-1} = I$', 'the determinant', 'the trace']
+        answer: 1
+        explanation: The equation that defines the inverse.
+    - question:
+        id: drill-near-identity
+        type: choice
+        system: s1
+        prompt: |
+          For small $E$, $\det(I + E)$ is approximately
+        options: ['$1 + \det E$', '$1 + \operatorname{tr}E$', '$\operatorname{tr}E$', '$1$']
+        answer: 1
+        explanation: To first order only the diagonal of $E$ matters.
+    - question:
+        id: drill-near-identity-number
+        type: numeric
+        system: s1
+        prompt: |
+          To first order, what is $\det(I + E)$ for $E = \begin{pmatrix} 0.01 & 0.5 \\ 0 & 0.02 \end{pmatrix}$?
+        answer: "1.03"
+        explanation: $1 + \operatorname{tr}E = 1 + 0.03$.
+    - question:
+        id: drill-jacobi
+        type: choice
+        system: s1
+        prompt: |
+          $d\det(X)$ is
+        options: ['$\det(dX)$', '$\det(X)\operatorname{tr}(X^{-1}dX)$', '$\operatorname{tr}(dX)$', '$\det(X)\,dX$']
+        answer: 1
+        explanation: Jacobi's formula.
+    - question:
+        id: drill-grad-det
+        type: choice
+        system: s1
+        prompt: |
+          The gradient of $\det X$ with respect to $X$ is
+        options: ['$X^{-1}$', '$\det(X)\,X^{-\top}$', '$\det(X)\,X$', '$X^\top$']
+        answer: 1
+        explanation: The matrix of cofactors.
+    - question:
+        id: drill-logdet
+        type: choice
+        system: s1
+        prompt: |
+          The gradient of $\log\det X$ with respect to $X$ is
+        options: ['$X^{-\top}$', '$\det(X)\,X^{-\top}$', '$X$', '$1/\det X$']
+        answer: 0
+        explanation: The determinant cancels.
+    - question:
+        id: drill-logdet-number
+        type: numeric
+        system: s1
+        prompt: |
+          $X = \operatorname{diag}(4, 10)$. What is the slope of $\log\det X$ with respect to $X_{22}$?
+        answer: "0.1"
+        explanation: The $(2, 2)$ entry of $X^{-1}$.
+    - question:
+        id: drill-det-number
+        type: numeric
+        system: s1
+        prompt: |
+          $X = \operatorname{diag}(4, 10)$. What is the slope of $\det X$ with respect to $X_{22}$?
+        answer: "4"
+        explanation: $\det(X)$ times $1/10$, which is the other diagonal entry.
+    - question:
+        id: drill-trace-ax
+        type: choice
+        system: s1
+        prompt: |
+          The gradient of $\operatorname{tr}(AX)$ with respect to $X$ is
+        options: ['$A$', '$A^\top$', '$X$', '$I$']
+        answer: 1
+        explanation: $\operatorname{tr}(AX) = \operatorname{tr}\big((A^\top)^\top X\big)$.
+    - question:
+        id: drill-scalar
+        type: choice
+        system: s1
+        prompt: |
+          For $1 \times 1$ matrices the rule $d(X^{-1}) = -X^{-1}dX\,X^{-1}$ becomes
+        options: ['$d(1/x) = -dx/x^2$', '$d(1/x) = dx/x$', '$d(1/x) = -dx/x$', '$d(1/x) = dx/x^2$']
+        answer: 0
+        explanation: The familiar derivative of the reciprocal.
+    - question:
+        id: drill-solve
+        type: choice
+        system: s1
+        prompt: |
+          In code, $X^{-\top}\mathbf{a}$ is best computed as
+        options: ['`np.linalg.inv(X).T @ a`', '`np.linalg.solve(X.T, a)`', '`np.linalg.solve(X, a).T`', '`a / X.T`']
+        answer: 1
+        explanation: A solve with the transposed matrix, with no inverse formed.
+    - question:
+        id: drill-system
+        type: choice
+        system: s1
+        prompt: |
+          If $\mathbf{x} = A^{-1}\mathbf{b}$ and only $A$ changes, then $d\mathbf{x}$ is
+        options: ['$-A^{-1}\,dA\,\mathbf{x}$', '$dA\,\mathbf{x}$', '$-dA\,\mathbf{b}$', '$A^{-1}\,dA$']
+        answer: 0
+        explanation: $-A^{-1}dA\,A^{-1}\mathbf{b}$, with $A^{-1}\mathbf{b} = \mathbf{x}$.
+    - question:
+        id: predict-inverse
+        type: predict
+        system: s1
+        prompt: The true change of an inverse under a small displacement, the error of the correct differential, and the error of the guess with X to the power minus two. What does this show?
+        code: |
+          import numpy as np
+
+          X = np.array([[2.0, 1.0], [3.0, 2.0]])
+          dX = 0.001 * np.array([[1.0, 2.0], [0.0, -1.0]])
+          Xi = np.linalg.inv(X)
+          change = np.linalg.inv(X + dX) - Xi
+          print(round(float(np.abs(change).max()), 4))
+          print(round(float(np.abs(change + Xi @ dX @ Xi).max()), 4))
+          print(round(float(np.abs(change + Xi @ Xi @ dX).max()), 4))
+        output: |
+          0.0181
+          0.0001
+          0.0301
+        explanation: The inverse changes by about 0.018. The formula with an inverse on each side of dX is right up to second order. The guess that gathers the two inverses on one side is off by more than the change itself.
+    - question:
+        id: predict-cofactors
+        type: predict
+        system: s1
+        prompt: The gradient of the determinant of a three by three matrix, by Jacobi's formula. What does this show?
+        code: |
+          import numpy as np
+
+          Y = np.array([[1.0, 2.0, 0.0], [0.0, 1.0, 3.0], [4.0, 0.0, 1.0]])
+          d = float(np.linalg.det(Y))
+          G = d * np.linalg.inv(Y).T
+          print(round(d, 4))
+          print([[round(float(v), 4) + 0.0 for v in row] for row in G])
+          print(round(float((G[0] * Y[0]).sum()), 4))
+        output: |
+          25.0
+          [[1.0, 12.0, -4.0], [-2.0, 1.0, 8.0], [6.0, -3.0, 1.0]]
+          25.0
+        explanation: The gradient of the determinant is the matrix of cofactors, all whole numbers here. Multiplying the first row of the matrix by its cofactors and adding gives the determinant back, which is the expansion along the first row.
+  work:
+    - text: Slower now. The first task differentiates through an inverse.
+    - question:
+        id: write-inverse-form
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `grad_inverse_form(X, a, b)` returning the gradient with respect to `X` of $f(X) = \mathbf{a}^\top X^{-1}\mathbf{b}$. Use `np.linalg.solve` twice, and do not call `np.linalg.inv`.
+        starter: |
+          import numpy as np
+
+
+          def grad_inverse_form(X, a, b):
+              return X * 0.0
+
+
+          X = np.array([[2.0, 1.0], [3.0, 2.0]])
+          G = grad_inverse_form(X, np.array([1.0, 2.0]), np.array([3.0, -1.0]))
+          print([[round(float(v), 4) + 0.0 for v in row] for row in G])
+        solution: |
+          import numpy as np
+
+
+          def grad_inverse_form(X, a, b):
+              u = np.linalg.solve(X.T, a)
+              v = np.linalg.solve(X, b)
+              return -np.outer(u, v)
+
+
+          X = np.array([[2.0, 1.0], [3.0, 2.0]])
+          G = grad_inverse_form(X, np.array([1.0, 2.0]), np.array([3.0, -1.0]))
+          print([[round(float(v), 4) + 0.0 for v in row] for row in G])
+        tests: |
+          import numpy as _np
+          assert "inv(" not in source, "Use np.linalg.solve, without forming an inverse"
+          _X = _np.array([[2.0, 1.0], [3.0, 2.0]])
+          _a, _b = _np.array([1.0, 2.0]), _np.array([3.0, -1.0])
+          _G = grad_inverse_form(_X, _a, _b)
+          assert _np.shape(_G) == (2, 2), "The gradient has the shape of X"
+          assert _np.allclose(_G, [[28.0, -44.0], [-21.0, 33.0]]), "With u = X^-T a = (-4, 3) and v = X^-1 b = (7, -11) the gradient is -u v^T = [[28, -44], [-21, 33]]"
+          _rng = _np.random.default_rng(0)
+          _Y = _rng.normal(size=(3, 3)) + 3.0 * _np.eye(3)
+          _c, _d = _rng.normal(size=3), _rng.normal(size=3)
+          _f = lambda M: float(_c @ _np.linalg.solve(M, _d))
+          _num = _np.zeros((3, 3))
+          for _i in range(3):
+              for _j in range(3):
+                  _E = _np.zeros((3, 3))
+                  _E[_i, _j] = 1e-6
+                  _num[_i, _j] = (_f(_Y + _E) - _f(_Y - _E)) / 2e-6
+          assert _np.allclose(grad_inverse_form(_Y, _c, _d), _num, atol=1e-5), "For a random 3 by 3 matrix the gradient should agree with central differences"
+          assert _np.allclose(grad_inverse_form(_np.eye(2), _a, _b), -_np.outer(_a, _b)), "At X = I the gradient is -a b^T"
+          assert output.strip() == "[[28.0, -44.0], [-21.0, 33.0]]", "The program should print [[28.0, -44.0], [-21.0, 33.0]]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def grad_inverse_form(X, a, b):
+                u = np.linalg.solve(X.T, a)
+                v = np.linalg.solve(X, b)
+                return np.outer(u, v)
+
+
+            print("[[28.0, -44.0], [-21.0, 33.0]]")
+          - |
+            import numpy as np
+
+
+            def grad_inverse_form(X, a, b):
+                u = np.linalg.solve(X, a)
+                v = np.linalg.solve(X, b)
+                return -np.outer(u, v)
+
+
+            print("[[28.0, -44.0], [-21.0, 33.0]]")
+          - |
+            import numpy as np
+
+
+            def grad_inverse_form(X, a, b):
+                u = np.linalg.solve(X.T, a)
+                v = np.linalg.solve(X, b)
+                return -np.outer(v, u)
+
+
+            print("[[28.0, -44.0], [-21.0, 33.0]]")
+          - |
+            import numpy as np
+
+
+            def grad_inverse_form(X, a, b):
+                v = np.linalg.solve(X, b)
+                return -np.outer(a, v)
+
+
+            print("[[28.0, -44.0], [-21.0, 33.0]]")
+        explanation: |
+          $df = -\mathbf{a}^\top X^{-1}\,dX\,X^{-1}\mathbf{b}$. Group the factors on each side of $dX$: on the right $\mathbf{v} = X^{-1}\mathbf{b}$, and on the left the row $\mathbf{a}^\top X^{-1}$, which is $\mathbf{u}^\top$ for $\mathbf{u} = X^{-\top}\mathbf{a}$. Then $df = -\mathbf{u}^\top dX\,\mathbf{v}$ and the gradient is $-\mathbf{u}\mathbf{v}^\top$.
+
+          Two solves, one with $X$ and one with $X^\top$. The second is the price of a gradient: wherever a computation solves a system with a matrix, its derivative solves one with the transpose. The same pair will return when a whole solver is differentiated.
+
+          The second wrong version solves with $X$ both times. For a symmetric matrix that is correct, and a test with a symmetric matrix would not notice.
+    - question:
+        id: write-fit
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `grad_fit(S, C)` returning the gradient with respect to `S` of $f(S) = \log\det S + \operatorname{tr}(S^{-1}C)$, treating all entries of `S` as independent. `S` and `C` need not be symmetric.
+        starter: |
+          import numpy as np
+
+
+          def grad_fit(S, C):
+              return S * 0.0 + 1.0
+
+
+          C = np.array([[2.0, 1.0], [1.0, 3.0]])
+          print([[round(float(v), 4) + 0.0 for v in row] for row in grad_fit(C, C)])
+          print([[round(float(v), 4) + 0.0 for v in row] for row in grad_fit(np.array([[2.0, 1.0], [0.0, 1.0]]), np.array([[1.0, 0.0], [1.0, 3.0]]))])
+        solution: |
+          import numpy as np
+
+
+          def grad_fit(S, C):
+              Si = np.linalg.inv(S)
+              return (Si - Si @ C @ Si).T
+
+
+          C = np.array([[2.0, 1.0], [1.0, 3.0]])
+          print([[round(float(v), 4) + 0.0 for v in row] for row in grad_fit(C, C)])
+          print([[round(float(v), 4) + 0.0 for v in row] for row in grad_fit(np.array([[2.0, 1.0], [0.0, 1.0]]), np.array([[1.0, 0.0], [1.0, 3.0]]))])
+        tests: |
+          import numpy as _np
+          _C = _np.array([[2.0, 1.0], [1.0, 3.0]])
+          assert _np.allclose(grad_fit(_C, _C), 0.0), "At S = C the gradient is zero: the function is stationary there"
+          _S = _np.array([[2.0, 1.0], [0.0, 1.0]])
+          _D = _np.array([[1.0, 0.0], [1.0, 3.0]])
+          assert _np.allclose(grad_fit(_S, _D), [[0.5, -0.5], [1.0, -1.5]]), "For S = [[2, 1], [0, 1]] and C = [[1, 0], [1, 3]] the gradient is (S^-1 - S^-1 C S^-1)^T = [[0.5, -0.5], [1, -1.5]]. Mind the transpose"
+          _f = lambda M, K: float(_np.log(_np.linalg.det(M))) + float(_np.trace(_np.linalg.solve(M, K)))
+          _rng = _np.random.default_rng(0)
+          _M = _rng.normal(size=(3, 3)) * 0.3 + 2.0 * _np.eye(3)
+          _K = _rng.normal(size=(3, 3))
+          _num = _np.zeros((3, 3))
+          for _i in range(3):
+              for _j in range(3):
+                  _E = _np.zeros((3, 3))
+                  _E[_i, _j] = 1e-6
+                  _num[_i, _j] = (_f(_M + _E, _K) - _f(_M - _E, _K)) / 2e-6
+          assert _np.allclose(grad_fit(_M, _K), _num, atol=1e-5), "For random 3 by 3 matrices the gradient should agree with central differences"
+          assert _np.allclose(grad_fit(_np.eye(2), _np.zeros((2, 2))), _np.eye(2)), "For C = 0 the function is log det S, whose gradient at the identity is the identity"
+          assert output.strip() == "[[0.0, 0.0], [0.0, 0.0]]\n[[0.5, -0.5], [1.0, -1.5]]", "The program should print [[0.0, 0.0], [0.0, 0.0]] and then [[0.5, -0.5], [1.0, -1.5]]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def grad_fit(S, C):
+                Si = np.linalg.inv(S)
+                return Si - Si @ C @ Si
+
+
+            print("[[0.0, 0.0], [0.0, 0.0]]\n[[0.5, -0.5], [1.0, -1.5]]")
+          - |
+            import numpy as np
+
+
+            def grad_fit(S, C):
+                Si = np.linalg.inv(S)
+                return (Si + Si @ C @ Si).T
+
+
+            print("[[0.0, 0.0], [0.0, 0.0]]\n[[0.5, -0.5], [1.0, -1.5]]")
+          - |
+            import numpy as np
+
+
+            def grad_fit(S, C):
+                Si = np.linalg.inv(S)
+                return (Si - Si @ Si @ C).T
+
+
+            print("[[0.0, 0.0], [0.0, 0.0]]\n[[0.5, -0.5], [1.0, -1.5]]")
+          - |
+            import numpy as np
+
+
+            def grad_fit(S, C):
+                Si = np.linalg.inv(S)
+                return (np.linalg.det(S) * Si - Si @ C @ Si).T
+
+
+            print("[[0.0, 0.0], [0.0, 0.0]]\n[[0.5, -0.5], [1.0, -1.5]]")
+        explanation: |
+          Two terms. $d\log\det S = \operatorname{tr}(S^{-1}dS)$. And $d\operatorname{tr}(S^{-1}C) = -\operatorname{tr}(S^{-1}dS\,S^{-1}C) = -\operatorname{tr}(S^{-1}CS^{-1}dS)$ after cycling. So $df = \operatorname{tr}\big((S^{-1} - S^{-1}CS^{-1})\,dS\big)$, and the gradient is the transpose of the bracket.
+
+          At $S = C$ the bracket is $C^{-1} - C^{-1}CC^{-1} = 0$, which the first printed line confirms. For a symmetric positive definite $C$ this is the minimum of $f$, and the reason a Gaussian fitted to data takes the covariance of the data.
+
+          The solution forms the inverse because the gradient **is** a matrix built from the inverse, and all of it is needed. That is different from the previous task, where only products of the inverse with two vectors were needed.
+    - question:
+        id: fix-cofactor
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `grad_det(X)` should return the gradient of the determinant with respect to `X`. The program prints the largest difference from central differences, which should be `0.0`. Fix `grad_det`.
+        starter: |
+          import numpy as np
+
+
+          def grad_det(X):
+              return np.linalg.det(X) * np.linalg.inv(X)
+
+
+          X = np.array([[1.0, 2.0, 0.0], [0.0, 1.0, 3.0], [4.0, 0.0, 1.0]])
+          h = 1e-6
+          measured = np.zeros((3, 3))
+          for i in range(3):
+              for j in range(3):
+                  E = np.zeros((3, 3))
+                  E[i, j] = h
+                  measured[i, j] = (np.linalg.det(X + E) - np.linalg.det(X - E)) / (2 * h)
+          print(round(float(np.abs(grad_det(X) - measured).max()), 4))
+        solution: |
+          import numpy as np
+
+
+          def grad_det(X):
+              return np.linalg.det(X) * np.linalg.inv(X).T
+
+
+          X = np.array([[1.0, 2.0, 0.0], [0.0, 1.0, 3.0], [4.0, 0.0, 1.0]])
+          h = 1e-6
+          measured = np.zeros((3, 3))
+          for i in range(3):
+              for j in range(3):
+                  E = np.zeros((3, 3))
+                  E[i, j] = h
+                  measured[i, j] = (np.linalg.det(X + E) - np.linalg.det(X - E)) / (2 * h)
+          print(round(float(np.abs(grad_det(X) - measured).max()), 4))
+        tests: |
+          import numpy as _np
+          _X = _np.array([[1.0, 2.0, 0.0], [0.0, 1.0, 3.0], [4.0, 0.0, 1.0]])
+          assert _np.allclose(grad_det(_X), [[1.0, 12.0, -4.0], [-2.0, 1.0, 8.0], [6.0, -3.0, 1.0]]), "The gradient of the determinant is the matrix of cofactors, det(X) times the inverse transposed. For this matrix it is [[1, 12, -4], [-2, 1, 8], [6, -3, 1]]"
+          assert _np.allclose(grad_det(_np.array([[2.0, 1.0], [3.0, 2.0]])), [[2.0, -3.0], [-1.0, 2.0]]), "For [[2, 1], [3, 2]] the gradient is [[2, -3], [-1, 2]]"
+          assert _np.allclose(grad_det(_np.diag([2.0, 5.0])), _np.diag([5.0, 2.0])), "For diag(2, 5) the slope with respect to each diagonal entry is the other diagonal entry"
+          assert output.strip() == "0.0", "The program should print 0.0"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def grad_det(X):
+                return np.linalg.det(X) * np.linalg.inv(X)
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def grad_det(X):
+                return np.linalg.inv(X).T
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def grad_det(X):
+                return np.linalg.det(X) * X.T
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def grad_det(X):
+                return np.linalg.inv(X).T / np.linalg.det(X)
+
+
+            print("0.0")
+        explanation: |
+          $d\det X = \det(X)\operatorname{tr}(X^{-1}dX)$, and the standard form is $\operatorname{tr}(G^\top dX)$. So $G^\top = \det(X)X^{-1}$ and the gradient is $\det(X)X^{-\top}$. Reading the gradient off $\operatorname{tr}(M\,dX)$ as $M$, without the transpose, is the most common slip in matrix calculus.
+
+          For a symmetric matrix the slip does no harm, and covariance matrices are symmetric, which is why many formulas in statistics are printed without the transpose. Code that will ever be given a matrix that is not symmetric needs it.
+
+          The second wrong version is the gradient of $\log\det$. The two differ by the factor $\det X$, which here is 25.
+    - question:
+        id: work-trace-at-identity
+        type: numeric
+        system: s2
+        prompt: |
+          $A = \begin{pmatrix} 3 & 1 \\ 2 & -1 \end{pmatrix}$ and $g(t) = \det(I + tA)$. What is $g'(0)$?
+        answer: "2"
+        explanation: |
+          $\det(I + tA) = 1 + t\operatorname{tr}A + O(t^2)$, so $g'(0) = \operatorname{tr}A = 3 - 1 = 2$. In full, $\det(I + tA) = (1 + 3t)(1 - t) - 2t^2 = 1 + 2t - 5t^2$, and the coefficient of $t^2$ is $\det A = -5$. The trace is the rate at which a flow $\mathbf{x}' = A\mathbf{x}$ expands volume, which is the infinitesimal form of $\det e^{tA} = e^{t\operatorname{tr}A}$.
+    - question:
+        id: work-logdet-numerics
+        type: choice
+        system: s2
+        prompt: |
+          A covariance matrix of size $500 \times 500$ has all eigenvalues near $0.01$. Its log-determinant is needed for a likelihood. What happens with `np.log(np.linalg.det(S))`, and what should be done?
+        options:
+          - 'It works, since the logarithm is taken at the end.'
+          - 'The determinant is about $0.01^{500} = 10^{-1000}$, far below the smallest positive float, so it underflows to 0 and the logarithm is minus infinity. Compute the Cholesky factor $S = LL^\top$ and return $2\sum_i\log L_{ii}$, which is about $-2303$ and causes no trouble.'
+          - 'The determinant overflows to infinity.'
+          - 'The determinant is negative.'
+        answer: 1
+        explanation: |
+          The log-determinant is a moderate number, the sum of the logarithms of the eigenvalues, but the determinant itself is their product and leaves the range of floating point for almost any large matrix. Working with logarithms from the start avoids forming it. $\det S = (\det L)^2 = \prod L_{ii}^2$ for a triangular factor. The gradient has the same character: $\nabla\log\det S = S^{-1}$ involves no determinant, while $\nabla\det S = \det(S)S^{-\top}$ would underflow with it. This is why models are written in terms of $\log\det$.
+    - question:
+        id: work-solution-sensitivity
+        type: choice
+        system: s2
+        prompt: |
+          $\mathbf{x}$ solves $A\mathbf{x} = \mathbf{b}$. The matrix is changed to $A + dA$. What is the first-order change of the solution, and what does it cost to compute if a factorisation of $A$ is already at hand?
+        options:
+          - '$d\mathbf{x} = dA\,\mathbf{x}$, a matrix-vector product.'
+          - '$d\mathbf{x} = -A^{-1}(dA\,\mathbf{x})$: form the vector $dA\,\mathbf{x}$ and solve one more system with the same $A$, reusing the factorisation. No new inverse or factorisation is needed.'
+          - '$d\mathbf{x} = -dA^{-1}\mathbf{b}$, which needs the inverse of $dA$.'
+          - 'It cannot be found without solving the new system from scratch.'
+        answer: 1
+        explanation: |
+          From $d(A^{-1}) = -A^{-1}dA\,A^{-1}$ and $\mathbf{x} = A^{-1}\mathbf{b}$. Or, more directly, differentiate the equation $A\mathbf{x} = \mathbf{b}$ itself: $dA\,\mathbf{x} + A\,d\mathbf{x} = 0$. The second route is the same idea that gave the differential of the inverse: differentiate the equation that defines the unknown, and solve the resulting **linear** equation for its differential. It works for any quantity defined by an equation, however the equation was solved, and a later lesson builds on it.
+  connections:
+    - text: |
+        The gradient of the determinant contains the inverse because a displacement $dX$ matters only relative to $X$: $X + dX = X(I + X^{-1}dX)$, and near the identity the determinant changes by the trace. So $d\det X = \det(X)\operatorname{tr}(X^{-1}dX)$, with gradient $\det(X)X^{-\top}$, and $d\log\det X = \operatorname{tr}(X^{-1}dX)$, with gradient $X^{-\top}$.
+
+        The inverse is differentiated through its defining equation: $d(X^{-1}) = -X^{-1}dX\,X^{-1}$, an inverse on each side. With the trace identities these give the gradient of any scalar built from products, traces, inverses and determinants, and in code each inverse becomes a linear solve.
+
+        Every gradient in these four lessons was a formula, found by hand for one function. A neural network is a composition of hundreds of functions, and nobody derives its gradient by hand. What makes that unnecessary is a change of question. Do not ask for the Jacobian of each step, which may be enormous. Ask only for what it does to a vector, from the right or from the left. Those two products are all that differentiation by machine ever computes: [[m13.jacobian-vector-and-vector-jacobian-products]].

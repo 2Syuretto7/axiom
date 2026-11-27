@@ -4,9 +4,9 @@ What is built, what comes next and in what order. The curriculum itself, every c
 
 ## Lessons
 
-162 lessons are written, covering 16 of the 54 clusters. Learn walks them in this order: M0, E0, M1, M2, E1, M3, M10, M4, E3, M5, E5, M12, E6, M7, M6, M8.
+173 lessons are written, covering 17 of the 54 clusters. Learn walks them in this order: M0, E0, M1, M2, E1, M3, M10, M4, E3, M5, E5, M12, E6, M7, M6, M8, M13.
 
-The next cluster is M13, matrix calculus and automatic differentiation. With M8 and M12 written, everything it depends on is in place.
+The next cluster is E7, PyTorch. With E6 and M13 written, everything it depends on in the curriculum is in place. One thing is not: lessons run their Python in the browser with NumPy only, and PyTorch does not run there, so how E7's code will be run and checked has to be decided before its lessons are written.
 
 ## Mini-capstones
 
@@ -30,6 +30,7 @@ Built. A mini-capstone closes one cluster. It is one small project in stages tha
 | M7 Orthogonality and least squares | A thermometer you can trust |
 | M6 Abstract vector spaces | Three samples of a curve |
 | M8 Spectral theory | The shape of a data cloud |
+| M13 Matrix calculus and automatic differentiation | One small network, differentiated every way |
 
 Every written cluster now has one. From here on, every new cluster ships with its mini-capstone in the same batch as its lessons.
 

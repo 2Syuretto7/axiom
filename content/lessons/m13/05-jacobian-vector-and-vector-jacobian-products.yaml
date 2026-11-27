@@ -1,0 +1,683 @@
+concept: m13.jacobian-vector-and-vector-jacobian-products
+minutes: 85
+claim: You can say what the product of a Jacobian with a vector on its right and on its left each means, compute both for a linear map, an elementwise function and their compositions without forming any Jacobian, explain why one runs through a composition in the order of the computation and the other in reverse, count how many of each are needed for a full Jacobian or for a gradient, and test an implementation with the identity that links the two.
+recalls: [m13.trace-identities-determinant-and-inverse-derivatives]
+uses: [m13.the-method-of-differentials, m13.derivatives-with-respect-to-matrices, m13.derivatives-with-respect-to-vectors, m12.jacobian, m12.directional-derivative, m12.multivariable-chain-rule, m6.dual-spaces-and-the-transpose, m6.adjoints-orthogonal-and-unitary-maps, m5.matrix-multiplication-as-composition, m5.transpose, e6.tensor-valued-autograd, e6.reverse-mode-on-scalars, e5.vectorisation, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e0.functions, e0.loops]
+leads: [m13.computational-graphs, m13.reverse-mode-differentiation-and-its-cost, m13.forward-mode-and-dual-numbers, m13.hessian-vector-products]
+starter: |
+  # Scratch space. F(x) = tanh(W x). Its Jacobian, and two products with it
+  # computed without it.
+  import numpy as np
+
+  W = np.array([[1.0, 0.0, 2.0, -1.0], [0.0, 1.0, 1.0, 0.0], [2.0, -1.0, 0.0, 1.0]])
+  x = np.array([0.5, -0.5, 0.25, 1.0])
+  v = np.array([1.0, 0.0, 2.0, -1.0])
+  u = np.array([1.0, -1.0, 2.0])
+
+  t = np.tanh(W @ x)
+  J = np.diag(1 - t ** 2) @ W
+  print([round(float(a), 4) for a in J @ v], [round(float(a), 4) for a in (1 - t ** 2) * (W @ v)])
+  print([round(float(a), 4) for a in u @ J], [round(float(a), 4) for a in W.T @ ((1 - t ** 2) * u)])
+parts:
+  recall:
+    - text: |
+        [[m13.trace-identities-determinant-and-inverse-derivatives]] closed the part of this cluster in which gradients are derived by hand, and pointed out that for a long composition nobody does that. Today's idea is what replaces it. Three quick pulls first.
+  puzzle:
+    - text: |
+        One layer of a network takes a vector $\mathbf{x}$ with a million entries and returns $F(\mathbf{x}) = \tanh(W\mathbf{x})$, also with a million entries.
+
+        Its Jacobian is a matrix of a million rows and a million columns. That is $10^{12}$ numbers, eight thousand gigabytes. It cannot be stored, let alone multiplied by the Jacobian of the next layer, as the chain rule appears to demand.
+
+        And yet the gradient of a loss through such layers is computed in a fraction of a second, exactly, by every deep learning library.
+
+        The starter shows the trick at a size where both ways can be done: a layer from 4 inputs to 3 outputs. Each line prints a product with the Jacobian, computed first with the Jacobian and then without it.
+
+        ```
+        [6.0, 1.88, 0.0266] [6.0, 1.88, 0.0266]
+        [1.1064, -0.9932, 1.06, -0.9468] [1.1064, -0.9932, 1.06, -0.9468]
+        ```
+
+        The products agree, and the second of each pair never built $J$.
+
+        **What do these two products mean? How is each computed without the Jacobian? And why are they enough?**
+  intuition:
+    - text: |
+        A Jacobian is a matrix, and a matrix can be used without being written down, as long as one can say what it does to a vector. There are two things it can do.
+
+        **From the right: $J\mathbf{v}$.** Here $\mathbf{v}$ lives in the input space, and the product is in the output space. It answers: if the input is nudged in the direction $\mathbf{v}$, in which direction does the output move? It is a directional derivative of the whole function. This is the **Jacobian-vector product**, JVP. A displacement is pushed **forward**.
+
+        **From the left: $\mathbf{u}^\top J$, or $J^\top\mathbf{u}$.** Here $\mathbf{u}$ lives in the output space, and the product is in the input space. It answers: if the outputs are weighted by $\mathbf{u}$ to make one number, $\mathbf{u}^\top F(\mathbf{x})$, what is the gradient of that number with respect to the input? This is the **vector-Jacobian product**, VJP. A sensitivity is pulled **back**.
+
+        For the layer of the puzzle both are easy.
+
+        - Forward: nudging $\mathbf{x}$ by $\mathbf{v}$ nudges $W\mathbf{x}$ by $W\mathbf{v}$, and $\tanh$ scales each entry by its own slope $1 - \tanh^2$. So $J\mathbf{v} = (1 - \mathbf{t}^2) \odot (W\mathbf{v})$.
+        - Backward: scale each entry of $\mathbf{u}$ by the slope of $\tanh$, then come back through $W^\top$. So $J^\top\mathbf{u} = W^\top\big((1 - \mathbf{t}^2) \odot \mathbf{u}\big)$.
+
+        Each costs one product with $W$ or $W^\top$, the same as evaluating the layer. For a million inputs that is the cost of the layer, not $10^{12}$.
+
+        They are enough because of how they chain. For a composition the Jacobian is a product $J_3J_2J_1$. Then $J\mathbf{v} = J_3(J_2(J_1\mathbf{v}))$: one vector, passed through the steps in the order of the computation. And $\mathbf{u}^\top J = ((\mathbf{u}^\top J_3)J_2)J_1$: one vector, passed through the steps in **reverse**. No matrix is ever multiplied by a matrix.
+
+        The gradient of a scalar loss is a single VJP, with $\mathbf{u} = 1$. That is the whole of backpropagation.
+  derivation:
+    - text: |
+        Let $F: \mathbb{R}^n \to \mathbb{R}^m$ have Jacobian $J = J_F(\mathbf{x})$, of shape $m \times n$.
+
+        **JVP.** For $\mathbf{v} \in \mathbb{R}^n$,
+
+        $$J\mathbf{v} = \frac{d}{d\varepsilon}F(\mathbf{x} + \varepsilon\mathbf{v})\Big|_{\varepsilon = 0} \in \mathbb{R}^m.$$
+
+        In the language of differentials it is $dF$ with $d\mathbf{x} = \mathbf{v}$. The vector $\mathbf{v}$ is called a **tangent**.
+
+        **VJP.** For $\mathbf{u} \in \mathbb{R}^m$,
+
+        $$J^\top\mathbf{u} = \nabla_{\mathbf{x}}\big(\mathbf{u}^\top F(\mathbf{x})\big) \in \mathbb{R}^n.$$
+
+        In the language of differentials, $\mathbf{u}^\top dF = (J^\top\mathbf{u})^\top d\mathbf{x}$: it is what "reading off the gradient" has computed in every lesson so far. The vector $\mathbf{u}$ is called a **cotangent** or an **adjoint**. If $\mathbf{u}$ is the gradient of a loss with respect to the output of $F$, then $J^\top\mathbf{u}$ is the gradient of the loss with respect to its input.
+
+        **The primitives.**
+
+        | $F(\mathbf{x})$ | JVP $J\mathbf{v}$ | VJP $J^\top\mathbf{u}$ |
+        |---|---|---|
+        | $A\mathbf{x} + \mathbf{b}$ | $A\mathbf{v}$ | $A^\top\mathbf{u}$ |
+        | $\phi(\mathbf{x})$ elementwise | $\phi'(\mathbf{x}) \odot \mathbf{v}$ | $\phi'(\mathbf{x}) \odot \mathbf{u}$ |
+        | $\mathbf{a} \odot \mathbf{x}$ | $\mathbf{a} \odot \mathbf{v}$ | $\mathbf{a} \odot \mathbf{u}$ |
+        | $\sum_ix_i$ | $\sum_iv_i$ | $u\,\mathbf{1}$ |
+        | $\tfrac12\lVert\mathbf{x}\rVert^2$ | $\mathbf{x}^\top\mathbf{v}$ | $u\,\mathbf{x}$ |
+
+        For a matrix variable the same holds with the Frobenius pairing. For $Z = XW$ as a function of $W$: the JVP of a tangent $V$ is $XV$, and the VJP of a cotangent $U$ is $X^\top U$.
+
+        None of these forms a Jacobian. The diagonal Jacobian of an elementwise function acts as an entry-by-entry product, and the Jacobian of a sum, a row of ones, acts as a sum one way and as a copy the other.
+
+        **Composition.** For $F = F_k \circ \dots \circ F_1$ with intermediate values $\mathbf{x}_0 = \mathbf{x}$, $\mathbf{x}_i = F_i(\mathbf{x}_{i-1})$, the chain rule gives $J = J_k\cdots J_2J_1$, with $J_i$ evaluated at $\mathbf{x}_{i-1}$.
+
+        - *JVP, forward.* $\mathbf{v}_0 = \mathbf{v}$, $\ \mathbf{v}_i = J_i\mathbf{v}_{i-1}$. Then $J\mathbf{v} = \mathbf{v}_k$. It can be carried along with the computation of the values, step by step.
+        - *VJP, backward.* $\mathbf{u}_k = \mathbf{u}$, $\ \mathbf{u}_{i-1} = J_i^\top\mathbf{u}_i$. Then $J^\top\mathbf{u} = \mathbf{u}_0$. It starts at the output, so the values $\mathbf{x}_0, \dots, \mathbf{x}_{k-1}$ must all have been computed, and kept, beforehand.
+
+        *The puzzle,* with $F_1(\mathbf{x}) = W\mathbf{x}$ and $F_2 = \tanh$: the JVP is $\tanh'$ applied after $W\mathbf{v}$, and the VJP is $W^\top$ applied after $\tanh' \odot \mathbf{u}$, in the opposite order.
+    - question:
+        id: derivation-count
+        type: numeric
+        system: s2
+        prompt: |
+          $F$ takes 1000 inputs to 10 outputs. Its full Jacobian is wanted, and each JVP or VJP costs about one evaluation of $F$. What is the smallest number of such products that suffices?
+        answer: "10"
+        explanation: |
+          A VJP with the $i$th basis vector, $J^\top\mathbf{e}_i$, returns row $i$ of the Jacobian, so 10 VJPs give all 10 rows. A JVP with $\mathbf{e}_j$ returns column $j$, and that way would need 1000. The rule is to work from the smaller side: rows by VJPs when there are few outputs, columns by JVPs when there are few inputs. With one output, a single VJP gives the whole gradient, however many inputs there are.
+    - text: |
+        **The full Jacobian, if it is wanted.** $J\mathbf{e}_j$ is column $j$ and $J^\top\mathbf{e}_i$ is row $i$. So the Jacobian costs $n$ JVPs or $m$ VJPs.
+
+        | Wanted | Cheapest way |
+        |---|---|
+        | Gradient of a scalar loss, $m = 1$ | one VJP |
+        | Derivative along one direction, or $n = 1$ | one JVP |
+        | Full Jacobian | $\min(n, m)$ products |
+
+        **The identity that links them.** For any $\mathbf{u}$ and $\mathbf{v}$,
+
+        $$\mathbf{u}^\top(J\mathbf{v}) = (J^\top\mathbf{u})^\top\mathbf{v}.$$
+
+        Both sides are $\mathbf{u}^\top J\mathbf{v}$, bracketed differently. The left uses only a JVP and the right only a VJP. So a JVP routine and a VJP routine for the same function can be tested against each other with random vectors, with no finite differences. This is the **dot-product test**. And a JVP can itself be checked against one finite difference of $F$ along $\mathbf{v}$.
+
+        **What it costs.** A JVP or a VJP through a function costs a small constant multiple of evaluating the function, because each primitive's product costs about as much as the primitive. The two differ in memory. The forward product needs only the current value and the current tangent. The backward product needs every intermediate value at which a Jacobian is evaluated, which have to be stored on the way forward.
+
+        **The names.** Computing JVPs through a program is **forward-mode** differentiation. Computing VJPs through a program is **reverse-mode** differentiation, and applied to a scalar loss of a neural network it is called backpropagation. The engine built earlier in this course stored a function on each node that turned the gradient of a result into the share owed to an operand. Each of those functions was a VJP.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the computation of a vector-Jacobian product through the composition of F1, then F2, then F3.
+        steps:
+          - 'Run the computation forward and keep the values $\mathbf{x}_1 = F_1(\mathbf{x}_0)$ and $\mathbf{x}_2 = F_2(\mathbf{x}_1)$.'
+          - 'Start at the output with the given vector, $\mathbf{u}_3 = \mathbf{u}$.'
+          - 'Pull it back through the last step: $\mathbf{u}_2 = J_3(\mathbf{x}_2)^\top\mathbf{u}_3$.'
+          - 'Pull it back through the middle step: $\mathbf{u}_1 = J_2(\mathbf{x}_1)^\top\mathbf{u}_2$.'
+          - 'Pull it back through the first step: $\mathbf{u}_0 = J_1(\mathbf{x}_0)^\top\mathbf{u}_1$, which is the answer.'
+        explanation: Forward to get the values, then backward through the steps in reverse order.
+  formal:
+    - text: |
+        **Pushforward and pullback.** For $F: \mathbb{R}^n \to \mathbb{R}^m$ differentiable at $\mathbf{x}$, the derivative $DF(\mathbf{x}): \mathbb{R}^n \to \mathbb{R}^m$ is $\mathbf{v} \mapsto J\mathbf{v}$. Its adjoint $DF(\mathbf{x})^*: \mathbb{R}^m \to \mathbb{R}^n$ is $\mathbf{u} \mapsto J^\top\mathbf{u}$, defined by $\langle\mathbf{u}, DF[\mathbf{v}]\rangle = \langle DF^*[\mathbf{u}], \mathbf{v}\rangle$.
+
+        **Chain rule.** $D(G \circ F) = DG \circ DF$ and $D(G \circ F)^* = DF^* \circ DG^*$. The adjoint reverses the order of composition.
+
+        **Matrix variables.** For $\mathcal{F}: \mathbb{R}^{p \times q} \to \mathbb{R}^{r \times s}$ the same definitions hold with $\langle A, B\rangle = \operatorname{tr}(A^\top B)$.
+
+        | $\mathcal{F}$ | JVP of $V$ | VJP of $U$ |
+        |---|---|---|
+        | $X \mapsto AXB$ | $AVB$ | $A^\top UB^\top$ |
+        | $X \mapsto X^\top$ | $V^\top$ | $U^\top$ |
+        | $X \mapsto X^{-1}$ | $-X^{-1}VX^{-1}$ | $-X^{-\top}UX^{-\top}$ |
+        | $X \mapsto \log\det X$ | $\operatorname{tr}(X^{-1}V)$ | $u\,X^{-\top}$ |
+        | $X \mapsto \operatorname{tr}X$ | $\operatorname{tr}V$ | $u\,I$ |
+        | $\mathbf{x} \mapsto \operatorname{softmax}(\mathbf{x}) = \mathbf{p}$ | $\mathbf{p} \odot \mathbf{v} - (\mathbf{p}^\top\mathbf{v})\mathbf{p}$ | $\mathbf{p} \odot \mathbf{u} - (\mathbf{p}^\top\mathbf{u})\mathbf{p}$ |
+
+        **Functions of several arguments.** For $F(\mathbf{x}, \mathbf{y})$: the JVP of tangents $(\mathbf{v}_x, \mathbf{v}_y)$ is $J_x\mathbf{v}_x + J_y\mathbf{v}_y$, one output. The VJP of a cotangent $\mathbf{u}$ is the pair $(J_x^\top\mathbf{u}, J_y^\top\mathbf{u})$, one per argument.
+
+        **A value used twice.** If $\mathbf{x}$ feeds two functions whose results are later combined, forward tangents are computed for each and combined downstream, and backward the cotangents arriving at $\mathbf{x}$ from the two uses are **added**. This is the adjoint of copying: $\mathbf{x} \mapsto (\mathbf{x}, \mathbf{x})$ has adjoint $(\mathbf{u}_1, \mathbf{u}_2) \mapsto \mathbf{u}_1 + \mathbf{u}_2$.
+
+        **Extraction.** $J_{ij} = \mathbf{e}_i^\top J\mathbf{e}_j$. $\ J = \sum_j(J\mathbf{e}_j)\mathbf{e}_j^\top = \sum_i\mathbf{e}_i(J^\top\mathbf{e}_i)^\top$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-jvp-meaning
+        type: choice
+        system: s1
+        prompt: |
+          The Jacobian-vector product $J\mathbf{v}$ is
+        options: ['the gradient of the output', 'the rate at which the output moves when the input moves along $\mathbf{v}$', 'the Hessian', 'the inverse of the function']
+        answer: 1
+        explanation: A directional derivative of the whole function.
+    - question:
+        id: drill-vjp-meaning
+        type: choice
+        system: s1
+        prompt: |
+          The vector-Jacobian product $J^\top\mathbf{u}$ is
+        options: ['the gradient of $\mathbf{u}^\top F(\mathbf{x})$ with respect to $\mathbf{x}$', 'the directional derivative along $\mathbf{u}$', 'the value $F(\mathbf{u})$', 'the determinant of $J$']
+        answer: 0
+        explanation: The gradient of the outputs weighted by $\mathbf{u}$.
+    - question:
+        id: drill-jvp-shape
+        type: numeric
+        system: s1
+        prompt: |
+          $F$ takes 4 inputs to 3 outputs. How many entries has $J\mathbf{v}$?
+        answer: "3"
+        explanation: A JVP lives in the output space.
+    - question:
+        id: drill-vjp-shape
+        type: numeric
+        system: s1
+        prompt: |
+          $F$ takes 4 inputs to 3 outputs. How many entries has $J^\top\mathbf{u}$?
+        answer: "4"
+        explanation: A VJP lives in the input space.
+    - question:
+        id: drill-linear-jvp
+        type: choice
+        system: s1
+        prompt: |
+          For $F(\mathbf{x}) = A\mathbf{x}$ the JVP of $\mathbf{v}$ is
+        options: ['$A\mathbf{v}$', '$A^\top\mathbf{v}$', '$\mathbf{v}$', '$A\mathbf{x}$']
+        answer: 0
+        explanation: The Jacobian is $A$.
+    - question:
+        id: drill-linear-vjp
+        type: choice
+        system: s1
+        prompt: |
+          For $F(\mathbf{x}) = A\mathbf{x}$ the VJP of $\mathbf{u}$ is
+        options: ['$A\mathbf{u}$', '$A^\top\mathbf{u}$', '$\mathbf{u}$', '$A^{-1}\mathbf{u}$']
+        answer: 1
+        explanation: The transpose brings a sensitivity back.
+    - question:
+        id: drill-elementwise
+        type: choice
+        system: s1
+        prompt: |
+          For an elementwise function $\phi$, both the JVP and the VJP multiply the vector by
+        options: ['$\phi(\mathbf{x})$', '$\phi''(\mathbf{x})$, entry by entry', 'the transpose of $\phi$', 'a matrix of ones']
+        answer: 1
+        explanation: The Jacobian is diagonal, hence symmetric.
+    - question:
+        id: drill-order-forward
+        type: choice
+        system: s1
+        prompt: |
+          A JVP through a composition passes through the steps
+        options: ['in the order of the computation', 'in reverse order', 'in any order', 'only through the last step']
+        answer: 0
+        explanation: $J_3(J_2(J_1\mathbf{v}))$.
+    - question:
+        id: drill-order-backward
+        type: choice
+        system: s1
+        prompt: |
+          A VJP through a composition passes through the steps
+        options: ['in the order of the computation', 'in reverse order', 'in any order', 'only through the first step']
+        answer: 1
+        explanation: $J_1^\top(J_2^\top(J_3^\top\mathbf{u}))$.
+    - question:
+        id: drill-gradient
+        type: numeric
+        system: s1
+        prompt: |
+          A loss takes a million parameters to one number. How many VJPs give its whole gradient?
+        answer: "1"
+        explanation: With $\mathbf{u} = 1$.
+    - question:
+        id: drill-columns
+        type: choice
+        system: s1
+        prompt: |
+          The JVP with the basis vector $\mathbf{e}_j$ gives
+        options: ['row $j$ of the Jacobian', 'column $j$ of the Jacobian', 'the diagonal of the Jacobian', 'the trace of the Jacobian']
+        answer: 1
+        explanation: $J\mathbf{e}_j$ is a column.
+    - question:
+        id: drill-store
+        type: choice
+        system: s1
+        prompt: |
+          Which product needs the intermediate values of the computation to have been stored?
+        options: ['The JVP', 'The VJP', 'Both equally', 'Neither']
+        answer: 1
+        explanation: It starts from the output and needs each step's Jacobian at the value that step received.
+    - question:
+        id: drill-identity
+        type: choice
+        system: s1
+        prompt: |
+          For every $\mathbf{u}$ and $\mathbf{v}$, $\mathbf{u}^\top(J\mathbf{v})$ equals
+        options: ['$(J^\top\mathbf{u})^\top\mathbf{v}$', '$(J\mathbf{u})^\top\mathbf{v}$', '$\mathbf{u}^\top\mathbf{v}$', '$0$']
+        answer: 0
+        explanation: The same number, bracketed the other way.
+    - question:
+        id: predict-two-ways
+        type: predict
+        system: s1
+        prompt: The layer of the puzzle. A JVP, a VJP, and the two sides of the identity that links them. What does this show?
+        code: |
+          import numpy as np
+
+          W = np.array([[1.0, 0.0, 2.0, -1.0], [0.0, 1.0, 1.0, 0.0], [2.0, -1.0, 0.0, 1.0]])
+          x = np.array([0.5, -0.5, 0.25, 1.0])
+          v = np.array([1.0, 0.0, 2.0, -1.0])
+          u = np.array([1.0, -1.0, 2.0])
+          slope = 1 - np.tanh(W @ x) ** 2
+          forward = slope * (W @ v)
+          backward = W.T @ (slope * u)
+          print(forward.shape, backward.shape)
+          print(round(float(u @ forward), 4), round(float(backward @ v), 4))
+        output: |
+          (3,) (4,)
+          4.1732 4.1732
+        explanation: The JVP lives in the output space and the VJP in the input space. Pairing the JVP with u and the VJP with v gives the same number, u transpose J v.
+    - question:
+        id: predict-finite-difference
+        type: predict
+        system: s1
+        prompt: A JVP against a finite difference of the function along v. What does this show?
+        code: |
+          import numpy as np
+
+          W = np.array([[1.0, 0.0, 2.0, -1.0], [0.0, 1.0, 1.0, 0.0], [2.0, -1.0, 0.0, 1.0]])
+          x = np.array([0.5, -0.5, 0.25, 1.0])
+          v = np.array([1.0, 0.0, 2.0, -1.0])
+          h = 1e-6
+          measured = (np.tanh(W @ (x + h * v)) - np.tanh(W @ (x - h * v))) / (2 * h)
+          formula = (1 - np.tanh(W @ x) ** 2) * (W @ v)
+          print([round(float(a), 4) for a in measured])
+          print([round(float(a), 4) for a in formula])
+        output: |
+          [6.0, 1.88, 0.0266]
+          [6.0, 1.88, 0.0266]
+        explanation: A JVP is the derivative of the function along one direction, so two evaluations of the function check it, whatever the number of inputs.
+  work:
+    - text: Slower now. The first task is the pair of products for one layer.
+    - question:
+        id: write-products
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          For $F(\mathbf{x}) = \tanh(W\mathbf{x})$ write `jvp(W, x, v)` returning $J\mathbf{v}$ and `vjp(W, x, u)` returning $J^\top\mathbf{u}$. Neither may build the Jacobian.
+        starter: |
+          import numpy as np
+
+
+          def jvp(W, x, v):
+              return np.zeros(W.shape[0])
+
+
+          def vjp(W, x, u):
+              return np.zeros(W.shape[1])
+
+
+          W = np.array([[1.0, 0.0, 2.0, -1.0], [0.0, 1.0, 1.0, 0.0], [2.0, -1.0, 0.0, 1.0]])
+          x = np.array([0.5, -0.5, 0.25, 1.0])
+          print([round(float(a), 4) for a in jvp(W, x, np.array([1.0, 0.0, 2.0, -1.0]))])
+          print([round(float(a), 4) for a in vjp(W, x, np.array([1.0, -1.0, 2.0]))])
+        solution: |
+          import numpy as np
+
+
+          def jvp(W, x, v):
+              return (1 - np.tanh(W @ x) ** 2) * (W @ v)
+
+
+          def vjp(W, x, u):
+              return W.T @ ((1 - np.tanh(W @ x) ** 2) * u)
+
+
+          W = np.array([[1.0, 0.0, 2.0, -1.0], [0.0, 1.0, 1.0, 0.0], [2.0, -1.0, 0.0, 1.0]])
+          x = np.array([0.5, -0.5, 0.25, 1.0])
+          print([round(float(a), 4) for a in jvp(W, x, np.array([1.0, 0.0, 2.0, -1.0]))])
+          print([round(float(a), 4) for a in vjp(W, x, np.array([1.0, -1.0, 2.0]))])
+        tests: |
+          import numpy as _np
+          assert "diag" not in source, "Do not build the Jacobian. An elementwise slope acts as an entry-by-entry product"
+          _W = _np.array([[1.0, 0.0, 2.0, -1.0], [0.0, 1.0, 1.0, 0.0], [2.0, -1.0, 0.0, 1.0]])
+          _x = _np.array([0.5, -0.5, 0.25, 1.0])
+          _J = _np.diag(1 - _np.tanh(_W @ _x) ** 2) @ _W
+          _v, _u = _np.array([1.0, 0.0, 2.0, -1.0]), _np.array([1.0, -1.0, 2.0])
+          assert _np.shape(jvp(_W, _x, _v)) == (3,), "The JVP has one entry per output, 3 here"
+          assert _np.shape(vjp(_W, _x, _u)) == (4,), "The VJP has one entry per input, 4 here"
+          assert _np.allclose(jvp(_W, _x, _v), _J @ _v), "The JVP should equal the Jacobian times v: first W v, then the slope of tanh on each entry"
+          assert _np.allclose(vjp(_W, _x, _u), _J.T @ _u), "The VJP should equal the transposed Jacobian times u: first the slope of tanh on each entry of u, then W^T"
+          _rng = _np.random.default_rng(0)
+          _A, _y, _a, _b = _rng.normal(size=(5, 5)), _rng.normal(size=5), _rng.normal(size=5), _rng.normal(size=5)
+          _JA = _np.diag(1 - _np.tanh(_A @ _y) ** 2) @ _A
+          assert _np.allclose(jvp(_A, _y, _a), _JA @ _a) and _np.allclose(vjp(_A, _y, _b), _JA.T @ _b), "For a random square layer both products should agree with the explicit Jacobian"
+          assert abs(float(_b @ jvp(_A, _y, _a)) - float(vjp(_A, _y, _b) @ _a)) < 1e-9, "The two products should satisfy u . (J v) = (J^T u) . v"
+          assert output.strip() == "[6.0, 1.88, 0.0266]\n[1.1064, -0.9932, 1.06, -0.9468]", "The program should print [6.0, 1.88, 0.0266] and then [1.1064, -0.9932, 1.06, -0.9468]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def jvp(W, x, v):
+                return (1 - np.tanh(W @ x) ** 2) * (W @ v)
+
+
+            def vjp(W, x, u):
+                return (1 - np.tanh(W @ x) ** 2) @ W * (u @ np.ones(len(u)))
+
+
+            print("[6.0, 1.88, 0.0266]\n[1.1064, -0.9932, 1.06, -0.9468]")
+          - |
+            import numpy as np
+
+
+            def jvp(W, x, v):
+                return W @ ((1 - np.tanh(x) ** 2) * v)
+
+
+            def vjp(W, x, u):
+                return W.T @ ((1 - np.tanh(W @ x) ** 2) * u)
+
+
+            print("[6.0, 1.88, 0.0266]\n[1.1064, -0.9932, 1.06, -0.9468]")
+          - |
+            import numpy as np
+
+
+            def jvp(W, x, v):
+                return (1 - np.tanh(W @ x) ** 2) * (W @ v)
+
+
+            def vjp(W, x, u):
+                return W.T @ u
+
+
+            print("[6.0, 1.88, 0.0266]\n[1.1064, -0.9932, 1.06, -0.9468]")
+          - |
+            import numpy as np
+
+
+            def jvp(W, x, v):
+                return (1 - np.tanh(W @ v) ** 2) * (W @ x)
+
+
+            def vjp(W, x, u):
+                return W.T @ ((1 - np.tanh(W @ x) ** 2) * u)
+
+
+            print("[6.0, 1.88, 0.0266]\n[1.1064, -0.9932, 1.06, -0.9468]")
+        explanation: |
+          The layer is two steps, $\mathbf{z} = W\mathbf{x}$ and then $\tanh$. The JVP takes them in order: $W\mathbf{v}$, then the slope. The VJP takes them in reverse: the slope on $\mathbf{u}$, then $W^\top$. The slope is evaluated at $\mathbf{z} = W\mathbf{x}$ in both, the value the second step actually received.
+
+          The second wrong version applies the slope before the matrix in the forward product, and evaluates it at $\mathbf{x}$. For a square $W$ it has the right shape. The order of the steps is the order in which the function computes, and the slope of each step is taken at that step's own input.
+
+          The last test is the dot-product test. It needs no Jacobian and no finite difference, only the two routines and two random vectors, so it can be run at any size.
+    - question:
+        id: write-jacobian
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `jacobian_from_vjps(vjp_fn, m)`. `vjp_fn(u)` returns $J^\top\mathbf{u}$ for a function with `m` outputs. Return the full Jacobian, using exactly `m` calls of `vjp_fn`.
+        starter: |
+          import numpy as np
+
+
+          def jacobian_from_vjps(vjp_fn, m):
+              return np.zeros((m, 1))
+
+
+          A = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+          J = jacobian_from_vjps(lambda u: A.T @ u, 2)
+          print(J.shape, [[float(a) for a in row] for row in J])
+        solution: |
+          import numpy as np
+
+
+          def jacobian_from_vjps(vjp_fn, m):
+              return np.stack([vjp_fn(e) for e in np.eye(m)])
+
+
+          A = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+          J = jacobian_from_vjps(lambda u: A.T @ u, 2)
+          print(J.shape, [[float(a) for a in row] for row in J])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+          _calls = []
+          def _fn(u):
+              _calls.append(1)
+              return _A.T @ u
+          _J = jacobian_from_vjps(_fn, 2)
+          assert _np.shape(_J) == (2, 3), "For a function from 3 inputs to 2 outputs the Jacobian is 2 by 3"
+          assert _np.allclose(_J, _A), "For the linear map x -> A x the Jacobian is A. Each VJP with a basis vector is one row"
+          assert len(_calls) == 2, "Use exactly m calls of vjp_fn, one per output"
+          _B = _np.array([[1.0, 2.0], [0.0, 3.0]])
+          assert _np.allclose(jacobian_from_vjps(lambda u: _B.T @ u, 2), _B), "For a square matrix that is not symmetric the Jacobian should be the matrix, not its transpose"
+          _W = _np.random.default_rng(0).normal(size=(4, 6))
+          _x = _np.random.default_rng(1).normal(size=6)
+          _s = 1 - _np.tanh(_W @ _x) ** 2
+          assert _np.allclose(jacobian_from_vjps(lambda u: _W.T @ (_s * u), 4), _np.diag(_s) @ _W), "For tanh(W x) with W of shape 4 by 6 the result should be diag(slope) W"
+          assert output.strip() == "(2, 3) [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]", "The program should print (2, 3) [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def jacobian_from_vjps(vjp_fn, m):
+                return np.stack([vjp_fn(e) for e in np.eye(m)]).T
+
+
+            print("(2, 3) [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]")
+          - |
+            import numpy as np
+
+
+            def jacobian_from_vjps(vjp_fn, m):
+                return np.stack([vjp_fn(np.ones(m)) for e in np.eye(m)])
+
+
+            print("(2, 3) [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]")
+          - |
+            import numpy as np
+
+
+            def jacobian_from_vjps(vjp_fn, m):
+                rows = [vjp_fn(e) for e in np.eye(m)]
+                rows = [vjp_fn(e) for e in np.eye(m)]
+                return np.stack(rows)
+
+
+            print("(2, 3) [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]")
+        explanation: |
+          $J^\top\mathbf{e}_i$ is the $i$th column of $J^\top$, which is the $i$th row of $J$. So the results are stacked as **rows**. Had the function been given as a JVP routine, the results $J\mathbf{e}_j$ would have been columns, and there would have been one per input.
+
+          This is how a full Jacobian is obtained from an automatic differentiation library when it is really needed, and why the cost is counted in passes: here $m$ backward passes. For a network with a million parameters and a scalar loss, $m = 1$.
+
+          It is also a way to **see** a Jacobian while debugging, at small sizes, and compare it with one built from finite differences.
+    - question:
+        id: fix-reverse
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          For $G(\mathbf{x}) = B\tanh(A\mathbf{x})$, `jvp` is correct and `vjp` is not. The program prints the difference between the two sides of the dot-product test, which should be `0.0`. Fix `vjp`.
+        starter: |
+          import numpy as np
+
+
+          def jvp(A, B, x, v):
+              slope = 1 - np.tanh(A @ x) ** 2
+              return B @ (slope * (A @ v))
+
+
+          def vjp(A, B, x, u):
+              slope = 1 - np.tanh(A @ x) ** 2
+              return B.T @ (slope * (A.T @ u))
+
+
+          A = np.array([[1.0, 2.0], [0.0, 1.0]])
+          B = np.array([[2.0, 0.0], [1.0, 1.0]])
+          x = np.array([0.5, -0.25])
+          u, v = np.array([1.0, 2.0]), np.array([3.0, -1.0])
+          print(round(abs(float(u @ jvp(A, B, x, v)) - float(vjp(A, B, x, u) @ v)), 4))
+        solution: |
+          import numpy as np
+
+
+          def jvp(A, B, x, v):
+              slope = 1 - np.tanh(A @ x) ** 2
+              return B @ (slope * (A @ v))
+
+
+          def vjp(A, B, x, u):
+              slope = 1 - np.tanh(A @ x) ** 2
+              return A.T @ (slope * (B.T @ u))
+
+
+          A = np.array([[1.0, 2.0], [0.0, 1.0]])
+          B = np.array([[2.0, 0.0], [1.0, 1.0]])
+          x = np.array([0.5, -0.25])
+          u, v = np.array([1.0, 2.0]), np.array([3.0, -1.0])
+          print(round(abs(float(u @ jvp(A, B, x, v)) - float(vjp(A, B, x, u) @ v)), 4))
+        tests: |
+          import numpy as _np
+          _A = _np.array([[1.0, 2.0], [0.0, 1.0]])
+          _B = _np.array([[2.0, 0.0], [1.0, 1.0]])
+          _x = _np.array([0.5, -0.25])
+          _J = _B @ _np.diag(1 - _np.tanh(_A @ _x) ** 2) @ _A
+          assert _np.allclose(vjp(_A, _B, _x, _np.array([1.0, 2.0])), _J.T @ _np.array([1.0, 2.0])), "The VJP should equal J^T u with J = B diag(slope) A. Going backward, B^T comes first and A^T last"
+          _rng = _np.random.default_rng(0)
+          _C, _D, _y, _w = _rng.normal(size=(4, 3)), _rng.normal(size=(2, 4)), _rng.normal(size=3), _rng.normal(size=2)
+          _JJ = _D @ _np.diag(1 - _np.tanh(_C @ _y) ** 2) @ _C
+          assert _np.shape(vjp(_C, _D, _y, _w)) == (3,) and _np.allclose(vjp(_C, _D, _y, _w), _JJ.T @ _w), "For shapes 4 by 3 and 2 by 4 the VJP has 3 entries and should equal J^T u"
+          assert _np.allclose(jvp(_C, _D, _y, _np.ones(3)), _JJ @ _np.ones(3)), "jvp was correct and should stay so"
+          assert output.strip() == "0.0", "The program should print 0.0"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def jvp(A, B, x, v):
+                slope = 1 - np.tanh(A @ x) ** 2
+                return B @ (slope * (A @ v))
+
+
+            def vjp(A, B, x, u):
+                slope = 1 - np.tanh(A @ x) ** 2
+                return B.T @ (slope * (A.T @ u))
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def jvp(A, B, x, v):
+                slope = 1 - np.tanh(A @ x) ** 2
+                return B @ (slope * (A @ v))
+
+
+            def vjp(A, B, x, u):
+                return A.T @ (B.T @ u)
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def jvp(A, B, x, v):
+                slope = 1 - np.tanh(A @ x) ** 2
+                return B @ (slope * (A @ v))
+
+
+            def vjp(A, B, x, u):
+                slope = 1 - np.tanh(A @ x) ** 2
+                return A @ (slope * (B @ u))
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def jvp(A, B, x, v):
+                slope = 1 - np.tanh(A @ x) ** 2
+                return B @ (slope * (A @ v))
+
+
+            def vjp(A, B, x, u):
+                slope = 1 - np.tanh(B.T @ u) ** 2
+                return A.T @ (slope * (B.T @ u))
+
+
+            print("0.0")
+        explanation: |
+          The function computes $A\mathbf{x}$, then $\tanh$, then multiplies by $B$. Its Jacobian is $B\,\operatorname{diag}(\text{slope})\,A$, and the transpose of a product reverses it: $A^\top\operatorname{diag}(\text{slope})\,B^\top$. Read from the right, the backward product first applies $B^\top$, then the slope, then $A^\top$. The buggy version transposed each matrix and kept them in forward order.
+
+          With matrices of different shapes it would not have run. Both were $2 \times 2$, so it ran and returned a vector of the right length. The dot-product test caught it at once: $2.12$ on one side and $13.52$ on the other.
+
+          The slope is still evaluated at $A\mathbf{x}$, a value from the **forward** computation. The backward pass revisits the steps in reverse, but each step's derivative is taken where the forward pass was.
+    - question:
+        id: work-which-mode
+        type: choice
+        system: s2
+        prompt: |
+          A model has $10^7$ parameters and a scalar loss. One evaluation of the loss takes one second. Roughly how long does the gradient take by JVPs, and by a VJP?
+        options:
+          - 'About the same either way.'
+          - 'By JVPs, one per parameter: about $10^7$ seconds, some four months. By a VJP: one backward pass, a few seconds.'
+          - 'By JVPs a few seconds, and by a VJP four months.'
+          - 'Neither is feasible. Finite differences must be used.'
+        answer: 1
+        explanation: |
+          Each JVP gives the derivative along one direction, so the full gradient needs one per parameter. A VJP with $u = 1$ at the scalar output gives all $10^7$ partial derivatives in one pass, at a small constant multiple of the cost of the loss. Finite differences cost the same as JVPs, one or two evaluations per parameter, and are inexact besides. This asymmetry, many inputs and one output, is the reason training neural networks is feasible at all, and the reason reverse mode is the default in every library.
+    - question:
+        id: work-few-inputs
+        type: numeric
+        system: s2
+        prompt: |
+          A simulation takes 3 design parameters and returns 500 measurements. Its full Jacobian is wanted. What is the smallest number of JVPs or VJPs that gives it?
+        answer: "3"
+        explanation: |
+          Three JVPs, one for each input direction $\mathbf{e}_1, \mathbf{e}_2, \mathbf{e}_3$, give the three columns. By VJPs it would take 500. So forward mode is the right tool when a function has few inputs and many outputs. It also needs no stored intermediate values, which matters for a long simulation. A function from one input, such as time, to many outputs is the extreme case, where one JVP is the entire derivative.
+    - question:
+        id: work-dot-test
+        type: choice
+        system: s2
+        prompt: |
+          A new operation has been given a hand-written VJP. Its JVP has been verified against finite differences. Why is checking $\mathbf{u}^\top(J\mathbf{v}) = (J^\top\mathbf{u})^\top\mathbf{v}$ for a few random $\mathbf{u}$ and $\mathbf{v}$ a strong test of the VJP?
+        options:
+          - 'It is not: it tests only one entry of the Jacobian.'
+          - 'The left side is known to be right. A random $\mathbf{u}$ and $\mathbf{v}$ excite every entry of the Jacobian at once, so any wrong entry of the implied $J^\top$ changes the right side, except by an accident of probability zero. A few random pairs test the whole linear map.'
+          - 'Because the two sides are always equal, whatever the code does.'
+          - 'Because random vectors are orthogonal.'
+        answer: 1
+        explanation: |
+          If the routine implements some linear map $M$ in place of $J^\top$, the test compares $\mathbf{u}^\top J\mathbf{v}$ with $\mathbf{u}^\top M^\top\mathbf{v}$, and these agree for all $\mathbf{u}, \mathbf{v}$ only if $M^\top = J$. For random vectors a disagreement in any entry shows up. The test compares two numbers computed exactly, so it works to nearly machine precision, where a comparison with finite differences is limited to about six digits and needs a step size to be chosen. It is the standard way to validate a backward routine.
+  connections:
+    - text: |
+        The million-by-million Jacobian is never built, because only its action on a vector is needed. From the right, $J\mathbf{v}$ pushes a displacement of the input forward to the output: a **JVP**. From the left, $J^\top\mathbf{u}$ pulls a sensitivity at the output back to the input: a **VJP**. For a linear map these are $A\mathbf{v}$ and $A^\top\mathbf{u}$, and for an elementwise function both are an entry-by-entry product.
+
+        Through a composition the JVP runs in the order of the computation and the VJP in reverse, each at about the cost of the function. One VJP gives the gradient of a scalar. $n$ JVPs or $m$ VJPs give a full Jacobian. And $\mathbf{u}^\top(J\mathbf{v}) = (J^\top\mathbf{u})^\top\mathbf{v}$ tests one against the other.
+
+        Today's compositions were chains: each step fed the next and nothing else. Real computations are not chains. A value is used in several places, and a step takes several values. Then "the order of the computation" and "the reverse order" need a precise meaning, and so does the rule for a value that is used twice. The structure that carries all this is one already built in code earlier in the course, and it is time to look at it as a mathematical object: [[m13.computational-graphs]].

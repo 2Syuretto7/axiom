@@ -1,0 +1,683 @@
+cluster: M13
+title: One small network, differentiated every way
+minutes: 110
+claim: You will have taken one small network through every method of the cluster. You will have read its calculation as a graph, derived its gradients by differentials and coded its backward pass, checked that pass with Jacobian-vector and vector-Jacobian products and with dual numbers, measured the curvature of its loss without a Hessian, and differentiated a fitted layer through the equation that defines it.
+brief: |
+  This cluster was about derivatives of calculations with many inputs: what they are, what they cost, and how to get them without writing down anything too large to hold. This project spends all of it on one network that is small enough to check by hand.
+
+  **The project.** The network has two inputs, three hidden units and one output:
+
+  $$\mathbf{h} = \tanh(W_1\mathbf{x}), \qquad f = \mathbf{w}_2 \cdot \mathbf{h}, \qquad L = \tfrac12(f - t)^2,$$
+
+  with
+
+  $$W_1 = \begin{pmatrix} 1 & -1 \\ 0.5 & 1 \\ 2 & 0 \end{pmatrix}, \qquad \mathbf{w}_2 = (1, -2, 0.5), \qquad \mathbf{x} = (0.3, -0.2), \qquad t = 1.$$
+
+  At this input the hidden units receive $W_1\mathbf{x} = (0.5, -0.05, 0.6)$ and give $\mathbf{h} = (0.4621, -0.0500, 0.5370)$. The output is $f = 0.8306$, the residual is $r = f - t = -0.1694$, and the loss is $0.0144$. The starter prints these.
+
+  Every question below is about the derivatives of this one calculation. Nothing here is new. Keep your results as you go, because later stages use earlier ones.
+starter: |
+  # Scratch space. The network of the project.
+  import numpy as np
+
+  W1 = np.array([[1.0, -1.0], [0.5, 1.0], [2.0, 0.0]])
+  w2 = np.array([1.0, -2.0, 0.5])
+  x = np.array([0.3, -0.2])
+  t = 1.0
+
+  h = np.tanh(W1 @ x)
+  f = float(w2 @ h)
+  print([round(float(c), 4) for c in h])
+  print(round(f, 4), round(f - t, 4), round(0.5 * (f - t) ** 2, 4))
+stages:
+  - title: The calculation as a graph
+    blocks:
+      - text: |
+          Draw the calculation with one node per number: the two inputs, the three sums entering the hidden units, their three outputs, then $f$ and $L$. Each input feeds every hidden unit, and every hidden unit feeds $f$.
+      - question:
+          id: paths
+          type: numeric
+          system: s1
+          concepts: [m13.computational-graphs]
+          prompt: How many paths lead from the input $x_1$ to the loss $L$ in this graph?
+          answer: "3"
+          explanation: |
+            One through each hidden unit: $x_1 \to a_i \to h_i \to f \to L$ for $i = 1, 2, 3$. The derivative $\partial L/\partial x_1$ is the sum over these three paths of the product of the slopes along each. With three paths the sum could be written out. In a deep network the paths multiply at every layer, and the recursions over the graph, forward or backward, are what keep the work proportional to the number of arrows.
+      - question:
+          id: passes
+          type: choice
+          system: s1
+          concepts: [m13.reverse-mode-differentiation-and-its-cost, m13.forward-mode-and-dual-numbers]
+          prompt: |
+            The network has 9 parameters, six in $W_1$ and three in $\mathbf{w}_2$, and one loss. How many passes does each mode need for the gradient with respect to all the parameters?
+          options:
+            - 'Forward mode 1 pass, reverse mode 9 sweeps.'
+            - 'Forward mode 9 passes, one per parameter. Reverse mode 1 backward sweep, after a forward sweep that keeps $\mathbf{h}$.'
+            - 'Both need 9.'
+            - 'Both need 1.'
+          answer: 1
+          explanation: |
+            Forward mode follows one nudged input per pass, and reverse mode one output per sweep. With 9 inputs and 1 output, reverse mode wins by a factor of 9, and for a real network by a factor of millions. Its price is that the forward values must be kept for the way back. Here that is only $\mathbf{h}$ and the residual.
+  - title: Gradients by differentials
+    blocks:
+      - text: |
+          Now derive what the backward sweep must compute. Write $D$ for the diagonal matrix of the slopes $1 - h_i^2$ and $r = f - t$.
+      - question:
+          id: last-layer
+          type: numeric
+          system: s1
+          concepts: [m13.derivatives-with-respect-to-vectors]
+          prompt: |
+            As a function of $\mathbf{w}_2$ alone, $L = \tfrac12(\mathbf{w}_2 \cdot \mathbf{h} - t)^2$. What is the second entry of its gradient with respect to $\mathbf{w}_2$? Use $r = -0.1694$ and $\mathbf{h} = (0.4621, -0.0500, 0.5370)$, and answer to 4 decimal places.
+          answer: "0.0085"
+          explanation: |
+            $dL = r\,d(\mathbf{w}_2 \cdot \mathbf{h}) = r\,\mathbf{h} \cdot d\mathbf{w}_2$, so the gradient is $r\mathbf{h}$: the residual times the input of the layer. Its second entry is $-0.1694 \times -0.0500 = 0.0085$. The whole gradient is $(-0.0783, 0.0085, -0.0910)$. The output is too small, so the weights on the units with positive output should rise and the weight on the unit with negative output should fall, which is what moving against this gradient does.
+      - question:
+          id: first-layer
+          type: choice
+          system: s2
+          concepts: [m13.the-method-of-differentials, m13.derivatives-with-respect-to-matrices]
+          prompt: |
+            Find the gradient of $L$ with respect to the matrix $W_1$ by taking the differential with only $W_1$ changing.
+          options:
+            - '$\bar W_1 = r\,\mathbf{x}\,(D\mathbf{w}_2)^\top$, a $2 \times 3$ matrix.'
+            - '$dL = r\,\mathbf{w}_2^\top D\,dW_1\,\mathbf{x} = \operatorname{tr}\big(\mathbf{x}\,r\,\mathbf{w}_2^\top D\,dW_1\big)$, so $\bar W_1 = \boldsymbol\delta\mathbf{x}^\top$ with $\boldsymbol\delta = r\,D\mathbf{w}_2$: a $3 \times 2$ outer product of the gradient at the hidden sums with the input.'
+            - '$\bar W_1 = r\,W_1$.'
+            - '$\bar W_1 = r\,\mathbf{w}_2\mathbf{x}^\top$, since $\tanh$ does not affect the gradient.'
+          answer: 1
+          explanation: |
+            Go step by step. $dL = r\,df$, $\ df = \mathbf{w}_2^\top d\mathbf{h}$, $\ d\mathbf{h} = D\,d(W_1\mathbf{x}) = D\,dW_1\,\mathbf{x}$. So $dL$ is the scalar $r\,\mathbf{w}_2^\top D\,dW_1\,\mathbf{x}$. A scalar is its own trace, and moving $\mathbf{x}$ to the front gives $\operatorname{tr}\big((\boldsymbol\delta\mathbf{x}^\top)^\top dW_1\big)$ with $\boldsymbol\delta = r\,D\mathbf{w}_2$, from which the gradient is read off. It has the shape of $W_1$, as a gradient must, which rules out the first option. The vector $\boldsymbol\delta$ is the gradient of the loss with respect to the hidden sums $W_1\mathbf{x}$, and it will appear again in the gradient with respect to $\mathbf{x}$.
+      - question:
+          id: backward
+          type: code
+          mode: write
+          system: s2
+          concepts: [m13.gradients-of-common-neural-network-layers, m13.derivatives-with-respect-to-matrices, m13.reverse-mode-differentiation-and-its-cost]
+          prompt: |
+            Write `backward(W1, w2, x, t)` returning the triple `(W1bar, w2bar, xbar)`: the gradients of the loss with respect to `W1`, `w2` and `x`. Run the network forward once, keep what the way back needs, and use no finite differences.
+          starter: |
+            import numpy as np
+
+
+            def backward(W1, w2, x, t):
+                return W1 * 0.0, w2 * 0.0, x * 0.0
+
+
+            W1 = np.array([[1.0, -1.0], [0.5, 1.0], [2.0, 0.0]])
+            w2 = np.array([1.0, -2.0, 0.5])
+            W1bar, w2bar, xbar = backward(W1, w2, np.array([0.3, -0.2]), 1.0)
+            print([[round(float(c), 4) for c in row] for row in W1bar])
+            print([round(float(c), 4) for c in w2bar])
+            print([round(float(c), 4) for c in xbar])
+          solution: |
+            import numpy as np
+
+
+            def backward(W1, w2, x, t):
+                h = np.tanh(W1 @ x)
+                r = float(w2 @ h) - t
+                delta = r * w2 * (1 - h ** 2)
+                return np.outer(delta, x), r * h, W1.T @ delta
+
+
+            W1 = np.array([[1.0, -1.0], [0.5, 1.0], [2.0, 0.0]])
+            w2 = np.array([1.0, -2.0, 0.5])
+            W1bar, w2bar, xbar = backward(W1, w2, np.array([0.3, -0.2]), 1.0)
+            print([[round(float(c), 4) for c in row] for row in W1bar])
+            print([round(float(c), 4) for c in w2bar])
+            print([round(float(c), 4) for c in xbar])
+          tests: |
+            import numpy as _np
+            def _loss(W1, w2, x, t):
+                return 0.5 * (float(w2 @ _np.tanh(W1 @ x)) - t) ** 2
+            def _num(f, P):
+                G = _np.zeros(P.size)
+                for _i in range(P.size):
+                    E = _np.zeros(P.size)
+                    E[_i] = 1e-6
+                    E = E.reshape(P.shape)
+                    G[_i] = (f(P + E) - f(P - E)) / 2e-6
+                return G.reshape(P.shape)
+            _W1 = _np.array([[1.0, -1.0], [0.5, 1.0], [2.0, 0.0]])
+            _w2 = _np.array([1.0, -2.0, 0.5])
+            _x = _np.array([0.3, -0.2])
+            _a, _b, _c = backward(_W1, _w2, _x, 1.0)
+            assert _np.shape(_a) == (3, 2), "W1bar has the shape of W1, 3 by 2: the outer product of delta with x, in that order"
+            assert _np.shape(_b) == (3,) and _np.shape(_c) == (2,), "w2bar has 3 entries and xbar has 2"
+            assert _np.allclose(_b, _num(lambda P: _loss(_W1, P, _x, 1.0), _w2), atol=1e-7), "w2bar should agree with central differences. It is the residual r times h"
+            assert _np.allclose(_a, _num(lambda P: _loss(P, _w2, _x, 1.0), _W1), atol=1e-7), "W1bar should agree with central differences. delta is r times w2 times the slopes 1 - h**2, entry by entry"
+            assert _np.allclose(_c, _num(lambda P: _loss(_W1, _w2, P, 1.0), _x), atol=1e-7), "xbar should agree with central differences. It is W1 transposed times delta"
+            _rng = _np.random.default_rng(6)
+            _V1 = _rng.normal(size=(4, 3))
+            _v2 = _rng.normal(size=4)
+            _y = _rng.normal(size=3)
+            _a2, _b2, _c2 = backward(_V1, _v2, _y, -0.5)
+            assert _np.allclose(_a2, _num(lambda P: _loss(P, _v2, _y, -0.5), _V1), atol=1e-7) and _np.allclose(_c2, _num(lambda P: _loss(_V1, _v2, P, -0.5), _y), atol=1e-7), "For a random network with 3 inputs and 4 hidden units and target -0.5, W1bar and xbar should agree with central differences"
+            assert output.strip() == "[[-0.04, 0.0267], [0.1014, -0.0676], [-0.0181, 0.0121]]\n[-0.0783, 0.0085, -0.091]\n[-0.0848, 0.4713]", "The program should print [[-0.04, 0.0267], [0.1014, -0.0676], [-0.0181, 0.0121]], then [-0.0783, 0.0085, -0.091], then [-0.0848, 0.4713]"
+          wrong:
+            - |
+              import numpy as np
+
+
+              def backward(W1, w2, x, t):
+                  h = np.tanh(W1 @ x)
+                  r = float(w2 @ h) - t
+                  delta = r * w2
+                  return np.outer(delta, x), r * h, W1.T @ delta
+
+
+              print("[[-0.04, 0.0267], [0.1014, -0.0676], [-0.0181, 0.0121]]\n[-0.0783, 0.0085, -0.091]\n[-0.0848, 0.4713]")
+            - |
+              import numpy as np
+
+
+              def backward(W1, w2, x, t):
+                  h = np.tanh(W1 @ x)
+                  r = float(w2 @ h) - t
+                  delta = r * w2 * (1 - h ** 2)
+                  return np.outer(x, delta), r * h, W1.T @ delta
+
+
+              print("[[-0.04, 0.0267], [0.1014, -0.0676], [-0.0181, 0.0121]]\n[-0.0783, 0.0085, -0.091]\n[-0.0848, 0.4713]")
+            - |
+              import numpy as np
+
+
+              def backward(W1, w2, x, t):
+                  h = np.tanh(W1 @ x)
+                  r = float(w2 @ h) - t
+                  delta = w2 * (1 - h ** 2)
+                  return np.outer(delta, x), h, W1.T @ delta
+
+
+              print("[[-0.04, 0.0267], [0.1014, -0.0676], [-0.0181, 0.0121]]\n[-0.0783, 0.0085, -0.091]\n[-0.0848, 0.4713]")
+            - |
+              import numpy as np
+
+
+              def backward(W1, w2, x, t):
+                  h = np.tanh(W1 @ x)
+                  r = float(w2 @ h) - t
+                  delta = r * w2 * (1 - np.tanh(h) ** 2)
+                  return np.outer(delta, x), r * h, W1.T @ delta
+
+
+              print("[[-0.04, 0.0267], [0.1014, -0.0676], [-0.0181, 0.0121]]\n[-0.0783, 0.0085, -0.091]\n[-0.0848, 0.4713]")
+          explanation: |
+            The sweep runs in the reverse of the forward order. The loss has slope $r$ with respect to $f$. The output layer $f = \mathbf{w}_2 \cdot \mathbf{h}$ sends $r\mathbf{h}$ to its weights and $r\mathbf{w}_2$ to its input $\mathbf{h}$. The activation multiplies by its slopes $1 - \mathbf{h}^2$, which gives $\boldsymbol\delta$. The first layer sends $\boldsymbol\delta\mathbf{x}^\top$ to its weights and $W_1^\top\boldsymbol\delta$ to its input.
+
+            Each line is one of the layer rules, and each costs about what the matching forward line cost. Only $\mathbf{h}$ and $r$ were kept from the forward pass, because the slope of $\tanh$ can be written in terms of its output.
+
+            All 11 derivatives, nine for the parameters and two for the input, came from one sweep. The gradient with respect to the input is not needed for training this network. It is what a layer placed in front of this one would receive, and it costs one more product.
+  - title: A second and a third opinion
+    blocks:
+      - text: |
+          A backward pass written by hand needs checking. The hidden layer alone is the map $\mathbf{x} \mapsto \mathbf{h}$ from $\mathbb{R}^2$ to $\mathbb{R}^3$, with Jacobian $J = DW_1$. Its two products never need $J$ itself.
+      - question:
+          id: products
+          type: code
+          mode: write
+          system: s2
+          concepts: [m13.jacobian-vector-and-vector-jacobian-products]
+          prompt: |
+            For the map $\mathbf{x} \mapsto \tanh(W_1\mathbf{x})$, write `jvp(W1, x, v)` returning $J\mathbf{v}$ and `vjp(W1, x, u)` returning $J^\top\mathbf{u}$, without forming $J$. The program prints the two sides of the dot-product test, $\mathbf{u} \cdot (J\mathbf{v})$ and $(J^\top\mathbf{u}) \cdot \mathbf{v}$, which must agree.
+          starter: |
+            import numpy as np
+
+
+            def jvp(W1, x, v):
+                return W1 @ v * 0.0
+
+
+            def vjp(W1, x, u):
+                return x * 0.0
+
+
+            W1 = np.array([[1.0, -1.0], [0.5, 1.0], [2.0, 0.0]])
+            x = np.array([0.3, -0.2])
+            v = np.array([1.0, 1.0])
+            u = np.array([1.0, 2.0, 3.0])
+            print(round(float(u @ jvp(W1, x, v)), 4), round(float(vjp(W1, x, u) @ v), 4))
+          solution: |
+            import numpy as np
+
+
+            def jvp(W1, x, v):
+                h = np.tanh(W1 @ x)
+                return (1 - h ** 2) * (W1 @ v)
+
+
+            def vjp(W1, x, u):
+                h = np.tanh(W1 @ x)
+                return W1.T @ ((1 - h ** 2) * u)
+
+
+            W1 = np.array([[1.0, -1.0], [0.5, 1.0], [2.0, 0.0]])
+            x = np.array([0.3, -0.2])
+            v = np.array([1.0, 1.0])
+            u = np.array([1.0, 2.0, 3.0])
+            print(round(float(u @ jvp(W1, x, v)), 4), round(float(vjp(W1, x, u) @ v), 4))
+          tests: |
+            import numpy as _np
+            _W1 = _np.array([[1.0, -1.0], [0.5, 1.0], [2.0, 0.0]])
+            _x = _np.array([0.3, -0.2])
+            _J = _np.stack([(_np.tanh(_W1 @ (_x + 1e-6 * e)) - _np.tanh(_W1 @ (_x - 1e-6 * e))) / 2e-6 for e in _np.eye(2)]).T
+            _v = _np.array([1.0, 1.0])
+            _u = _np.array([1.0, 2.0, 3.0])
+            assert _np.shape(jvp(_W1, _x, _v)) == (3,), "J v has one entry per hidden unit: 3"
+            assert _np.shape(vjp(_W1, _x, _u)) == (2,), "J^T u has one entry per input: 2"
+            assert _np.allclose(jvp(_W1, _x, _v), _J @ _v, atol=1e-7), "J v should be about (0, 1.4963, 1.4232): the slopes 1 - h**2 times W1 v"
+            assert _np.allclose(vjp(_W1, _x, _u), _J.T @ _u, atol=1e-7), "J^T u should be about (6.0534, 1.2086): W1 transposed times the slopes times u"
+            _rng = _np.random.default_rng(8)
+            _V = _rng.normal(size=(5, 4))
+            _y = _rng.normal(size=4)
+            _p = _rng.normal(size=4)
+            _q = _rng.normal(size=5)
+            assert abs(float(_q @ jvp(_V, _y, _p)) - float(vjp(_V, _y, _q) @ _p)) < 1e-10, "For a random 5 by 4 layer the two sides of the dot-product test should agree to rounding"
+            assert output.strip() == "7.262 7.262", "The program should print 7.262 7.262"
+          wrong:
+            - |
+              import numpy as np
+
+
+              def jvp(W1, x, v):
+                  return W1 @ v
+
+
+              def vjp(W1, x, u):
+                  h = np.tanh(W1 @ x)
+                  return W1.T @ ((1 - h ** 2) * u)
+
+
+              print("7.262 7.262")
+            - |
+              import numpy as np
+
+
+              def jvp(W1, x, v):
+                  h = np.tanh(W1 @ x)
+                  return (1 - h ** 2) * (W1 @ v)
+
+
+              def vjp(W1, x, u):
+                  return W1.T @ u
+
+
+              print("7.262 7.262")
+            - |
+              import numpy as np
+
+
+              def jvp(W1, x, v):
+                  h = np.tanh(W1 @ x)
+                  return (1 - h ** 2) * (W1 @ x)
+
+
+              def vjp(W1, x, u):
+                  h = np.tanh(W1 @ x)
+                  return W1.T @ ((1 - h ** 2) * u)
+
+
+              print("7.262 7.262")
+            - |
+              import numpy as np
+
+
+              def jvp(W1, x, v):
+                  h = np.tanh(W1 @ x)
+                  return (1 - h ** 2) * (W1 @ v)
+
+
+              def vjp(W1, x, u):
+                  h = np.tanh(W1 @ u[:2])
+                  return W1.T @ ((1 - h ** 2) * u)
+
+
+              print("7.262 7.262")
+          explanation: |
+            $J = DW_1$, so $J\mathbf{v} = D(W_1\mathbf{v})$: through the weights, then the slopes, in the order of the calculation. And $J^\top\mathbf{u} = W_1^\top(D\mathbf{u})$: the same two steps transposed and in the opposite order.
+
+            The two printed numbers are $\mathbf{u}^\top J\mathbf{v}$ computed from each side, and their agreement is the test that the backward rule is the transpose of the forward one. It involves no finite difference and no step size. If the forward product is then checked once against a difference quotient, the backward product is checked with it.
+
+            The backward pass of the previous stage is this `vjp`, applied to $\mathbf{u} = r\mathbf{w}_2$.
+      - text: |
+          For a third opinion, run the network on dual numbers. Seeding both inputs with tangent 1 nudges $\mathbf{x}$ along $\mathbf{v} = (1, 1)$, and the tangent of the output is the directional derivative of $f$.
+      - question:
+          id: seed
+          type: numeric
+          system: s1
+          concepts: [m13.forward-mode-and-dual-numbers]
+          prompt: |
+            The inputs are seeded as $x_1 = 0.3 + \varepsilon$ and $x_2 = -0.2 + \varepsilon$. What is the tangent of the second hidden sum, $a_2 = 0.5x_1 + x_2$?
+          answer: "1.5"
+          explanation: |
+            $0.5(0.3 + \varepsilon) + (-0.2 + \varepsilon) = -0.05 + 1.5\varepsilon$. A constant times a dual number scales its tangent, and a sum adds tangents. The three sums carry the tangents $(0, 1.5, 2)$, which is $W_1\mathbf{v}$. The first is 0: moving both inputs by the same amount leaves $x_1 - x_2$ unchanged.
+      - question:
+          id: dual-bug
+          type: code
+          mode: find-bug
+          system: s2
+          concepts: [m13.forward-mode-and-dual-numbers, m13.computational-graphs]
+          prompt: |
+            The program runs the network on dual numbers with both inputs seeded with tangent 1. It should print the output and its directional derivative along $(1, 1)$, which are `0.8306 -2.2809`. The value is right and the derivative is not. Fix it.
+          starter: |
+            import numpy as np
+
+
+            class Dual:
+                def __init__(self, a, b=0.0):
+                    self.a = a
+                    self.b = b
+
+                def __add__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a + other.a, self.b + other.b)
+
+                def __mul__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+                def __radd__(self, other):
+                    return self + other
+
+                def __rmul__(self, other):
+                    return self * other
+
+
+            def tanh(x):
+                t = float(np.tanh(x.a))
+                return Dual(t, (1 - x.a * x.a) * x.b)
+
+
+            def network(W1, w2, x):
+                out = 0.0
+                for i in range(len(w2)):
+                    a = 0.0
+                    for j in range(len(x)):
+                        a = a + W1[i][j] * x[j]
+                    out = out + w2[i] * tanh(a)
+                return out
+
+
+            W1 = [[1.0, -1.0], [0.5, 1.0], [2.0, 0.0]]
+            w2 = [1.0, -2.0, 0.5]
+            y = network(W1, w2, [Dual(0.3, 1.0), Dual(-0.2, 1.0)])
+            print(round(y.a, 4), round(y.b, 4))
+          solution: |
+            import numpy as np
+
+
+            class Dual:
+                def __init__(self, a, b=0.0):
+                    self.a = a
+                    self.b = b
+
+                def __add__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a + other.a, self.b + other.b)
+
+                def __mul__(self, other):
+                    if not isinstance(other, Dual):
+                        other = Dual(other)
+                    return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+                def __radd__(self, other):
+                    return self + other
+
+                def __rmul__(self, other):
+                    return self * other
+
+
+            def tanh(x):
+                t = float(np.tanh(x.a))
+                return Dual(t, (1 - t * t) * x.b)
+
+
+            def network(W1, w2, x):
+                out = 0.0
+                for i in range(len(w2)):
+                    a = 0.0
+                    for j in range(len(x)):
+                        a = a + W1[i][j] * x[j]
+                    out = out + w2[i] * tanh(a)
+                return out
+
+
+            W1 = [[1.0, -1.0], [0.5, 1.0], [2.0, 0.0]]
+            w2 = [1.0, -2.0, 0.5]
+            y = network(W1, w2, [Dual(0.3, 1.0), Dual(-0.2, 1.0)])
+            print(round(y.a, 4), round(y.b, 4))
+          tests: |
+            import numpy as _np
+            _d = tanh(Dual(0.5, 2.0))
+            assert abs(_d.a - float(_np.tanh(0.5))) < 1e-12, "The value of tanh(0.5 + 2 eps) is tanh(0.5)"
+            assert abs(_d.b - 2.0 * (1 - float(_np.tanh(0.5)) ** 2)) < 1e-12, "The tangent of tanh(0.5 + 2 eps) is 2 times (1 - tanh(0.5)**2), about 1.5729. The slope of tanh is 1 minus the square of its output"
+            _z = tanh(Dual(0.0, 1.0))
+            assert (_z.a, _z.b) == (0.0, 1.0), "tanh(0 + eps) is 0 + eps"
+            _y = network([[1.0, -1.0], [0.5, 1.0], [2.0, 0.0]], [1.0, -2.0, 0.5], [Dual(0.3, 1.0), Dual(-0.2, 0.0)])
+            assert abs(_y.b - (0.7864 * 1 - 2 * 0.9975 * 0.5 + 0.5 * 0.7116 * 2)) < 1e-3, "Seeding only the first input, the tangent of the output should be about 0.5005"
+            assert output.strip() == "0.8306 -2.2809", "The program should print 0.8306 -2.2809"
+          wrong:
+            - |
+              import numpy as np
+
+
+              class Dual:
+                  def __init__(self, a, b=0.0):
+                      self.a = a
+                      self.b = b
+
+                  def __add__(self, other):
+                      if not isinstance(other, Dual):
+                          other = Dual(other)
+                      return Dual(self.a + other.a, self.b + other.b)
+
+                  def __mul__(self, other):
+                      if not isinstance(other, Dual):
+                          other = Dual(other)
+                      return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+                  def __radd__(self, other):
+                      return self + other
+
+                  def __rmul__(self, other):
+                      return self * other
+
+
+              def tanh(x):
+                  t = float(np.tanh(x.a))
+                  return Dual(t, (1 - x.a * x.a) * x.b)
+
+
+              def network(W1, w2, x):
+                  out = 0.0
+                  for i in range(len(w2)):
+                      a = 0.0
+                      for j in range(len(x)):
+                          a = a + W1[i][j] * x[j]
+                      out = out + w2[i] * tanh(a)
+                  return out
+
+
+              print("0.8306 -2.2809")
+            - |
+              import numpy as np
+
+
+              class Dual:
+                  def __init__(self, a, b=0.0):
+                      self.a = a
+                      self.b = b
+
+                  def __add__(self, other):
+                      if not isinstance(other, Dual):
+                          other = Dual(other)
+                      return Dual(self.a + other.a, self.b + other.b)
+
+                  def __mul__(self, other):
+                      if not isinstance(other, Dual):
+                          other = Dual(other)
+                      return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+                  def __radd__(self, other):
+                      return self + other
+
+                  def __rmul__(self, other):
+                      return self * other
+
+
+              def tanh(x):
+                  t = float(np.tanh(x.a))
+                  return Dual(t, 1 - t * t)
+
+
+              def network(W1, w2, x):
+                  out = 0.0
+                  for i in range(len(w2)):
+                      a = 0.0
+                      for j in range(len(x)):
+                          a = a + W1[i][j] * x[j]
+                      out = out + w2[i] * tanh(a)
+                  return out
+
+
+              print("0.8306 -2.2809")
+            - |
+              import numpy as np
+
+
+              class Dual:
+                  def __init__(self, a, b=0.0):
+                      self.a = a
+                      self.b = b
+
+                  def __add__(self, other):
+                      if not isinstance(other, Dual):
+                          other = Dual(other)
+                      return Dual(self.a + other.a, self.b + other.b)
+
+                  def __mul__(self, other):
+                      if not isinstance(other, Dual):
+                          other = Dual(other)
+                      return Dual(self.a * other.a, self.a * other.b + self.b * other.a)
+
+                  def __radd__(self, other):
+                      return self + other
+
+                  def __rmul__(self, other):
+                      return self * other
+
+
+              def tanh(x):
+                  t = float(np.tanh(x.a))
+                  return Dual(t, (1 - t) * x.b)
+
+
+              def network(W1, w2, x):
+                  out = 0.0
+                  for i in range(len(w2)):
+                      a = 0.0
+                      for j in range(len(x)):
+                          a = a + W1[i][j] * x[j]
+                      out = out + w2[i] * tanh(a)
+                  return out
+
+
+              print("0.8306 -2.2809")
+          explanation: |
+            The rule for $\tanh$ used the square of its **input** where the square of its **output** belongs: the slope is $1 - \tanh^2a$, not $1 - a^2$. For small inputs the two are close, which is why the error was easy to miss: at $a = -0.05$ they agree to five decimal places.
+
+            Everything else in the program is generic. `network` was written with ordinary loops and knows nothing about derivatives. The sums and products come from the class, and the tangent of the output is $\nabla f \cdot \mathbf{v}$, in one pass and with nothing kept.
+
+            This agrees with the backward pass. There, $\bar{\mathbf{x}} = (-0.0848, 0.4713)$ was the gradient of the loss, so along $(1, 1)$ the loss changes at rate $0.3865$. The loss is $\tfrac12(f - t)^2$, so that should be $r$ times the rate of $f$: $-0.1694 \times -2.2809 = 0.3865$. Three methods, one answer.
+  - title: Curvature without a Hessian
+    blocks:
+      - text: |
+          How large a step can training take? Hold $W_1$ fixed and look at the loss as a function of the output weights alone: $L(\mathbf{w}_2) = \tfrac12(\mathbf{w}_2 \cdot \mathbf{h} - t)^2$. Its gradient is $(\mathbf{w}_2 \cdot \mathbf{h} - t)\,\mathbf{h}$.
+      - question:
+          id: hvp
+          type: choice
+          system: s2
+          concepts: [m13.hessian-vector-products, m13.derivatives-with-respect-to-vectors]
+          prompt: |
+            What is the Hessian-vector product $H\mathbf{v}$ of this loss, and what does it reveal about $H$?
+          options:
+            - '$H\mathbf{v} = \mathbf{v}$: the Hessian is the identity.'
+            - 'Moving $\mathbf{w}_2$ along $\mathbf{v}$ changes the gradient at the rate $(\mathbf{h} \cdot \mathbf{v})\,\mathbf{h}$. So $H\mathbf{v} = (\mathbf{h} \cdot \mathbf{v})\mathbf{h}$, computed with one dot product, and $H = \mathbf{h}\mathbf{h}^\top$ has the single nonzero eigenvalue $\|\mathbf{h}\|^2$, with eigenvector $\mathbf{h}$.'
+            - '$H\mathbf{v} = (\mathbf{w}_2 \cdot \mathbf{h} - t)\,\mathbf{v}$.'
+            - '$H\mathbf{v}$ cannot be found without first writing out the $3 \times 3$ Hessian.'
+          answer: 1
+          explanation: |
+            $H\mathbf{v}$ is the derivative of the gradient along $\mathbf{v}$. In the gradient $(\mathbf{w}_2 \cdot \mathbf{h} - t)\,\mathbf{h}$ only the scalar factor depends on $\mathbf{w}_2$, and along $\mathbf{v}$ it changes at rate $\mathbf{h} \cdot \mathbf{v}$. The product $(\mathbf{h} \cdot \mathbf{v})\mathbf{h}$ always points along $\mathbf{h}$, so $H$ has rank 1. For $\mathbf{v} = \mathbf{h}$ it gives $\|\mathbf{h}\|^2\mathbf{h}$, and for any $\mathbf{v}$ perpendicular to $\mathbf{h}$ it gives zero. Power iteration with this product would converge in a single step. With one training example the loss curves in one direction only, and is flat in the other two.
+      - question:
+          id: step-limit
+          type: numeric
+          system: s2
+          concepts: [m13.hessian-vector-products]
+          prompt: |
+            With $\mathbf{h} = (0.4621, -0.0500, 0.5370)$, the largest eigenvalue of that Hessian is $\|\mathbf{h}\|^2 = 0.5045$. Below what step size is gradient descent on $\mathbf{w}_2$ stable? Answer to 2 decimal places.
+          answer: "3.96"
+          explanation: |
+            The limit is $2/\lambda_{\max} = 2/0.5045 = 3.96$. Along $\mathbf{h}$ each step multiplies the error by $1 - \eta\|\mathbf{h}\|^2$, which has size below 1 exactly when $\eta < 2/\|\mathbf{h}\|^2$. With $\eta = 1/\|\mathbf{h}\|^2 = 1.98$ the factor is 0 and one step fits the example exactly. The limit depends on the size of the hidden activations: scale $\mathbf{h}$ by 10 and the safe step shrinks by 100. That is one reason the scale of activations is controlled so carefully in deep networks.
+  - title: A layer chosen by a solver
+    blocks:
+      - text: |
+          Suppose the output weights are not trained by gradient steps at all. With $W_1$ fixed and a batch of examples whose hidden outputs are the rows of a matrix $H$, the best $\mathbf{w}_2$ under a penalty $\tfrac12\lambda\|\mathbf{w}_2\|^2$ solves
+
+          $$(H^\top H + \lambda I)\,\mathbf{w}_2 = H^\top\mathbf{t}.$$
+
+          Now $\mathbf{w}_2$ is the output of a solver, and it depends on $\lambda$.
+      - question:
+          id: implicit-scalar
+          type: numeric
+          system: s2
+          concepts: [m13.implicit-differentiation-through-solvers]
+          prompt: |
+            Take the smallest case: one hidden unit and one example, with $h = 1$ and $t = 3$, so the equation is $(1 + \lambda)w = 3$. At $\lambda = 2$ the solution is $w = 1$. What is $dw/d\lambda$ there? Answer to 4 decimal places.
+          answer: "-0.3333"
+          explanation: |
+            Differentiate the equation: $w + (1 + \lambda)\,w' = 0$, so $w' = -w/(1 + \lambda) = -1/3$. In general $d\mathbf{w}_2/d\lambda = -(H^\top H + \lambda I)^{-1}\mathbf{w}_2$: one more solve with the matrix that was already used to find $\mathbf{w}_2$. Here the formula $w = 3/(1 + \lambda)$ could have been differentiated directly, giving $-3/(1 + \lambda)^2 = -1/3$. The point of differentiating the equation is that it works equally when there is no formula.
+      - question:
+          id: logdet
+          type: numeric
+          system: s2
+          concepts: [m13.trace-identities-determinant-and-inverse-derivatives]
+          prompt: |
+            Criteria for choosing $\lambda$ often contain the term $\log\det(H^\top H + \lambda I)$. Suppose $H^\top H$ has the eigenvalues 1 and 3. What is the derivative of that term with respect to $\lambda$ at $\lambda = 1$?
+          answer: "0.75"
+          explanation: |
+            $d\log\det M = \operatorname{tr}(M^{-1}dM)$, and here $dM = I\,d\lambda$, so the derivative is $\operatorname{tr}\big((H^\top H + \lambda I)^{-1}\big)$. The eigenvalues of $H^\top H + \lambda I$ are $1 + 1 = 2$ and $3 + 1 = 4$, those of its inverse are $\tfrac12$ and $\tfrac14$, and the trace is their sum, $0.75$. As a check, $\log\det M = \log(1 + \lambda) + \log(3 + \lambda)$, with derivative $\tfrac12 + \tfrac14$.
+      - question:
+          id: at-scale
+          type: choice
+          system: s2
+          concepts: [m13.implicit-differentiation-through-solvers, m13.hessian-vector-products, m13.reverse-mode-differentiation-and-its-cost]
+          prompt: |
+            For a large model the weights come from a long training run, not a linear solve, and the gradient of a validation loss with respect to a hyperparameter is wanted. Which plan follows the cluster?
+          options:
+            - 'Nudge the hyperparameter and retrain, once per hyperparameter.'
+            - 'Record every step of training and sweep back through all of them.'
+            - 'Treat the trained weights as the solution of "training gradient = 0". The adjoint equation then has the Hessian of the training loss as its matrix. Solve it approximately by an iterative method that uses only Hessian-vector products, each costing a few gradients, and store nothing of the training run.'
+            - 'It cannot be done, because the Hessian is too large to form.'
+          answer: 2
+          explanation: |
+            This is the scalar calculation above with every piece scaled up. The equation $(H^\top H + \lambda I)\mathbf{w} = H^\top\mathbf{t}$ becomes "the gradient of the training loss is zero". The matrix of the adjoint solve becomes the Hessian of the training loss. The solve becomes conjugate gradients on Hessian-vector products. The second option is possible in principle, and its memory grows with the length of training. The first is what a grid search does. Nothing in the third plan needs the Hessian, the training history, or more than a few vectors the size of the model.
+review: |
+  One small network, and the whole cluster:
+
+  - The gradient $r\mathbf{h}$ with respect to the output weights was [[m13.derivatives-with-respect-to-vectors]].
+  - The gradient $\boldsymbol\delta\mathbf{x}^\top$, with the shape of $W_1$, was [[m13.derivatives-with-respect-to-matrices]].
+  - Getting it from $dL = r\,\mathbf{w}_2^\top D\,dW_1\,\mathbf{x}$ and a trace was [[m13.the-method-of-differentials]].
+  - The derivative of the log-determinant as a trace of an inverse was [[m13.trace-identities-determinant-and-inverse-derivatives]].
+  - $D(W_1\mathbf{v})$ and $W_1^\top(D\mathbf{u})$, and the test that they are transposes, were [[m13.jacobian-vector-and-vector-jacobian-products]].
+  - The three paths from $x_1$ to the loss, and the recursions that replace them, were [[m13.computational-graphs]].
+  - One backward sweep for all nine parameters, keeping only $\mathbf{h}$ and $r$, was [[m13.reverse-mode-differentiation-and-its-cost]].
+  - Running the network on $\mathbf{x} + \mathbf{v}\varepsilon$ and reading the tangent of the output was [[m13.forward-mode-and-dual-numbers]].
+  - $(\mathbf{h} \cdot \mathbf{v})\mathbf{h}$, the eigenvalue $\|\mathbf{h}\|^2$ and the step limit were [[m13.hessian-vector-products]].
+  - Differentiating $(H^\top H + \lambda I)\mathbf{w}_2 = H^\top\mathbf{t}$ and not the solver was [[m13.implicit-differentiation-through-solvers]].
+  - The backward rules of the output layer, the activation and the first layer, called in reverse, were [[m13.gradients-of-common-neural-network-layers]].
+
+  Two things here go forward. The first is the habit of the middle stage: no gradient is trusted until a second method has agreed with it, whether a product from the other side, a dual number, or a difference along one direction. The second is the shape of the backward pass itself, a short rule per layer called in reverse order with a few stored values. You have now written that by hand for a network of nine parameters. A library does exactly the same for a network of billions, recording the graph as the forward pass runs and storing one backward rule for each operation, and the next cluster of engineering puts that library in your hands.
