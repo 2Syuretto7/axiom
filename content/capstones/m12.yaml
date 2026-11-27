@@ -1,0 +1,435 @@
+cluster: M12
+title: An arm that reaches
+minutes: 100
+claim: You will have taken a robot arm with two joints, written down the matrix that says how its hand moves when its joints turn, found the poses in which that matrix fails, measured the region the hand can reach by an integral, and programmed the arm to put its hand on a target.
+brief: |
+  This cluster was about functions with several inputs, and for most of it the function was a loss with one output. The last lessons let the output be a vector as well. This project is about one such function that you can picture with your own arm.
+
+  **The project.** A robot arm lies flat on a table. Its upper arm is 2 units long and turns about a fixed shoulder at the origin. Its forearm is 1 unit long and turns about the elbow. Two angles say everything about its pose: $\theta_1$, the angle of the upper arm from the $x$-axis, and $\theta_2$, the angle of the forearm **from the line of the upper arm**. Both are in radians and both are counted anticlockwise.
+
+  The elbow is at $(2\cos\theta_1,\ 2\sin\theta_1)$. The forearm points at the angle $\theta_1 + \theta_2$ from the $x$-axis, so the hand is at
+
+  $$\mathbf{p}(\theta_1, \theta_2) = \bigl( 2\cos\theta_1 + \cos(\theta_1 + \theta_2),\ \ 2\sin\theta_1 + \sin(\theta_1 + \theta_2) \bigr).$$
+
+  That is a function from $\mathbb{R}^2$ to $\mathbb{R}^2$: two angles in, two coordinates out. Going from the angles to the hand is easy, as the starter shows. The useful problem is the other way round: **given a place on the table, which angles put the hand there?** Nobody solves that with a formula on a real robot. They solve it with the Jacobian.
+
+  Nothing here is new. Keep your results as you go, because later stages use earlier ones.
+starter: |
+  # Scratch space for the arm.
+  import numpy as np
+
+
+  def hand(theta):
+      a, b = theta[0], theta[0] + theta[1]
+      return np.array([2 * np.cos(a) + np.cos(b), 2 * np.sin(a) + np.sin(b)])
+
+
+  print(hand(np.array([0.0, np.pi / 2])))
+  print(hand(np.array([np.pi / 2, -np.pi / 2])))
+stages:
+  - title: Two angles in, two coordinates out
+    blocks:
+      - text: |
+          Run the starter. With $\theta_1 = 0$ and $\theta_2 = \frac{\pi}{2}$ the upper arm lies along the $x$-axis and the forearm points straight up from the elbow, so the hand is at $(2, 1)$. That pose is the one this project keeps coming back to. Call it the **home pose**.
+      - question:
+          id: second-pose
+          type: numeric
+          system: s1
+          concepts: [m12.functions-of-several-variables]
+          prompt: The second line of the starter uses $\theta_1 = \frac{\pi}{2}$ and $\theta_2 = -\frac{\pi}{2}$. What is the $y$-coordinate of the hand?
+          answer: "2"
+          tolerance: "0.001"
+          explanation: |
+            The upper arm points straight up, so the elbow is at $(0, 2)$. The forearm is turned a quarter turn clockwise from that, so it points along the $x$-axis, at the angle $\theta_1 + \theta_2 = 0$. The hand is at $(0 + 1,\ 2 + 0) = (1, 2)$.
+      - question:
+          id: shoulder-partial
+          type: choice
+          system: s2
+          concepts: [m12.partial-derivatives, m12.functions-of-several-variables]
+          prompt: Write the hand as $(x, y)$. Hold the elbow angle $\theta_2$ fixed and turn only the shoulder. Which pair is $\left( \dfrac{\partial x}{\partial \theta_1},\ \dfrac{\partial y}{\partial \theta_1} \right)$?
+          options:
+            - '$(-y,\ x)$'
+            - '$(x,\ y)$'
+            - '$(-\sin\theta_1,\ \cos\theta_1)$'
+            - '$(-2\sin\theta_1,\ 2\cos\theta_1)$'
+          answer: 0
+          explanation: |
+            With $\theta_2$ treated as a constant, $\dfrac{\partial x}{\partial \theta_1} = -2\sin\theta_1 - \sin(\theta_1 + \theta_2)$, which is $-y$, and $\dfrac{\partial y}{\partial \theta_1} = 2\cos\theta_1 + \cos(\theta_1 + \theta_2)$, which is $x$. The vector $(-y, x)$ is the hand's position turned a quarter turn. That is as it should be: with the elbow locked, the whole arm is one rigid rod turning about the shoulder, and the hand moves round a circle, at right angles to the line from the shoulder. The last option forgets that $\theta_1$ also appears inside $\theta_1 + \theta_2$: turning the shoulder carries the forearm round with it.
+  - title: The arm, zoomed in
+    blocks:
+      - text: |
+          Turning only the elbow is simpler, since $\theta_2$ appears in one term of each coordinate: $\dfrac{\partial x}{\partial \theta_2} = -\sin(\theta_1 + \theta_2)$ and $\dfrac{\partial y}{\partial \theta_2} = \cos(\theta_1 + \theta_2)$.
+
+          Those four partial derivatives are the Jacobian of $\mathbf{p}$. Its first column says what the shoulder does to the hand and its second column says what the elbow does:
+
+          $$J(\theta_1, \theta_2) = \begin{pmatrix} -2\sin\theta_1 - \sin(\theta_1 + \theta_2) & -\sin(\theta_1 + \theta_2) \\ 2\cos\theta_1 + \cos(\theta_1 + \theta_2) & \cos(\theta_1 + \theta_2) \end{pmatrix}.$$
+      - question:
+          id: jacobian
+          type: code
+          mode: write
+          system: s2
+          concepts: [m12.jacobian, m12.partial-derivatives]
+          prompt: |
+            Write `jacobian(theta)`. `theta` is an array holding the two angles. Return the 2 by 2 array $J$ above: row 0 for $x$, row 1 for $y$, column 0 for the shoulder, column 1 for the elbow.
+          starter: |
+            import numpy as np
+
+
+            def hand(theta):
+                a, b = theta[0], theta[0] + theta[1]
+                return np.array([2 * np.cos(a) + np.cos(b), 2 * np.sin(a) + np.sin(b)])
+
+
+            def jacobian(theta):
+                return np.zeros((2, 2))
+          solution: |
+            import numpy as np
+
+
+            def hand(theta):
+                a, b = theta[0], theta[0] + theta[1]
+                return np.array([2 * np.cos(a) + np.cos(b), 2 * np.sin(a) + np.sin(b)])
+
+
+            def jacobian(theta):
+                a, b = theta[0], theta[0] + theta[1]
+                return np.array([
+                    [-2 * np.sin(a) - np.sin(b), -np.sin(b)],
+                    [2 * np.cos(a) + np.cos(b), np.cos(b)],
+                ])
+          tests: |
+            import numpy as _np
+
+            def _hand(t):
+                return _np.array([2 * _np.cos(t[0]) + _np.cos(t[0] + t[1]), 2 * _np.sin(t[0]) + _np.sin(t[0] + t[1])])
+
+            def _numeric(t):
+                h = 1e-6
+                cols = [(_hand(t + h * e) - _hand(t - h * e)) / (2 * h) for e in _np.eye(2)]
+                return _np.stack(cols, axis=1)
+
+            _J = _np.asarray(jacobian(_np.array([0.0, _np.pi / 2])))
+            assert _J.shape == (2, 2), "jacobian should return a 2 by 2 array"
+            assert _np.allclose(_J, [[-1, -1], [2, 0]], atol=1e-9), "at the home pose the Jacobian is [[-1, -1], [2, 0]]"
+            for _t in [_np.array([0.4, 1.1]), _np.array([-1.3, 0.6]), _np.array([2.0, -2.5])]:
+                _got = _np.asarray(jacobian(_t))
+                assert _np.allclose(_got, _numeric(_t), atol=1e-6), "the Jacobian does not match the measured change in the hand: check that turning the shoulder also turns the forearm, and that rows are outputs and columns are inputs"
+          wrong:
+            - |
+                import numpy as np
+
+
+                def jacobian(theta):
+                    a, b = theta[0], theta[0] + theta[1]
+                    return np.array([
+                        [-2 * np.sin(a) - np.sin(b), 2 * np.cos(a) + np.cos(b)],
+                        [-np.sin(b), np.cos(b)],
+                    ])
+            - |
+                import numpy as np
+
+
+                def jacobian(theta):
+                    a, b = theta[0], theta[0] + theta[1]
+                    return np.array([
+                        [-2 * np.sin(a), -np.sin(b)],
+                        [2 * np.cos(a), np.cos(b)],
+                    ])
+            - |
+                import numpy as np
+
+
+                def jacobian(theta):
+                    a, b = theta[0], theta[1]
+                    return np.array([
+                        [-2 * np.sin(a) - np.sin(b), -np.sin(b)],
+                        [2 * np.cos(a) + np.cos(b), np.cos(b)],
+                    ])
+            - |
+                import numpy as np
+
+
+                def jacobian(theta):
+                    a, b = theta[0], theta[0] + theta[1]
+                    return np.array([
+                        [-np.sin(b), -2 * np.sin(a) - np.sin(b)],
+                        [np.cos(b), 2 * np.cos(a) + np.cos(b)],
+                    ])
+          explanation: |
+            Each column is one partial derivative of the whole output vector. The first has two terms in each entry because $\theta_1$ appears twice in each coordinate, once for the upper arm and once inside the forearm's angle. The tests compare your matrix with one measured by moving each joint a millionth of a radian each way, which is how to check any Jacobian you have worked out by hand.
+      - text: |
+          At the home pose, $J = \begin{pmatrix} -1 & -1 \\ 2 & 0 \end{pmatrix}$. Read the columns. Turning the shoulder moves the hand in the direction $(-1, 2)$, which is $(-y, x)$ for the hand at $(2, 1)$. Turning the elbow moves it in the direction $(-1, 0)$, straight to the left, since the forearm is pointing straight up.
+      - question:
+          id: small-move
+          type: numeric
+          system: s2
+          concepts: [m12.total-derivative-as-best-linear-approximation, m12.jacobian]
+          prompt: From the home pose, the shoulder turns by $+0.1$ radian and the elbow by $-0.1$ radian. By the linear approximation, how far does the hand move in the $y$ direction?
+          answer: "0.2"
+          tolerance: "0.001"
+          explanation: |
+            The linear approximation is $\Delta\mathbf{p} \approx J\,\Delta\boldsymbol{\theta}$. With $\Delta\boldsymbol{\theta} = (0.1, -0.1)$ that is $\bigl( -1 \times 0.1 + (-1) \times (-0.1),\ \ 2 \times 0.1 + 0 \times (-0.1) \bigr) = (0, 0.2)$. The two joints cancel sideways and the hand goes straight up. The true movement is $(-0.0100, 0.1997)$: the approximation is out by about a hundredth, which is of the order of the square of the step, as an error of a linear approximation should be.
+  - title: Where the arm gets stuck
+    blocks:
+      - text: |
+          The determinant of $J$ says how the arm scales areas: a small square of joint angles is sent to a small parallelogram of hand positions, and the determinant is the ratio of the two areas. Work it out and the angle sum formula collapses it:
+
+          $$\det J = 2\cos\theta_1 \sin(\theta_1 + \theta_2) - 2\sin\theta_1\cos(\theta_1 + \theta_2) = 2\sin\theta_2.$$
+
+          The shoulder angle has dropped out. That is no surprise: turning the shoulder turns the whole picture rigidly, and a rotation does not change areas.
+      - question:
+          id: det-thirty
+          type: numeric
+          system: s1
+          concepts: [m12.jacobian]
+          prompt: What is $\det J$ when the elbow is bent at $\theta_2 = \frac{\pi}{6}$, which is 30°?
+          answer: "1"
+          tolerance: "0.001"
+          explanation: |
+            $2\sin\frac{\pi}{6} = 2 \times \frac12 = 1$. In that pose a small patch of joint angles is sent to a patch of the table of the same area.
+      - question:
+          id: straight-arm
+          type: choice
+          system: s2
+          concepts: [m12.inverse-and-implicit-function-theorems, m12.jacobian]
+          prompt: The arm is stretched out straight, with $\theta_2 = 0$, so that the hand is 3 units from the shoulder. Which statement is true?
+          options:
+            - "$J$ has no inverse there. Both of its columns are at right angles to the arm, so to first order no small turn of the joints moves the hand along the line of the arm, and the inverse function theorem promises nothing."
+            - "$J$ has an inverse there, since the hand can still be moved by either joint, so nearby targets are reached by nearby poses."
+            - "$J$ is the zero matrix there, so the hand cannot move at all."
+            - "$J$ has no inverse there, which proves that no target near the hand can be reached."
+          answer: 0
+          explanation: |
+            $\det J = 2\sin 0 = 0$. With the arm straight, turning the shoulder swings the hand sideways and turning the elbow also swings it sideways: the two columns are parallel, and together they span a line and not the plane. The inverse function theorem needs an invertible Jacobian, so it gives no local inverse here. The table shows why none could exist: targets just beyond the hand, further than 3 from the shoulder, are out of reach, and each target just inside is reached by two poses, with the elbow bent a little one way or the other, which merge into one as the target moves out to the circle. The last option claims too much. A failed hypothesis proves nothing either way, and targets just inside the circle can be reached. The arm folded flat, with $\theta_2 = \pi$, is stuck in the same way.
+      - text: |
+          Now use the determinant for what the last lesson of the cluster used it for. Let the shoulder go once round, $0 \le \theta_1 \le 2\pi$, and let the elbow bend one way only, $0 \le \theta_2 \le \pi$. Over that rectangle of angles $\det J$ is never negative, each reachable point of the table is reached by exactly one pose, apart from the edges, and the area the hand can reach is
+
+          $$\int_0^{2\pi}\!\!\int_0^{\pi} \lvert \det J \rvert \; d\theta_2\, d\theta_1.$$
+      - question:
+          id: reach-area
+          type: numeric
+          system: s2
+          concepts: [m12.multiple-integrals-and-change-of-variables, m12.jacobian]
+          prompt: Evaluate that integral. Give the area the hand can reach as a multiple of $\pi$, so that an area of $5\pi$ is entered as 5.
+          answer: "8"
+          tolerance: "0.01"
+          explanation: |
+            The inner integral is $\int_0^{\pi} 2\sin\theta_2\, d\theta_2 = \bigl[ -2\cos\theta_2 \bigr]_0^{\pi} = 4$. It does not depend on $\theta_1$, so the outer integral multiplies it by $2\pi$, giving $8\pi$. Check it against geometry. The hand can be anywhere from $2 - 1 = 1$ to $2 + 1 = 3$ units from the shoulder, so the reachable region is a ring between circles of radius 1 and 3, of area $9\pi - \pi = 8\pi$. The change of variables formula has measured a region of the table by integrating over the angles, with the Jacobian determinant supplying the area of each cell.
+  - title: Reaching
+    blocks:
+      - text: |
+          Now the real problem. A target $\mathbf{t}$ is given, and the angles are wanted. The equation $\mathbf{p}(\boldsymbol{\theta}) = \mathbf{t}$ is two equations in two unknowns, with sines and cosines in them.
+
+          Replace the arm by its linear approximation at the present pose. If the joints change by $\Delta\boldsymbol{\theta}$, the hand goes to about $\mathbf{p}(\boldsymbol{\theta}) + J\,\Delta\boldsymbol{\theta}$. Ask for that to equal $\mathbf{t}$:
+
+          $$J\,\Delta\boldsymbol{\theta} = \mathbf{t} - \mathbf{p}(\boldsymbol{\theta}).$$
+
+          That is a linear system, and you know how to solve one. Solve it, change the joints by $\Delta\boldsymbol{\theta}$, and you are at a new pose, nearer the target. The approximation was not exact, so do it again from there, with the Jacobian of the new pose. This is Newton's method for a system, and it is how robot arms are driven.
+      - question:
+          id: reach
+          type: code
+          mode: write
+          system: s2
+          concepts: [m12.jacobian, m12.total-derivative-as-best-linear-approximation, m12.inverse-and-implicit-function-theorems]
+          prompt: |
+            Write `reach(target, theta, steps)`. Starting from the pose `theta`, repeat this `steps` times: solve $J\,\Delta\boldsymbol{\theta} = \mathbf{t} - \mathbf{p}(\boldsymbol{\theta})$ with the Jacobian of the **present** pose, and add $\Delta\boldsymbol{\theta}$ to the pose. Return the final pose.
+
+            `hand` and `jacobian` are given. Use `np.linalg.solve`.
+          starter: |
+            import numpy as np
+
+
+            def hand(theta):
+                a, b = theta[0], theta[0] + theta[1]
+                return np.array([2 * np.cos(a) + np.cos(b), 2 * np.sin(a) + np.sin(b)])
+
+
+            def jacobian(theta):
+                a, b = theta[0], theta[0] + theta[1]
+                return np.array([
+                    [-2 * np.sin(a) - np.sin(b), -np.sin(b)],
+                    [2 * np.cos(a) + np.cos(b), np.cos(b)],
+                ])
+
+
+            def reach(target, theta, steps):
+                return theta
+
+
+            pose = reach(np.array([1.0, 2.0]), np.array([0.0, np.pi / 2]), 8)
+            print(pose, hand(pose))
+          solution: |
+            import numpy as np
+
+
+            def hand(theta):
+                a, b = theta[0], theta[0] + theta[1]
+                return np.array([2 * np.cos(a) + np.cos(b), 2 * np.sin(a) + np.sin(b)])
+
+
+            def jacobian(theta):
+                a, b = theta[0], theta[0] + theta[1]
+                return np.array([
+                    [-2 * np.sin(a) - np.sin(b), -np.sin(b)],
+                    [2 * np.cos(a) + np.cos(b), np.cos(b)],
+                ])
+
+
+            def reach(target, theta, steps):
+                for _ in range(steps):
+                    change = np.linalg.solve(jacobian(theta), target - hand(theta))
+                    theta = theta + change
+                return theta
+
+
+            pose = reach(np.array([1.0, 2.0]), np.array([0.0, np.pi / 2]), 8)
+            print(pose, hand(pose))
+          tests: |
+            import numpy as _np
+
+            def _hand(t):
+                return _np.array([2 * _np.cos(t[0]) + _np.cos(t[0] + t[1]), 2 * _np.sin(t[0]) + _np.sin(t[0] + t[1])])
+
+            _start = _np.array([0.0, _np.pi / 2])
+            _keep = _start.copy()
+            _one = _np.asarray(reach(_np.array([1.0, 2.0]), _start, 1))
+            assert _np.allclose(_one, [0.5, _np.pi / 2 + 0.5], atol=1e-9), "one step from the home pose towards (1, 2) should give the pose (0.5, 2.0708): solve J times the change equals target minus hand, and add the change"
+            assert _np.array_equal(_start, _keep), "the starting pose was changed in place: build a new array at each step"
+            _pose = _np.asarray(reach(_np.array([1.0, 2.0]), _start, 8))
+            assert float(abs(_hand(_pose) - _np.array([1.0, 2.0])).max()) < 1e-9, "after 8 steps from the home pose the hand should be on the target (1, 2): use the Jacobian of the present pose at every step"
+            _pose = _np.asarray(reach(_np.array([0.5, -2.2]), _np.array([-1.0, 0.8]), 8))
+            assert float(abs(_hand(_pose) - _np.array([0.5, -2.2])).max()) < 1e-9, "after 8 steps from the pose (-1, 0.8) the hand should be on the target (0.5, -2.2)"
+            assert _np.allclose(_np.asarray(reach(_np.array([1.0, 2.0]), _start, 0)), _start), "with no steps the pose should be returned as it was"
+          wrong:
+            - |
+                import numpy as np
+
+
+                def hand(theta):
+                    a, b = theta[0], theta[0] + theta[1]
+                    return np.array([2 * np.cos(a) + np.cos(b), 2 * np.sin(a) + np.sin(b)])
+
+
+                def jacobian(theta):
+                    a, b = theta[0], theta[0] + theta[1]
+                    return np.array([
+                        [-2 * np.sin(a) - np.sin(b), -np.sin(b)],
+                        [2 * np.cos(a) + np.cos(b), np.cos(b)],
+                    ])
+
+
+                def reach(target, theta, steps):
+                    for _ in range(steps):
+                        change = np.linalg.solve(jacobian(theta), hand(theta) - target)
+                        theta = theta + change
+                    return theta
+            - |
+                import numpy as np
+
+
+                def hand(theta):
+                    a, b = theta[0], theta[0] + theta[1]
+                    return np.array([2 * np.cos(a) + np.cos(b), 2 * np.sin(a) + np.sin(b)])
+
+
+                def jacobian(theta):
+                    a, b = theta[0], theta[0] + theta[1]
+                    return np.array([
+                        [-2 * np.sin(a) - np.sin(b), -np.sin(b)],
+                        [2 * np.cos(a) + np.cos(b), np.cos(b)],
+                    ])
+
+
+                def reach(target, theta, steps):
+                    first = jacobian(theta)
+                    for _ in range(steps):
+                        change = np.linalg.solve(first, target - hand(theta))
+                        theta = theta + change
+                    return theta
+            - |
+                import numpy as np
+
+
+                def hand(theta):
+                    a, b = theta[0], theta[0] + theta[1]
+                    return np.array([2 * np.cos(a) + np.cos(b), 2 * np.sin(a) + np.sin(b)])
+
+
+                def jacobian(theta):
+                    a, b = theta[0], theta[0] + theta[1]
+                    return np.array([
+                        [-2 * np.sin(a) - np.sin(b), -np.sin(b)],
+                        [2 * np.cos(a) + np.cos(b), np.cos(b)],
+                    ])
+
+
+                def reach(target, theta, steps):
+                    for _ in range(steps):
+                        theta = theta + jacobian(theta).T @ (target - hand(theta))
+                    return theta
+            - |
+                import numpy as np
+
+
+                def hand(theta):
+                    a, b = theta[0], theta[0] + theta[1]
+                    return np.array([2 * np.cos(a) + np.cos(b), 2 * np.sin(a) + np.sin(b)])
+
+
+                def jacobian(theta):
+                    a, b = theta[0], theta[0] + theta[1]
+                    return np.array([
+                        [-2 * np.sin(a) - np.sin(b), -np.sin(b)],
+                        [2 * np.cos(a) + np.cos(b), np.cos(b)],
+                    ])
+
+
+                def reach(target, theta, steps):
+                    for _ in range(steps):
+                        theta += np.linalg.solve(jacobian(theta), target - hand(theta))
+                    return theta
+          explanation: |
+            Each pass replaces the arm by its best linear approximation at the present pose and solves that easier problem exactly. From the home pose, the first step lands the hand about half a unit from the target $(1, 2)$, the third within a thousandth, and the sixth as near as a float can tell: once the pose is close, each step roughly squares the error. Keeping the Jacobian of the starting pose for every step, to save work, still creeps towards the target but loses that speed, which is why the tests ask for nine correct decimal places in eight steps. The method leans on the inverse function theorem throughout. Where $\det J \ne 0$ the system has one solution and the arm has a local inverse to find. Start it with the arm perfectly straight and `np.linalg.solve` refuses, as it should.
+  - title: Downhill instead
+    blocks:
+      - text: |
+          There is a second way to reach, and it is the way everything after this cluster is trained. Measure how far the hand is from the target by one number, the squared distance
+
+          $$E(\boldsymbol{\theta}) = \lVert \mathbf{p}(\boldsymbol{\theta}) - \mathbf{t} \rVert^2,$$
+
+          and walk downhill on it. $E$ is a chain: the angles determine the hand, and the hand determines the squared distance. The outer function, $\mathbf{p} \mapsto \lVert \mathbf{p} - \mathbf{t} \rVert^2$, has gradient $2(\mathbf{p} - \mathbf{t})$ with respect to $\mathbf{p}$.
+      - question:
+          id: energy-gradient
+          type: choice
+          system: s2
+          concepts: [m12.multivariable-chain-rule, m12.gradient, m12.jacobian]
+          prompt: By the chain rule, what is the gradient of $E$ with respect to the two angles?
+          options:
+            - '$2J^{\mathsf T}(\mathbf{p} - \mathbf{t})$'
+            - '$2J(\mathbf{p} - \mathbf{t})$'
+            - '$2(\mathbf{p} - \mathbf{t})$'
+            - '$2J^{-1}(\mathbf{p} - \mathbf{t})$'
+          answer: 0
+          explanation: |
+            $\dfrac{\partial E}{\partial \theta_j}$ is a sum over the two routes by which $\theta_j$ reaches $E$, through $x$ and through $y$: $\dfrac{\partial E}{\partial x}\dfrac{\partial x}{\partial \theta_j} + \dfrac{\partial E}{\partial y}\dfrac{\partial y}{\partial \theta_j}$. That is the dot product of $2(\mathbf{p} - \mathbf{t})$ with **column** $j$ of $J$. Dotting a vector with each column of $J$ in turn is multiplying it by $J^{\mathsf T}$. So the gradient with respect to the inputs is the transpose of the Jacobian times the gradient with respect to the outputs. Remember that sentence. Carried back through a chain of many functions, it is the whole of backpropagation.
+      - question:
+          id: slope-both-joints
+          type: numeric
+          system: s2
+          concepts: [m12.directional-derivative, m12.gradient, m12.multivariable-chain-rule]
+          prompt: |
+            The arm is at the home pose, with the hand at $(2, 1)$, and the target is $(1, 2)$. Both joints start to turn anticlockwise at the same rate, so the pose moves in the direction $\mathbf{u} = \frac{1}{\sqrt2}(1, 1)$. What is the directional derivative of $E$ in that direction? Give it to two decimal places.
+          answer: "-5.66"
+          tolerance: "0.01"
+          explanation: |
+            $\mathbf{p} - \mathbf{t} = (1, -1)$ and $J^{\mathsf T} = \begin{pmatrix} -1 & 2 \\ -1 & 0 \end{pmatrix}$, so $\nabla E = 2J^{\mathsf T}(1, -1) = 2(-3, -1) = (-6, -2)$. The directional derivative is $\nabla E \cdot \mathbf{u} = \dfrac{-6 - 2}{\sqrt2} = -\dfrac{8}{\sqrt2} \approx -5.66$. It is negative, so turning both joints together brings the hand nearer the target. The steepest descent is along $-\nabla E = (6, 2)$, mostly shoulder, where the slope is $-\lVert \nabla E \rVert = -\sqrt{40} \approx -6.32$. Newton's first step from this pose was $(0.5, 0.5)$, along $\mathbf{u}$ exactly: the two methods agree that both joints should turn anticlockwise and differ about the proportions.
+review: |
+  One arm, and most of the cluster:
+
+  - The hand as a function of two angles with two outputs was [[m12.functions-of-several-variables]], and holding the elbow still while the shoulder turned was [[m12.partial-derivatives]].
+  - The four partial derivatives, arranged with a column for each joint, were the matrix of [[m12.jacobian]], and predicting a small movement of the hand as $J\,\Delta\boldsymbol{\theta}$ was [[m12.total-derivative-as-best-linear-approximation]].
+  - The straight arm, where the determinant vanishes and no local inverse exists, was the hypothesis of [[m12.inverse-and-implicit-function-theorems]] seen failing, and Newton's method was that theorem put to work where it holds.
+  - Measuring the ring the hand can reach by integrating the determinant over the angles was [[m12.multiple-integrals-and-change-of-variables]].
+  - The gradient of the squared distance, $2J^{\mathsf T}(\mathbf{p} - \mathbf{t})$, came from [[m12.multivariable-chain-rule]] and [[m12.gradient]], and its slope along a chosen turning of the joints was [[m12.directional-derivative]].
+
+  Two things here go forward. The first is the loop in `reach`: linearise, solve, step, repeat. The second is the sentence from the last stage. A gradient is carried backwards through a function by the transpose of that function's Jacobian. The next cluster builds a machine that does exactly that, through any chain of functions you care to write, with no formula worked out by hand.
