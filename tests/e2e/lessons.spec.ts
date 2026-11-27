@@ -398,6 +398,12 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   await expect(trail).toContainText("Backwards, step 5 of 5. p hands back: w receives 4 × 2 = 8 and x receives 4 × 3 = 12.");
   await expect(trail).toContainText("w: 8");
   await expect(trail).toContainText("x: 12");
+  const fit = fig("Fitting a line by least squares");
+  await expect(fit).toContainText("the line is y = 1.5x + 1.1. Its misses, each point's height minus the line's, are −0.1, 0.4, −0.1, 0.4. The sum of their squares is 0.34. The misses add up to 0.6, and weighted by x they add up to 1.4.");
+  await expect(fit).toContainText("Here they are not");
+  await press(fit, "Increase slope in tenths");
+  await expect(fit).toContainText("the line is y = 1.6x + 1.1. Its misses, each point's height minus the line's, are −0.1, 0.3, −0.3, 0.1. The sum of their squares is 0.2. The misses add up to 0, and weighted by x they add up to 0.");
+  await expect(fit).toContainText("Both sums are zero");
   await expect(page.locator(".prose-lesson img")).toHaveCount(0);
 
   // Wrong, then right. There is no hint ladder: hints come from the tutor. Fractions and words are handled by the grader.
