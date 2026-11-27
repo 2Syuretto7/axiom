@@ -1,0 +1,748 @@
+concept: m7.gram-schmidt-and-qr
+minutes: 90
+claim: You can turn any independent set of vectors into an orthonormal set with the same span by the Gram-Schmidt process, subtracting from each vector its projections onto those already found, record the numbers the process uses as an upper triangular matrix so that the original matrix factors as QR, use that factorisation to solve for coefficients by back substitution, and explain why the modified form of the process is the one to use in floating point.
+recalls: [m7.orthonormal-bases]
+uses: [m7.orthogonal-subspaces, m5.elimination-and-linear-systems, m5.matrix-multiplication-as-composition, m5.transpose, m5.rank, m5.determinant, m5.column-space-and-null-space, m4.projection-onto-a-vector, m4.linear-independence, m4.linear-combinations-and-span, m4.norms-and-distance, e5.linear-algebra-routines, e5.indexing-and-slicing, e5.arrays-dtype-and-shape, e5.axis-operations-and-reductions, e5.numerical-error-analysis-in-practice, e0.functions, e0.loops]
+leads: [m7.projection-onto-a-subspace, m7.least-squares-and-the-normal-equations, m7.conditioning, m9.householder-qr, m8.eigenvalues-and-eigenvectors]
+starter: |
+  # Scratch space. The two columns of the line fit: ones, and the x values.
+  # Dividing each by its length gives columns of length 1. Is that enough?
+  import numpy as np
+
+  X = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+  N = X / np.linalg.norm(X, axis=0)
+  print([[round(float(v), 4) for v in row] for row in N.T @ N])
+parts:
+  recall:
+    - text: |
+        [[m7.orthonormal-bases]] showed that with orthonormal columns, coordinates and projections cost a few dot products. It ended by noting that data never arrives that way. Today builds the orthonormal columns. Three quick pulls first.
+  puzzle:
+    - text: |
+        The line fit has two columns: a column of ones, and the column of $x$ values $(0, 1, 2, 3)$. They span the plane of all possible lines' heights. An orthonormal basis of that plane would make fitting a matter of two dot products.
+
+        The starter tries the obvious thing. It divides each column by its own length, which the last lesson's `normalise` did, and prints $N^\top N$.
+
+        ```
+        [[1.0, 0.8018], [0.8018, 1.0]]
+        ```
+
+        The diagonal is right: both columns now have length 1. The off-diagonal entry is 0.8018, where 0 is wanted. The two columns point in nearly the same direction, about 37 degrees apart, and shrinking them has done nothing about that.
+
+        Scaling changes a vector's length and never its direction. To make two vectors orthogonal, at least one of them has to be turned, and turning it must not take it out of the plane, or the basis would be a basis of something else.
+
+        **How can the second column be changed so that it is orthogonal to the first, using only the two columns themselves? With a third column, what must be done, and in what order?**
+  intuition:
+    - text: |
+        You already own the tool. The lesson on orthogonal subspaces split a vector into a part along a given direction and a part orthogonal to it:
+
+        $$\mathbf{a}_2 = \underbrace{(\mathbf{q}_1 \cdot \mathbf{a}_2)\,\mathbf{q}_1}_{\text{along } \mathbf{q}_1} + \underbrace{\mathbf{v}}_{\text{orthogonal to } \mathbf{q}_1},$$
+
+        with $\mathbf{q}_1$ of length 1. The second piece, $\mathbf{v} = \mathbf{a}_2 - (\mathbf{q}_1 \cdot \mathbf{a}_2)\,\mathbf{q}_1$, is what is wanted. It is orthogonal to $\mathbf{q}_1$ by construction. It is a combination of $\mathbf{a}_2$ and $\mathbf{q}_1$, so it has not left the plane. And it is not zero, as long as $\mathbf{a}_2$ was not already a multiple of $\mathbf{a}_1$.
+
+        So the recipe for two vectors is: keep the first and give it length 1. From the second, **subtract its shadow on the first**, and give what remains length 1.
+
+        For a third vector, do the same against both of the directions already found: subtract its shadow on $\mathbf{q}_1$ and its shadow on $\mathbf{q}_2$. Because $\mathbf{q}_1$ and $\mathbf{q}_2$ are orthogonal, the two shadows do not overlap, and removing both leaves something orthogonal to both. That is why the order matters: each new vector is cleaned against directions that have **already** been made orthonormal. Had they not been, the subtractions would interfere.
+
+        This is the **Gram-Schmidt process**. It walks along the columns from left to right, and at each one removes everything the earlier ones can account for and keeps what is new.
+
+        For the line fit: $\mathbf{q}_1$ is the column of ones divided by 2. The shadow of $(0, 1, 2, 3)$ on it is $(1.5, 1.5, 1.5, 1.5)$, the column's **mean** repeated. What remains is $(-1.5, -0.5, 0.5, 1.5)$: the $x$ values with their mean subtracted. Making the second column orthogonal to the column of ones is exactly centring it.
+  derivation:
+    - text: |
+        **By hand.** Take $\mathbf{a}_1 = (1, 2, 2)$, $\mathbf{a}_2 = (3, 3, 0)$, $\mathbf{a}_3 = (5, 1, 4)$.
+
+        *First column.* Its length is 3, so $\mathbf{q}_1 = \tfrac13(1, 2, 2)$. Record $r_{11} = 3$.
+
+        *Second column.* Its component along $\mathbf{q}_1$ is $r_{12} = \mathbf{q}_1 \cdot \mathbf{a}_2 = \tfrac13(3 + 6 + 0) = 3$. Subtract: $\mathbf{v} = (3, 3, 0) - 3 \cdot \tfrac13(1, 2, 2) = (2, 1, -2)$. Its length is $r_{22} = 3$, so $\mathbf{q}_2 = \tfrac13(2, 1, -2)$.
+
+        *Third column.* Along $\mathbf{q}_1$: $r_{13} = \tfrac13(5 + 2 + 8) = 5$. Along $\mathbf{q}_2$: $r_{23} = \tfrac13(10 + 1 - 8) = 1$. Subtract both: $\mathbf{v} = (5, 1, 4) - 5\mathbf{q}_1 - \mathbf{q}_2 = \tfrac43(2, -2, 1)$, of length $r_{33} = 4$, so $\mathbf{q}_3 = \tfrac13(2, -2, 1)$.
+
+        Check: $\mathbf{q}_1 \cdot \mathbf{q}_2 = \tfrac19(2 + 2 - 4) = 0$, and likewise for the other pairs.
+
+        **What was recorded.** Each step can be read backwards, as a statement of how an original column is built from the new ones:
+
+        $$\mathbf{a}_1 = 3\mathbf{q}_1, \qquad \mathbf{a}_2 = 3\mathbf{q}_1 + 3\mathbf{q}_2, \qquad \mathbf{a}_3 = 5\mathbf{q}_1 + 1\mathbf{q}_2 + 4\mathbf{q}_3.$$
+
+        Column $j$ of $A$ is a combination of the first $j$ columns of $Q$ only. Written as matrices, that is
+
+        $$A = QR, \qquad \begin{pmatrix} 1 & 3 & 5 \\ 2 & 3 & 1 \\ 2 & 0 & 4 \end{pmatrix} = \frac13\begin{pmatrix} 1 & 2 & 2 \\ 2 & 1 & -2 \\ 2 & -2 & 1 \end{pmatrix} \begin{pmatrix} 3 & 3 & 5 \\ 0 & 3 & 1 \\ 0 & 0 & 4 \end{pmatrix}.$$
+
+        $Q$ has orthonormal columns. $R$ is **upper triangular**, with zeros below the diagonal, because column $j$ never needs a later $\mathbf{q}$. Its diagonal entries are the lengths of the remainders, which are positive when the columns are independent. This is the **QR factorisation**. Since $Q^\top Q = I$, the triangular factor is also $R = Q^\top A$: entry $r_{ij}$ is $\mathbf{q}_i \cdot \mathbf{a}_j$.
+
+        **The process, in general.** For $j = 1, 2, \dots, n$:
+
+        1. Start with $\mathbf{v} = \mathbf{a}_j$.
+        2. For each earlier $i < j$: compute $r_{ij} = \mathbf{q}_i \cdot \mathbf{v}$ and subtract, $\mathbf{v} \leftarrow \mathbf{v} - r_{ij}\,\mathbf{q}_i$.
+        3. Set $r_{jj} = \lVert\mathbf{v}\rVert$ and $\mathbf{q}_j = \mathbf{v} / r_{jj}$.
+
+        If a column is a combination of the earlier ones, the subtractions consume all of it, $\mathbf{v} = \mathbf{0}$ and $r_{jj} = 0$. The process detects dependence, as elimination does with a missing pivot.
+
+        The same works for a tall matrix. For the line fit's $X$, with the column of ones first:
+
+        $$Q = \begin{pmatrix} 0.5 & -1.5/\sqrt5 \\ 0.5 & -0.5/\sqrt5 \\ 0.5 & 0.5/\sqrt5 \\ 0.5 & 1.5/\sqrt5 \end{pmatrix}, \qquad R = \begin{pmatrix} 2 & 3 \\ 0 & \sqrt5 \end{pmatrix}.$$
+    - question:
+        id: derivation-r
+        type: numeric
+        system: s2
+        prompt: |
+          Gram-Schmidt is run on $\mathbf{a}_1 = (3, 4)$ and $\mathbf{a}_2 = (5, 0)$. What is $r_{22}$, the length of what remains of $\mathbf{a}_2$ after its shadow on $\mathbf{q}_1$ is removed?
+        answer: "4"
+        explanation: |
+          $\mathbf{q}_1 = (0.6, 0.8)$ and $r_{12} = \mathbf{q}_1 \cdot \mathbf{a}_2 = 3$. The remainder is $(5, 0) - 3(0.6, 0.8) = (3.2, -2.4)$, of length $\sqrt{10.24 + 5.76} = 4$. Check with Pythagoras: $\mathbf{a}_2$ has length 5, its shadow has length 3, and what is left has length 4. The second column of $R$ is $(3, 4)$, and $r_{11} r_{22} = 5 \times 4 = 20$ is the size of the determinant of the matrix with columns $\mathbf{a}_1$ and $\mathbf{a}_2$, the area of their parallelogram.
+    - text: |
+        **What QR is for.** Suppose the columns of $A$ are independent and you want the coefficients $\mathbf{c}$ for which $A\mathbf{c}$ is the projection of $\mathbf{b}$ onto the column space. The projection is $QQ^\top\mathbf{b}$, from the last lesson. So $QR\mathbf{c} = QQ^\top\mathbf{b}$, and multiplying by $Q^\top$,
+
+        $$R\,\mathbf{c} = Q^\top\mathbf{b}.$$
+
+        A triangular system is solved from the bottom up, by **back substitution**: the last equation has one unknown, the one above it then has one unknown left, and so on. For the line fit, $Q^\top\mathbf{y} = (7, \; 8/\sqrt5)$, and
+
+        $$\begin{pmatrix} 2 & 3 \\ 0 & \sqrt5 \end{pmatrix}\begin{pmatrix} c_1 \\ c_2 \end{pmatrix} = \begin{pmatrix} 7 \\ 8/\sqrt5 \end{pmatrix} \;\Longrightarrow\; c_2 = \frac{8}{5} = 1.6, \quad c_1 = \frac{7 - 3 \times 1.6}{2} = 1.1.$$
+
+        Intercept 1.1 and slope 1.6: the line that gradient descent took two thousand steps to settle on, reached by a few dot products and two divisions.
+
+        **Classical and modified.** Step 2 above computes each coefficient from the **current** remainder, $r_{ij} = \mathbf{q}_i \cdot \mathbf{v}$. The textbook formula instead uses the original column, $r_{ij} = \mathbf{q}_i \cdot \mathbf{a}_j$. On paper they are equal, since the parts already removed from $\mathbf{v}$ were orthogonal to $\mathbf{q}_i$ anyway. In floating point they are not. The computed $\mathbf{q}$'s are only orthogonal up to rounding, and the version that keeps measuring the original column never notices the small errors it has introduced, while the version that measures the current remainder removes them as it goes. The first is **classical** Gram-Schmidt and the second is **modified** Gram-Schmidt. For columns that are nearly dependent, the classical form can return "orthonormal" vectors whose dot product is 0.5. Always use the modified form.
+
+        Library routines such as `np.linalg.qr` go further and build $Q$ from reflections, which is more stable still. Their $Q$ and $R$ may differ from Gram-Schmidt's by signs: a column of $Q$ and the matching row of $R$ can both be negated without changing the product.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the steps that modified Gram-Schmidt performs for the third column of a matrix.
+        steps:
+          - 'Copy the third column into $\mathbf{v}$.'
+          - 'Take the dot product of $\mathbf{q}_1$ with $\mathbf{v}$, record it as $r_{13}$, and subtract that multiple of $\mathbf{q}_1$ from $\mathbf{v}$.'
+          - 'Take the dot product of $\mathbf{q}_2$ with the updated $\mathbf{v}$, record it as $r_{23}$, and subtract that multiple of $\mathbf{q}_2$ from $\mathbf{v}$.'
+          - 'Record the length of $\mathbf{v}$ as $r_{33}$.'
+          - 'Divide $\mathbf{v}$ by $r_{33}$ to get $\mathbf{q}_3$.'
+        explanation: Each coefficient is measured on the remainder as it stands, after the earlier subtractions, which is what makes this the modified form. The length is taken last, after everything the earlier directions account for has been removed.
+  formal:
+    - text: |
+        **Gram-Schmidt.** Let $\mathbf{a}_1, \dots, \mathbf{a}_n \in \mathbb{R}^m$ be linearly independent. Define, for $j = 1, \dots, n$,
+
+        $$\mathbf{v}_j = \mathbf{a}_j - \sum_{i < j} (\mathbf{q}_i \cdot \mathbf{a}_j)\,\mathbf{q}_i, \qquad \mathbf{q}_j = \frac{\mathbf{v}_j}{\lVert\mathbf{v}_j\rVert}.$$
+
+        Then $\mathbf{q}_1, \dots, \mathbf{q}_n$ are orthonormal and, for every $j$, $\operatorname{span}(\mathbf{q}_1, \dots, \mathbf{q}_j) = \operatorname{span}(\mathbf{a}_1, \dots, \mathbf{a}_j)$.
+
+        **QR factorisation.** Every $A \in \mathbb{R}^{m \times n}$ with independent columns factors as $A = QR$, where $Q \in \mathbb{R}^{m \times n}$ has orthonormal columns and $R \in \mathbb{R}^{n \times n}$ is upper triangular with positive diagonal, $r_{ij} = \mathbf{q}_i \cdot \mathbf{a}_j$ for $i \le j$. With the diagonal required positive, the factorisation is unique.
+
+        **Consequences.** $R = Q^\top A$. $A^\top A = R^\top R$. For square $A$, $\lvert\det A\rvert = r_{11} r_{22} \cdots r_{nn}$. The coefficients of the projection of $\mathbf{b}$ onto the column space of $A$ solve $R\mathbf{c} = Q^\top\mathbf{b}$.
+
+        **Modified Gram-Schmidt.** The same process with $r_{ij}$ computed as $\mathbf{q}_i \cdot \mathbf{v}$, where $\mathbf{v}$ is the partly reduced column. Equal to the classical form in exact arithmetic and far more accurate in floating point.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-scaling
+        type: choice
+        system: s1
+        prompt: |
+          Why does dividing each column by its length not make the columns orthonormal?
+        options: ['It changes their span', 'Scaling changes lengths and not the angle between the columns', 'It makes them dependent', 'It does make them orthonormal']
+        answer: 1
+        explanation: The overlap between two directions is untouched by shrinking them.
+    - question:
+        id: drill-step
+        type: choice
+        system: s1
+        prompt: |
+          What does Gram-Schmidt subtract from a column before normalising it?
+        options: ['The mean of its entries', 'Its projections onto the orthonormal vectors already found', 'The previous column', 'Its length']
+        answer: 1
+        explanation: Everything the earlier directions account for is removed, leaving what is new.
+    - question:
+        id: drill-q1
+        type: choice
+        system: s1
+        prompt: |
+          Gram-Schmidt starts with $\mathbf{a}_1 = (1, 2, 2)$. What is $\mathbf{q}_1$?
+        options: ['$(1, 2, 2)$', '$\tfrac13(1, 2, 2)$', '$\tfrac19(1, 2, 2)$', '$(1, 0, 0)$']
+        answer: 1
+        explanation: The first column divided by its length, which is 3.
+    - question:
+        id: drill-r12
+        type: numeric
+        system: s1
+        prompt: |
+          $\mathbf{q}_1 = (0.6, 0.8)$ and $\mathbf{a}_2 = (5, 0)$. What is $r_{12}$?
+        answer: "3"
+        explanation: The dot product of the two.
+    - question:
+        id: drill-shape-r
+        type: choice
+        system: s1
+        prompt: |
+          In $A = QR$ from Gram-Schmidt, what shape of matrix is $R$?
+        options: ['Diagonal', 'Upper triangular', 'Lower triangular', 'Orthogonal']
+        answer: 1
+        explanation: Column j of A uses only the first j columns of Q.
+    - question:
+        id: drill-diagonal
+        type: choice
+        system: s1
+        prompt: |
+          What is the diagonal entry $r_{jj}$?
+        options: ['The length of column $j$ of $A$', 'The length of what remains of column $j$ after the earlier directions are removed', 'Always 1', 'The dot product of $\mathbf{q}_j$ with $\mathbf{q}_{j-1}$']
+        answer: 1
+        explanation: It is the size of the new direction that column j contributes.
+    - question:
+        id: drill-dependent
+        type: choice
+        system: s1
+        prompt: |
+          The third column of $A$ is the sum of the first two. What does Gram-Schmidt find at the third step?
+        options: ['$r_{33} = 1$', '$r_{33} = 0$: nothing remains', 'A negative $r_{33}$', 'An error in the first step']
+        answer: 1
+        explanation: The subtractions remove all of a column that lies in the span of the earlier ones.
+    - question:
+        id: drill-r-formula
+        type: choice
+        system: s1
+        prompt: |
+          Given $A$ and $Q$ from its QR factorisation, how can $R$ be computed?
+        options: ['$R = AQ$', '$R = Q^\top A$', '$R = A^\top Q$', '$R = Q^{-1} + A$']
+        answer: 1
+        explanation: Multiply A = QR on the left by Q transposed.
+    - question:
+        id: drill-solve
+        type: choice
+        system: s1
+        prompt: |
+          With $A = QR$, which system gives the coefficients of the projection of $\mathbf{b}$ onto the column space?
+        options: ['$Q\mathbf{c} = R\mathbf{b}$', '$R\mathbf{c} = Q^\top\mathbf{b}$', '$R^\top\mathbf{c} = \mathbf{b}$', '$Q^\top\mathbf{c} = R\mathbf{b}$']
+        answer: 1
+        explanation: A triangular system, solved from the last equation upwards.
+    - question:
+        id: drill-back
+        type: numeric
+        system: s1
+        prompt: |
+          Solve by back substitution: $2c_1 + 3c_2 = 12$ and $4c_2 = 8$. What is $c_1$?
+        answer: "3"
+        explanation: The last equation gives 2, and then 12 minus 6 is halved.
+    - question:
+        id: drill-centre
+        type: choice
+        system: s1
+        prompt: |
+          The first column is all ones. What does Gram-Schmidt's subtraction do to the second column?
+        options: ['Sorts it', 'Subtracts its mean from every entry', 'Sets it to zero', 'Squares it']
+        answer: 1
+        explanation: The projection of a column onto the ones direction is its mean, repeated.
+    - question:
+        id: drill-modified
+        type: choice
+        system: s1
+        prompt: |
+          How does modified Gram-Schmidt compute the coefficient for $\mathbf{q}_i$?
+        options: ['From the original column', 'From the remainder as it stands after the earlier subtractions', 'From the previous coefficient', 'From the length of $\mathbf{q}_i$']
+        answer: 1
+        explanation: Measuring the current remainder lets each step clean up the rounding left by the ones before.
+    - question:
+        id: predict-library
+        type: predict
+        system: s1
+        prompt: The library's QR factorisation of the line fit's two columns, with signs removed from $R$, and a check of the product. What does this show?
+        code: |
+          import numpy as np
+
+          X = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+          Q, R = np.linalg.qr(X)
+          print(Q.shape, R.shape)
+          print([[round(abs(float(v)), 4) for v in row] for row in R])
+          print(np.allclose(Q @ R, X), np.allclose(Q.T @ Q, np.eye(2)))
+        output: |
+          (4, 2) (2, 2)
+          [[2.0, 3.0], [0.0, 2.2361]]
+          True True
+        explanation: A tall Q with two orthonormal columns and a 2 by 2 upper triangular R. Up to sign, R is what Gram-Schmidt gives by hand. Its 2 is the length of the column of ones, its 3 is the shadow of the x column on that direction, and the 2.2361 is the square root of 5, the length of the centred x column.
+    - question:
+        id: predict-centre
+        type: predict
+        system: s1
+        prompt: The second Gram-Schmidt step for the line fit, done by hand. What does this show?
+        code: |
+          import numpy as np
+
+          ones = np.ones(4)
+          x = np.array([0.0, 1.0, 2.0, 3.0])
+          q1 = ones / np.linalg.norm(ones)
+          v = x - (q1 @ x) * q1
+          print(v.tolist(), float(x.mean()))
+          print(round(float(q1 @ v), 6), round(float(np.linalg.norm(v)), 4))
+        output: |
+          [-1.5, -0.5, 0.5, 1.5] 1.5
+          0.0 2.2361
+        explanation: Removing the shadow of x on the ones direction subtracts the mean, 1.5, from each entry. What remains is orthogonal to the column of ones and has length root 5.
+  work:
+    - text: Slower now. These are loops over columns, and the index bookkeeping is where they go wrong.
+    - question:
+        id: write-gram-schmidt
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `gram_schmidt(A)`. `A` is an array with independent columns, $m$ rows and $n$ columns. Return the pair `(Q, R)`: `Q` of shape $(m, n)$ with orthonormal columns and `R` of shape $(n, n)$, upper triangular, with `Q @ R` equal to `A`.
+
+          Use the modified process. For column `j`: copy it into `v`. For each `i` below `j`, set `R[i, j]` to the dot product of column `i` of `Q` with `v`, and subtract that multiple of the column from `v`. Then `R[j, j]` is the length of `v`, and column `j` of `Q` is `v` divided by it.
+        starter: |
+          import numpy as np
+
+
+          def gram_schmidt(A):
+              m, n = A.shape
+              Q = np.zeros((m, n))
+              R = np.zeros((n, n))
+              # Fill Q and R, one column at a time.
+              return Q, R
+
+
+          A = np.array([[1.0, 3.0, 5.0], [2.0, 3.0, 1.0], [2.0, 0.0, 4.0]])
+          Q, R = gram_schmidt(A)
+          print([[round(float(v), 4) for v in row] for row in R])
+        solution: |
+          import numpy as np
+
+
+          def gram_schmidt(A):
+              m, n = A.shape
+              Q = np.zeros((m, n))
+              R = np.zeros((n, n))
+              for j in range(n):
+                  v = A[:, j] * 1.0
+                  for i in range(j):
+                      R[i, j] = Q[:, i] @ v
+                      v = v - R[i, j] * Q[:, i]
+                  R[j, j] = np.linalg.norm(v)
+                  Q[:, j] = v / R[j, j]
+              return Q, R
+
+
+          A = np.array([[1.0, 3.0, 5.0], [2.0, 3.0, 1.0], [2.0, 0.0, 4.0]])
+          Q, R = gram_schmidt(A)
+          print([[round(float(v), 4) for v in row] for row in R])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[1.0, 3.0, 5.0], [2.0, 3.0, 1.0], [2.0, 0.0, 4.0]])
+          _keep = _A.copy()
+          _Q, _R = gram_schmidt(_A)
+          assert _np.array_equal(_A, _keep), "A should be left as it was: copy each column before changing it"
+          assert _np.shape(_Q) == (3, 3) and _np.shape(_R) == (3, 3), "Q should have the shape of A and R should be square"
+          assert _np.allclose(_Q.T @ _Q, _np.eye(3)), "The columns of Q should be orthonormal: subtract the projections, then divide by the length of what remains"
+          assert _np.allclose(_R, [[3.0, 3.0, 5.0], [0.0, 3.0, 1.0], [0.0, 0.0, 4.0]]), "For this matrix R is [[3, 3, 5], [0, 3, 1], [0, 0, 4]], upper triangular"
+          assert _np.allclose(_Q * 3, [[1.0, 2.0, 2.0], [2.0, 1.0, -2.0], [2.0, -2.0, 1.0]]), "For this matrix the columns of Q are a third of (1, 2, 2), (2, 1, -2) and (2, -2, 1)"
+          assert _np.allclose(_Q @ _R, _A), "Q @ R should rebuild A"
+          _X = _np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+          _Q, _R = gram_schmidt(_X)
+          assert _np.shape(_Q) == (4, 2) and _np.shape(_R) == (2, 2), "For a tall matrix Q is tall and R is small and square"
+          assert _np.allclose(_R, [[2.0, 3.0], [0.0, 5 ** 0.5]]), "For the line fit's columns R is [[2, 3], [0, root 5]]"
+          assert _np.allclose(_Q.T @ _Q, _np.eye(2)) and _np.allclose(_Q @ _R, _X), "For a tall matrix the columns of Q should be orthonormal and Q @ R should rebuild it"
+          _B = _np.random.default_rng(0).normal(size=(6, 4))
+          _Q, _R = gram_schmidt(_B)
+          assert _np.allclose(_Q.T @ _Q, _np.eye(4)) and _np.allclose(_Q @ _R, _B) and _np.allclose(_R, _np.triu(_R)) and (_np.diag(_R) > 0).all(), "For a random 6 by 4 matrix: Q orthonormal, R upper triangular with positive diagonal, and Q @ R equal to it"
+          assert output.strip() == "[[3.0, 3.0, 5.0], [0.0, 3.0, 1.0], [0.0, 0.0, 4.0]]", "The program should print [[3.0, 3.0, 5.0], [0.0, 3.0, 1.0], [0.0, 0.0, 4.0]]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def gram_schmidt(A):
+                m, n = A.shape
+                Q = np.zeros((m, n))
+                R = np.zeros((n, n))
+                for j in range(n):
+                    v = A[:, j] * 1.0
+                    for i in range(j):
+                        R[i, j] = Q[:, i] @ v
+                        v = v - R[i, j] * Q[:, i]
+                    R[j, j] = np.linalg.norm(v)
+                    Q[:, j] = v
+                return Q, R
+
+
+            print("[[3.0, 3.0, 5.0], [0.0, 3.0, 1.0], [0.0, 0.0, 4.0]]")
+          - |
+            import numpy as np
+
+
+            def gram_schmidt(A):
+                m, n = A.shape
+                Q = np.zeros((m, n))
+                R = np.zeros((n, n))
+                for j in range(n):
+                    v = A[:, j] * 1.0
+                    for i in range(j):
+                        R[j, i] = Q[:, i] @ v
+                        v = v - R[j, i] * Q[:, i]
+                    R[j, j] = np.linalg.norm(v)
+                    Q[:, j] = v / R[j, j]
+                return Q, R
+
+
+            print("[[3.0, 3.0, 5.0], [0.0, 3.0, 1.0], [0.0, 0.0, 4.0]]")
+          - |
+            import numpy as np
+
+
+            def gram_schmidt(A):
+                m, n = A.shape
+                Q = np.zeros((m, n))
+                R = np.zeros((n, n))
+                for j in range(n):
+                    v = A[:, j] * 1.0
+                    for i in range(j):
+                        R[i, j] = Q[:, i] @ v
+                    R[j, j] = np.linalg.norm(v)
+                    Q[:, j] = v / R[j, j]
+                return Q, R
+
+
+            print("[[3.0, 3.0, 5.0], [0.0, 3.0, 1.0], [0.0, 0.0, 4.0]]")
+          - |
+            import numpy as np
+
+
+            def gram_schmidt(A):
+                m, n = A.shape
+                Q = np.zeros((m, n))
+                R = np.zeros((n, n))
+                for j in range(n):
+                    v = A[:, j] * 1.0
+                    for i in range(j):
+                        R[i, j] = A[:, i] @ v
+                        v = v - R[i, j] * A[:, i]
+                    R[j, j] = np.linalg.norm(v)
+                    Q[:, j] = v / R[j, j]
+                return Q, R
+
+
+            print("[[3.0, 3.0, 5.0], [0.0, 3.0, 1.0], [0.0, 0.0, 4.0]]")
+          - |
+            import numpy as np
+
+
+            def gram_schmidt(A):
+                m, n = A.shape
+                Q = np.zeros((m, n))
+                R = np.zeros((n, n))
+                for j in range(n):
+                    v = A[:, j]
+                    for i in range(j):
+                        R[i, j] = Q[:, i] @ v
+                        v -= R[i, j] * Q[:, i]
+                    R[j, j] = np.linalg.norm(v)
+                    Q[:, j] = v / R[j, j]
+                return Q, R
+
+
+            print("[[3.0, 3.0, 5.0], [0.0, 3.0, 1.0], [0.0, 0.0, 4.0]]")
+        explanation: |
+          Two loops. The outer one takes the columns in order. The inner one removes from the current column its component along each direction already found, recording the component in `R`. What remains is measured, recorded on the diagonal, and normalised.
+
+          `A[:, j]` is a view into `A`. Multiplying by 1.0 makes a new array, so that reducing `v` does not reduce the caller's matrix. The last wrong version skips that and subtracts in place, and the function then destroys its argument while computing a correct answer, the aliasing trap of the lesson on in-place operations.
+
+          Forgetting to divide leaves orthogonal columns of the wrong length. Writing the coefficients at `R[j, i]` fills the lower triangle. Recording coefficients without subtracting changes nothing. Subtracting projections onto the **original** columns in place of the orthonormal ones is the natural mistake of the puzzle: those columns overlap one another, so their shadows overlap, and removing them all removes too much.
+    - question:
+        id: write-back-substitution
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `solve_upper(R, c)`. `R` is a square upper triangular array with a non-zero diagonal, and `c` is an array. Return the array `x` with `R @ x` equal to `c`, by back substitution: work from the last row to the first, and in row `i` subtract from `c[i]` the contributions of the entries of `x` already found, then divide by `R[i, i]`. Do not call a solver.
+
+          The program uses it, with `np.linalg.qr`, to fit the line.
+        starter: |
+          import numpy as np
+
+
+          def solve_upper(R, c):
+              n = len(c)
+              x = np.zeros(n)
+              # Fill x from the last entry to the first.
+              return x
+
+
+          X = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          Q, R = np.linalg.qr(X)
+          print([round(float(v), 4) for v in solve_upper(R, Q.T @ y)])
+        solution: |
+          import numpy as np
+
+
+          def solve_upper(R, c):
+              n = len(c)
+              x = np.zeros(n)
+              for i in range(n - 1, -1, -1):
+                  x[i] = (c[i] - R[i, i + 1:] @ x[i + 1:]) / R[i, i]
+              return x
+
+
+          X = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          Q, R = np.linalg.qr(X)
+          print([round(float(v), 4) for v in solve_upper(R, Q.T @ y)])
+        tests: |
+          import numpy as _np
+          _R = _np.array([[3.0, 3.0, 5.0], [0.0, 3.0, 1.0], [0.0, 0.0, 4.0]])
+          _c = _np.array([11.0, 4.0, 4.0])
+          _keep = _c.copy()
+          _x = solve_upper(_R, _c)
+          assert _np.array_equal(_c, _keep), "c should be left as it was"
+          assert _np.shape(_x) == (3,), "The solution has one entry for each unknown"
+          assert _np.allclose(_x, [1.0, 1.0, 1.0]), "For R = [[3, 3, 5], [0, 3, 1], [0, 0, 4]] and c = (11, 4, 4) the solution is (1, 1, 1): start from the last row"
+          assert _np.allclose(solve_upper(_np.array([[2.0, 3.0], [0.0, 4.0]]), _np.array([12.0, 8.0])), [3.0, 2.0]), "For 2 c1 + 3 c2 = 12 and 4 c2 = 8 the solution is (3, 2)"
+          assert _np.allclose(solve_upper(_np.array([[5.0]]), _np.array([10.0])), [2.0]), "A 1 by 1 system is one division"
+          _T = _np.triu(_np.random.default_rng(1).normal(size=(6, 6))) + 3 * _np.eye(6)
+          _b = _np.random.default_rng(2).normal(size=6)
+          assert _np.allclose(_T @ solve_upper(_T, _b), _b), "For a random 6 by 6 upper triangular system, R @ x should equal c"
+          _D = _np.array([[-2.0, 1.0], [0.0, -4.0]])
+          assert _np.allclose(solve_upper(_D, _np.array([0.0, 8.0])), [-1.0, -2.0]), "A negative diagonal should be handled: divide by R[i, i] as it is"
+          assert output.strip() == "[1.1, 1.6]", "The program should print [1.1, 1.6]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def solve_upper(R, c):
+                n = len(c)
+                x = np.zeros(n)
+                for i in range(n):
+                    x[i] = (c[i] - R[i, i + 1:] @ x[i + 1:]) / R[i, i]
+                return x
+
+
+            print("[1.1, 1.6]")
+          - |
+            import numpy as np
+
+
+            def solve_upper(R, c):
+                n = len(c)
+                x = np.zeros(n)
+                for i in range(n - 1, -1, -1):
+                    x[i] = c[i] / R[i, i]
+                return x
+
+
+            print("[1.1, 1.6]")
+          - |
+            import numpy as np
+
+
+            def solve_upper(R, c):
+                n = len(c)
+                x = np.zeros(n)
+                for i in range(n - 1, -1, -1):
+                    x[i] = c[i] - R[i, i + 1:] @ x[i + 1:]
+                return x
+
+
+            print("[1.1, 1.6]")
+          - |
+            import numpy as np
+
+
+            def solve_upper(R, c):
+                n = len(c)
+                x = np.zeros(n)
+                for i in range(n - 1, -1, -1):
+                    x[i] = (c[i] - R[i + 1:, i] @ x[i + 1:]) / R[i, i]
+                return x
+
+
+            print("[1.1, 1.6]")
+        explanation: |
+          Row $i$ of $R\mathbf{x} = \mathbf{c}$ reads $r_{ii}x_i + r_{i,i+1}x_{i+1} + \dots = c_i$. Going upwards from the last row, every $x$ to the right of the diagonal is already known when row $i$ is reached, so the row is solved for $x_i$ by a subtraction and a division. The slice `R[i, i + 1:]` is the part of the row to the right of the diagonal, and for the last row it is empty, so its dot product is 0.
+
+          Looping from the top uses unknowns that are still zero. Dropping the subtraction treats $R$ as diagonal. Slicing down the column, `R[i + 1:, i]`, reads the zeros below the diagonal.
+
+          With the factorisation from the library and these few lines, the line fit is finished: intercept 1.1 and slope 1.6. No learning rate, no steps, no stopping rule.
+    - question:
+        id: fix-classical
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          This `gram_schmidt` is correct on paper and passes on ordinary matrices. The matrix `A` in the program has three columns that are independent but nearly parallel. The program prints the largest deviation of $Q^\top Q$ from the identity, which should be about 0. It prints 0.5: two of the "orthonormal" columns have a dot product of one half. Fix `gram_schmidt` so that it is accurate for such matrices. One line needs to change.
+        starter: |
+          import numpy as np
+
+
+          def gram_schmidt(A):
+              m, n = A.shape
+              Q = np.zeros((m, n))
+              R = np.zeros((n, n))
+              for j in range(n):
+                  v = A[:, j] * 1.0
+                  for i in range(j):
+                      R[i, j] = Q[:, i] @ A[:, j]
+                      v = v - R[i, j] * Q[:, i]
+                  R[j, j] = np.linalg.norm(v)
+                  Q[:, j] = v / R[j, j]
+              return Q, R
+
+
+          e = 1e-8
+          A = np.array([[1.0, 1.0, 1.0], [e, 0.0, 0.0], [0.0, e, 0.0], [0.0, 0.0, e]])
+          Q, R = gram_schmidt(A)
+          print(round(float(np.abs(Q.T @ Q - np.eye(3)).max()), 6))
+        solution: |
+          import numpy as np
+
+
+          def gram_schmidt(A):
+              m, n = A.shape
+              Q = np.zeros((m, n))
+              R = np.zeros((n, n))
+              for j in range(n):
+                  v = A[:, j] * 1.0
+                  for i in range(j):
+                      R[i, j] = Q[:, i] @ v
+                      v = v - R[i, j] * Q[:, i]
+                  R[j, j] = np.linalg.norm(v)
+                  Q[:, j] = v / R[j, j]
+              return Q, R
+
+
+          e = 1e-8
+          A = np.array([[1.0, 1.0, 1.0], [e, 0.0, 0.0], [0.0, e, 0.0], [0.0, 0.0, e]])
+          Q, R = gram_schmidt(A)
+          print(round(float(np.abs(Q.T @ Q - np.eye(3)).max()), 6))
+        tests: |
+          import numpy as _np
+          _e = 1e-8
+          _A = _np.array([[1.0, 1.0, 1.0], [_e, 0.0, 0.0], [0.0, _e, 0.0], [0.0, 0.0, _e]])
+          _Q, _R = gram_schmidt(_A)
+          assert float(_np.abs(_Q.T @ _Q - _np.eye(3)).max()) < 1e-6, "For the nearly parallel columns, Q transposed times Q should be within a millionth of the identity: measure each coefficient on the remainder v, not on the original column"
+          assert _np.allclose(_Q @ _R, _A), "Q @ R should still rebuild A"
+          assert _np.allclose(_R, _np.triu(_R)), "R should still be upper triangular"
+          _B = _np.array([[1.0, 3.0, 5.0], [2.0, 3.0, 1.0], [2.0, 0.0, 4.0]])
+          _Q, _R = gram_schmidt(_B)
+          assert _np.allclose(_R, [[3.0, 3.0, 5.0], [0.0, 3.0, 1.0], [0.0, 0.0, 4.0]]) and _np.allclose(_Q.T @ _Q, _np.eye(3)), "On an ordinary matrix the result should be unchanged"
+          assert _np.array_equal(_B, _np.array([[1.0, 3.0, 5.0], [2.0, 3.0, 1.0], [2.0, 0.0, 4.0]])), "A should be left as it was"
+          _e = 1e-7
+          _C = _np.array([[1.0, 1.0, 1.0, 1.0], [_e, 0.0, 0.0, 0.0], [0.0, _e, 0.0, 0.0], [0.0, 0.0, _e, 0.0], [0.0, 0.0, 0.0, _e]])
+          _Q, _R = gram_schmidt(_C)
+          assert float(_np.abs(_Q.T @ _Q - _np.eye(4)).max()) < 1e-5, "The same should hold with four nearly parallel columns"
+          assert output.strip() == "0.0", "The program should print 0.0"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def gram_schmidt(A):
+                m, n = A.shape
+                Q = np.zeros((m, n))
+                R = np.zeros((n, n))
+                for j in range(n):
+                    v = A[:, j] * 1.0
+                    for i in range(j):
+                        R[i, j] = Q[:, i] @ A[:, j]
+                        v = v - R[i, j] * Q[:, i]
+                    R[j, j] = np.linalg.norm(v)
+                    Q[:, j] = v / R[j, j]
+                return Q, R
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def gram_schmidt(A):
+                m, n = A.shape
+                Q = np.zeros((m, n))
+                R = np.zeros((n, n))
+                for j in range(n):
+                    v = A[:, j] * 1.0
+                    for i in range(j):
+                        R[i, j] = Q[:, i] @ v
+                        v = A[:, j] - R[i, j] * Q[:, i]
+                    R[j, j] = np.linalg.norm(v)
+                    Q[:, j] = v / R[j, j]
+                return Q, R
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def gram_schmidt(A):
+                m, n = A.shape
+                Q = np.zeros((m, n))
+                R = np.zeros((n, n))
+                for j in range(n):
+                    v = A[:, j] / np.linalg.norm(A[:, j])
+                    for i in range(j):
+                        R[i, j] = Q[:, i] @ A[:, j]
+                        v = v - R[i, j] * Q[:, i]
+                    R[j, j] = np.linalg.norm(v)
+                    Q[:, j] = v / R[j, j]
+                return Q, R
+
+
+            print("0.0")
+        explanation: |
+          The line `R[i, j] = Q[:, i] @ A[:, j]` measures the **original** column against each earlier direction. That is the classical process. Changing it to `Q[:, i] @ v` measures the column **as reduced so far**, which is the modified process.
+
+          Here is why it matters for this matrix. The three columns differ from one another only in entries of size $10^{-8}$, whose squares, $10^{-16}$, are below what a 64-bit float can register next to 1. After the first subtraction the second and third remainders are tiny vectors made almost entirely of rounding. The second step produces a $\mathbf{q}_2$ that is not quite orthogonal to $\mathbf{q}_1$. The classical form, computing the third column's coefficients from the untouched original, never sees that, and the leftover contamination, tiny in absolute size, is then magnified by the division by a tiny length. The modified form measures the remainder it actually has, contamination included, and removes it.
+
+          In exact arithmetic the two lines give the same number. That is what makes this bug instructive: **the algebra cannot tell the two versions apart, and one of them is wrong by one half.** The check that revealed it is the one to run after any orthogonalisation: compute $Q^\top Q$ and compare with the identity.
+    - question:
+        id: work-triangular
+        type: choice
+        system: s2
+        prompt: |
+          Why is the matrix $R$ of a QR factorisation upper triangular?
+        options:
+          - 'Because $Q$ is orthogonal.'
+          - 'Because column $j$ of $A$ is rebuilt from $\mathbf{q}_1, \dots, \mathbf{q}_j$ alone. The later $\mathbf{q}$''s were made orthogonal to the span of the first $j$ columns, which contains $\mathbf{a}_j$, so their coefficients $r_{ij} = \mathbf{q}_i \cdot \mathbf{a}_j$ with $i > j$ are zero.'
+          - 'Because elimination was applied to it.'
+          - 'Because $A$ is square.'
+        answer: 1
+        explanation: |
+          $r_{ij} = \mathbf{q}_i \cdot \mathbf{a}_j$. For $i > j$, the vector $\mathbf{q}_i$ is orthogonal to $\mathbf{q}_1, \dots, \mathbf{q}_j$, hence to their span, which is the span of $\mathbf{a}_1, \dots, \mathbf{a}_j$, and $\mathbf{a}_j$ lies in it. The triangular shape is the algebraic trace of the order in which the columns were processed: each column may depend on earlier directions and never on later ones.
+    - question:
+        id: work-det
+        type: numeric
+        system: s2
+        prompt: |
+          A 3 by 3 matrix $A$ has the factorisation $A = QR$ with $R = \begin{pmatrix} 3 & 3 & 5 \\ 0 & 3 & 1 \\ 0 & 0 & 4 \end{pmatrix}$. What is the absolute value of $\det A$?
+        answer: "36"
+        explanation: |
+          $\det A = \det Q \cdot \det R$. An orthogonal matrix has determinant $\pm1$, and a triangular matrix has the product of its diagonal as its determinant: $3 \times 3 \times 4 = 36$. Geometrically, the volume of the box on the columns of $A$ is the length of the first column, times the height of the second above the first, times the height of the third above the plane of the first two. Those three heights are the diagonal of $R$.
+    - question:
+        id: work-mean
+        type: choice
+        system: s2
+        prompt: |
+          A data matrix has a column of ones followed by a column of measurements. Gram-Schmidt replaces the second column by the measurements minus their mean, scaled. What does that say about fitting a line to centred data?
+        options:
+          - 'Nothing. It is a coincidence of this example.'
+          - 'If the $x$ values are centred first, the column of ones and the column of $x$ are already orthogonal, so the intercept and the slope can each be found alone: the intercept is the mean of the $y$ values, and the slope is the dot product of $y$ with the centred $x$ divided by the squared length of the centred $x$.'
+          - 'Centred data cannot be fitted by a line.'
+          - 'The slope becomes zero.'
+        answer: 1
+        explanation: |
+          With orthogonal columns each coefficient is one projection, independent of the other. For the puzzle's data, the mean of $y$ is 3.5 and the centred $x$ is $(-1.5, -0.5, 0.5, 1.5)$, so the slope is $(-1.5 - 1.5 + 2 + 9)/5 = 1.6$, and the line is $y = 3.5 + 1.6(x - 1.5)$, which is $1.6x + 1.1$. This is why centring features before fitting is standard advice: it removes the overlap between each feature and the constant column, the largest overlap there usually is.
+    - question:
+        id: work-library
+        type: choice
+        system: s2
+        prompt: |
+          `np.linalg.qr` returns, for the line fit's matrix, an $R$ whose entries are $-2$, $-3$ and $-2.2361$ where Gram-Schmidt by hand gives 2, 3 and 2.2361. Is one of them wrong?
+        options:
+          - 'Yes, the library has a bug.'
+          - 'No. Negating a column of $Q$ and the matching row of $R$ leaves the product $QR$ unchanged, so the factorisation is determined only up to these signs. Gram-Schmidt fixes them by making the diagonal of $R$ positive. The library uses a different method and does not.'
+          - 'Yes, the hand calculation is wrong.'
+          - 'They are factorisations of different matrices.'
+        answer: 1
+        explanation: |
+          $(-\mathbf{q})(-r) = \mathbf{q}r$. Both pairs are valid: orthonormal columns times an upper triangular matrix, with the right product. Anything computed from the factorisation in a way that does not depend on that choice, such as the solution of $R\mathbf{c} = Q^\top\mathbf{b}$ or the projection $QQ^\top\mathbf{b}$, comes out the same. A test that compares a hand-written $R$ with the library's must compare up to sign, or compare the products.
+  connections:
+    - text: |
+        Dividing the two columns of the line fit by their lengths left an overlap of 0.8018, because scaling does not turn a vector. **Gram-Schmidt** turns it: from each column, subtract its projections onto the orthonormal directions already found, and normalise what remains. For a column of ones followed by data, that subtraction is centring.
+
+        The numbers the process uses form an upper triangular $R$, and the result is the factorisation $A = QR$: orthonormal columns times a triangular matrix. Coefficients then come from $R\mathbf{c} = Q^\top\mathbf{b}$ by **back substitution**. In floating point, measure each coefficient on the current remainder, the **modified** form, and check $Q^\top Q$ against the identity.
+
+        You can now build an orthonormal basis of any column space, and with it project onto that space. So far the projection has been seen only through such a basis, as $QQ^\top\mathbf{b}$. But it is a property of the subspace and not of the basis chosen for it, and it can be written directly in terms of the original matrix $A$. Doing so gives a single matrix that carries every vector to its nearest point in the subspace, with properties that say a great deal in two short equations. That is the next lesson: [[m7.projection-onto-a-subspace]].
