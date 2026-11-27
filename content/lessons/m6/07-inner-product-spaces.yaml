@@ -1,0 +1,682 @@
+concept: m6.inner-product-spaces
+minutes: 90
+claim: You can state the axioms of an inner product over the real and the complex numbers, recognise inner products on spaces of polynomials, matrices and weighted lists, define length and orthogonality from an inner product, compute inner products in coordinates with a Gram matrix, run Gram-Schmidt in any inner product space, and explain why every functional on a finite-dimensional inner product space is the inner product with one fixed vector.
+recalls: [m6.dual-spaces-and-the-transpose]
+uses: [m6.matrix-of-a-linear-map-and-similarity, m6.fields-and-the-vector-space-axioms, m6.subspaces-sums-and-direct-sums, m4.dot-product, m4.norms-and-distance, m4.projection-onto-a-vector, m7.orthonormal-bases, m7.gram-schmidt-and-qr, m7.projection-onto-a-subspace, m5.transpose, m1.polynomials, m1.complex-numbers, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e0.functions, e0.loops]
+leads: [m6.cauchy-schwarz-and-the-triangle-inequality, m6.adjoints-orthogonal-and-unitary-maps, m8.positive-definite-matrices-and-cholesky]
+starter: |
+  # Scratch space. Polynomials are coefficient arrays, lowest power first.
+  # G[i][j] is the integral of x^i * x^j from -1 to 1, so p @ G @ q is the
+  # integral of p * q. Gram-Schmidt on 1, x, x^2 with that as the "dot product".
+  import numpy as np
+
+  G = np.array([[2.0 / (i + j + 1) if (i + j) % 2 == 0 else 0.0 for j in range(3)] for i in range(3)])
+  basis = []
+  for v in np.eye(3):
+      for q in basis:
+          v = v - (v @ G @ q) / (q @ G @ q) * q
+      basis.append(v)
+  print([[round(float(c), 4) + 0.0 for c in q] for q in basis])
+parts:
+  recall:
+    - text: |
+        [[m6.dual-spaces-and-the-transpose]] ended by pointing out that treating a column as a functional, "take the dot product with me", quietly uses the dot product. Today asks what a dot product is, so that other spaces can have one. Three quick pulls first.
+  puzzle:
+    - text: |
+        The starter runs Gram-Schmidt on the polynomials $1, x, x^2$. Wherever the procedure asks for a dot product of two polynomials, it uses the integral of their product from $-1$ to $1$.
+
+        ```
+        [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [-0.3333, 0.0, 1.0]]
+        ```
+
+        Out come $1$, $x$ and $x^2 - \tfrac13$. The procedure left $1$ and $x$ alone and changed $x^2$, as if $1$ and $x$ were already perpendicular and $x^2$ leaned towards $1$.
+
+        Polynomials are not arrows. Nobody can hold a protractor between $1$ and $x^2$.
+
+        **What could it mean for two polynomials to be perpendicular, and what must a "dot product" satisfy for the geometry of the last cluster to keep working?**
+  intuition:
+    - text: |
+        Look back at what the orthogonality cluster used. Lengths, angles, projections, Gram-Schmidt, least squares: every one was computed from dot products, and every proof used only three properties of the dot product.
+
+        1. It does not matter which vector comes first.
+        2. It is linear in each slot.
+        3. The dot product of a vector with itself is positive, unless the vector is zero.
+
+        Nothing else. No proof looked inside at the formula $x_1y_1 + \dots + x_ny_n$.
+
+        So any rule that takes two vectors of a space, returns a number, and has those three properties will support all of that geometry. Such a rule is an **inner product**, written $\langle \mathbf{u}, \mathbf{v} \rangle$, and a vector space equipped with one is an **inner product space**.
+
+        The integral of a product is such a rule on polynomials. It is symmetric, it is linear in each slot, and $\int p^2$ is positive unless $p$ is the zero polynomial. Under it, $1$ and $x$ are perpendicular because $\int_{-1}^{1} x\,dx = 0$: the positive and negative halves cancel. And $1$ and $x^2$ are not, because $\int_{-1}^{1} x^2\,dx = \tfrac23$.
+
+        Length and angle are therefore not properties of a vector space. They are **added** by choosing an inner product, and a different choice gives a different geometry on the same vectors.
+  derivation:
+    - text: |
+        **The axioms, real case.** An **inner product** on a real vector space $V$ assigns to each pair $\mathbf{u}, \mathbf{v}$ a real number $\langle \mathbf{u}, \mathbf{v} \rangle$ such that
+
+        1. **Symmetry.** $\langle \mathbf{u}, \mathbf{v} \rangle = \langle \mathbf{v}, \mathbf{u} \rangle$.
+        2. **Linearity in the first slot.** $\langle a\mathbf{u} + b\mathbf{w}, \mathbf{v} \rangle = a\langle \mathbf{u}, \mathbf{v} \rangle + b\langle \mathbf{w}, \mathbf{v} \rangle$. With symmetry, the second slot is linear too.
+        3. **Positive definiteness.** $\langle \mathbf{v}, \mathbf{v} \rangle > 0$ for every $\mathbf{v} \ne \mathbf{0}$.
+
+        **Examples.**
+
+        - *The dot product* on $\mathbb{R}^n$.
+        - *A weighted dot product*: $\langle \mathbf{x}, \mathbf{y} \rangle = w_1x_1y_1 + \dots + w_nx_ny_n$ with all $w_i > 0$. Weighted least squares is ordinary least squares in this geometry.
+        - *Polynomials or continuous functions on $[a, b]$*: $\langle f, g \rangle = \int_a^b f(x)g(x)\,dx$.
+        - *Matrices of one shape*: $\langle A, B \rangle = \operatorname{tr}(A^\top B)$, which is the sum of the products of matching entries. It is called the Frobenius inner product.
+        - *Random quantities with mean zero*: $\langle X, Y \rangle = \mathbb{E}[XY]$, the covariance. Uncorrelated means perpendicular.
+
+        *Not an inner product:* $\langle \mathbf{x}, \mathbf{y} \rangle = x_1y_1 - x_2y_2$ on the plane. It is symmetric and linear, but $(1, 1)$ would have "length squared" zero.
+
+        **Geometry from the axioms.** Define the **norm** $\|\mathbf{v}\| = \sqrt{\langle \mathbf{v}, \mathbf{v} \rangle}$, and call $\mathbf{u}, \mathbf{v}$ **orthogonal** when $\langle \mathbf{u}, \mathbf{v} \rangle = 0$. Then Pythagoras holds: for orthogonal $\mathbf{u}, \mathbf{v}$,
+
+        $$\|\mathbf{u} + \mathbf{v}\|^2 = \langle \mathbf{u} + \mathbf{v}, \mathbf{u} + \mathbf{v} \rangle = \|\mathbf{u}\|^2 + 2\langle \mathbf{u}, \mathbf{v} \rangle + \|\mathbf{v}\|^2 = \|\mathbf{u}\|^2 + \|\mathbf{v}\|^2.$$
+
+        The projection of $\mathbf{v}$ onto $\mathbf{u}$ is $\dfrac{\langle \mathbf{v}, \mathbf{u} \rangle}{\langle \mathbf{u}, \mathbf{u} \rangle}\mathbf{u}$, Gram-Schmidt subtracts projections exactly as before, and the closest point of a subspace is the orthogonal projection onto it. The proofs are the old ones with angle brackets in place of dots.
+
+        *The puzzle, by hand.* $\langle 1, x \rangle = 0$, so $x$ is kept. For $x^2$: $\langle x^2, 1 \rangle = \tfrac23$, $\langle 1, 1 \rangle = 2$, $\langle x^2, x \rangle = 0$. So the orthogonalised vector is $x^2 - \tfrac{2/3}{2}\cdot 1 = x^2 - \tfrac13$. These are, up to scaling, the first **Legendre polynomials**.
+
+        **Coordinates: the Gram matrix.** Let $\mathbf{b}_1, \dots, \mathbf{b}_n$ be a basis and $G$ the matrix with entries $g_{ij} = \langle \mathbf{b}_i, \mathbf{b}_j \rangle$. If $\mathbf{u}, \mathbf{v}$ have coordinates $\mathbf{x}, \mathbf{y}$, bilinearity gives
+
+        $$\langle \mathbf{u}, \mathbf{v} \rangle = \sum_{i,j} x_i y_j \langle \mathbf{b}_i, \mathbf{b}_j \rangle = \mathbf{x}^\top G\,\mathbf{y}.$$
+
+        $G$ is the **Gram matrix** of the basis. It is symmetric, and $\mathbf{x}^\top G\mathbf{x} > 0$ for $\mathbf{x} \ne \mathbf{0}$. For the monomials on $[-1, 1]$, $g_{ij} = \int x^{i+j}$ is $\tfrac{2}{i + j + 1}$ when $i + j$ is even and 0 when it is odd. That is the matrix `G` of the starter.
+
+        If the basis is **orthonormal**, then $G = I$ and $\langle \mathbf{u}, \mathbf{v} \rangle = \mathbf{x}^\top\mathbf{y}$: the inner product is the plain dot product of the coordinates. Gram-Schmidt always produces such a basis. So every real inner product space of dimension $n$ is $\mathbb{R}^n$ with the dot product, seen through a well-chosen basis.
+    - question:
+        id: derivation-frobenius
+        type: numeric
+        system: s2
+        prompt: |
+          With $\langle A, B \rangle = \operatorname{tr}(A^\top B)$, what is the inner product of $A = \begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix}$ and $B = \begin{pmatrix} 0 & 1 \\ 1 & 0 \end{pmatrix}$?
+        answer: "5"
+        explanation: |
+          The trace of $A^\top B$ is the sum of products of matching entries: $1 \cdot 0 + 2 \cdot 1 + 3 \cdot 1 + 4 \cdot 0 = 5$. It is the dot product of the two matrices read as lists of four numbers. The norm it gives, the square root of the sum of the squares of the entries, is the Frobenius norm.
+    - text: |
+        **Functionals are inner products.** Fix a vector $\mathbf{a}$. Then $\mathbf{v} \mapsto \langle \mathbf{v}, \mathbf{a} \rangle$ is a linear functional. In a finite-dimensional inner product space **every** functional arises in this way, from exactly one $\mathbf{a}$.
+
+        *Why.* Take an orthonormal basis $\mathbf{e}_1, \dots, \mathbf{e}_n$ and a functional $\varphi$. Put $\mathbf{a} = \varphi(\mathbf{e}_1)\mathbf{e}_1 + \dots + \varphi(\mathbf{e}_n)\mathbf{e}_n$. Then $\langle \mathbf{e}_i, \mathbf{a} \rangle = \varphi(\mathbf{e}_i)$ for each $i$, so the two functionals agree on a basis and are equal.
+
+        This is the identification of a space with its dual that the last lesson said needed extra structure. The inner product supplies it. For instance, on $P_2$ with the integral inner product, the functional "integrate from $-1$ to $1$" is $\langle p, 1 \rangle$: it is represented by the constant polynomial 1.
+
+        The **gradient** of a function is the vector that represents its derivative, a functional, in this way. Change the inner product and the gradient vector changes, though the derivative does not.
+
+        **The complex case.** Over $\mathbb{C}$ the formula $z_1w_1 + \dots + z_nw_n$ fails: for $\mathbf{z} = (1, i)$ it gives $\langle \mathbf{z}, \mathbf{z} \rangle = 1 + i^2 = 0$. The repair is a conjugate:
+
+        $$\langle \mathbf{z}, \mathbf{w} \rangle = z_1\overline{w_1} + \dots + z_n\overline{w_n}, \qquad \langle \mathbf{z}, \mathbf{z} \rangle = |z_1|^2 + \dots + |z_n|^2 \ge 0.$$
+
+        The axioms change to match. Symmetry becomes **conjugate symmetry**, $\langle \mathbf{u}, \mathbf{v} \rangle = \overline{\langle \mathbf{v}, \mathbf{u} \rangle}$. Linearity holds in the first slot, and scalars leave the second slot conjugated: $\langle \mathbf{u}, c\mathbf{v} \rangle = \overline{c}\langle \mathbf{u}, \mathbf{v} \rangle$. Many books, and NumPy's `vdot`, conjugate the first slot instead. Either convention works if kept throughout.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the argument that every functional on a finite-dimensional inner product space is the inner product with one vector.
+        steps:
+          - 'Gram-Schmidt gives an orthonormal basis $\mathbf{e}_1, \dots, \mathbf{e}_n$.'
+          - 'Record the values $\varphi(\mathbf{e}_i)$ of the functional on that basis.'
+          - 'Let $\mathbf{a}$ be the combination of the $\mathbf{e}_i$ with those values as weights.'
+          - 'Then $\langle \mathbf{e}_i, \mathbf{a} \rangle = \varphi(\mathbf{e}_i)$ for every $i$, by orthonormality.'
+          - 'Two functionals that agree on a basis are equal, so $\varphi(\mathbf{v}) = \langle \mathbf{v}, \mathbf{a} \rangle$ for all $\mathbf{v}$.'
+        explanation: The representing vector is built from the values on an orthonormal basis, and linearity carries the agreement from the basis to the whole space.
+  formal:
+    - text: |
+        Let $V$ be a vector space over $F = \mathbb{R}$ or $\mathbb{C}$.
+
+        **Inner product.** A map $\langle \cdot, \cdot \rangle: V \times V \to F$ with $\langle \mathbf{u}, \mathbf{v} \rangle = \overline{\langle \mathbf{v}, \mathbf{u} \rangle}$, linearity in the first argument, and $\langle \mathbf{v}, \mathbf{v} \rangle > 0$ for $\mathbf{v} \ne \mathbf{0}$. Over $\mathbb{R}$ the conjugate does nothing. It follows that $\langle \mathbf{u}, a\mathbf{v} + b\mathbf{w} \rangle = \overline{a}\langle \mathbf{u}, \mathbf{v} \rangle + \overline{b}\langle \mathbf{u}, \mathbf{w} \rangle$ and $\langle \mathbf{v}, \mathbf{0} \rangle = 0$.
+
+        **Norm and orthogonality.** $\|\mathbf{v}\| = \sqrt{\langle \mathbf{v}, \mathbf{v} \rangle}$, with $\|c\mathbf{v}\| = |c|\|\mathbf{v}\|$. $\mathbf{u} \perp \mathbf{v}$ if $\langle \mathbf{u}, \mathbf{v} \rangle = 0$, and then $\|\mathbf{u} + \mathbf{v}\|^2 = \|\mathbf{u}\|^2 + \|\mathbf{v}\|^2$.
+
+        **Gram matrix.** For a basis $(\mathbf{b}_i)$, $G = (\langle \mathbf{b}_i, \mathbf{b}_j \rangle)$. Over $\mathbb{R}$, $\langle \mathbf{u}, \mathbf{v} \rangle = \mathbf{x}^\top G\mathbf{y}$, and $G$ is symmetric with $\mathbf{x}^\top G\mathbf{x} > 0$ for $\mathbf{x} \ne \mathbf{0}$. Conversely every such matrix defines an inner product on $\mathbb{R}^n$. Vectors $\mathbf{v}_1, \dots, \mathbf{v}_k$ are independent if and only if their Gram matrix is invertible.
+
+        **Orthonormal bases.** Every finite-dimensional inner product space has one. In it, $\mathbf{v} = \sum_i \langle \mathbf{v}, \mathbf{e}_i \rangle \mathbf{e}_i$, $\langle \mathbf{u}, \mathbf{v} \rangle = \sum_i x_i\overline{y_i}$ and $\|\mathbf{v}\|^2 = \sum_i |x_i|^2$.
+
+        **Orthogonal complement.** For a subspace $U$ of finite-dimensional $V$, $U^\perp = \{\mathbf{v} : \langle \mathbf{v}, \mathbf{u} \rangle = 0 \text{ for all } \mathbf{u} \in U\}$ and $V = U \oplus U^\perp$. The orthogonal projection onto $U$ gives the unique closest point of $U$.
+
+        **Riesz representation.** For each $\varphi \in V^*$ there is a unique $\mathbf{a} \in V$ with $\varphi(\mathbf{v}) = \langle \mathbf{v}, \mathbf{a} \rangle$ for all $\mathbf{v}$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-axioms
+        type: choice
+        system: s1
+        prompt: |
+          Which is **not** one of the axioms of a real inner product?
+        options: ['Symmetry', 'The inner product of two vectors is at most 1', 'Linearity in each slot', 'Positivity of $\langle \mathbf{v}, \mathbf{v} \rangle$ for nonzero $\mathbf{v}$']
+        answer: 1
+        explanation: There is no bound on its size.
+    - question:
+        id: drill-norm
+        type: choice
+        system: s1
+        prompt: |
+          The norm that comes from an inner product is
+        options: ['$\langle \mathbf{v}, \mathbf{v} \rangle$', '$\sqrt{\langle \mathbf{v}, \mathbf{v} \rangle}$', '$\langle \mathbf{v}, \mathbf{v} \rangle^2$', '$|\mathbf{v}|$ entry by entry']
+        answer: 1
+        explanation: The square root, as for the dot product.
+    - question:
+        id: drill-orthogonal
+        type: choice
+        system: s1
+        prompt: |
+          Two vectors of an inner product space are orthogonal when
+        options: ['their inner product is 1', 'their inner product is 0', 'they have the same norm', 'one is a multiple of the other']
+        answer: 1
+        explanation: That is the definition.
+    - question:
+        id: drill-one-x
+        type: numeric
+        system: s1
+        prompt: |
+          With $\langle p, q \rangle = \int_{-1}^{1} p(x)q(x)\,dx$, what is $\langle 1, x \rangle$?
+        answer: "0"
+        explanation: The integral of an odd function over a symmetric interval vanishes.
+    - question:
+        id: drill-one-one
+        type: numeric
+        system: s1
+        prompt: |
+          With the same inner product, what is $\langle 1, 1 \rangle$?
+        answer: "2"
+        explanation: The length of the interval. So the constant 1 has norm $\sqrt2$, not 1.
+    - question:
+        id: drill-weighted
+        type: numeric
+        system: s1
+        prompt: |
+          With $\langle \mathbf{x}, \mathbf{y} \rangle = x_1y_1 + 3x_2y_2$, what is the inner product of $(1, 1)$ and $(1, -1)$?
+        answer: "-2"
+        explanation: $1 - 3$. These two are perpendicular for the dot product and not for this one.
+    - question:
+        id: drill-fails
+        type: choice
+        system: s1
+        prompt: |
+          $\langle \mathbf{x}, \mathbf{y} \rangle = x_1y_1 - x_2y_2$ fails to be an inner product because
+        options: ['it is not symmetric', 'it is not positive definite', 'it is not linear', 'it is not defined']
+        answer: 1
+        explanation: $(0, 1)$ would have a negative square, and $(1, 1)$ a zero one.
+    - question:
+        id: drill-gram
+        type: choice
+        system: s1
+        prompt: |
+          Entry $(i, j)$ of the Gram matrix of a basis is
+        options: ['the $j$th coordinate of $\mathbf{b}_i$', '$\langle \mathbf{b}_i, \mathbf{b}_j \rangle$', '$\|\mathbf{b}_i\| + \|\mathbf{b}_j\|$', '1 if $i = j$ and 0 otherwise']
+        answer: 1
+        explanation: The table of all inner products of basis vectors.
+    - question:
+        id: drill-gram-formula
+        type: choice
+        system: s1
+        prompt: |
+          In coordinates $\mathbf{x}, \mathbf{y}$ with Gram matrix $G$, the real inner product is
+        options: ['$\mathbf{x}^\top\mathbf{y}$', '$\mathbf{x}^\top G\,\mathbf{y}$', '$G\mathbf{x} + G\mathbf{y}$', '$\mathbf{x}^\top G^{-1}\mathbf{y}$']
+        answer: 1
+        explanation: Expand both vectors in the basis and use linearity in each slot.
+    - question:
+        id: drill-gram-orthonormal
+        type: choice
+        system: s1
+        prompt: |
+          The Gram matrix of an orthonormal basis is
+        options: ['zero', 'the identity', 'diagonal with arbitrary entries', 'all ones']
+        answer: 1
+        explanation: Inner products are 1 on the diagonal and 0 off it.
+    - question:
+        id: drill-complex
+        type: numeric
+        system: s1
+        prompt: |
+          With the complex inner product $\langle \mathbf{z}, \mathbf{w} \rangle = \sum z_k\overline{w_k}$, what is $\langle \mathbf{z}, \mathbf{z} \rangle$ for $\mathbf{z} = (1, i)$?
+        answer: "2"
+        explanation: $1 \cdot 1 + i \cdot (-i) = 2$. Without the conjugate it would be 0.
+    - question:
+        id: drill-conj-symmetry
+        type: choice
+        system: s1
+        prompt: |
+          In a complex inner product space, $\langle \mathbf{v}, \mathbf{u} \rangle$ equals
+        options: ['$\langle \mathbf{u}, \mathbf{v} \rangle$', 'the conjugate of $\langle \mathbf{u}, \mathbf{v} \rangle$', '$-\langle \mathbf{u}, \mathbf{v} \rangle$', '$|\langle \mathbf{u}, \mathbf{v} \rangle|$']
+        answer: 1
+        explanation: Conjugate symmetry.
+    - question:
+        id: drill-riesz
+        type: choice
+        system: s1
+        prompt: |
+          On a finite-dimensional inner product space, every linear functional has the form
+        options: ['$\mathbf{v} \mapsto \|\mathbf{v}\|$', '$\mathbf{v} \mapsto \langle \mathbf{v}, \mathbf{a} \rangle$ for one fixed $\mathbf{a}$', '$\mathbf{v} \mapsto \langle \mathbf{v}, \mathbf{v} \rangle$', '$\mathbf{v} \mapsto \mathbf{a}$']
+        answer: 1
+        explanation: The inner product identifies the space with its dual.
+    - question:
+        id: predict-frobenius
+        type: predict
+        system: s1
+        prompt: Two ways of taking an inner product of matrices. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[1.0, 2.0], [3.0, 4.0]])
+          B = np.array([[0.0, 1.0], [1.0, 0.0]])
+          print(float(np.trace(A.T @ B)), float((A * B).sum()))
+          print(float(np.trace(A.T @ A)), round(float(np.linalg.norm(A)) ** 2, 4))
+        output: |
+          5.0 5.0
+          30.0 30.0
+        explanation: The trace of A transpose B is the sum of products of matching entries. The inner product of A with itself is the sum of the squares of its entries, the square of the norm that `np.linalg.norm` gives for a matrix.
+    - question:
+        id: predict-gram
+        type: predict
+        system: s1
+        prompt: The Gram matrix of 1, x, x^2 for the integral from -1 to 1. What does this show?
+        code: |
+          import numpy as np
+
+          G = np.array([[2.0 / (i + j + 1) if (i + j) % 2 == 0 else 0.0 for j in range(3)] for i in range(3)])
+          one = np.array([1.0, 0.0, 0.0])
+          x = np.array([0.0, 1.0, 0.0])
+          q = np.array([-1.0 / 3.0, 0.0, 1.0])
+          print(round(float(one @ G @ x), 4), round(float(one @ G @ q), 4) + 0.0, round(float(x @ G @ q), 4))
+          print(round(float(q @ G @ q), 4))
+        output: |
+          0.0 0.0 0.0
+          0.1778
+        explanation: The polynomials 1, x and x^2 - 1/3 are mutually orthogonal for the integral inner product. The last number is the squared norm of x^2 - 1/3, which is 8/45.
+  work:
+    - text: Slower now. In each task the only change from the orthogonality cluster is which inner product is used.
+    - question:
+        id: write-inner
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Polynomials are coefficient arrays, lowest power first. Write `gram(n)`: the $n \times n$ Gram matrix of $1, x, \dots, x^{n-1}$ for $\langle p, q \rangle = \int_{-1}^{1} p\,q$. Its entry $(i, j)$ is $\frac{2}{i + j + 1}$ if $i + j$ is even and 0 otherwise. Then write `inner(p, q)` for two coefficient arrays of the same length, and `norm(p)`.
+        starter: |
+          import numpy as np
+
+
+          def gram(n):
+              return np.eye(n)
+
+
+          def inner(p, q):
+              return 0.0
+
+
+          def norm(p):
+              return 0.0
+
+
+          x = np.array([0.0, 1.0, 0.0])
+          x2 = np.array([0.0, 0.0, 1.0])
+          one = np.array([1.0, 0.0, 0.0])
+          print(round(inner(one, x2), 4), round(inner(x, x2), 4), round(norm(x), 4))
+        solution: |
+          import numpy as np
+
+
+          def gram(n):
+              return np.array([[2.0 / (i + j + 1) if (i + j) % 2 == 0 else 0.0 for j in range(n)] for i in range(n)])
+
+
+          def inner(p, q):
+              return float(p @ gram(len(p)) @ q)
+
+
+          def norm(p):
+              return float(np.sqrt(inner(p, p)))
+
+
+          x = np.array([0.0, 1.0, 0.0])
+          x2 = np.array([0.0, 0.0, 1.0])
+          one = np.array([1.0, 0.0, 0.0])
+          print(round(inner(one, x2), 4), round(inner(x, x2), 4), round(norm(x), 4))
+        tests: |
+          import numpy as _np
+          _G = gram(3)
+          assert _np.shape(_G) == (3, 3), "gram(3) should be 3 by 3"
+          assert _np.allclose(_G, [[2.0, 0.0, 2 / 3], [0.0, 2 / 3, 0.0], [2 / 3, 0.0, 2 / 5]]), "The Gram matrix of 1, x, x^2 on [-1, 1] has rows (2, 0, 2/3), (0, 2/3, 0), (2/3, 0, 2/5)"
+          assert _np.allclose(gram(4)[1], [0.0, 2 / 3, 0.0, 2 / 5]), "Row 1 of gram(4) is (0, 2/3, 0, 2/5): the integrals of x, x^2, x^3, x^4"
+          _one = _np.array([1.0, 0.0, 0.0]); _x = _np.array([0.0, 1.0, 0.0]); _x2 = _np.array([0.0, 0.0, 1.0])
+          assert abs(inner(_one, _x2) - 2 / 3) < 1e-9, "The integral of x^2 from -1 to 1 is 2/3"
+          assert abs(inner(_x, _x2)) < 1e-9, "x and x^2 are orthogonal: the integral of x^3 over [-1, 1] is 0"
+          assert abs(inner(_np.array([1.0, 2.0]), _np.array([3.0, -1.0])) - (6.0 - 4.0 / 3.0)) < 1e-9, "For 1 + 2x and 3 - x the product is 3 + 5x - 2x^2, with integral 6 - 4/3"
+          assert abs(norm(_x) - (2 / 3) ** 0.5) < 1e-9, "The norm of x is the square root of 2/3"
+          assert abs(norm(_np.array([1.0])) - 2 ** 0.5) < 1e-9, "The constant 1 has norm sqrt(2) on [-1, 1]"
+          assert output.strip() == "0.6667 0.0 0.8165", "The program should print 0.6667 0.0 0.8165"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def gram(n):
+                return np.array([[2.0 / (i + j + 1) for j in range(n)] for i in range(n)])
+
+
+            def inner(p, q):
+                return float(p @ gram(len(p)) @ q)
+
+
+            def norm(p):
+                return float(np.sqrt(inner(p, p)))
+
+
+            print("0.6667 0.0 0.8165")
+          - |
+            import numpy as np
+
+
+            def gram(n):
+                return np.array([[1.0 / (i + j + 1) for j in range(n)] for i in range(n)])
+
+
+            def inner(p, q):
+                return float(p @ gram(len(p)) @ q)
+
+
+            def norm(p):
+                return float(np.sqrt(inner(p, p)))
+
+
+            print("0.6667 0.0 0.8165")
+          - |
+            import numpy as np
+
+
+            def gram(n):
+                return np.array([[2.0 / (i + j + 1) if (i + j) % 2 == 0 else 0.0 for j in range(n)] for i in range(n)])
+
+
+            def inner(p, q):
+                return float(p @ q)
+
+
+            def norm(p):
+                return float(np.sqrt(inner(p, p)))
+
+
+            print("0.6667 0.0 0.8165")
+          - |
+            import numpy as np
+
+
+            def gram(n):
+                return np.array([[2.0 / (i + j + 1) if (i + j) % 2 == 0 else 0.0 for j in range(n)] for i in range(n)])
+
+
+            def inner(p, q):
+                return float(p @ gram(len(p)) @ q)
+
+
+            def norm(p):
+                return inner(p, p)
+
+
+            print("0.6667 0.0 0.8165")
+        explanation: |
+          Once the Gram matrix is known, an inner product on a space of functions becomes a computation with coefficient arrays: $\mathbf{p}^\top G\mathbf{q}$. No integral is evaluated at run time.
+
+          `p @ q` alone, the third wrong version, is also an inner product on polynomials, and a perfectly legitimate one. It is the one for which the monomials are orthonormal. It is just not the integral. The second wrong version is the Gram matrix for the interval $[0, 1]$, known as the Hilbert matrix. It has no zeros, because on $[0, 1]$ no two monomials are orthogonal, and it is a famous example of a badly conditioned matrix: the monomials there point in nearly the same direction.
+    - question:
+        id: write-orthogonalise
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `orthogonalise(vectors, G)`. `vectors` is a list of independent coordinate arrays and `G` is a Gram matrix, so that the inner product of `u` and `v` is `u @ G @ v`. Return a list of arrays, orthogonal for that inner product, by Gram-Schmidt: from each vector subtract its projections onto the vectors already produced. Do not normalise.
+        starter: |
+          import numpy as np
+
+
+          def orthogonalise(vectors, G):
+              return [v * 1.0 for v in vectors]
+
+
+          G = np.array([[2.0 / (i + j + 1) if (i + j) % 2 == 0 else 0.0 for j in range(4)] for i in range(4)])
+          for q in orthogonalise(list(np.eye(4)), G):
+              print([round(float(c), 4) + 0.0 for c in q])
+        solution: |
+          import numpy as np
+
+
+          def orthogonalise(vectors, G):
+              result = []
+              for v in vectors:
+                  w = v * 1.0
+                  for q in result:
+                      w = w - (v @ G @ q) / (q @ G @ q) * q
+                  result.append(w)
+              return result
+
+
+          G = np.array([[2.0 / (i + j + 1) if (i + j) % 2 == 0 else 0.0 for j in range(4)] for i in range(4)])
+          for q in orthogonalise(list(np.eye(4)), G):
+              print([round(float(c), 4) + 0.0 for c in q])
+        tests: |
+          import numpy as _np
+          _G = _np.array([[2.0 / (i + j + 1) if (i + j) % 2 == 0 else 0.0 for j in range(4)] for i in range(4)])
+          _Q = orthogonalise(list(_np.eye(4)), _G)
+          assert len(_Q) == 4, "There should be one output vector for each input vector"
+          assert _np.allclose(_Q[2], [-1 / 3, 0.0, 1.0, 0.0]), "The third polynomial should be x^2 - 1/3"
+          assert _np.allclose(_Q[3], [0.0, -0.6, 0.0, 1.0]), "The fourth polynomial should be x^3 - (3/5) x"
+          _M = _np.random.default_rng(0).normal(size=(4, 4))
+          _H = _M.T @ _M + _np.eye(4)
+          _V = [_np.array([1.0, 1.0, 0.0, 0.0]), _np.array([1.0, 0.0, 1.0, 0.0]), _np.array([0.0, 1.0, 1.0, 1.0])]
+          _R = orthogonalise(_V, _H)
+          assert all(abs(float(_R[i] @ _H @ _R[j])) < 1e-9 for i in range(3) for j in range(i)), "For a general Gram matrix the outputs should be orthogonal in pairs: u @ G @ v = 0. Use G in every inner product, and project onto the vectors already produced"
+          assert _np.allclose(_R[0], _V[0]), "The first vector is kept as it is"
+          assert _np.linalg.matrix_rank(_np.stack(_R[:2] + _V[:2])) == 2, "The first two outputs should span the same plane as the first two inputs"
+          _I = orthogonalise([_np.array([3.0, 4.0]), _np.array([1.0, 0.0])], _np.eye(2))
+          assert _np.allclose(_I[1], [0.64, -0.48]), "With G the identity this is ordinary Gram-Schmidt: (1, 0) minus its projection onto (3, 4) is (0.64, -0.48)"
+          assert output.strip() == "[1.0, 0.0, 0.0, 0.0]\n[0.0, 1.0, 0.0, 0.0]\n[-0.3333, 0.0, 1.0, 0.0]\n[0.0, -0.6, 0.0, 1.0]", "The program should print the coefficients of 1, x, x^2 - 1/3 and x^3 - 0.6x"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def orthogonalise(vectors, G):
+                result = []
+                for v in vectors:
+                    w = v * 1.0
+                    for q in result:
+                        w = w - (v @ q) / (q @ q) * q
+                    result.append(w)
+                return result
+
+
+            print("[1.0, 0.0, 0.0, 0.0]\n[0.0, 1.0, 0.0, 0.0]\n[-0.3333, 0.0, 1.0, 0.0]\n[0.0, -0.6, 0.0, 1.0]")
+          - |
+            import numpy as np
+
+
+            def orthogonalise(vectors, G):
+                result = []
+                for k in range(len(vectors)):
+                    w = vectors[k] * 1.0
+                    for q in vectors[:k]:
+                        w = w - (vectors[k] @ G @ q) / (q @ G @ q) * q
+                    result.append(w)
+                return result
+
+
+            print("[1.0, 0.0, 0.0, 0.0]\n[0.0, 1.0, 0.0, 0.0]\n[-0.3333, 0.0, 1.0, 0.0]\n[0.0, -0.6, 0.0, 1.0]")
+          - |
+            import numpy as np
+
+
+            def orthogonalise(vectors, G):
+                result = []
+                for v in vectors:
+                    w = v * 1.0
+                    for q in result:
+                        w = w - (v @ G @ q) * q
+                    result.append(w)
+                return result
+
+
+            print("[1.0, 0.0, 0.0, 0.0]\n[0.0, 1.0, 0.0, 0.0]\n[-0.3333, 0.0, 1.0, 0.0]\n[0.0, -0.6, 0.0, 1.0]")
+          - |
+            import numpy as np
+
+
+            def orthogonalise(vectors, G):
+                result = []
+                for v in vectors:
+                    w = v * 1.0
+                    for q in result:
+                        w = w - (v @ G @ q) / (q @ G @ q) * v
+                    result.append(w)
+                return result
+
+
+            print("[1.0, 0.0, 0.0, 0.0]\n[0.0, 1.0, 0.0, 0.0]\n[-0.3333, 0.0, 1.0, 0.0]\n[0.0, -0.6, 0.0, 1.0]")
+        explanation: |
+          This is the Gram-Schmidt of the orthogonality cluster with `u @ G @ v` wherever a dot product stood. Nothing else changed, because nothing else in the procedure knew what a dot product was.
+
+          Applied to the monomials with the integral Gram matrix it produces $1,\ x,\ x^2 - \tfrac13,\ x^3 - \tfrac35x$, the Legendre polynomials up to scale. Fitting a function with these in place of the monomials solves the same least squares problem with a diagonal Gram matrix, so each coefficient is found by one inner product and none of the conditioning trouble of high powers arises. Orthogonal families of functions, such as sines and cosines for Fourier series, are orthonormal bases in exactly this sense.
+    - question:
+        id: fix-complex
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `inner(z, w)` should be the complex inner product $\sum_k z_k\overline{w_k}$ and `norm(z)` the length that comes from it. The program prints the norm of $(1, i)$, which must be $\sqrt2 \approx 1.4142$, and prints 0.0. Fix it.
+        starter: |
+          import numpy as np
+
+
+          def inner(z, w):
+              return (z * w).sum()
+
+
+          def norm(z):
+              return float(np.sqrt(inner(z, z).real))
+
+
+          print(round(norm(np.array([1.0, 1j])), 4))
+        solution: |
+          import numpy as np
+
+
+          def inner(z, w):
+              return (z * w.conjugate()).sum()
+
+
+          def norm(z):
+              return float(np.sqrt(inner(z, z).real))
+
+
+          print(round(norm(np.array([1.0, 1j])), 4))
+        tests: |
+          import numpy as _np
+          _z = _np.array([1.0, 1j])
+          _w = _np.array([1j, 2.0])
+          assert abs(inner(_z, _z) - 2.0) < 1e-9, "The inner product of (1, i) with itself is 1 + i times (-i) = 2: conjugate the second vector"
+          assert abs(inner(_z, _w) - 1j) < 1e-9, "For z = (1, i) and w = (i, 2) the inner product is 1 times (-i) plus i times 2, which is i"
+          assert abs(inner(_w, _z) - _np.conjugate(inner(_z, _w))) < 1e-9, "Swapping the two vectors should conjugate the result"
+          assert abs(inner(2j * _z, _w) - 2j * inner(_z, _w)) < 1e-9, "A scalar in the first slot should come out unchanged"
+          assert abs(norm(_z) - 2 ** 0.5) < 1e-9, "The norm of (1, i) is sqrt(2)"
+          assert abs(norm(_np.array([3.0, 4.0])) - 5.0) < 1e-9, "For real vectors the norm is the usual length: (3, 4) has norm 5"
+          assert abs(norm(_np.array([3j, 4.0])) - 5.0) < 1e-9, "The norm of (3i, 4) is 5"
+          assert output.strip() == "1.4142", "The program should print 1.4142"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def inner(z, w):
+                return (z * w).sum()
+
+
+            def norm(z):
+                return float(np.sqrt(inner(z, z).real))
+
+
+            print("1.4142")
+          - |
+            import numpy as np
+
+
+            def inner(z, w):
+                return (z.conjugate() * w).sum()
+
+
+            def norm(z):
+                return float(np.sqrt(inner(z, z).real))
+
+
+            print("1.4142")
+          - |
+            import numpy as np
+
+
+            def inner(z, w):
+                return (z.conjugate() * w.conjugate()).sum()
+
+
+            def norm(z):
+                return float(np.sqrt(inner(z, z).real))
+
+
+            print("1.4142")
+          - |
+            import numpy as np
+
+
+            def inner(z, w):
+                return (z.real * w.real).sum()
+
+
+            def norm(z):
+                return float(np.sqrt(inner(z, z).real))
+
+
+            print("1.4142")
+        explanation: |
+          Without the conjugate, $(1, i)$ has "length squared" $1 + i^2 = 0$, and a nonzero vector of length zero breaks every argument that divides by a norm. With it, each term is $z_k\overline{z_k} = |z_k|^2$, which is real and not negative.
+
+          The second wrong version conjugates the first vector instead of the second. It also gives correct norms, and it is the other common convention, the one `np.vdot` follows. The tests here reject it only because the prompt fixed the convention: linear in the first slot. The two differ by a conjugate, and mixing them in one calculation is a classic source of sign errors in the imaginary part.
+    - question:
+        id: work-riesz
+        type: choice
+        system: s2
+        prompt: |
+          On $P_2$ with $\langle p, q \rangle = \int_{-1}^{1} p\,q$, the functional $\varphi(p) = \int_{-1}^{1} p(x)\,dx$ must equal $\langle p, a \rangle$ for exactly one polynomial $a$. Which one?
+        options:
+          - '$a(x) = x$'
+          - '$a(x) = 1$, since $\langle p, 1 \rangle = \int_{-1}^{1} p(x) \cdot 1\,dx$.'
+          - '$a(x) = x^2 - \tfrac13$'
+          - 'No such polynomial exists.'
+        answer: 1
+        explanation: |
+          The inner product with the constant 1 is the integral itself. The representing vector depends on the inner product: with the inner product that makes $1, x, x^2$ orthonormal, the same functional has coefficients $(2, 0, \tfrac23)$ and is represented by $2 + \tfrac23x^2$. A functional is one object, and the vector that stands for it is a matter of which inner product is in force. For evaluation at a point the representing polynomial is less obvious, but it exists, and finding it is a small linear system with the Gram matrix.
+    - question:
+        id: work-same-space
+        type: choice
+        system: s2
+        prompt: |
+          In what sense is every real inner product space of dimension $n$ "the same as" $\mathbb{R}^n$ with the dot product?
+        options:
+          - 'Its vectors are lists of $n$ numbers.'
+          - 'Choosing an orthonormal basis, which Gram-Schmidt always provides, gives each vector coordinates, and in those coordinates the inner product of two vectors is the dot product of their coordinate lists. Lengths, angles and projections can all be computed there.'
+          - 'Its Gram matrix is always the identity, in every basis.'
+          - 'It is not the same in any sense.'
+        answer: 1
+        explanation: |
+          The coordinate map for an orthonormal basis is an isomorphism of vector spaces that also preserves inner products. So no new theorem about finite-dimensional geometry can come from changing the inner product, and what was proved about orthogonality in $\mathbb{R}^n$ holds for polynomials and matrices at once. The Gram matrix is the identity only in orthonormal bases. In other bases it records how far the basis is from orthonormal, and it is what turns up as $A^\top A$ in the normal equations.
+    - question:
+        id: work-weighted
+        type: numeric
+        system: s2
+        prompt: |
+          Use $\langle \mathbf{x}, \mathbf{y} \rangle = x_1y_1 + 4x_2y_2$ on the plane. The projection of $(1, 1)$ onto the line spanned by $(1, 0)$ is $c\,(1, 0)$, and the projection onto the line spanned by $(1, 1)$ of the vector $(5, 0)$ is $d\,(1, 1)$. What is $d$?
+        answer: "1"
+        explanation: |
+          $d = \dfrac{\langle (5, 0), (1, 1) \rangle}{\langle (1, 1), (1, 1) \rangle} = \dfrac{5}{1 + 4} = 1$. With the plain dot product it would have been $\tfrac52$. The weight 4 makes the second coordinate four times as costly, so the closest point on the line is pulled towards a smaller second coordinate. This is weighted least squares: observations with large weights are fitted more closely. (And $c = 1$, the same as for the dot product, since $(1, 0)$ has no second coordinate to weigh.)
+  connections:
+    - text: |
+        Gram-Schmidt turned $1, x, x^2$ into $1, x, x^2 - \tfrac13$ because, for the integral of a product over $[-1, 1]$, the first two are already perpendicular and the third is not. An **inner product** is any rule on pairs of vectors that is symmetric (conjugate symmetric over $\mathbb{C}$), linear in a slot and positive definite. It gives a **norm** and a notion of **orthogonality**, and with them projections, Gram-Schmidt and closest points.
+
+        In a basis the inner product is $\mathbf{x}^\top G\mathbf{y}$ with the **Gram matrix** $G$, and in an orthonormal basis it is the dot product of coordinates. Every functional is the inner product with one vector, which is how a space with an inner product is identified with its dual.
+
+        One piece of the old geometry has not been carried over. The angle between two vectors was defined through $\cos\theta = \dfrac{\mathbf{u} \cdot \mathbf{v}}{\|\mathbf{u}\|\|\mathbf{v}\|}$, and that needs the fraction to lie between $-1$ and $1$. For arrows in the plane a picture shows it. For polynomials, matrices and random quantities there is no picture, and the claim has to be proved from the three axioms alone. It is the most used inequality in mathematics: [[m6.cauchy-schwarz-and-the-triangle-inequality]].
