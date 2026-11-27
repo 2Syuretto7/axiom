@@ -1,0 +1,667 @@
+concept: m13.derivatives-with-respect-to-vectors
+minutes: 85
+claim: You can find the gradient of a function of a vector without writing out a single partial derivative, by expanding the function at a displaced point and reading off the part that is linear in the displacement, give the gradients of linear forms, quadratic forms and squared norms, give the Jacobians of a matrix product and of an elementwise function, differentiate a composition by multiplying by the transpose of a Jacobian, and use the shape of the answer as a check.
+recalls: [m12.multiple-integrals-and-change-of-variables, m8.perron-frobenius-and-power-iteration]
+uses: [m12.gradient, m12.jacobian, m12.multivariable-chain-rule, m12.total-derivative-as-best-linear-approximation, m12.hessian-and-symmetry-of-mixed-partials, m12.partial-derivatives, m8.quadratic-forms-and-the-rayleigh-quotient, m6.dual-spaces-and-the-transpose, m5.transpose, m5.matrix-vector-product, m4.dot-product, m2.the-exponential-and-e, m1.logarithms, e6.gradient-checking, e5.vectorisation, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e0.functions]
+leads: [m13.derivatives-with-respect-to-matrices, m13.the-method-of-differentials, m13.jacobian-vector-and-vector-jacobian-products]
+starter: |
+  # Scratch space. f(x) = x^T A x. Is its gradient 2 A x?
+  import numpy as np
+
+  A = np.array([[1.0, 4.0], [0.0, 3.0]])
+  x = np.array([1.0, 2.0])
+
+
+  def f(x):
+      return float(x @ A @ x)
+
+
+  h = 1e-6
+  measured = [(f(x + h * e) - f(x - h * e)) / (2 * h) for e in np.eye(2)]
+  print([round(float(v), 4) for v in measured])
+  print([round(float(v), 4) for v in 2 * A @ x])
+parts:
+  recall:
+    - text: |
+        [[m12.multiple-integrals-and-change-of-variables]] completed the calculus of several variables, and [[m8.perron-frobenius-and-power-iteration]] ended by asking for derivatives with respect to millions of numbers at once. Both threads meet here. The calculus is known. What is new is doing it on whole vectors, without ever descending to entries. Three quick pulls first.
+  puzzle:
+    - text: |
+        In one variable, the derivative of $ax^2$ is $2ax$. The natural generalisation of $ax^2$ to a vector $\mathbf{x}$ is the quadratic form $f(\mathbf{x}) = \mathbf{x}^\top A\mathbf{x}$, so the natural guess for its gradient is $2A\mathbf{x}$.
+
+        The starter tests the guess on $A = \begin{pmatrix} 1 & 4 \\ 0 & 3 \end{pmatrix}$ at $\mathbf{x} = (1, 2)$. The first line holds slopes measured by central differences, and the second holds $2A\mathbf{x}$.
+
+        ```
+        [10.0, 16.0]
+        [18.0, 12.0]
+        ```
+
+        The guess is wrong in both entries. It is not even close.
+
+        One way to find the right answer is to write $f$ out as $x_1^2 + 4x_1x_2 + 3x_2^2$ and take partial derivatives. That works for two variables. For a loss with a million variables, defined by matrices, it is hopeless.
+
+        **What is the gradient of $\mathbf{x}^\top A\mathbf{x}$, and how can it be found by a calculation with $A$ and $\mathbf{x}$ themselves, in which no entry is ever written down?**
+  intuition:
+    - text: |
+        Go back to what a gradient **is**. For a small displacement $\mathbf{h}$,
+
+        $$f(\mathbf{x} + \mathbf{h}) = f(\mathbf{x}) + \nabla f(\mathbf{x}) \cdot \mathbf{h} + \text{(something much smaller than } \mathbf{h}).$$
+
+        The gradient is the vector whose dot product with $\mathbf{h}$ gives the first-order change. That is a definition which never mentions coordinates. So it gives a method which never mentions them either:
+
+        1. Put $\mathbf{x} + \mathbf{h}$ into the formula and multiply out.
+        2. Throw away everything with two or more factors of $\mathbf{h}$.
+        3. Arrange what is left with one $\mathbf{h}$ as $(\text{some vector})^\top\mathbf{h}$.
+
+        That vector is the gradient.
+
+        Try it on the puzzle.
+
+        $$(\mathbf{x} + \mathbf{h})^\top A(\mathbf{x} + \mathbf{h}) = \mathbf{x}^\top A\mathbf{x} + \mathbf{x}^\top A\mathbf{h} + \mathbf{h}^\top A\mathbf{x} + \mathbf{h}^\top A\mathbf{h}.$$
+
+        The last term has two $\mathbf{h}$s and goes. The two middle terms each have one, but $\mathbf{h}$ sits in different places. Each is a number, and a number equals its own transpose: $\mathbf{h}^\top A\mathbf{x} = (A\mathbf{x})^\top\mathbf{h}$, and $\mathbf{x}^\top A\mathbf{h} = (A^\top\mathbf{x})^\top\mathbf{h}$. Together,
+
+        $$\nabla(\mathbf{x}^\top A\mathbf{x}) = A\mathbf{x} + A^\top\mathbf{x} = (A + A^\top)\mathbf{x}.$$
+
+        There were **two** $\mathbf{x}$s in the formula, and each contributes a term, as in the product rule. In one variable the two terms are equal and add to $2ax$. For matrices they are equal only if $A = A^\top$. The guess $2A\mathbf{x}$ quietly assumed a symmetric matrix.
+
+        Check: $A + A^\top = \begin{pmatrix} 2 & 4 \\ 4 & 6 \end{pmatrix}$, and times $(1, 2)$ gives $(10, 16)$.
+  derivation:
+    - text: |
+        **Conventions.** Vectors are columns. For $f: \mathbb{R}^n \to \mathbb{R}$ the **gradient** $\nabla f(\mathbf{x})$ is a column of the same shape as $\mathbf{x}$, defined by
+
+        $$f(\mathbf{x} + \mathbf{h}) = f(\mathbf{x}) + \nabla f(\mathbf{x})^\top\mathbf{h} + o(\|\mathbf{h}\|).$$
+
+        For $F: \mathbb{R}^n \to \mathbb{R}^m$ the **Jacobian** $J_F(\mathbf{x})$ is the $m \times n$ matrix with
+
+        $$F(\mathbf{x} + \mathbf{h}) = F(\mathbf{x}) + J_F(\mathbf{x})\mathbf{h} + o(\|\mathbf{h}\|).$$
+
+        Its rows are the gradients of the outputs, transposed. For $m = 1$ the Jacobian is the row $\nabla f^\top$. The gradient is a column, and the Jacobian of a scalar function is a row: that single transpose is the source of most confusion in this subject, and of every transpose in what follows.
+
+        **First gradients,** each by expanding and reading off.
+
+        - $f = \mathbf{a}^\top\mathbf{x}$: $\ \mathbf{a}^\top(\mathbf{x} + \mathbf{h}) = \mathbf{a}^\top\mathbf{x} + \mathbf{a}^\top\mathbf{h}$, so $\nabla f = \mathbf{a}$.
+        - $f = \mathbf{x}^\top A\mathbf{x}$: $\ \nabla f = (A + A^\top)\mathbf{x}$, and $2A\mathbf{x}$ if $A$ is symmetric.
+        - $f = \|\mathbf{x}\|^2 = \mathbf{x}^\top I\mathbf{x}$: $\ \nabla f = 2\mathbf{x}$.
+        - $f = \mathbf{b}^\top A\mathbf{x} = (A^\top\mathbf{b})^\top\mathbf{x}$: $\ \nabla f = A^\top\mathbf{b}$.
+
+        **First Jacobians.**
+
+        - $F = A\mathbf{x} + \mathbf{b}$: $\ A(\mathbf{x} + \mathbf{h}) + \mathbf{b} = F(\mathbf{x}) + A\mathbf{h}$, so $J_F = A$.
+        - $F = \phi(\mathbf{x})$, a function $\phi$ applied to each entry: output $i$ depends only on input $i$, so $J_F = \operatorname{diag}(\phi'(\mathbf{x}))$.
+
+        **The chain rule.** Let $f(\mathbf{x}) = g(F(\mathbf{x}))$ with $g$ scalar. Displace $\mathbf{x}$ by $\mathbf{h}$. Then $F$ moves by $J_F\mathbf{h}$, and $g$ changes by $\nabla g^\top(J_F\mathbf{h}) = (J_F^\top\nabla g)^\top\mathbf{h}$. So
+
+        $$\nabla f(\mathbf{x}) = J_F(\mathbf{x})^\top\,\nabla g(F(\mathbf{x})).$$
+
+        The gradient with respect to the output is turned into the gradient with respect to the input by the **transpose** of the Jacobian. Displacements go forward through $J_F$. Gradients come back through $J_F^\top$.
+
+        The most used case is $F = A\mathbf{x} + \mathbf{b}$:
+
+        $$\nabla_{\mathbf{x}}\,g(A\mathbf{x} + \mathbf{b}) = A^\top\,\nabla g(A\mathbf{x} + \mathbf{b}).$$
+
+        *Example.* $f = \tfrac12\|A\mathbf{x} - \mathbf{b}\|^2$ is $g(\mathbf{r}) = \tfrac12\|\mathbf{r}\|^2$ at $\mathbf{r} = A\mathbf{x} - \mathbf{b}$, and $\nabla g = \mathbf{r}$. So $\nabla f = A^\top(A\mathbf{x} - \mathbf{b})$, the residual pulled back by $A^\top$. Setting it to zero gives the normal equations.
+    - question:
+        id: derivation-gradient
+        type: numeric
+        system: s2
+        prompt: |
+          $f(\mathbf{x}) = \mathbf{x}^\top A\mathbf{x}$ with $A = \begin{pmatrix} 2 & 1 \\ 5 & 0 \end{pmatrix}$. What is the first entry of $\nabla f$ at $\mathbf{x} = (1, 1)$?
+        answer: "10"
+        explanation: |
+          $A + A^\top = \begin{pmatrix} 4 & 6 \\ 6 & 0 \end{pmatrix}$, and times $(1, 1)$ gives $(10, 6)$. The tempting $2A\mathbf{x} = (6, 10)$ has the same entries in the wrong places. Only the symmetric part $\tfrac12(A + A^\top)$ of a matrix affects the quadratic form, so it is the only part that can appear in the gradient.
+    - text: |
+        **More rules.**
+
+        - *Sum.* $\nabla(f + g) = \nabla f + \nabla g$.
+        - *Product of vector functions.* $\nabla\big(\mathbf{u}(\mathbf{x})^\top\mathbf{v}(\mathbf{x})\big) = J_{\mathbf{u}}^\top\mathbf{v} + J_{\mathbf{v}}^\top\mathbf{u}$. Each factor is differentiated in turn, with the other held fixed. The quadratic form is the case $\mathbf{u} = \mathbf{x}$, $\mathbf{v} = A\mathbf{x}$.
+        - *Sum of a function of each entry.* $f = \sum_i\phi(x_i)$ has $\nabla f = \phi'(\mathbf{x})$, entry by entry.
+        - *Norm.* $\|\mathbf{x}\| = \sqrt{\mathbf{x}^\top\mathbf{x}}$, so $\nabla\|\mathbf{x}\| = \mathbf{x}/\|\mathbf{x}\|$, the unit vector pointing away from the origin.
+
+        **A pattern that covers most losses.** $f(\mathbf{x}) = \sum_i\phi(\mathbf{a}_i^\top\mathbf{x})$, where $\mathbf{a}_i^\top$ are the rows of $A$. This is $g(A\mathbf{x})$ with $g(\mathbf{z}) = \sum_i\phi(z_i)$, so
+
+        $$\nabla f = A^\top\phi'(A\mathbf{x}).$$
+
+        Least squares is $\phi(z) = \tfrac12(z - b)^2$. Logistic regression is $\phi(z) = \log(1 + e^z) - yz$, whose derivative is $\sigma(z) - y$ with $\sigma(z) = 1/(1 + e^{-z})$. In every case: compute $A\mathbf{x}$, apply a scalar derivative to each entry, multiply by $A^\top$.
+
+        **Second derivatives.** The Hessian is the Jacobian of the gradient. For $\mathbf{x}^\top A\mathbf{x}$ it is $A + A^\top$. For $g(A\mathbf{x})$ it is $A^\top H_g(A\mathbf{x})A$.
+
+        **Shapes as a check.** A gradient has the shape of the variable. In $\nabla_{\mathbf{x}}\,g(A\mathbf{x})$ with $A$ of shape $m \times n$, the vector $\nabla g$ has length $m$ and the answer must have length $n$. Only $A^\top\nabla g$ fits. When $A$ is square the shapes no longer help, and that is when mistakes are made.
+
+        **And measurement as the judge.** Every formula in this cluster can be tested in three lines against central differences, as the starter did. A gradient that has not been checked should not be trusted.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the derivation of the gradient of the quadratic form x transpose A x.
+        steps:
+          - 'Replace $\mathbf{x}$ by $\mathbf{x} + \mathbf{h}$ and multiply out into four terms.'
+          - 'Discard $\mathbf{h}^\top A\mathbf{h}$, which has two factors of $\mathbf{h}$.'
+          - 'Rewrite $\mathbf{h}^\top A\mathbf{x}$ as $(A\mathbf{x})^\top\mathbf{h}$, since a number equals its transpose.'
+          - 'Rewrite $\mathbf{x}^\top A\mathbf{h}$ as $(A^\top\mathbf{x})^\top\mathbf{h}$.'
+          - 'Read off the vector multiplying $\mathbf{h}$: the gradient is $(A + A^\top)\mathbf{x}$.'
+        explanation: Expand, keep the part linear in h, bring every term to the form of a vector dotted with h.
+  formal:
+    - text: |
+        **Differentiability.** $F: \mathbb{R}^n \to \mathbb{R}^m$ is differentiable at $\mathbf{x}$ if there is a matrix $J \in \mathbb{R}^{m \times n}$ with $\|F(\mathbf{x} + \mathbf{h}) - F(\mathbf{x}) - J\mathbf{h}\| = o(\|\mathbf{h}\|)$. Then $J = J_F(\mathbf{x})$, $(J_F)_{ij} = \partial F_i/\partial x_j$.
+
+        **Gradient.** For $m = 1$: $\nabla f = J_f^\top \in \mathbb{R}^n$. It is the vector representing the linear functional $\mathbf{h} \mapsto J_f\mathbf{h}$ in the standard inner product.
+
+        **Chain rule.** $J_{G \circ F}(\mathbf{x}) = J_G(F(\mathbf{x}))\,J_F(\mathbf{x})$. For scalar $g$: $\nabla(g \circ F) = J_F^\top(\nabla g \circ F)$.
+
+        **Table.** With $\mathbf{a}, \mathbf{b}$ constant vectors and $A$ a constant matrix:
+
+        | $f(\mathbf{x})$ | $\nabla f$ | Hessian |
+        |---|---|---|
+        | $\mathbf{a}^\top\mathbf{x}$ | $\mathbf{a}$ | $0$ |
+        | $\mathbf{x}^\top A\mathbf{x}$ | $(A + A^\top)\mathbf{x}$ | $A + A^\top$ |
+        | $\tfrac12\lVert A\mathbf{x} - \mathbf{b}\rVert^2$ | $A^\top(A\mathbf{x} - \mathbf{b})$ | $A^\top A$ |
+        | $\lVert\mathbf{x}\rVert$ | $\mathbf{x}/\lVert\mathbf{x}\rVert$ | $(I - \hat{\mathbf{x}}\hat{\mathbf{x}}^\top)/\lVert\mathbf{x}\rVert$ |
+        | $g(A\mathbf{x} + \mathbf{b})$ | $A^\top\nabla g$ | $A^\top H_gA$ |
+        | $\log\sum_i e^{x_i}$ | $\operatorname{softmax}(\mathbf{x})$ | $\operatorname{diag}(\mathbf{p}) - \mathbf{p}\mathbf{p}^\top$ |
+
+        | $F(\mathbf{x})$ | $J_F$ |
+        |---|---|
+        | $A\mathbf{x} + \mathbf{b}$ | $A$ |
+        | $\phi(\mathbf{x})$ elementwise | $\operatorname{diag}(\phi'(\mathbf{x}))$ |
+        | $\mathbf{x}/\lVert\mathbf{x}\rVert$ | $(I - \hat{\mathbf{x}}\hat{\mathbf{x}}^\top)/\lVert\mathbf{x}\rVert$ |
+        | $\operatorname{softmax}(\mathbf{x}) = \mathbf{p}$ | $\operatorname{diag}(\mathbf{p}) - \mathbf{p}\mathbf{p}^\top$ |
+
+        **Layout.** Some texts define the derivative of a scalar by a vector as the row $J_f$ ("numerator layout") and others as the column $\nabla f$ ("denominator layout"). Formulas from the two differ by transposes. Here: Jacobians are $m \times n$, and gradients have the shape of the variable.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-linear
+        type: choice
+        system: s1
+        prompt: |
+          The gradient of $\mathbf{a}^\top\mathbf{x}$ with respect to $\mathbf{x}$ is
+        options: ['$\mathbf{x}$', '$\mathbf{a}$', '$\mathbf{a}^\top\mathbf{x}$', '$0$']
+        answer: 1
+        explanation: The coefficient of the displacement.
+    - question:
+        id: drill-square
+        type: numeric
+        system: s1
+        prompt: |
+          $f(\mathbf{x}) = \|\mathbf{x}\|^2$. What is the first entry of $\nabla f$ at $\mathbf{x} = (3, 4)$?
+        answer: "6"
+        explanation: $\nabla f = 2\mathbf{x} = (6, 8)$.
+    - question:
+        id: drill-quadratic
+        type: choice
+        system: s1
+        prompt: |
+          The gradient of $\mathbf{x}^\top A\mathbf{x}$, for any square $A$, is
+        options: ['$2A\mathbf{x}$', '$(A + A^\top)\mathbf{x}$', '$A\mathbf{x}$', '$A^\top\mathbf{x}$']
+        answer: 1
+        explanation: One term from each of the two factors of the variable.
+    - question:
+        id: drill-symmetric
+        type: choice
+        system: s1
+        prompt: |
+          If $A$ is symmetric, the gradient of $\mathbf{x}^\top A\mathbf{x}$ simplifies to
+        options: ['$2A\mathbf{x}$', '$A\mathbf{x}$', '$\mathbf{x}$', '$A^2\mathbf{x}$']
+        answer: 0
+        explanation: Then $A + A^\top = 2A$.
+    - question:
+        id: drill-shape-gradient
+        type: numeric
+        system: s1
+        prompt: |
+          $f$ takes a vector of length 7 to a number. How many entries has its gradient?
+        answer: "7"
+        explanation: A gradient has the shape of the variable.
+    - question:
+        id: drill-shape-jacobian
+        type: numeric
+        system: s1
+        prompt: |
+          $F$ takes a vector of length 3 to a vector of length 2. How many rows has its Jacobian?
+        answer: "2"
+        explanation: One row per output, one column per input.
+    - question:
+        id: drill-jacobian-linear
+        type: choice
+        system: s1
+        prompt: |
+          The Jacobian of $F(\mathbf{x}) = A\mathbf{x} + \mathbf{b}$ is
+        options: ['$A$', '$A^\top$', '$A\mathbf{x}$', '$\mathbf{b}$']
+        answer: 0
+        explanation: The map is already linear, apart from a shift.
+    - question:
+        id: drill-jacobian-elementwise
+        type: choice
+        system: s1
+        prompt: |
+          The Jacobian of a function applied to each entry of $\mathbf{x}$ separately is
+        options: ['a full matrix', 'a diagonal matrix', 'a row', 'the zero matrix']
+        answer: 1
+        explanation: Output $i$ depends only on input $i$.
+    - question:
+        id: drill-chain
+        type: choice
+        system: s1
+        prompt: |
+          The gradient of $g(A\mathbf{x})$ with respect to $\mathbf{x}$ is
+        options: ['$A\,\nabla g(A\mathbf{x})$', '$A^\top\nabla g(A\mathbf{x})$', '$\nabla g(A\mathbf{x})$', '$\nabla g(\mathbf{x})^\top A$']
+        answer: 1
+        explanation: Gradients come back through the transpose.
+    - question:
+        id: drill-least-squares
+        type: choice
+        system: s1
+        prompt: |
+          The gradient of $\tfrac12\|A\mathbf{x} - \mathbf{b}\|^2$ is
+        options: ['$A\mathbf{x} - \mathbf{b}$', '$A^\top(A\mathbf{x} - \mathbf{b})$', '$A(A\mathbf{x} - \mathbf{b})$', '$2A\mathbf{x}$']
+        answer: 1
+        explanation: The residual, pulled back by $A^\top$.
+    - question:
+        id: drill-norm
+        type: numeric
+        system: s1
+        prompt: |
+          $f(\mathbf{x}) = \|\mathbf{x}\|$. What is the first entry of $\nabla f$ at $\mathbf{x} = (3, 4)$?
+        answer: "0.6"
+        explanation: $\mathbf{x}/\|\mathbf{x}\| = (3, 4)/5$.
+    - question:
+        id: drill-bilinear
+        type: choice
+        system: s1
+        prompt: |
+          The gradient of $\mathbf{b}^\top A\mathbf{x}$ with respect to $\mathbf{x}$ is
+        options: ['$A\mathbf{b}$', '$A^\top\mathbf{b}$', '$\mathbf{b}$', '$A\mathbf{x}$']
+        answer: 1
+        explanation: $\mathbf{b}^\top A\mathbf{x} = (A^\top\mathbf{b})^\top\mathbf{x}$.
+    - question:
+        id: drill-hessian
+        type: choice
+        system: s1
+        prompt: |
+          The Hessian of $\mathbf{x}^\top A\mathbf{x}$ is
+        options: ['$A$', '$A + A^\top$', '$2\mathbf{x}$', '$A^\top A$']
+        answer: 1
+        explanation: The Jacobian of the gradient $(A + A^\top)\mathbf{x}$.
+    - question:
+        id: predict-check
+        type: predict
+        system: s1
+        prompt: The puzzle again, with the measured slopes, the correct formula and the guess. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[1.0, 4.0], [0.0, 3.0]])
+          x = np.array([1.0, 2.0])
+          h = 1e-6
+          measured = [(float((x + h * e) @ A @ (x + h * e)) - float((x - h * e) @ A @ (x - h * e))) / (2 * h) for e in np.eye(2)]
+          print([round(float(v), 4) for v in measured])
+          print([round(float(v), 4) for v in (A + A.T) @ x])
+          print([round(float(v), 4) for v in 2 * A @ x])
+        output: |
+          [10.0, 16.0]
+          [10.0, 16.0]
+          [18.0, 12.0]
+        explanation: The measured slopes agree with (A + A transpose) x. The guess 2 A x is right only for a symmetric matrix.
+    - question:
+        id: predict-jacobian
+        type: predict
+        system: s1
+        prompt: The Jacobian of tanh applied to each entry, measured one column at a time, against the formula. What does this show?
+        code: |
+          import numpy as np
+
+          x = np.array([0.0, 1.0, -2.0])
+          h = 1e-6
+          columns = [(np.tanh(x + h * e) - np.tanh(x - h * e)) / (2 * h) for e in np.eye(3)]
+          J = np.stack(columns).T
+          print([[round(float(v), 4) + 0.0 for v in row] for row in J])
+          print([round(float(v), 4) for v in 1 - np.tanh(x) ** 2])
+        output: |
+          [[1.0, 0.0, 0.0], [0.0, 0.42, 0.0], [0.0, 0.0, 0.0707]]
+          [1.0, 0.42, 0.0707]
+        explanation: The Jacobian of an elementwise function is diagonal, with the scalar derivative at each entry on the diagonal. Multiplying a vector by it is an elementwise product, so the matrix never needs to be formed.
+  work:
+    - text: Slower now. The first task is the rule the puzzle was about.
+    - question:
+        id: write-quadratic
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `grad_quadratic(A, b, x)` returning the gradient with respect to `x` of $f(\mathbf{x}) = \mathbf{x}^\top A\mathbf{x} + \mathbf{b}^\top\mathbf{x}$, for any square matrix `A`.
+        starter: |
+          import numpy as np
+
+
+          def grad_quadratic(A, b, x):
+              return x * 0.0
+
+
+          A = np.array([[1.0, 4.0], [0.0, 3.0]])
+          print([round(float(v), 4) for v in grad_quadratic(A, np.array([1.0, -1.0]), np.array([1.0, 2.0]))])
+        solution: |
+          import numpy as np
+
+
+          def grad_quadratic(A, b, x):
+              return (A + A.T) @ x + b
+
+
+          A = np.array([[1.0, 4.0], [0.0, 3.0]])
+          print([round(float(v), 4) for v in grad_quadratic(A, np.array([1.0, -1.0]), np.array([1.0, 2.0]))])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[1.0, 4.0], [0.0, 3.0]])
+          _g = grad_quadratic(_A, _np.array([1.0, -1.0]), _np.array([1.0, 2.0]))
+          assert _np.shape(_g) == (2,), "The gradient has the shape of x"
+          assert _np.allclose(_g, [11.0, 15.0]), "For A = [[1, 4], [0, 3]], b = (1, -1) and x = (1, 2) the gradient is (A + A^T) x + b = (11, 15)"
+          assert _np.allclose(grad_quadratic(_np.eye(3), _np.zeros(3), _np.array([1.0, 2.0, 3.0])), [2.0, 4.0, 6.0]), "For A = I and b = 0 the function is the squared length and the gradient is 2x"
+          assert _np.allclose(grad_quadratic(_np.zeros((2, 2)), _np.array([5.0, 7.0]), _np.array([1.0, 1.0])), [5.0, 7.0]), "For A = 0 the function is b^T x and the gradient is b"
+          _rng = _np.random.default_rng(0)
+          _B, _b, _x = _rng.normal(size=(4, 4)), _rng.normal(size=4), _rng.normal(size=4)
+          _f = lambda v: float(v @ _B @ v + _b @ v)
+          _num = _np.array([(_f(_x + 1e-6 * _e) - _f(_x - 1e-6 * _e)) / 2e-6 for _e in _np.eye(4)])
+          assert _np.allclose(grad_quadratic(_B, _b, _x), _num, atol=1e-6), "For a random 4 by 4 matrix the gradient should agree with central differences. The matrix need not be symmetric"
+          assert output.strip() == "[11.0, 15.0]", "The program should print [11.0, 15.0]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def grad_quadratic(A, b, x):
+                return 2 * A @ x + b
+
+
+            print("[11.0, 15.0]")
+          - |
+            import numpy as np
+
+
+            def grad_quadratic(A, b, x):
+                return (A + A.T) @ x
+
+
+            print("[11.0, 15.0]")
+          - |
+            import numpy as np
+
+
+            def grad_quadratic(A, b, x):
+                return A @ x + b
+
+
+            print("[11.0, 15.0]")
+          - |
+            import numpy as np
+
+
+            def grad_quadratic(A, b, x):
+                return (A + A.T) @ x + b @ x
+
+
+            print("[11.0, 15.0]")
+        explanation: |
+          The two terms are differentiated separately. The quadratic part gives $(A + A^\top)\mathbf{x}$ and the linear part gives $\mathbf{b}$.
+
+          The last test is the one to remember. It builds a random matrix, measures the slopes of the function by central differences, and compares. A test of that kind needs no knowledge of the right formula, and catches the tempting $2A\mathbf{x}$ at once. A test on a symmetric matrix would not: half of all bugs in gradient code hide behind test cases that are too tidy.
+    - question:
+        id: write-logistic
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          The logistic regression loss for a data matrix `X` with one example per row, labels `y` of zeros and ones, and weights `w` is $f(\mathbf{w}) = \sum_i\big(\log(1 + e^{z_i}) - y_iz_i\big)$ with $\mathbf{z} = X\mathbf{w}$. Write `grad_logistic(X, y, w)` returning its gradient with respect to `w`. The derivative of $\log(1 + e^z)$ is $1/(1 + e^{-z})$.
+        starter: |
+          import numpy as np
+
+
+          def grad_logistic(X, y, w):
+              return w * 0.0
+
+
+          X = np.array([[1.0, 2.0], [1.0, -1.0], [1.0, 0.5]])
+          y = np.array([1.0, 0.0, 1.0])
+          print([round(float(v), 4) for v in grad_logistic(X, y, np.array([0.0, 0.0]))])
+          print([round(float(v), 4) for v in grad_logistic(X, y, np.array([0.5, 1.0]))])
+        solution: |
+          import numpy as np
+
+
+          def grad_logistic(X, y, w):
+              z = X @ w
+              return X.T @ (1.0 / (1.0 + np.exp(-z)) - y)
+
+
+          X = np.array([[1.0, 2.0], [1.0, -1.0], [1.0, 0.5]])
+          y = np.array([1.0, 0.0, 1.0])
+          print([round(float(v), 4) for v in grad_logistic(X, y, np.array([0.0, 0.0]))])
+          print([round(float(v), 4) for v in grad_logistic(X, y, np.array([0.5, 1.0]))])
+        tests: |
+          import numpy as _np
+          _X = _np.array([[1.0, 2.0], [1.0, -1.0], [1.0, 0.5]])
+          _y = _np.array([1.0, 0.0, 1.0])
+          _g = grad_logistic(_X, _y, _np.array([0.0, 0.0]))
+          assert _np.shape(_g) == (2,), "The gradient has the shape of w, one entry per column of X"
+          assert _np.allclose(_g, [-0.5, -1.75]), "At w = 0 every sigma(z) is 0.5, so the gradient is X^T (0.5 - y) = (-0.5, -1.75)"
+          _f = lambda w: float((_np.log(1.0 + _np.exp(_X @ w)) - _y * (_X @ w)).sum())
+          _w = _np.array([0.5, 1.0])
+          _num = _np.array([(_f(_w + 1e-6 * _e) - _f(_w - 1e-6 * _e)) / 2e-6 for _e in _np.eye(2)])
+          assert _np.allclose(grad_logistic(_X, _y, _w), _num, atol=1e-6), "At w = (0.5, 1) the gradient should agree with central differences of the loss"
+          _rng = _np.random.default_rng(1)
+          _X2, _w2 = _rng.normal(size=(6, 3)), _rng.normal(size=3)
+          _y2 = _np.array([1.0, 0.0, 0.0, 1.0, 1.0, 0.0])
+          _f2 = lambda w: float((_np.log(1.0 + _np.exp(_X2 @ w)) - _y2 * (_X2 @ w)).sum())
+          _num2 = _np.array([(_f2(_w2 + 1e-6 * _e) - _f2(_w2 - 1e-6 * _e)) / 2e-6 for _e in _np.eye(3)])
+          assert _np.allclose(grad_logistic(_X2, _y2, _w2), _num2, atol=1e-6), "For random data with 6 examples and 3 features the gradient should agree with central differences"
+          assert output.strip() == "[-0.5, -1.75]\n[0.0327, -0.6637]", "The program should print [-0.5, -1.75] and then [0.0327, -0.6637]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def grad_logistic(X, y, w):
+                z = X @ w
+                return X.T @ (z - y)
+
+
+            print("[-0.5, -1.75]\n[0.0327, -0.6637]")
+          - |
+            import numpy as np
+
+
+            def grad_logistic(X, y, w):
+                z = X @ w
+                return X.T @ (1.0 / (1.0 + np.exp(-z)))
+
+
+            print("[-0.5, -1.75]\n[0.0327, -0.6637]")
+          - |
+            import numpy as np
+
+
+            def grad_logistic(X, y, w):
+                z = X @ w
+                return X.T @ (1.0 / (1.0 + np.exp(z)) - y)
+
+
+            print("[-0.5, -1.75]\n[0.0327, -0.6637]")
+          - |
+            import numpy as np
+
+
+            def grad_logistic(X, y, w):
+                z = X @ w
+                return (1.0 / (1.0 + np.exp(-z)) - y).sum() * w
+
+
+            print("[-0.5, -1.75]\n[0.0327, -0.6637]")
+        explanation: |
+          The loss is $g(X\mathbf{w})$ with $g(\mathbf{z}) = \sum_i\phi_i(z_i)$, so its gradient is $X^\top$ times the vector of scalar derivatives $\phi_i'(z_i) = \sigma(z_i) - y_i$. Three steps: the scores `z`, the errors $\sigma(\mathbf{z}) - \mathbf{y}$, and the pull back through `X.T`.
+
+          The form is worth staring at. $\sigma(z_i)$ is the predicted probability and $y_i$ the label, so the middle factor is "prediction minus target". The gradient of least squares, $X^\top(X\mathbf{w} - \mathbf{y})$, has the very same shape, which is the first wrong version. Each example pushes the weights along its own feature vector, in proportion to how wrong the model is on it.
+
+          No sum over examples and no partial derivative was written. For a million weights the code would be the same two lines.
+    - question:
+        id: fix-transpose
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `grad(A, x)` should return the gradient of $f(\mathbf{x}) = \sum_i\tanh^2\big((A\mathbf{x})_i\big)$. The program prints the largest difference from central differences, which should be `0.0`. It is not. Fix `grad`.
+        starter: |
+          import numpy as np
+
+
+          def f(A, x):
+              return float((np.tanh(A @ x) ** 2).sum())
+
+
+          def grad(A, x):
+              t = np.tanh(A @ x)
+              return A @ (2 * t * (1 - t ** 2))
+
+
+          A = np.array([[1.0, 2.0], [0.0, -1.0]])
+          x = np.array([0.5, 0.25])
+          h = 1e-6
+          measured = np.array([(f(A, x + h * e) - f(A, x - h * e)) / (2 * h) for e in np.eye(2)])
+          print(round(float(np.abs(grad(A, x) - measured).max()), 4))
+        solution: |
+          import numpy as np
+
+
+          def f(A, x):
+              return float((np.tanh(A @ x) ** 2).sum())
+
+
+          def grad(A, x):
+              t = np.tanh(A @ x)
+              return A.T @ (2 * t * (1 - t ** 2))
+
+
+          A = np.array([[1.0, 2.0], [0.0, -1.0]])
+          x = np.array([0.5, 0.25])
+          h = 1e-6
+          measured = np.array([(f(A, x + h * e) - f(A, x - h * e)) / (2 * h) for e in np.eye(2)])
+          print(round(float(np.abs(grad(A, x) - measured).max()), 4))
+        tests: |
+          import numpy as _np
+          _fn = lambda A, x: float((_np.tanh(A @ x) ** 2).sum())
+          _num = lambda A, x: _np.array([(_fn(A, x + 1e-6 * _e) - _fn(A, x - 1e-6 * _e)) / 2e-6 for _e in _np.eye(len(x))])
+          _A = _np.array([[1.0, 2.0], [0.0, -1.0]])
+          _x = _np.array([0.5, 0.25])
+          assert _np.allclose(grad(_A, _x), _num(_A, _x), atol=1e-6), "For the square matrix of the program the gradient should agree with central differences. The gradient of g(A x) is A^T times the gradient of g"
+          _B = _np.array([[1.0, 0.0, 2.0], [-1.0, 1.0, 0.5]])
+          _y = _np.array([0.3, -0.2, 0.1])
+          assert _np.shape(grad(_B, _y)) == (3,), "For a 2 by 3 matrix the gradient has 3 entries, the shape of x"
+          assert _np.allclose(grad(_B, _y), _num(_B, _y), atol=1e-6), "For a 2 by 3 matrix the gradient should agree with central differences"
+          assert _np.allclose(grad(_np.eye(2), _np.zeros(2)), [0.0, 0.0]), "At x = 0 every tanh is 0, the function is at its minimum, and the gradient is zero"
+          assert output.strip() == "0.0", "The program should print 0.0"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def f(A, x):
+                return float((np.tanh(A @ x) ** 2).sum())
+
+
+            def grad(A, x):
+                t = np.tanh(A @ x)
+                return A @ (2 * t * (1 - t ** 2))
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def f(A, x):
+                return float((np.tanh(A @ x) ** 2).sum())
+
+
+            def grad(A, x):
+                t = np.tanh(A @ x)
+                return A.T @ (2 * t)
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def f(A, x):
+                return float((np.tanh(A @ x) ** 2).sum())
+
+
+            def grad(A, x):
+                t = np.tanh(A @ x)
+                return A.T @ (t * (1 - t ** 2))
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def f(A, x):
+                return float((np.tanh(A @ x) ** 2).sum())
+
+
+            def grad(A, x):
+                t = np.tanh(x)
+                return A.T @ (2 * t * (1 - t ** 2))
+
+
+            print("0.0")
+        explanation: |
+          $f(\mathbf{x}) = g(A\mathbf{x})$ with $g(\mathbf{z}) = \sum\tanh^2z_i$. The gradient of $g$ is $2\tanh z_i(1 - \tanh^2z_i)$ in each entry, by the scalar chain rule. It is a gradient with respect to $\mathbf{z}$, and it comes back to $\mathbf{x}$ through $A^\top$, not through $A$.
+
+          With a matrix that is not square, `A @ ...` would have failed with a shape error, and the mistake would have been found in a second. The matrix here is square, so both products run, and only the comparison with measured slopes shows that one of them is wrong. This is why gradient code is tested on shapes where every dimension is different.
+
+          The second wrong version forgets the derivative of $\tanh$, and the third forgets the 2 from the square. Each layer of a composition contributes one factor, and each is easy to drop.
+    - question:
+        id: work-why-transpose
+        type: choice
+        system: s2
+        prompt: |
+          Why is it the transpose $A^\top$, and not $A$, that appears in the gradient of $g(A\mathbf{x})$?
+        options:
+          - 'It is a convention, and $A$ would do as well.'
+          - 'A displacement $\mathbf{h}$ of $\mathbf{x}$ becomes the displacement $A\mathbf{h}$ of $\mathbf{z} = A\mathbf{x}$, which changes $g$ by $\nabla g^\top A\mathbf{h} = (A^\top\nabla g)^\top\mathbf{h}$. The gradient is the vector paired with $\mathbf{h}$, and moving $A$ across the dot product transposes it.'
+          - 'Because $A$ is usually symmetric.'
+          - 'Because gradients are always rows.'
+        answer: 1
+        explanation: |
+          Displacements live in the input space and are pushed **forward** by $A$. A gradient is a rule for turning displacements into numbers, a linear functional, and such rules are pulled **back** by the transpose. That is the dual map of the lesson on dual spaces, turning up in calculus. It also settles the shapes: if $A$ is $m \times n$, $\nabla g$ has $m$ entries and the gradient with respect to $\mathbf{x}$ needs $n$, and $A^\top$ is the only one of the two that can be applied. Backpropagation is this one fact, used once for every layer.
+    - question:
+        id: work-hessian
+        type: numeric
+        system: s2
+        prompt: |
+          $f(\mathbf{x}) = \|A\mathbf{x}\|^2$ with $A = \begin{pmatrix} 1 & 2 \\ 0 & 1 \end{pmatrix}$. What is the top-right entry of the Hessian of $f$?
+        answer: "4"
+        explanation: |
+          $f = \mathbf{x}^\top(A^\top A)\mathbf{x}$, a quadratic form with the symmetric matrix $A^\top A = \begin{pmatrix} 1 & 2 \\ 2 & 5 \end{pmatrix}$. Its gradient is $2A^\top A\mathbf{x}$ and its Hessian is $2A^\top A = \begin{pmatrix} 2 & 4 \\ 4 & 10 \end{pmatrix}$. The Hessian of a least-squares loss is always of this form, a Gram matrix, and so it is positive semidefinite with eigenvalues $2\sigma_i(A)^2$. The condition number of the problem is the square of that of $A$.
+    - question:
+        id: work-layout
+        type: choice
+        system: s2
+        prompt: |
+          A reference book gives "the derivative of $\mathbf{a}^\top\mathbf{x}$ with respect to $\mathbf{x}$" as $\mathbf{a}^\top$, a row, where this lesson gave the column $\mathbf{a}$. What is going on, and what is the safe practice?
+        options:
+          - 'One of the two is a mistake.'
+          - 'The book writes the derivative of a scalar as the $1 \times n$ Jacobian, and this lesson writes the gradient, its transpose. Both describe the same linear approximation. The safe practice is to fix one convention, make every gradient the shape of its variable, and confirm with a numerical check.'
+          - 'Rows and columns are the same thing.'
+          - 'The book is using complex numbers.'
+        answer: 1
+        explanation: |
+          The two conventions are called numerator layout and denominator layout, and formulas copied from mixed sources differ by transposes in unpredictable places. For code the question has only one useful answer: an optimiser computes `w - rate * grad`, so the gradient must have exactly the shape of `w`. The Jacobian convention, $m \times n$ for a map from $\mathbb{R}^n$ to $\mathbb{R}^m$, is the one in which the chain rule is a plain product of matrices in the order of composition. Keeping Jacobians for maps and gradients for scalar functions, with one transpose between them, avoids the muddle.
+  connections:
+    - text: |
+        The gradient of $\mathbf{x}^\top A\mathbf{x}$ is $(A + A^\top)\mathbf{x}$, one term from each appearance of $\mathbf{x}$. It was found with no partial derivative: put in $\mathbf{x} + \mathbf{h}$, keep what is linear in $\mathbf{h}$, and bring it to the form $(\text{vector})^\top\mathbf{h}$.
+
+        The same method gave the Jacobians of $A\mathbf{x}$ and of elementwise functions, and the chain rule in the form that matters: the gradient of $g(F(\mathbf{x}))$ is $J_F^\top\nabla g$. Displacements go forward through the Jacobian, and gradients come back through its transpose. Most losses are of the form $g(A\mathbf{x})$, with gradient $A^\top\nabla g$.
+
+        In all of this the variable was a vector and the matrix was a constant. In a neural network it is the other way round. The data are fixed, and the things being trained are the weight **matrices**. The loss is a function of a matrix, and its gradient must say how to change every entry. Flattening the matrix into a long vector would work, and would throw away exactly the structure that made today's formulas short: [[m13.derivatives-with-respect-to-matrices]].
