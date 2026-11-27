@@ -1,0 +1,614 @@
+concept: m8.spectral-theorem
+minutes: 90
+claim: You can state the spectral theorem for real symmetric and for Hermitian matrices, prove that their eigenvalues are real and that eigenvectors for different eigenvalues are orthogonal, write a symmetric matrix as Q Lambda Q transpose and as a sum of eigenvalues times projections onto orthonormal eigenvectors, describe such a matrix geometrically as stretching along perpendicular axes, and use the routine for symmetric matrices in NumPy.
+recalls: [m8.diagonalisation]
+uses: [m8.eigenvalues-and-eigenvectors, m8.characteristic-polynomial, m6.adjoints-orthogonal-and-unitary-maps, m6.inner-product-spaces, m6.subspaces-sums-and-direct-sums, m7.orthonormal-bases, m7.projection-onto-a-subspace, m7.orthogonal-subspaces, m5.transpose, m1.complex-numbers, e5.linear-algebra-routines, e5.random-number-generation, e0.functions, e0.loops]
+leads: [m8.positive-definite-matrices-and-cholesky, m8.quadratic-forms-and-the-rayleigh-quotient, m8.singular-value-decomposition, m8.pca-as-svd]
+starter: |
+  # Scratch space. A random 4 by 4 matrix M, and the symmetric matrix M + M.T.
+  # For each: are all eigenvalues real? Are the eigenvectors orthonormal?
+  import numpy as np
+
+  rng = np.random.default_rng(0)
+  M = rng.normal(size=(4, 4))
+  for X in (M, M + M.T):
+      values, V = np.linalg.eig(X)
+      print(np.allclose(values.imag, 0.0), np.allclose(V.conjugate().T @ V, np.eye(4)))
+parts:
+  recall:
+    - text: |
+        [[m8.diagonalisation]] left two worries: a matrix may have too few eigenvectors, and even when it has enough, the basis they form may be badly skewed. Today's theorem names a class of matrices for which both worries vanish. Three quick pulls first.
+  puzzle:
+    - text: |
+        The starter draws a random $4 \times 4$ matrix $M$ and asks two questions about its eigenvalues and eigenvectors. Then it asks the same two questions about $M + M^\top$, which is symmetric.
+
+        ```
+        False False
+        True True
+        ```
+
+        The random matrix has complex eigenvalues, and its eigenvectors are at odd angles to each other. That is what a typical matrix looks like.
+
+        The symmetric matrix has only real eigenvalues, and its eigenvectors are orthonormal. Try other seeds or other sizes: the second line never changes.
+
+        Symmetry is a statement about the entries, $a_{ij} = a_{ji}$. Real eigenvalues and perpendicular eigenvectors are statements about geometry.
+
+        **Why should a mirror symmetry in a table of numbers force the eigenvalues to be real and the eigenvectors to be perpendicular?**
+  intuition:
+    - text: |
+        Symmetry of the table is the visible form of a property of the map. By the last lesson of the previous cluster, a matrix is symmetric exactly when the map is **self-adjoint** for the dot product:
+
+        $$(A\mathbf{u}) \cdot \mathbf{v} = \mathbf{u} \cdot (A\mathbf{v}) \quad\text{for all } \mathbf{u}, \mathbf{v}.$$
+
+        The matrix can be moved from one side of a dot product to the other. Everything follows from that.
+
+        Take two eigenvectors, $A\mathbf{u} = \lambda\mathbf{u}$ and $A\mathbf{v} = \mu\mathbf{v}$. Compute $(A\mathbf{u}) \cdot \mathbf{v}$ in two ways. Letting $A$ act on $\mathbf{u}$ gives $\lambda\,\mathbf{u} \cdot \mathbf{v}$. Moving it across and letting it act on $\mathbf{v}$ gives $\mu\,\mathbf{u} \cdot \mathbf{v}$. So $(\lambda - \mu)\,\mathbf{u} \cdot \mathbf{v} = 0$, and if the eigenvalues differ, the eigenvectors are perpendicular. Two lines.
+
+        The full statement is the **spectral theorem**: a real symmetric matrix has real eigenvalues and an **orthonormal** basis of eigenvectors. In pictures, a symmetric matrix stretches space along a set of mutually perpendicular axes, by real factors, and does nothing else. No rotation, no shearing. It sends the unit circle to an ellipse whose axes are the eigenvectors and whose semi-axes are the absolute values of the eigenvalues.
+
+        And because the basis is orthonormal, the change-of-basis matrix is orthogonal: $P^{-1} = Q^\top$. No inverse to compute, and no loss of accuracy.
+  derivation:
+    - text: |
+        Let $A$ be a real symmetric $n \times n$ matrix. Write $\langle \mathbf{u}, \mathbf{v} \rangle$ for the standard inner product, on $\mathbb{C}^n$ where needed, so that $\langle A\mathbf{u}, \mathbf{v} \rangle = \langle \mathbf{u}, A\mathbf{v} \rangle$.
+
+        **Step 1: the eigenvalues are real.** Let $A\mathbf{v} = \lambda\mathbf{v}$ with $\mathbf{v} \ne \mathbf{0}$, possibly complex. Then
+
+        $$\lambda\langle \mathbf{v}, \mathbf{v} \rangle = \langle A\mathbf{v}, \mathbf{v} \rangle = \langle \mathbf{v}, A\mathbf{v} \rangle = \overline{\lambda}\langle \mathbf{v}, \mathbf{v} \rangle.$$
+
+        Since $\langle \mathbf{v}, \mathbf{v} \rangle > 0$, $\lambda = \overline{\lambda}$: $\lambda$ is real. Every matrix has an eigenvalue over $\mathbb{C}$, so a symmetric matrix has a real one, with a real eigenvector.
+
+        **Step 2: eigenvectors for different eigenvalues are orthogonal.** As in the intuition: $\lambda\langle \mathbf{u}, \mathbf{v} \rangle = \langle A\mathbf{u}, \mathbf{v} \rangle = \langle \mathbf{u}, A\mathbf{v} \rangle = \mu\langle \mathbf{u}, \mathbf{v} \rangle$, so $\langle \mathbf{u}, \mathbf{v} \rangle = 0$ when $\lambda \ne \mu$.
+
+        **Step 3: there are enough of them.** Let $\mathbf{q}_1$ be a unit eigenvector, and $W = \mathbf{q}_1^\perp$ the subspace of vectors orthogonal to it. If $\mathbf{w} \in W$ then
+
+        $$\langle A\mathbf{w}, \mathbf{q}_1 \rangle = \langle \mathbf{w}, A\mathbf{q}_1 \rangle = \lambda_1\langle \mathbf{w}, \mathbf{q}_1 \rangle = 0,$$
+
+        so $A\mathbf{w} \in W$ as well. $A$ maps $W$ into itself, and on $W$ it is still self-adjoint. So the argument can be repeated inside $W$, which has dimension $n - 1$: find a unit eigenvector $\mathbf{q}_2$ there, pass to the vectors orthogonal to both, and so on. After $n$ steps there are $n$ orthonormal eigenvectors. $\blacksquare$
+
+        Step 3 is where symmetry rules out the defective case. A shear has an eigenvector, but the perpendicular line is not mapped into itself, and the induction cannot continue.
+
+        **The spectral theorem.** For every real symmetric $A$ there are an orthogonal matrix $Q$ and a real diagonal matrix $\Lambda$ with
+
+        $$A = Q\Lambda Q^\top.$$
+
+        The columns of $Q$ are orthonormal eigenvectors and the diagonal of $\Lambda$ holds the eigenvalues.
+
+        *Example.* $A = \begin{pmatrix} 2 & 1 \\ 1 & 2 \end{pmatrix}$: eigenvalues 3 and 1, eigenvectors $(1, 1)$ and $(1, -1)$, which are perpendicular. Normalised,
+
+        $$Q = \frac{1}{\sqrt2}\begin{pmatrix} 1 & 1 \\ 1 & -1 \end{pmatrix}, \qquad \Lambda = \begin{pmatrix} 3 & 0 \\ 0 & 1 \end{pmatrix}.$$
+
+        The map stretches by 3 along the diagonal $y = x$ and leaves the anti-diagonal alone.
+
+        **Repeated eigenvalues.** If an eigenvalue is repeated, its eigenspace has the full dimension, and any orthonormal basis of the eigenspace will do. Eigenvectors within one eigenspace are not automatically orthogonal. They can be chosen so, by Gram-Schmidt.
+    - question:
+        id: derivation-orthogonal
+        type: numeric
+        system: s2
+        prompt: |
+          A symmetric $2 \times 2$ matrix has the eigenvector $(1, 2)$ for the eigenvalue 2. Its other eigenvalue is 7, with an eigenvector of the form $(2, y)$. What is $y$?
+        answer: "-1"
+        explanation: |
+          Eigenvectors of a symmetric matrix for different eigenvalues are orthogonal: $(1, 2) \cdot (2, y) = 2 + 2y = 0$, so $y = -1$. The matrix itself can then be rebuilt: with unit vectors $\mathbf{q}_1 = (1, 2)/\sqrt5$ and $\mathbf{q}_2 = (2, -1)/\sqrt5$, it is $2\,\mathbf{q}_1\mathbf{q}_1^\top + 7\,\mathbf{q}_2\mathbf{q}_2^\top = \begin{pmatrix} 6 & -2 \\ -2 & 3 \end{pmatrix}$. In the plane, one eigenvector of a symmetric matrix fixes the direction of the other.
+    - text: |
+        **A sum of projections.** Write $A = Q\Lambda Q^\top$ column by column:
+
+        $$A = \lambda_1\mathbf{q}_1\mathbf{q}_1^\top + \lambda_2\mathbf{q}_2\mathbf{q}_2^\top + \dots + \lambda_n\mathbf{q}_n\mathbf{q}_n^\top.$$
+
+        Each $\mathbf{q}_i\mathbf{q}_i^\top$ is the orthogonal projection onto the line of $\mathbf{q}_i$. So a symmetric matrix does this to a vector: split it into its components along $n$ perpendicular axes, multiply each component by the eigenvalue of its axis, and add the pieces. This is the **spectral decomposition**. The projections themselves add up to the identity, $\sum_i \mathbf{q}_i\mathbf{q}_i^\top = QQ^\top = I$.
+
+        **The converse.** If $A = Q\Lambda Q^\top$ with $Q$ orthogonal and $\Lambda$ real diagonal, then $A^\top = Q\Lambda^\top Q^\top = A$. So the real matrices with an orthonormal basis of eigenvectors and real eigenvalues are **exactly** the symmetric ones.
+
+        **Complex version.** A complex matrix with $A^{\mathsf H} = A$ is **Hermitian**. The same three steps give real eigenvalues and $A = U\Lambda U^{\mathsf H}$ with $U$ unitary. In terms of maps: a self-adjoint map on a finite-dimensional inner product space has an orthonormal basis of eigenvectors, with real eigenvalues.
+
+        **Where symmetric matrices come from.** They are everywhere in this subject, and now for a reason one can state.
+
+        - $A^\top A$ and $AA^\top$, for any $A$: the Gram matrices of least squares.
+        - Covariance matrices.
+        - Hessians: the matrix of second partial derivatives of a smooth function is symmetric.
+        - Matrices of undirected graphs.
+
+        **In NumPy.** `np.linalg.eigh(A)` is the routine for symmetric and Hermitian matrices. It returns real eigenvalues in **increasing** order and orthonormal eigenvectors as columns. It is faster and more accurate than `eig`, and it never returns complex numbers for a real symmetric input. It reads only one triangle of the matrix, so it does not notice if the input is not symmetric.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the proof that a real symmetric matrix has an orthonormal basis of eigenvectors.
+        steps:
+          - 'Over the complex numbers the matrix has an eigenvalue, and self-adjointness forces it to be real.'
+          - 'Take a real unit eigenvector $\mathbf{q}_1$ for it.'
+          - 'Show that the matrix maps the subspace orthogonal to $\mathbf{q}_1$ into itself.'
+          - 'On that subspace the map is again self-adjoint, so it has a unit eigenvector $\mathbf{q}_2$ there.'
+          - 'Repeat, each time inside the vectors orthogonal to all eigenvectors found so far, until $n$ are found.'
+        explanation: One eigenvector, then the same problem one dimension lower. Symmetry is what keeps the orthogonal complement invariant.
+  formal:
+    - text: |
+        **Spectral theorem (real).** Let $A \in \mathbb{R}^{n \times n}$ with $A^\top = A$. Then all eigenvalues of $A$ are real, and there is an orthogonal $Q$ with $Q^\top AQ = \Lambda$ diagonal. Equivalently $\mathbb{R}^n$ is the orthogonal direct sum of the eigenspaces of $A$.
+
+        **Spectral theorem (complex).** Let $A \in \mathbb{C}^{n \times n}$ with $A^{\mathsf H} = A$. Then all eigenvalues are real, and there is a unitary $U$ with $U^{\mathsf H}AU = \Lambda$.
+
+        **Operator form.** A self-adjoint map on a finite-dimensional inner product space has an orthonormal basis of eigenvectors.
+
+        **Spectral decomposition.** $A = \sum_{i=1}^n \lambda_i\mathbf{q}_i\mathbf{q}_i^\top = \sum_{\mu} \mu\,P_\mu$, where the second sum is over distinct eigenvalues and $P_\mu$ is the orthogonal projection onto $E_\mu$. The $P_\mu$ satisfy $P_\mu P_\nu = 0$ for $\mu \ne \nu$ and $\sum_\mu P_\mu = I$.
+
+        **Converse.** A real matrix is orthogonally diagonalisable with real eigenvalues if and only if it is symmetric.
+
+        **Functions.** $f(A) = Qf(\Lambda)Q^\top$ is symmetric for every real function $f$ on the eigenvalues.
+
+        **Uniqueness.** $\Lambda$ is unique up to order. $Q$ is unique up to signs of columns when the eigenvalues are distinct, and up to an orthogonal change of basis inside each eigenspace in general.
+
+        **Normal matrices.** A complex matrix is unitarily diagonalisable if and only if it is normal, $A^{\mathsf H}A = AA^{\mathsf H}$. This includes Hermitian, skew-Hermitian and unitary matrices. Their eigenvalues need not be real.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-statement
+        type: choice
+        system: s1
+        prompt: |
+          The spectral theorem says that a real symmetric matrix has
+        options: ['only positive eigenvalues', 'real eigenvalues and an orthonormal basis of eigenvectors', 'distinct eigenvalues', 'an inverse']
+        answer: 1
+        explanation: Real, and orthogonally diagonalisable.
+    - question:
+        id: drill-factorisation
+        type: choice
+        system: s1
+        prompt: |
+          For symmetric $A$ the spectral factorisation is
+        options: ['$A = Q\Lambda Q^\top$ with $Q$ orthogonal', '$A = LU$', '$A = Q\Lambda Q$', '$A = \Lambda Q\Lambda$']
+        answer: 0
+        explanation: $PDP^{-1}$ with $P$ orthogonal, so the inverse is the transpose.
+    - question:
+        id: drill-real
+        type: choice
+        system: s1
+        prompt: |
+          Can a real symmetric matrix have the eigenvalue $2 + i$?
+        options: ['Yes', 'No', 'Only if it is $2 \times 2$', 'Only if it is singular']
+        answer: 1
+        explanation: Its eigenvalues are all real.
+    - question:
+        id: drill-orthogonal
+        type: numeric
+        system: s1
+        prompt: |
+          $\mathbf{u}$ and $\mathbf{v}$ are eigenvectors of a symmetric matrix for the eigenvalues 2 and 5. What is $\mathbf{u} \cdot \mathbf{v}$?
+        answer: "0"
+        explanation: Different eigenvalues, so orthogonal.
+    - question:
+        id: drill-defective
+        type: choice
+        system: s1
+        prompt: |
+          Can a real symmetric matrix be defective, that is, have too few eigenvectors for a basis?
+        options: ['Yes, when an eigenvalue is repeated', 'No, never', 'Yes, when it is singular', 'Only in odd dimensions']
+        answer: 1
+        explanation: Every eigenspace has full dimension.
+    - question:
+        id: drill-inverse
+        type: choice
+        system: s1
+        prompt: |
+          In $A = Q\Lambda Q^\top$, the inverse of $Q$ is
+        options: ['$\Lambda$', '$Q^\top$', '$Q$', '$-Q$']
+        answer: 1
+        explanation: Orthonormal columns.
+    - question:
+        id: drill-projection
+        type: choice
+        system: s1
+        prompt: |
+          For a unit vector $\mathbf{q}$, the matrix $\mathbf{q}\mathbf{q}^\top$ is
+        options: ['the number 1', 'the orthogonal projection onto the line of $\mathbf{q}$', 'the identity', 'a rotation']
+        answer: 1
+        explanation: It sends $\mathbf{x}$ to $(\mathbf{q} \cdot \mathbf{x})\mathbf{q}$.
+    - question:
+        id: drill-sum
+        type: choice
+        system: s1
+        prompt: |
+          The spectral decomposition writes a symmetric matrix as
+        options: ['a product of rotations', 'a sum of eigenvalues times projections onto orthonormal eigenvectors', 'a sum of its rows', 'a lower times an upper triangular matrix']
+        answer: 1
+        explanation: $\sum_i \lambda_i\mathbf{q}_i\mathbf{q}_i^\top$.
+    - question:
+        id: drill-which
+        type: choice
+        system: s1
+        prompt: |
+          Which of these is guaranteed to have an orthonormal basis of eigenvectors?
+        options: ['$\begin{pmatrix} 1 & 2 \\ 0 & 3 \end{pmatrix}$', '$\begin{pmatrix} 1 & 2 \\ 2 & 3 \end{pmatrix}$', '$\begin{pmatrix} 1 & 1 \\ 0 & 1 \end{pmatrix}$', '$\begin{pmatrix} 0 & 2 \\ 1 & 0 \end{pmatrix}$']
+        answer: 1
+        explanation: The symmetric one.
+    - question:
+        id: drill-ata
+        type: choice
+        system: s1
+        prompt: |
+          For any real matrix $A$, the eigenvalues of $A^\top A$ are
+        options: ['possibly complex', 'real', 'all equal', 'all zero']
+        answer: 1
+        explanation: $A^\top A$ is symmetric.
+    - question:
+        id: drill-eigh-order
+        type: choice
+        system: s1
+        prompt: |
+          `np.linalg.eigh` returns the eigenvalues
+        options: ['in no particular order', 'in increasing order', 'in decreasing order', 'sorted by absolute value']
+        answer: 1
+        explanation: Smallest first, and always real.
+    - question:
+        id: drill-hermitian
+        type: choice
+        system: s1
+        prompt: |
+          A complex matrix is Hermitian when it equals its
+        options: ['transpose', 'conjugate transpose', 'inverse', 'conjugate']
+        answer: 1
+        explanation: The complex form of symmetric, with real eigenvalues.
+    - question:
+        id: drill-ellipse
+        type: choice
+        system: s1
+        prompt: |
+          A symmetric matrix with eigenvalues 3 and 1 sends the unit circle to
+        options: ['a circle of radius 3', 'an ellipse with semi-axes 3 and 1 along the eigenvectors', 'a square', 'a line']
+        answer: 1
+        explanation: It stretches along perpendicular axes.
+    - question:
+        id: predict-eigh
+        type: predict
+        system: s1
+        prompt: The routine for symmetric matrices. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[2.0, 1.0], [1.0, 2.0]])
+          values, Q = np.linalg.eigh(A)
+          print([round(float(v), 4) for v in values])
+          print(np.allclose(Q.T @ Q, np.eye(2)), np.allclose(Q @ np.diag(values) @ Q.T, A))
+        output: |
+          [1.0, 3.0]
+          True True
+        explanation: The eigenvalues come back real and in increasing order. The eigenvector matrix is orthogonal, and Q Lambda Q transpose rebuilds the matrix with no inverse needed.
+    - question:
+        id: predict-sum
+        type: predict
+        system: s1
+        prompt: Two perpendicular unit vectors and two weights. What does this show?
+        code: |
+          import numpy as np
+
+          q1 = np.array([1.0, 1.0]) / np.sqrt(2.0)
+          q2 = np.array([1.0, -1.0]) / np.sqrt(2.0)
+          P1 = np.outer(q1, q1)
+          P2 = np.outer(q2, q2)
+          print([[round(float(c), 4) for c in row] for row in 3.0 * P1 + 1.0 * P2])
+          print([[round(float(c), 4) for c in row] for row in P1 + P2])
+        output: |
+          [[2.0, 1.0], [1.0, 2.0]]
+          [[1.0, 0.0], [0.0, 1.0]]
+        explanation: Three times the projection onto (1, 1) plus once the projection onto (1, -1) is the matrix with those eigenvectors and eigenvalues. The two projections alone add up to the identity.
+  work:
+    - text: Slower now. Use `np.linalg.eigh` wherever the matrix is symmetric.
+    - question:
+        id: write-rebuild
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `partial(A, keep)` for a symmetric matrix `A`. Number its eigenvalues as `np.linalg.eigh` returns them, smallest first, starting from 0. `keep` is a list of such numbers. Return the sum of $\lambda_i\,\mathbf{q}_i\mathbf{q}_i^\top$ over the indices $i$ in `keep`. `np.outer(q, q)` forms $\mathbf{q}\mathbf{q}^\top$.
+        starter: |
+          import numpy as np
+
+
+          def partial(A, keep):
+              return A * 0.0
+
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          print([[round(float(c), 4) + 0.0 for c in row] for row in partial(A, [0, 1, 2])])
+          print([[round(float(c), 4) + 0.0 for c in row] for row in partial(A, [2]) * 6.0])
+        solution: |
+          import numpy as np
+
+
+          def partial(A, keep):
+              values, Q = np.linalg.eigh(A)
+              total = A * 0.0
+              for i in keep:
+                  total = total + values[i] * np.outer(Q[:, i], Q[:, i])
+              return total
+
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          print([[round(float(c), 4) + 0.0 for c in row] for row in partial(A, [0, 1, 2])])
+          print([[round(float(c), 4) + 0.0 for c in row] for row in partial(A, [2]) * 6.0])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          assert _np.allclose(partial(_A, [0, 1, 2]), _A), "Keeping every term should rebuild A exactly"
+          assert _np.allclose(partial(_A, []), _np.zeros((3, 3))), "Keeping no term gives the zero matrix"
+          _T = partial(_A, [2])
+          assert _np.allclose(_T * 6.0, [[4.0, 8.0, 4.0], [8.0, 16.0, 8.0], [4.0, 8.0, 4.0]]), "The largest eigenvalue is 4 with eigenvector (1, 2, 1)/sqrt 6, so the term is (4/6) times the matrix with rows (1, 2, 1), (2, 4, 2), (1, 2, 1)"
+          assert _np.linalg.matrix_rank(_T) == 1, "A single term has rank 1"
+          assert _np.allclose(partial(_A, [0]) + partial(_A, [1]) + partial(_A, [2]), _A), "The three single terms should add up to A"
+          assert _np.allclose(partial(_A, [0, 1]) @ _np.array([1.0, 2.0, 1.0]), [0.0, 0.0, 0.0]), "Without the term of the eigenvector (1, 2, 1), that vector is sent to zero"
+          _M = _np.random.default_rng(0).normal(size=(4, 4)); _S = _M + _M.T
+          assert _np.allclose(partial(_S, [0, 1, 2, 3]), _S), "Every symmetric matrix is the sum of all its terms"
+          assert _np.allclose(partial(_S, [1, 3]), partial(_S, [1, 3]).T), "Any partial sum is symmetric"
+          assert output.strip() == "[[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]]\n[[4.0, 8.0, 4.0], [8.0, 16.0, 8.0], [4.0, 8.0, 4.0]]", "The program should print A and then six times its largest term"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def partial(A, keep):
+                values, Q = np.linalg.eigh(A)
+                total = A * 0.0
+                for i in keep:
+                    total = total + values[i] * np.outer(Q[i], Q[i])
+                return total
+
+
+            print("[[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]]\n[[4.0, 8.0, 4.0], [8.0, 16.0, 8.0], [4.0, 8.0, 4.0]]")
+          - |
+            import numpy as np
+
+
+            def partial(A, keep):
+                values, Q = np.linalg.eigh(A)
+                total = A * 0.0
+                for i in keep:
+                    total = total + np.outer(Q[:, i], Q[:, i])
+                return total
+
+
+            print("[[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]]\n[[4.0, 8.0, 4.0], [8.0, 16.0, 8.0], [4.0, 8.0, 4.0]]")
+          - |
+            import numpy as np
+
+
+            def partial(A, keep):
+                values, Q = np.linalg.eigh(A)
+                total = A * 0.0
+                for i in keep:
+                    total = total + values[i] * Q[:, i] * Q[:, i]
+                return total
+
+
+            print("[[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]]\n[[4.0, 8.0, 4.0], [8.0, 16.0, 8.0], [4.0, 8.0, 4.0]]")
+        explanation: |
+          The matrix has eigenvalues $1, 2, 4$. Its largest term alone, $4\,\mathbf{q}\mathbf{q}^\top$ with $\mathbf{q} = (1, 2, 1)/\sqrt6$, is a rank-one matrix that already resembles $A$ in its overall pattern.
+
+          Summing only the terms with the largest eigenvalues gives a simpler matrix that captures most of what $A$ does. This idea, keep the big terms and drop the small, is the root of low-rank approximation and of principal component analysis, later in this cluster.
+
+          `Q[i]` takes a row where a column is needed, the standing trap. Leaving out the eigenvalue gives the projection onto the chosen eigenvectors. And `q * q` multiplies entry by entry and produces a vector where a matrix is wanted, which broadcasting then silently adds to every row.
+    - question:
+        id: write-projector
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `eigenprojection(A, lam)` for a symmetric matrix `A`: the orthogonal projection onto the eigenspace of `lam`. It is the sum of $\mathbf{q}_i\mathbf{q}_i^\top$ over the eigenvectors whose eigenvalue is within `1e-8` of `lam`. If `lam` is not an eigenvalue the result is the zero matrix.
+        starter: |
+          import numpy as np
+
+
+          def eigenprojection(A, lam):
+              return A * 0.0
+
+
+          J = np.ones((3, 3))
+          print([[round(float(c), 4) + 0.0 for c in row] for row in eigenprojection(J, 3.0) * 3.0])
+          print([[round(float(c), 4) + 0.0 for c in row] for row in eigenprojection(J, 0.0) * 3.0])
+        solution: |
+          import numpy as np
+
+
+          def eigenprojection(A, lam):
+              values, Q = np.linalg.eigh(A)
+              total = A * 0.0
+              for i in range(len(values)):
+                  if abs(values[i] - lam) < 1e-8:
+                      total = total + np.outer(Q[:, i], Q[:, i])
+              return total
+
+
+          J = np.ones((3, 3))
+          print([[round(float(c), 4) + 0.0 for c in row] for row in eigenprojection(J, 3.0) * 3.0])
+          print([[round(float(c), 4) + 0.0 for c in row] for row in eigenprojection(J, 0.0) * 3.0])
+        tests: |
+          import numpy as _np
+          _J = _np.ones((3, 3))
+          _P3 = eigenprojection(_J, 3.0)
+          assert _np.allclose(_P3, _J / 3.0), "For the all-ones matrix the eigenspace of 3 is the line of (1, 1, 1), and the projection onto it is the matrix with every entry 1/3"
+          _P0 = eigenprojection(_J, 0.0)
+          assert _np.allclose(_P0, _np.eye(3) - _J / 3.0), "The eigenspace of 0 is the plane of vectors that add up to zero, and the projection onto it is I minus the all-thirds matrix. Both eigenvectors of the repeated eigenvalue must be included"
+          assert _np.allclose(_P0 @ _P0, _P0) and _np.allclose(_P0, _P0.T), "A projection is symmetric and equal to its own square"
+          assert _np.allclose(_P0 + _P3, _np.eye(3)), "The projections onto all the eigenspaces add up to the identity"
+          assert _np.allclose(_P0 @ _P3, _np.zeros((3, 3))), "Projections onto different eigenspaces multiply to zero"
+          assert _np.allclose(eigenprojection(_J, 1.0), _np.zeros((3, 3))), "1 is not an eigenvalue of the all-ones matrix, so the result is the zero matrix"
+          _A = _np.array([[2.0, 1.0], [1.0, 2.0]])
+          assert _np.allclose(3.0 * eigenprojection(_A, 3.0) + 1.0 * eigenprojection(_A, 1.0), _A), "For [[2, 1], [1, 2]], 3 times the projection for 3 plus 1 times the projection for 1 should rebuild the matrix"
+          assert output.strip() == "[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]\n[[2.0, -1.0, -1.0], [-1.0, 2.0, -1.0], [-1.0, -1.0, 2.0]]", "The program should print three times each projection"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def eigenprojection(A, lam):
+                values, Q = np.linalg.eigh(A)
+                total = A * 0.0
+                for i in range(len(values)):
+                    if abs(values[i] - lam) < 1e-8:
+                        return np.outer(Q[:, i], Q[:, i])
+                return total
+
+
+            print("[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]\n[[2.0, -1.0, -1.0], [-1.0, 2.0, -1.0], [-1.0, -1.0, 2.0]]")
+          - |
+            import numpy as np
+
+
+            def eigenprojection(A, lam):
+                values, Q = np.linalg.eigh(A)
+                total = A * 0.0
+                for i in range(len(values)):
+                    if abs(values[i] - lam) < 1e-8:
+                        total = total + values[i] * np.outer(Q[:, i], Q[:, i])
+                return total
+
+
+            print("[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]\n[[2.0, -1.0, -1.0], [-1.0, 2.0, -1.0], [-1.0, -1.0, 2.0]]")
+          - |
+            import numpy as np
+
+
+            def eigenprojection(A, lam):
+                values, Q = np.linalg.eigh(A)
+                total = A * 0.0
+                for i in range(len(values)):
+                    if values[i] == lam:
+                        total = total + np.outer(Q[:, i], Q[:, i])
+                return total
+
+
+            print("[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]\n[[2.0, -1.0, -1.0], [-1.0, 2.0, -1.0], [-1.0, -1.0, 2.0]]")
+        explanation: |
+          The all-ones matrix has the eigenvalue 3 on the line of $(1, 1, 1)$ and the eigenvalue 0 on the whole plane perpendicular to it. For the repeated eigenvalue, `eigh` returns two orthonormal vectors of that plane. Which two is arbitrary, and another library might return a different pair. Their projections summed, though, give the projection onto the plane, which does not depend on the choice.
+
+          That is the reliable way to think about repeated eigenvalues: the individual eigenvectors are not well defined, and the eigenspace and its projection are.
+
+          Comparing floating-point eigenvalues with `==`, the third wrong version, fails because the computed eigenvalue 0 is something like $10^{-16}$. The projection $I - \tfrac13J$ found here is the matrix that subtracts the mean from a list of numbers. Centring data is a projection onto an eigenspace.
+    - question:
+        id: fix-sides
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `root(A)` should return the symmetric square root of a symmetric matrix with positive eigenvalues: the matrix $R = Q\sqrt{\Lambda}\,Q^\top$, which satisfies $RR = A$. The program prints whether $RR = A$, and prints `False`. Fix it.
+        starter: |
+          import numpy as np
+
+
+          def root(A):
+              values, Q = np.linalg.eigh(A)
+              return Q.T @ np.diag(np.sqrt(values)) @ Q
+
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          R = root(A)
+          print(np.allclose(R @ R, A))
+        solution: |
+          import numpy as np
+
+
+          def root(A):
+              values, Q = np.linalg.eigh(A)
+              return Q @ np.diag(np.sqrt(values)) @ Q.T
+
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          R = root(A)
+          print(np.allclose(R @ R, A))
+        tests: |
+          import numpy as _np
+          _A = _np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          _R = root(_A)
+          assert _np.allclose(_R @ _R, _A), "The square of the root should be A: the eigenvectors are the columns of Q, so Q goes on the left and its transpose on the right"
+          assert _np.allclose(_R, _R.T), "The root should be symmetric"
+          assert _np.all(_np.linalg.eigvalsh(_R) > 0), "The root should have positive eigenvalues, the square roots of those of A"
+          _M = _np.random.default_rng(1).normal(size=(4, 4)); _S = _M.T @ _M + _np.eye(4)
+          assert _np.allclose(root(_S) @ root(_S), _S), "The square of the root should give back a random symmetric matrix with positive eigenvalues"
+          assert _np.allclose(root(_np.diag([4.0, 9.0, 1.0])), _np.diag([2.0, 3.0, 1.0])), "The root of diag(4, 9, 1) is diag(2, 3, 1)"
+          assert output.strip() == "True", "The program should print True"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def root(A):
+                values, Q = np.linalg.eigh(A)
+                return Q.T @ np.diag(np.sqrt(values)) @ Q
+
+
+            print("True")
+          - |
+            import numpy as np
+
+
+            def root(A):
+                values, Q = np.linalg.eigh(A)
+                return Q @ np.diag(values / 2) @ Q.T
+
+
+            print("True")
+          - |
+            import numpy as np
+
+
+            def root(A):
+                return np.sqrt(A)
+
+
+            print("True")
+          - |
+            import numpy as np
+
+
+            def root(A):
+                values, Q = np.linalg.eigh(A)
+                return Q @ np.sqrt(np.diag(values)) @ Q
+
+
+            print("True")
+        explanation: |
+          $A = Q\Lambda Q^\top$ has the eigenvectors as the columns of $Q$, so a vector is first hit by $Q^\top$, which reads off its coordinates along the eigenvectors, and last by $Q$, which rebuilds it. $Q^\top\Lambda Q$ is the matrix with the same eigenvalues whose eigenvectors are the **rows** of $Q$, a different matrix unless $Q$ happens to be symmetric.
+
+          With $P^{-1}$ in the formula, getting the sides wrong produces an inverse on the wrong side and is easier to notice. With $Q^\top$ on both ends the formula looks symmetric and the mistake hides. Checking the factorisation on the original matrix, `Q @ np.diag(values) @ Q.T` against `A`, takes one line and catches it.
+    - question:
+        id: work-quadratic
+        type: numeric
+        system: s2
+        prompt: |
+          A symmetric matrix $A$ has orthonormal eigenvectors $\mathbf{q}_1, \mathbf{q}_2$ with eigenvalues 3 and $-1$. For $\mathbf{x} = 2\mathbf{q}_1 + 5\mathbf{q}_2$, what is $\mathbf{x}^\top A\mathbf{x}$?
+        answer: "-13"
+        explanation: |
+          $A\mathbf{x} = 6\mathbf{q}_1 - 5\mathbf{q}_2$, and by orthonormality $\mathbf{x} \cdot A\mathbf{x} = 2 \cdot 6 + 5 \cdot (-5) = -13$. In general, in the coordinates $y_i$ along orthonormal eigenvectors, $\mathbf{x}^\top A\mathbf{x} = \lambda_1y_1^2 + \dots + \lambda_ny_n^2$, with no cross terms. The expression $\mathbf{x}^\top A\mathbf{x}$ will be the main character of the next lessons, and this formula is why its sign is governed by the signs of the eigenvalues.
+    - question:
+        id: work-converse
+        type: choice
+        system: s2
+        prompt: |
+          A real matrix $B$ has real eigenvalues and an **orthonormal** basis of eigenvectors. Must $B$ be symmetric?
+        options:
+          - 'No. Many non-symmetric matrices have this property.'
+          - 'Yes. $B = Q\Lambda Q^\top$ with $Q$ orthogonal and $\Lambda$ diagonal, so $B^\top = Q\Lambda^\top Q^\top = Q\Lambda Q^\top = B$.'
+          - 'Only if its eigenvalues are distinct.'
+          - 'Only if it is invertible.'
+        answer: 1
+        explanation: |
+          So the spectral theorem is an "if and only if": perpendicular eigen-axes with real factors characterise symmetric matrices. A non-symmetric matrix can be diagonalisable with real eigenvalues, like $\begin{pmatrix} 4 & 1 \\ 2 & 3 \end{pmatrix}$, but then its eigenvectors, here $(1, -2)$ and $(1, 1)$, are not perpendicular. The amount by which they fail to be perpendicular is exactly what makes computations with $P$ and $P^{-1}$ inaccurate.
+    - question:
+        id: work-covariance
+        type: choice
+        system: s2
+        prompt: |
+          The covariance matrix $C$ of a data set is symmetric. What does the spectral theorem say about the data?
+        options:
+          - 'That the features are uncorrelated.'
+          - 'There is an orthonormal set of directions, the eigenvectors of $C$, such that the components of the data along different directions are uncorrelated, and the eigenvalue of each direction is the variance of the data along it.'
+          - 'That the data lie on a line.'
+          - 'Nothing, since covariance is a statistical notion.'
+        answer: 1
+        explanation: |
+          In the basis of eigenvectors the covariance matrix becomes $\Lambda$, which is diagonal: zero covariance between different coordinates, and variances $\lambda_i$ on the diagonal. The original features may be heavily correlated. Rotating to the eigenvectors removes the correlation without distorting distances, since the rotation is orthogonal. The directions with the largest eigenvalues are those along which the data vary most, and keeping only those is principal component analysis.
+  connections:
+    - text: |
+        A random matrix had complex eigenvalues and skewed eigenvectors, and its symmetric part had neither, because a symmetric matrix can be moved across a dot product. From that alone: eigenvalues are real, eigenvectors for different eigenvalues are orthogonal, and the orthogonal complement of an eigenvector is mapped to itself, which yields a full orthonormal set. This is the **spectral theorem**, $A = Q\Lambda Q^\top$ with $Q$ orthogonal.
+
+        Equivalently $A = \sum_i \lambda_i\mathbf{q}_i\mathbf{q}_i^\top$: split a vector along perpendicular axes, scale each part, and add. The converse holds, so this picture describes symmetric matrices and no others. Hermitian matrices satisfy the same theorem with unitary $U$.
+
+        The eigenvalues of a symmetric matrix are real, so they have signs, and the signs matter. If every eigenvalue is positive, the matrix stretches every axis without flipping any, and $\mathbf{x}^\top A\mathbf{x}$ is positive for every nonzero $\mathbf{x}$. Such matrices are the Gram matrices of the last cluster, the covariance matrices of statistics and the Hessians at a minimum, and they have a factorisation of their own that is cheaper than any eigenvalue computation: [[m8.positive-definite-matrices-and-cholesky]].
