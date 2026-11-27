@@ -1,0 +1,654 @@
+concept: m13.hessian-vector-products
+minutes: 85
+claim: You can define the Hessian-vector product as the derivative of the gradient along a direction, compute it without forming the Hessian in three ways (a difference of two gradients, the gradient of the gradient's dot product with the direction, and the gradient code run on dual numbers), state that it costs a small constant multiple of the function, derive it by hand for a small layer, and use it to measure curvature along a direction, to find the largest curvature by power iteration, and to explain how Newton steps are solved for large models.
+recalls: [m13.forward-mode-and-dual-numbers]
+uses: [m13.reverse-mode-differentiation-and-its-cost, m13.jacobian-vector-and-vector-jacobian-products, m13.the-method-of-differentials, m13.derivatives-with-respect-to-vectors, m12.hessian-and-symmetry-of-mixed-partials, m12.directional-derivative, m12.gradient, m12.multivariable-taylor-expansion, m8.perron-frobenius-and-power-iteration, m8.quadratic-forms-and-the-rayleigh-quotient, m8.spectral-theorem, m8.positive-definite-matrices-and-cholesky, e6.higher-order-gradients, e6.gradient-checking, e5.linear-algebra-routines, e1.complexity-and-big-o, e0.functions, e0.loops]
+leads: [m13.implicit-differentiation-through-solvers]
+starter: |
+  # Scratch space. f(x) = x.A x / 2 + sum(x**4) / 4, whose gradient is A x + x**3.
+  import numpy as np
+
+  A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+
+
+  def grad(x):
+      return A @ x + x ** 3
+
+
+  x = np.array([1.0, 0.0, -1.0])
+  v = np.array([1.0, 2.0, 1.0])
+
+  H = A + np.diag(3 * x ** 2)       # the whole Hessian: n * n numbers
+  print([float(c) for c in H @ v])
+
+  h = 1e-5                          # two gradients, and no Hessian
+  print([round(float(c), 4) for c in (grad(x + h * v) - grad(x - h * v)) / (2 * h)])
+parts:
+  recall:
+    - text: |
+        [[m13.forward-mode-and-dual-numbers]] ended with a promise: nudging the inputs of a gradient differentiates it once more, in one direction. That is today's object, and it is what makes second-order information affordable for large models. Three quick pulls first.
+  puzzle:
+    - text: |
+        The Hessian $H$ of a function of $n$ variables holds all its second partial derivatives: $n^2$ numbers. It says how the gradient changes as you move, which is what you need to know how far a step can safely go.
+
+        For a model with a million parameters, $n^2 = 10^{12}$. At 8 bytes each the Hessian would fill 8 terabytes. It cannot be stored, let alone computed entry by entry.
+
+        The starter takes a function of three variables. It builds the whole Hessian and multiplies it by a vector $\mathbf{v}$. Then it gets the same three numbers from **two gradients**, with no Hessian anywhere.
+
+        ```
+        [7.0, 8.0, 7.0]
+        [7.0, 8.0, 7.0]
+        ```
+
+        **What is $H\mathbf{v}$, that two gradients are enough to find it? Can it be had exactly, without the small step $h$? And what use is the Hessian if it can only ever be multiplied by vectors?**
+  intuition:
+    - text: |
+        The Hessian is the derivative of the gradient. Feed it a direction $\mathbf{v}$ and it returns **how the gradient changes when you move along $\mathbf{v}$**:
+
+        $$\nabla f(\mathbf{x} + t\mathbf{v}) \approx \nabla f(\mathbf{x}) + t\,H\mathbf{v}.$$
+
+        So $H\mathbf{v}$ is a directional derivative, not of $f$ but of $\nabla f$. The starter measured it in the plainest way: the gradient a little ahead minus the gradient a little behind, divided by the distance.
+
+        This is the same situation as with Jacobians. The matrix is too large to hold, but its **action on a vector** is cheap, and the action is what algorithms use. $H$ is the Jacobian of the function $\mathbf{x} \mapsto \nabla f(\mathbf{x})$, so $H\mathbf{v}$ is a Jacobian-vector product of the gradient.
+
+        That observation gives an exact method at once. A Jacobian-vector product is what dual numbers compute. Take the code that computes the gradient, by reverse mode or by hand, and run it on the inputs $\mathbf{x} + \mathbf{v}\varepsilon$. The values that come out are the gradient, and the tangents are $H\mathbf{v}$. One gradient costs a few evaluations of $f$. Running it on dual numbers costs about twice that. The Hessian of a million variables, applied to a vector, for the price of a handful of evaluations.
+
+        And products are enough. The curvature of $f$ along $\mathbf{v}$ is the number $\mathbf{v}^\top H\mathbf{v}$. The sharpest curvature is the top eigenvalue, which power iteration finds with nothing but products. Even the Newton step, which solves $H\mathbf{p} = -\nabla f$, can be found by iterative methods that only ever ask for $H$ times a vector.
+  derivation:
+    - text: |
+        **Definition.** For twice-differentiable $f: \mathbb{R}^n \to \mathbb{R}$ with Hessian $H(\mathbf{x})$, the **Hessian-vector product** is
+
+        $$H\mathbf{v} = \frac{d}{dt}\nabla f(\mathbf{x} + t\mathbf{v})\Big|_{t=0},$$
+
+        the directional derivative of the gradient. Entry $i$ is $\sum_j\frac{\partial^2f}{\partial x_i\partial x_j}v_j$.
+
+        **Three ways to compute it, none of which forms $H$.**
+
+        *1. Difference of gradients.* $H\mathbf{v} \approx \dfrac{\nabla f(\mathbf{x} + h\mathbf{v}) - \nabla f(\mathbf{x} - h\mathbf{v})}{2h}$. Two gradients, with the usual trouble of choosing $h$.
+
+        *2. Gradient of a dot product (reverse over reverse).* Hold $\mathbf{v}$ fixed and define the scalar function $g(\mathbf{x}) = \nabla f(\mathbf{x}) \cdot \mathbf{v}$. Then
+
+        $$\frac{\partial g}{\partial x_j} = \sum_i\frac{\partial^2f}{\partial x_j\partial x_i}v_i = (H\mathbf{v})_j, \qquad\text{so}\qquad \nabla g = H\mathbf{v}.$$
+
+        One backward sweep gives $\nabla f$, as a calculation that is itself recorded. A second backward sweep through that record gives $\nabla g$. This is what your engine did in [[e6.higher-order-gradients]].
+
+        *3. Dual numbers through the gradient (forward over reverse).* Run the gradient calculation on $\mathbf{x} + \mathbf{v}\varepsilon$:
+
+        $$\nabla f(\mathbf{x} + \mathbf{v}\varepsilon) = \nabla f(\mathbf{x}) + H\mathbf{v}\ \varepsilon.$$
+
+        Exact, with no second tape. This is usually the cheapest and the most accurate.
+
+        **Cost.** A gradient costs at most about 5 evaluations of $f$, and either a second sweep or dual arithmetic multiplies that by a small constant again. So $H\mathbf{v}$ costs a constant multiple of $f$, independent of $n$. The whole Hessian, if it is really wanted, takes $n$ products, one for each $\mathbf{e}_i$.
+
+        **By hand, for one layer.** Let $f(\mathbf{x}) = \tfrac12\|\tanh(W\mathbf{x})\|^2$. With $\mathbf{h} = \tanh(W\mathbf{x})$, the gradient is $\nabla f = W^\top\big((1 - \mathbf{h}^2) \circ \mathbf{h}\big) = W^\top(\mathbf{h} - \mathbf{h}^3)$, with powers taken entry by entry.
+
+        Nudge $\mathbf{x}$ along $\mathbf{v}$ and follow the tangents through the same steps. $\dot{\mathbf{h}} = (1 - \mathbf{h}^2) \circ W\mathbf{v}$, and the tangent of $\mathbf{h} - \mathbf{h}^3$ is $(1 - 3\mathbf{h}^2) \circ \dot{\mathbf{h}}$. So
+
+        $$H\mathbf{v} = W^\top\big((1 - 3\mathbf{h}^2) \circ (1 - \mathbf{h}^2) \circ W\mathbf{v}\big).$$
+
+        Read right to left: a JVP through the layer, a diagonal scaling, and a VJP back. $H$ itself, which is $W^\top DW$ with $D$ diagonal, was never formed.
+    - question:
+        id: derivation-small
+        type: numeric
+        system: s2
+        prompt: |
+          $f(x, y) = x^2y$. At the point $(1, 3)$ and for $\mathbf{v} = (1, 1)$, what is the first entry of $H\mathbf{v}$? Find it as the derivative of the first entry of the gradient along $\mathbf{v}$.
+        answer: "8"
+        explanation: |
+          The gradient is $(2xy,\ x^2)$. Its first entry $2xy$ has partial derivatives $2y = 6$ and $2x = 2$ at $(1, 3)$, so its rate of change along $(1, 1)$ is $6 + 2 = 8$. The second entry $x^2$ changes at rate $2x = 2$. So $H\mathbf{v} = (8, 2)$, which agrees with the Hessian $\begin{pmatrix} 6 & 2 \\ 2 & 0 \end{pmatrix}$ applied to $(1, 1)$. Only the two entries of the gradient were differentiated, each along one direction.
+    - text: |
+        **What the products are for.**
+
+        *Curvature along a direction.* By Taylor's theorem along the line $\mathbf{x} + t\mathbf{v}$:
+
+        $$f(\mathbf{x} + t\mathbf{v}) \approx f(\mathbf{x}) + t\,\nabla f \cdot \mathbf{v} + \tfrac12t^2\,\mathbf{v}^\top H\mathbf{v}.$$
+
+        The number $\mathbf{v}^\top H\mathbf{v}$ is the second derivative of $f$ along $\mathbf{v}$. If it is positive, the quadratic model is smallest at $t = -\dfrac{\nabla f \cdot \mathbf{v}}{\mathbf{v}^\top H\mathbf{v}}$: a step size, from one product.
+
+        *The largest curvature.* $H$ is symmetric, so power iteration with $\mathbf{v} \leftarrow H\mathbf{v}/\|H\mathbf{v}\|$ converges to an eigenvector of the eigenvalue of largest absolute value, and the Rayleigh quotient $\mathbf{v}^\top H\mathbf{v}$ to that eigenvalue. This $\lambda_{\max}$ is the **sharpness** of the loss at $\mathbf{x}$.
+
+        *The step-size limit.* For a quadratic $f = \tfrac12\mathbf{x}^\top H\mathbf{x}$, gradient descent $\mathbf{x} \leftarrow \mathbf{x} - \eta H\mathbf{x}$ multiplies the component along an eigenvector of eigenvalue $\lambda$ by $1 - \eta\lambda$. For positive $\lambda$ that shrinks exactly when $\eta < 2/\lambda$. So the method is stable only for
+
+        $$\eta < \frac{2}{\lambda_{\max}}.$$
+
+        *Newton's step.* Minimising the quadratic model in all directions at once gives $H\mathbf{p} = -\nabla f$. For large $n$ this is solved approximately by an iterative method, usually conjugate gradients, which touches $H$ only through products $H\mathbf{v}$: a few dozen products in place of a matrix with $n^2$ entries.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the argument that the gradient of $g(\mathbf{x}) = \nabla f(\mathbf{x}) \cdot \mathbf{v}$ is $H\mathbf{v}$.
+        steps:
+          - 'Write $g(\mathbf{x}) = \sum_i\frac{\partial f}{\partial x_i}v_i$, with $\mathbf{v}$ held constant.'
+          - 'Differentiate with respect to $x_j$: $\frac{\partial g}{\partial x_j} = \sum_i\frac{\partial^2f}{\partial x_j\partial x_i}v_i$.'
+          - 'The mixed partial derivatives are the entries of the Hessian: the sum is $\sum_iH_{ji}v_i$.'
+          - 'That is entry $j$ of $H\mathbf{v}$.'
+          - 'So one more backward sweep, through the calculation of the gradient, returns $H\mathbf{v}$.'
+        explanation: A scalar function was built whose gradient is the product wanted, and gradients of scalar functions are cheap.
+  formal:
+    - text: |
+        **Definition.** For $f \in C^2$: $H(\mathbf{x})\mathbf{v} = D(\nabla f)(\mathbf{x})[\mathbf{v}]$. Since $H$ is symmetric, $H\mathbf{v} = J_{\nabla f}\mathbf{v} = J_{\nabla f}^\top\mathbf{v}$: the JVP and the VJP of the gradient map coincide.
+
+        **Identities.** $H\mathbf{v} = \nabla_{\mathbf{x}}\big(\nabla f(\mathbf{x}) \cdot \mathbf{v}\big)$ for constant $\mathbf{v}$. $\ \nabla f(\mathbf{x} + \mathbf{v}\varepsilon) = \nabla f(\mathbf{x}) + H\mathbf{v}\,\varepsilon$. $\ \mathbf{v}^\top H\mathbf{v} = \frac{d^2}{dt^2}f(\mathbf{x} + t\mathbf{v})\big|_{t=0}$.
+
+        **Complexity.** $\operatorname{ops}(f, \nabla f, H\mathbf{v}) \le c\operatorname{ops}(f)$ with a constant $c$ independent of $n$ (about 10 to 15 in the operation-counting model, and 2 to 4 gradients in practice). Memory is that of one reverse sweep. The full Hessian costs $n$ products. Its diagonal is not, in general, obtainable more cheaply than that.
+
+        **The four combinations.** Forward over reverse and reverse over reverse both give $H\mathbf{v}$. Reverse over forward does too: the gradient of the scalar JVP $\nabla f \cdot \mathbf{v}$. Forward over forward gives only the scalar $\mathbf{u}^\top H\mathbf{v}$ per pass.
+
+        **Gauss-Newton product.** For $f = \ell \circ F$ with $J = J_F$ and $H_\ell$ the Hessian of $\ell$:
+
+        $$H = J^\top H_\ell J + \sum_k\frac{\partial\ell}{\partial F_k}\nabla^2F_k.$$
+
+        The first term, $G = J^\top H_\ell J$, is positive semidefinite when $\ell$ is convex. $G\mathbf{v}$ is a JVP, a small multiplication, and a VJP, with no second derivatives of $F$.
+
+        **Trace estimation (Hutchinson).** If $\mathbf{z}$ has independent entries of mean 0 and variance 1, then $\mathbb{E}[\mathbf{z}^\top H\mathbf{z}] = \operatorname{tr}H$.
+
+        **Newton by conjugate gradients.** For positive definite $H$, conjugate gradients solves $H\mathbf{p} = -\mathbf{g}$ exactly in at most $n$ products, and to relative accuracy $\epsilon$ in $O(\sqrt{\kappa(H)}\log(1/\epsilon))$ products.
+
+        **Gradient descent on a quadratic.** With $0 < \lambda_{\min} \le \lambda_{\max}$ the eigenvalues of $H$: convergence if and only if $0 < \eta < 2/\lambda_{\max}$, and the best rate is at $\eta = 2/(\lambda_{\min} + \lambda_{\max})$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-what
+        type: choice
+        system: s1
+        prompt: |
+          $H\mathbf{v}$ is
+        options: ['the derivative of $f$ along $\mathbf{v}$', 'the derivative of the gradient along $\mathbf{v}$', 'the gradient scaled by $\mathbf{v}$', 'the inverse of the Hessian times $\mathbf{v}$']
+        answer: 1
+        explanation: How the gradient changes as you move along the direction.
+    - question:
+        id: drill-entries
+        type: numeric
+        system: s1
+        prompt: |
+          A function has 1000 inputs. How many entries does its Hessian have?
+        answer: "1000000"
+        explanation: $n^2$.
+    - question:
+        id: drill-cost
+        type: choice
+        system: s1
+        prompt: |
+          One Hessian-vector product costs about
+        options: ['$n$ gradients', 'a small constant number of gradients', '$n^2$ evaluations of $f$', 'one evaluation per entry of the Hessian']
+        answer: 1
+        explanation: Independent of the number of inputs.
+    - question:
+        id: drill-dot
+        type: choice
+        system: s1
+        prompt: |
+          With $\mathbf{v}$ held constant, the gradient of $g(\mathbf{x}) = \nabla f(\mathbf{x}) \cdot \mathbf{v}$ is
+        options: ['$\nabla f$', '$H\mathbf{v}$', '$\mathbf{v}$', '$\mathbf{v}^\top H\mathbf{v}$']
+        answer: 1
+        explanation: Reverse over reverse.
+    - question:
+        id: drill-two-by-two
+        type: numeric
+        system: s1
+        prompt: |
+          $H = \begin{pmatrix} 2 & 1 \\ 1 & 3 \end{pmatrix}$ and $\mathbf{v} = (1, 0)$. What is the second entry of $H\mathbf{v}$?
+        answer: "1"
+        explanation: The product is the first column, $(2, 1)$.
+    - question:
+        id: drill-difference
+        type: choice
+        system: s1
+        prompt: |
+          The finite-difference estimate of $H\mathbf{v}$ is
+        options: ['$\dfrac{f(\mathbf{x} + h\mathbf{v}) - f(\mathbf{x} - h\mathbf{v})}{2h}$', '$\dfrac{\nabla f(\mathbf{x} + h\mathbf{v}) - \nabla f(\mathbf{x} - h\mathbf{v})}{2h}$', '$\dfrac{\nabla f(\mathbf{x} + h\mathbf{v})}{h}$', '$\nabla f(\mathbf{x}) \cdot \mathbf{v}$']
+        answer: 1
+        explanation: A central difference of gradients.
+    - question:
+        id: drill-dual
+        type: choice
+        system: s1
+        prompt: |
+          Running the gradient calculation on the dual inputs $\mathbf{x} + \mathbf{v}\varepsilon$ returns, as its tangents,
+        options: ['$\nabla f$', '$H\mathbf{v}$', '$\mathbf{v}$', 'the whole Hessian']
+        answer: 1
+        explanation: Forward over reverse.
+    - question:
+        id: drill-quadratic-form
+        type: choice
+        system: s1
+        prompt: |
+          The number $\mathbf{v}^\top H\mathbf{v}$ is
+        options: ['the slope of $f$ along $\mathbf{v}$', 'the second derivative of $f$ along the line $\mathbf{x} + t\mathbf{v}$', 'the largest eigenvalue of $H$', 'the trace of $H$']
+        answer: 1
+        explanation: Curvature in one direction.
+    - question:
+        id: drill-full
+        type: numeric
+        system: s1
+        prompt: |
+          A function has 20 inputs. How many Hessian-vector products give its full Hessian?
+        answer: "20"
+        explanation: One per column.
+    - question:
+        id: drill-linear
+        type: choice
+        system: s1
+        prompt: |
+          At a fixed point $\mathbf{x}$, doubling $\mathbf{v}$ makes $H\mathbf{v}$
+        options: ['unchanged', 'twice as large', 'four times as large', 'unpredictable']
+        answer: 1
+        explanation: The product is linear in the direction.
+    - question:
+        id: drill-power
+        type: choice
+        system: s1
+        prompt: |
+          Power iteration using only products $H\mathbf{v}$ finds
+        options: ['the trace of $H$', 'the eigenvalue of $H$ of largest absolute value', 'the determinant of $H$', 'the smallest eigenvalue of $H$']
+        answer: 1
+        explanation: The sharpest curvature.
+    - question:
+        id: drill-diagonal
+        type: numeric
+        system: s1
+        prompt: |
+          $f(\mathbf{x}) = \tfrac12\mathbf{x}^\top A\mathbf{x}$ with $A = \begin{pmatrix} 2 & 0 \\ 0 & 5 \end{pmatrix}$, and $\mathbf{v} = (1, 1)$. What is the second entry of $H\mathbf{v}$?
+        answer: "5"
+        explanation: The Hessian is $A$, and $A\mathbf{v} = (2, 5)$.
+    - question:
+        id: drill-newton
+        type: choice
+        system: s1
+        prompt: |
+          To solve the Newton system $H\mathbf{p} = -\nabla f$ by conjugate gradients, the method needs
+        options: ['every entry of $H$', 'only products of $H$ with vectors', 'the inverse of $H$', 'the eigenvalues of $H$']
+        answer: 1
+        explanation: Which is why the Hessian never has to be stored.
+    - question:
+        id: predict-storage
+        type: predict
+        system: s1
+        prompt: Storage for a model of a million parameters, at 8 bytes a number. What does this show?
+        code: |
+          n = 1000000
+          print(n * n * 8 / 1e12)
+          print(3 * n * 8 / 1e6)
+        output: |
+          8.0
+          24.0
+        explanation: The first line is the Hessian in terabytes. The second is three vectors, the point, the direction and the product, in megabytes. The product needs the three vectors and the working memory of a gradient, and the matrix is never held.
+    - question:
+        id: predict-curvature
+        type: predict
+        system: s1
+        prompt: Curvature along a direction, measured from three values of the function and from one product. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+
+
+          def f(x):
+              return 0.5 * float(x @ A @ x) + 0.25 * float((x ** 4).sum())
+
+
+          x = np.array([1.0, 0.0, -1.0])
+          v = np.array([1.0, 2.0, 1.0])
+          h = 1e-3
+          print(round((f(x + h * v) - 2 * f(x) + f(x - h * v)) / h ** 2, 3))
+          print(float(v @ (A @ v + 3 * x ** 2 * v)))
+        output: |
+          30.0
+          30.0
+        explanation: The product is (7, 8, 7), as in the starter, and its dot product with the direction (1, 2, 1) is 30. The second difference of the function along the line measures the same number. It is the second derivative along that direction.
+  work:
+    - text: Slower now. First the one-layer product derived above.
+    - question:
+        id: write-hvp
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          For $f(\mathbf{x}) = \tfrac12\|\tanh(W\mathbf{x})\|^2$ the gradient is given. Write `hvp(W, x, v)` returning $H\mathbf{v}$ exactly, by following the tangent of each step of the gradient calculation. Do not form the Hessian and do not use a finite difference.
+        starter: |
+          import numpy as np
+
+
+          def grad(W, x):
+              h = np.tanh(W @ x)
+              return W.T @ ((1 - h ** 2) * h)
+
+
+          def hvp(W, x, v):
+              return v * 0.0
+
+
+          W = np.array([[1.0, -1.0], [0.5, 1.0], [2.0, 0.0]])
+          print([round(float(c), 4) for c in hvp(W, np.array([0.3, -0.2]), np.array([1.0, 2.0]))])
+        solution: |
+          import numpy as np
+
+
+          def grad(W, x):
+              h = np.tanh(W @ x)
+              return W.T @ ((1 - h ** 2) * h)
+
+
+          def hvp(W, x, v):
+              h = np.tanh(W @ x)
+              hdot = (1 - h ** 2) * (W @ v)
+              return W.T @ ((1 - 3 * h ** 2) * hdot)
+
+
+          W = np.array([[1.0, -1.0], [0.5, 1.0], [2.0, 0.0]])
+          print([round(float(c), 4) for c in hvp(W, np.array([0.3, -0.2]), np.array([1.0, 2.0]))])
+        tests: |
+          import numpy as _np
+          def _grad(W, x):
+              h = _np.tanh(W @ x)
+              return W.T @ ((1 - h ** 2) * h)
+          def _num(W, x, v):
+              return (_grad(W, x + 1e-5 * v) - _grad(W, x - 1e-5 * v)) / 2e-5
+          _W = _np.array([[1.0, -1.0], [0.5, 1.0], [2.0, 0.0]])
+          _x = _np.array([0.3, -0.2])
+          _v = _np.array([1.0, 2.0])
+          _r = hvp(_W, _x, _v)
+          assert _np.shape(_r) == (2,), "The product has the shape of x"
+          assert _np.allclose(_r, _num(_W, _x, _v), atol=1e-7), "The product should agree with a central difference of the gradient to 7 decimals. The tangent of h - h**3 is (1 - 3 h**2) times the tangent of h"
+          _rng = _np.random.default_rng(1)
+          _W2 = _rng.normal(size=(4, 3))
+          _x2 = _rng.normal(size=3)
+          _v2 = _rng.normal(size=3)
+          assert _np.allclose(hvp(_W2, _x2, _v2), _num(_W2, _x2, _v2), atol=1e-7), "For a random 4 by 3 layer the product should agree with a central difference of the gradient"
+          assert _np.allclose(hvp(_W2, _x2, 2 * _v2), 2 * hvp(_W2, _x2, _v2)), "The product is linear in v"
+          assert "eye" not in source and "diag" not in source, "Do not build a matrix: scale entry by entry"
+          assert output.strip() == "[1.3384, 2.7577]", "The program should print [1.3384, 2.7577]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def grad(W, x):
+                h = np.tanh(W @ x)
+                return W.T @ ((1 - h ** 2) * h)
+
+
+            def hvp(W, x, v):
+                h = np.tanh(W @ x)
+                hdot = (1 - h ** 2) * (W @ v)
+                return W.T @ ((1 - h ** 2) * hdot)
+
+
+            print("[1.3384, 2.7577]")
+          - |
+            import numpy as np
+
+
+            def grad(W, x):
+                h = np.tanh(W @ x)
+                return W.T @ ((1 - h ** 2) * h)
+
+
+            def hvp(W, x, v):
+                h = np.tanh(W @ x)
+                return W.T @ ((1 - 3 * h ** 2) * (W @ v))
+
+
+            print("[1.3384, 2.7577]")
+          - |
+            import numpy as np
+
+
+            def grad(W, x):
+                h = np.tanh(W @ x)
+                return W.T @ ((1 - h ** 2) * h)
+
+
+            def hvp(W, x, v):
+                return (grad(W, x + 0.1 * v) - grad(W, x)) / 0.1
+
+
+            print("[1.3384, 2.7577]")
+        explanation: |
+          The function is the gradient calculation run a second time with a tangent beside each value. $\mathbf{h}$ has tangent $(1 - \mathbf{h}^2) \circ W\mathbf{v}$. The gradient applies $W^\top$ to $\mathbf{h} - \mathbf{h}^3$, whose tangent is $(1 - 3\mathbf{h}^2)$ times that of $\mathbf{h}$. $W$ is constant, so the last step is unchanged.
+
+          Three matrix-vector products and some entrywise arithmetic: about the cost of two gradients, whatever the size of the layer.
+
+          The first wrong version differentiates $\mathbf{h}$ but treats the slope $1 - \mathbf{h}^2$ as a constant. What it returns is $J^\top J\mathbf{v}$, with $J$ the Jacobian of the layer. That is not the Hessian, but it is a famous approximation to it, the **Gauss-Newton** matrix: it drops the term containing the second derivative of $\tanh$, is always positive semidefinite, and is what many second-order methods deliberately use.
+    - question:
+        id: write-sharpness
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `top_curvature(hvp, n, steps)`. `hvp` is a function taking a vector and returning the Hessian times that vector, for a symmetric Hessian of size `n`. Start from the vector of ones scaled to length 1, apply `steps` rounds of power iteration, and return the Rayleigh quotient of the final unit vector as a float. Use `hvp` and nothing else to reach the Hessian.
+        starter: |
+          import numpy as np
+
+
+          def top_curvature(hvp, n, steps):
+              return 1.0
+
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          x = np.array([1.0, 0.0, -1.0])
+          top = top_curvature(lambda v: A @ v + 3 * x ** 2 * v, 3, 60)
+          print(round(top, 4), round(2 / top, 4))
+        solution: |
+          import numpy as np
+
+
+          def top_curvature(hvp, n, steps):
+              v = np.ones(n) / np.sqrt(n)
+              for step in range(steps):
+                  w = hvp(v)
+                  v = w / np.linalg.norm(w)
+              return float(v @ hvp(v))
+
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          x = np.array([1.0, 0.0, -1.0])
+          top = top_curvature(lambda v: A @ v + 3 * x ** 2 * v, 3, 60)
+          print(round(top, 4), round(2 / top, 4))
+        tests: |
+          import numpy as _np
+          _A = _np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          _calls = []
+          def _h(v):
+              _calls.append(1)
+              return _A @ v
+          _t = top_curvature(_h, 3, 60)
+          assert abs(_t - 4.0) < 1e-6, "For the matrix with eigenvalues 4, 2 and 1 the result should be 4"
+          assert len(_calls) <= 62, "With 60 steps, call hvp about 61 times: once per step and once for the Rayleigh quotient"
+          assert abs(top_curvature(lambda v: _np.array([1.0, 7.0, 3.0]) * v, 3, 80) - 7.0) < 1e-6, "For the diagonal Hessian with entries 1, 7, 3 the result should be 7"
+          assert abs(top_curvature(lambda v: _np.array([-6.0, 1.0, 2.0]) * v, 3, 80) + 6.0) < 1e-6, "For the diagonal Hessian with entries -6, 1, 2 the eigenvalue of largest size is -6. Return the Rayleigh quotient, which keeps the sign"
+          assert abs(top_curvature(_h, 3, 0) - 11 / 3) < 1e-9, "With 0 steps the result is the Rayleigh quotient of the starting vector, 11/3 for this matrix"
+          assert output.strip() == "5.7321 0.3489", "The program should print 5.7321 0.3489"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def top_curvature(hvp, n, steps):
+                v = np.ones(n) / np.sqrt(n)
+                for step in range(steps):
+                    w = hvp(v)
+                    v = w / np.linalg.norm(w)
+                return float(np.linalg.norm(hvp(v)))
+
+
+            print("5.7321 0.3489")
+          - |
+            import numpy as np
+
+
+            def top_curvature(hvp, n, steps):
+                v = np.ones(n) / np.sqrt(n)
+                for step in range(steps):
+                    v = hvp(v)
+                return float(v @ hvp(v))
+
+
+            print("5.7321 0.3489")
+          - |
+            import numpy as np
+
+
+            def top_curvature(hvp, n, steps):
+                v = np.ones(n)
+                for step in range(steps):
+                    w = hvp(v)
+                    v = w / np.linalg.norm(w)
+                return float(v @ hvp(v))
+
+
+            print("5.7321 0.3489")
+        explanation: |
+          This is the power iteration of the spectral theory lessons, with one change: the matrix has been replaced by a function. The loop never asks for an entry of the Hessian, so it runs unchanged on a model with a million parameters, where `hvp` would be a gradient run on dual numbers.
+
+          At the point $(1, 0, -1)$ the Hessian of the starter's function is $A$ with 3 added to two of its diagonal entries. Its largest eigenvalue is $4 + \sqrt3 \approx 5.7321$. That is the sharpest curvature of the function at this point, and $2/5.7321 \approx 0.3489$ is the largest step size for which gradient descent is stable there.
+
+          Measuring $\lambda_{\max}$ of the Hessian in this way during training is how the sharpness of a loss is tracked, and a few dozen products are enough.
+
+          The first wrong version returns the length of $H\mathbf{v}$, which is the size of the eigenvalue without its sign. A negative top eigenvalue means the function curves downwards most strongly, which is a different situation altogether.
+    - question:
+        id: fix-linear
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `hvp(x, v)` should return the Hessian-vector product of $f(\mathbf{x}) = \tfrac12\mathbf{x}^\top A\mathbf{x} + \tfrac14\sum_ix_i^4$, whose gradient is $A\mathbf{x} + \mathbf{x}^3$. The program prints its largest difference from a central difference of the gradient, which should be `0.0`. Fix `hvp`.
+        starter: |
+          import numpy as np
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+
+
+          def grad(x):
+              return A @ x + x ** 3
+
+
+          def hvp(x, v):
+              return A @ v + 3 * v ** 2 * x
+
+
+          x = np.array([1.0, 0.5, -1.0])
+          v = np.array([1.0, 2.0, 1.0])
+          h = 1e-5
+          measured = (grad(x + h * v) - grad(x - h * v)) / (2 * h)
+          print(round(float(np.abs(hvp(x, v) - measured).max()), 4))
+        solution: |
+          import numpy as np
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+
+
+          def grad(x):
+              return A @ x + x ** 3
+
+
+          def hvp(x, v):
+              return A @ v + 3 * x ** 2 * v
+
+
+          x = np.array([1.0, 0.5, -1.0])
+          v = np.array([1.0, 2.0, 1.0])
+          h = 1e-5
+          measured = (grad(x + h * v) - grad(x - h * v)) / (2 * h)
+          print(round(float(np.abs(hvp(x, v) - measured).max()), 4))
+        tests: |
+          import numpy as _np
+          _A = _np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          _x = _np.array([1.0, 0.5, -1.0])
+          _v = _np.array([1.0, 2.0, 1.0])
+          assert _np.allclose(hvp(_x, _v), (_A + _np.diag(3 * _x ** 2)) @ _v), "At (1, 0.5, -1) along (1, 2, 1) the product is (7, 9.5, 7). The Hessian is A plus the diagonal matrix of 3 x**2"
+          assert _np.allclose(hvp(_x, 2 * _v), 2 * hvp(_x, _v)), "The product must be linear in v: doubling v should double it"
+          _y = _np.array([0.2, -0.3, 2.0])
+          _w = _np.array([-1.0, 0.5, 3.0])
+          assert _np.allclose(hvp(_y, _w), (_A + _np.diag(3 * _y ** 2)) @ _w), "At (0.2, -0.3, 2) along (-1, 0.5, 3) the product should equal the explicit Hessian times the direction"
+          assert output.strip() == "0.0", "The program should print 0.0"
+        wrong:
+          - |
+            import numpy as np
+            A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+
+
+            def grad(x):
+                return A @ x + x ** 3
+
+
+            def hvp(x, v):
+                return A @ v + 3 * v ** 2 * x
+
+
+            print("0.0")
+          - |
+            import numpy as np
+            A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+
+
+            def grad(x):
+                return A @ x + x ** 3
+
+
+            def hvp(x, v):
+                return A @ v + 3 * x ** 2
+
+
+            print("0.0")
+          - |
+            import numpy as np
+            A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+
+
+            def grad(x):
+                return A @ x + x ** 3
+
+
+            def hvp(x, v):
+                return A @ x + 3 * x ** 2 * v
+
+
+            print("0.0")
+        explanation: |
+          The tangent of $\mathbf{x}^3$ when $\mathbf{x}$ moves along $\mathbf{v}$ is $3\mathbf{x}^2 \circ \mathbf{v}$: the slope at the **point**, times the **direction**. The code had the two exchanged, squaring the direction.
+
+          There is a test that catches this kind of slip without knowing the right answer. $H\mathbf{v}$ is a matrix times $\mathbf{v}$, so it must be **linear in $\mathbf{v}$**: doubling the direction doubles the product. The broken version quadruples its second term. Any expression claimed to be a Hessian-vector product, a JVP or a VJP in which the direction appears squared, or not at all, is wrong on sight.
+
+          In the tangent of any step, each term contains exactly one dotted quantity.
+    - question:
+        id: work-terabytes
+        type: numeric
+        system: s2
+        prompt: |
+          A model has 100 000 parameters. Storing its Hessian at 8 bytes an entry takes how many gigabytes? Take $10^9$ bytes to the gigabyte.
+        answer: "80"
+        explanation: |
+          $(10^5)^2 = 10^{10}$ entries, times 8 bytes, is $8 \times 10^{10}$ bytes: 80 gigabytes, for what is by present standards a tiny model. The parameters themselves take under a megabyte. Multiply the parameters by 10 and the Hessian grows by 100. A Hessian-vector product for the same model needs a few vectors of $10^5$ numbers and the working memory of one gradient.
+    - question:
+        id: work-step-limit
+        type: numeric
+        system: s2
+        prompt: |
+          Power iteration on Hessian-vector products reports that the largest eigenvalue of the Hessian of a loss is 40, and all its eigenvalues are positive. Treating the loss as quadratic near this point, below what step size $\eta$ is gradient descent stable?
+        answer: "0.05"
+        explanation: |
+          Along the eigenvector of eigenvalue $\lambda$, each step multiplies the error by $1 - \eta\lambda$, which has size below 1 exactly when $0 < \eta < 2/\lambda$. The tightest of these conditions comes from the largest eigenvalue: $\eta < 2/40 = 0.05$. Above it, the error along the sharpest direction grows at every step while the others still shrink, and the loss blows up. This is the quantitative content of "the learning rate is too high", and it is set by one number that a few dozen products can measure.
+    - question:
+        id: work-why-enough
+        type: choice
+        system: s2
+        prompt: |
+          A Newton step solves $H\mathbf{p} = -\nabla f$ for a model with $10^6$ parameters. Which statement is right?
+        options:
+          - 'It is impossible, since the Hessian cannot be stored.'
+          - 'An iterative solver such as conjugate gradients finds an approximate $\mathbf{p}$ from a modest number of products $H\mathbf{v}$, each costing a few gradients, and the Hessian is never formed.'
+          - 'The Hessian must be computed by $10^6$ products and then inverted.'
+          - 'The Newton step equals the gradient step when the model is large.'
+        answer: 1
+        explanation: |
+          A linear system can be solved without holding its matrix, provided the matrix can be applied to vectors. Conjugate gradients builds the solution out of the vectors $\mathbf{g}, H\mathbf{g}, H^2\mathbf{g}, \dots$, one product per iteration, and a few dozen iterations usually give a useful step. This is called Newton-CG or Hessian-free optimisation. The third option would need $10^6$ products and 8 terabytes. The idea that an operator is fully usable through its action alone has now appeared for Jacobians, for their transposes and for Hessians, and it is the working principle of large-scale numerical computing.
+  connections:
+    - text: |
+        $H\mathbf{v}$ is how the gradient changes along $\mathbf{v}$: a Jacobian-vector product of the gradient. Two gradients and a subtraction approximate it. Exactly, it is the gradient of $\nabla f \cdot \mathbf{v}$, or the tangent that comes out when the gradient calculation is run on dual numbers. Either way it costs a few gradients and the Hessian is never formed.
+
+        Products are enough for what the Hessian is wanted for: the curvature $\mathbf{v}^\top H\mathbf{v}$ along a direction, the largest eigenvalue and with it the step-size limit $2/\lambda_{\max}$, and the Newton step by an iterative solver.
+
+        That last use contains a new kind of object. The Newton step is not given by a formula that can be traced operation by operation. It is defined as the **solution of an equation**, found by an iteration. Many quantities in machine learning are like that: the weights that minimise a loss, the fixed point of a layer, the solution of a linear system. How do you differentiate through something that is only defined by the equation it satisfies? Not by differentiating the solver: [[m13.implicit-differentiation-through-solvers]].
