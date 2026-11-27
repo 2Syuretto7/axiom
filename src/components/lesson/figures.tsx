@@ -4061,6 +4061,95 @@ function PolarCell(props: Props) {
   );
 }
 
+/* One small computation, L = (w × x + b − y)², drawn as the graph an autograd engine records. */
+const TRAIL: Record<string, Spot> = { w: [44, 40], x: [44, 104], b: [44, 168], y: [44, 232], p: [150, 72], q: [236, 120], e: [322, 176], L: [404, 176] };
+const TRAIL_VALUES: Record<string, number> = { w: 3, x: 2, b: 1, y: 5, p: 6, q: 7, e: 2, L: 4 };
+const TRAIL_GRADS: Record<string, number> = { L: 1, e: 4, q: 4, y: -4, p: 4, b: 4, w: 8, x: 12 };
+// Each edge runs from a value to the value computed from it, with the local derivative of the second by the first.
+const TRAIL_EDGES: [string, string, number, number][] = [
+  ["w", "p", 2, 0],
+  ["x", "p", 3, 0],
+  ["p", "q", 1, 0],
+  ["b", "q", 1, 0],
+  ["q", "e", 1, 0],
+  ["y", "e", -1, 0],
+  ["e", "L", 2, -7],
+  ["e", "L", 2, 7],
+];
+const TRAIL_MADE = ["p", "q", "e", "L"];
+const TRAIL_HOW: Record<string, string> = {
+  p: "p = w × x = 6. The engine records that p came from w and x, with local derivatives x = 2 and w = 3.",
+  q: "q = p + b = 7. It came from p and b, and a sum passes changes straight through: both local derivatives are 1.",
+  e: "e = q − y = 2. It came from q, with local derivative 1, and from y, with local derivative −1.",
+  L: "L = e × e = 4. It came from e twice, so there are two edges from e, each with local derivative e = 2.",
+};
+const TRAIL_BACK: [string, string][] = [
+  ["L", "The output's gradient is set to 1, since L changes by 1 when L changes by 1. Every other gradient starts at 0."],
+  ["L", "L hands its gradient back along both of its edges: e receives 1 × 2 and then 1 × 2 again, and adds them. The gradient of e is 4."],
+  ["e", "e has now heard from everything that used it, so it hands back: q receives 4 × 1 = 4 and y receives 4 × (−1) = −4."],
+  ["q", "q hands back along its two edges: p receives 4 × 1 = 4 and b receives 4 × 1 = 4."],
+  ["p", "p hands back: w receives 4 × 2 = 8 and x receives 4 × 3 = 12. Every value now holds the rate at which L changes with it, found in one sweep."],
+];
+
+/** A computation recorded as a graph, run forwards one operation at a time and then swept backwards for the gradients. */
+function TrailGraph(props: Props) {
+  const last = props.backward === false ? 4 : 9;
+  const [step, setStep] = useState(clamp(Math.round(num(props.step, 0)), 0, last));
+  const made = TRAIL_MADE.slice(0, Math.min(step, 4));
+  const known = (name: string) => !TRAIL_MADE.includes(name) || made.includes(name);
+  const sweep = step - 5;
+  // After sweep step k, the nodes that have handed their gradient back are the first k in this list.
+  const handed = ["L", "e", "q", "p"].slice(0, Math.max(0, sweep));
+  const hasGrad = (name: string) => sweep >= 0 && (name === "L" || TRAIL_EDGES.some(([from, to]) => from === name && handed.includes(to)));
+  const now = step === 0 ? "" : step <= 4 ? TRAIL_MADE[step - 1] : TRAIL_BACK[sweep][0];
+  const told =
+    step === 0
+      ? "Nothing has been computed yet. The inputs are w = 3, x = 2, b = 1 and y = 5."
+      : step <= 4
+        ? `Forwards, operation ${step} of 4. ${TRAIL_HOW[TRAIL_MADE[step - 1]]}`
+        : `Backwards, step ${sweep + 1} of 5. ${TRAIL_BACK[sweep][1]}`;
+  const grads = Object.keys(TRAIL)
+    .filter(hasGrad)
+    .map((name) => `${name}: ${dp(TRAIL_GRADS[name])}`);
+  return (
+    <Frame
+      title="A computation and its trail"
+      summary={`L = (w × x + b − y)², computed in four operations. ${told}${grads.length > 0 ? ` Gradients so far: ${grads.join(", ")}.` : ""}`}
+      controls={<Stepper label="step" value={step} onChange={setStep} min={0} max={last} />}
+    >
+      <svg viewBox="0 0 440 270" role="img" aria-label={`The graph of L = (w × x + b − y)² after ${plural(Math.min(step, 4), "forward operation")}${sweep >= 0 ? ` and ${plural(sweep + 1, "backward step")}` : ""}`}>
+        {TRAIL_EDGES.map(([from, to, local, shift], i) => {
+          const drawn = made.includes(to);
+          const hot = sweep >= 1 && handed[handed.length - 1] === to;
+          return (
+            <Link
+              key={i}
+              from={[TRAIL[from][0], TRAIL[from][1] + shift]}
+              to={[TRAIL[to][0], TRAIL[to][1] + shift]}
+              arrow
+              gap={36}
+              faint={!drawn}
+              hot={hot}
+              label={drawn && shift <= 0 ? dp(local) : undefined}
+            />
+          );
+        })}
+        {Object.keys(TRAIL).map((name) => (
+          <Dot
+            key={name}
+            at={TRAIL[name]}
+            name={known(name) ? `${name} = ${dp(TRAIL_VALUES[name])}` : name}
+            wide
+            mark={name === now ? "now" : known(name) ? "done" : "wait"}
+            note={hasGrad(name) ? `grad ${dp(TRAIL_GRADS[name])}` : undefined}
+            above={name === "L" || name === "e"}
+          />
+        ))}
+      </svg>
+    </Frame>
+  );
+}
+
 const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "place-value": PlaceValue,
   "number-line": NumberLine,
@@ -4135,6 +4224,7 @@ const FIGURES: Record<FigureName, ComponentType<Props>> = {
   "float-gaps": FloatGaps,
   contours: Contours,
   "polar-cell": PolarCell,
+  "trail-graph": TrailGraph,
 };
 
 export function Figure({ name, props }: { name: string; props?: Props }) {
