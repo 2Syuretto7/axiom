@@ -1,0 +1,995 @@
+concept: e6.reverse-mode-on-scalars
+minutes: 85
+claim: You can say what the gradient stored on a node of a computational graph means, pass gradients backwards from the output so that each value adds up a contribution from every place it was used, write that backward pass for scalars and use it to get the derivative with respect to every input in one sweep, explain why contributions are added and why old gradients must be cleared, and choose between forward and reverse mode from the numbers of inputs and outputs.
+recalls: [e6.scalar-computational-graph]
+uses: [m12.multivariable-chain-rule, m12.gradient, m12.partial-derivatives, m10.differentiation-rules, m10.chain-rule, m10.derivatives-of-exp-log-and-trig, m10.maxima-and-minima, e1.classes-and-objects, e1.special-methods-and-operator-overloading, e1.recursion, e1.comprehensions-and-iterators, e3.graphs-and-traversal, e0.functions, e0.loops]
+leads: [e6.topological-ordering-of-the-graph, e6.tensor-valued-autograd, e6.gradient-checking, e7.autograd-in-pytorch]
+starter: |
+  # Scratch space. The squared error again, differentiated by walking paths,
+  # with a count of how many times the walker is called.
+  class Value:
+      def __init__(self, data, parents=()):
+          self.data = data
+          self.parents = parents
+
+      def __add__(self, other):
+          return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+      def __sub__(self, other):
+          return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+      def __mul__(self, other):
+          return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+  calls = [0]
+
+
+  def path_sum(node, target):
+      calls[0] += 1
+      if node is target:
+          return 1.0
+      return sum(local * path_sum(parent, target) for parent, local in node.parents)
+
+
+  w, x, b, y = Value(3.0), Value(2.0), Value(1.0), Value(5.0)
+  e = w * x + b - y
+  L = e * e
+  print([path_sum(L, leaf) for leaf in [w, x, b, y]])
+  print(calls[0])
+parts:
+  recall:
+    - text: |
+        [[e6.scalar-computational-graph]] made arithmetic leave a trail: each `Value` remembers its parents and the local derivative for each, and a derivative is the sum over paths of the product of the local derivatives. It ended with a complaint, that the walk had to be done again for every input. Today the walk is turned round. Three quick pulls first.
+  puzzle:
+    - text: |
+        The starter is the last lesson's squared error, $L = (wx + b - y)^2$ at $w = 3$, $x = 2$, $b = 1$, $y = 5$, with one addition: a counter of how many times `path_sum` is called. It asks for the derivative of $L$ with respect to each of the four inputs.
+
+        Run it. The derivatives are `[8.0, 12.0, 4.0, -4.0]`, as before. The count is `60`.
+
+        Sixty calls for a graph with eight nodes. Each of the four questions set off its own walk of 15 calls, and the four walks were nearly the same walk. Every one of them began at `L`, went down both arrows to `e`, and multiplied by 2. Every one of them then went on to `q` and `y`. The products along the top of the graph were worked out four times over and thrown away four times.
+
+        With four inputs that is a nuisance. A network has a million weights, each one an input to the loss, and a million walks is no better than the million and one runs of the formula that the graph was supposed to save.
+
+        Look at where the waste is. All the paths, for all the inputs, **end** at `L`. They differ only in where they start. Walking from `L`, the first steps are the same whatever input you are asking about.
+
+        **Can one walk, started at the output, deliver all four derivatives? What would each value in the graph have to collect as the walk passes through it? And when a value was used in two places, what should it do with the two things it is handed?**
+  intuition:
+    - text: |
+        The last lesson asked, of every node in turn: how does this node respond to $w$? That question has an input fixed in it, so it must be asked again for each input.
+
+        Ask a different question of each node: **how does the output respond to this node?** For a node $v$, that is $\dfrac{\partial L}{\partial v}$. There is one output, so the question is asked once, and the answers for the four leaves are exactly the four derivatives wanted. The answers for the nodes in between are not wasted either. They are the shared beginnings of the paths, worked out once.
+
+        Give each `Value` a place to keep its answer, an attribute called `grad`. From now on, **`v.grad` means the rate at which the output changes when `v` changes.** It is called the gradient of the node, since for the leaves these numbers are the components of $\nabla L$.
+
+        Start at the end, where the answer is known without any work. How does $L$ respond to $L$? At the rate 1. So `L.grad` is 1.
+
+        Now step back along one arrow. `L = e * e`, and the arrow from `e` carries the local derivative 2. If $L$ responds to itself at the rate 1, and $L$ responds to `e` along this arrow at the rate 2, then this arrow tells `e`: the output responds to you at $1 \times 2$. But there is a second arrow from `e` to `L`, and it says the same. `e` was used twice, the output responds to it through both uses, and **the two responses add**. So `e.grad` is $2 + 2 = 4$.
+
+        Step back again. `e = q - y`, with local derivatives 1 and $-1$. The output responds to `e` at the rate 4, so it responds to `q` at $4 \times 1 = 4$ and to `y` at $4 \times (-1) = -4$. Each of those was used once only, so that is their whole gradient.
+
+        Carry on to the leaves. The figure does it one node at a time.
+    - figure: trail-graph
+      props: { step: 5 }
+    - text: |
+        One rule did all of it. **A node that knows its own gradient hands each parent that gradient times the local derivative on the arrow between them. A parent adds up everything it is handed.**
+
+        Read it as a conversation. Each node says to each of its parents: "The output cares about me this much. I care about you this much. So through me, the output cares about you by the product." A parent that fed several later computations hears from each of them, and its gradient is the total.
+
+        That is the chain rule again, the same multiplying along paths and adding over paths. What has changed is the order of the work. `path_sum` followed each path separately from one end to the other. Here the product along the shared part of many paths is held in one place, the `grad` of the node where they part, and is used for all of them.
+
+        In the program it is a few lines.
+
+        ```python
+        class Value:
+            def __init__(self, data, parents=()):
+                self.data = data
+                self.parents = parents
+                self.grad = 0.0
+
+            def __add__(self, other):
+                return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+            def __sub__(self, other):
+                return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+            def __mul__(self, other):
+                return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+        def backward(node, upstream=1.0):
+            node.grad += upstream
+            for parent, local in node.parents:
+                backward(parent, upstream * local)
+
+
+        w, x, b, y = Value(3.0), Value(2.0), Value(1.0), Value(5.0)
+        e = w * x + b - y
+        L = e * e
+        backward(L)
+        print(w.grad, x.grad, b.grad, y.grad)
+        ```
+
+        That prints `8.0 12.0 4.0 -4.0`. One call, and every input has its derivative. The intermediate nodes have theirs too: `e.grad` is 4.0.
+
+        Every gradient starts at 0. `backward(L)` adds 1 to `L.grad` and then, for each parent, calls itself with what that parent is owed by this route: the amount arriving, times the local derivative. Each node adds what arrives to what it already has. Because the walk begins at the output, this way of differentiating is called **reverse mode**, and when the graph is a neural network it is called **backpropagation**.
+  derivation:
+    - text: |
+        **The quantity.** Fix one output node $L$. For every node $v$ define its **gradient**, or **adjoint**,
+
+        $$\bar v = \frac{\partial L}{\partial v},$$
+
+        the rate at which $L$ responds to a change in $v$ with the values computed before $v$ held fixed and everything computed from $v$ allowed to follow. The program's `v.grad` is $\bar v$.
+
+        **The rule.** $\bar L = 1$. For any other node $u$, let the **uses** of $u$ be the edges that leave it, one for each time $u$ was an operand. Then
+
+        $$\bar u = \sum_{\text{uses } u \to v} \bar v \cdot \frac{\partial v}{\partial u},$$
+
+        where $\dfrac{\partial v}{\partial u}$ is the local derivative on that edge.
+
+        *Why.* A change in $u$ can reach $L$ only through the values computed directly from $u$. That is the situation of the multivariable chain rule, with the uses of $u$ as the intermediate variables: $\dfrac{\partial L}{\partial u} = \sum_v \dfrac{\partial L}{\partial v}\dfrac{\partial v}{\partial u}$. If $u$ is used twice in one operation, as in $e \times e$, both edges appear in the sum. $\blacksquare$
+
+        Compare this with the rule of the last lesson, which summed over the **parents** of a node. This one sums over the **uses**. The graph stores parents, not uses, and that is why the program is written as a push: no node goes looking for its uses. Each use, when its turn comes, delivers its term to the parent, and `+=` builds the sum.
+
+        **Why add.** It is the commonest slip in a first engine to write `node.grad = upstream`. On a graph where every value is used once, that is right. On `e * e` it leaves `e.grad` at 2, the contribution of whichever arrow came last, and every gradient below `e` is then half what it should be. Nothing crashes. The numbers are simply wrong.
+    - question:
+        id: derivation-add
+        type: choice
+        system: s2
+        prompt: An engine's backward pass writes `node.grad = upstream` in place of `node.grad += upstream`. For which of these does it still give the right gradient for `a`?
+        options:
+          - '`a * a`'
+          - '`a * b + c`, with `a`, `b` and `c` different leaves'
+          - '`a * b + a`'
+          - '`(a + b) * (a + c)`'
+        answer: 1
+        explanation: |
+          In `a * b + c` every value is used exactly once, so each node receives one contribution and it does not matter whether it is added or stored. In each of the others `a` is used twice, by one operation or by two, and receives two contributions. Storing keeps only the last. Since nearly every real computation uses some value twice (a weight applied to every data point, an activation feeding many units of the next layer), an engine with this slip is wrong almost always, and right on exactly the tiny cases a hurried test would try.
+    - text: |
+        **The order of the walk.** Follow `backward(L)` on a smaller graph, `q = w * x + b` with $w = 3$, $x = 2$, $b = 1$. The call adds 1 to `q.grad`, then goes to its first parent, the product, with $1 \times 1$. That call adds 1 to the product's gradient and goes to `w` with $1 \times 2$, then to `x` with $1 \times 3$. Only then does the first call move on to its second parent, `b`, with $1 \times 1$. The walk goes as deep as it can before turning aside, the depth-first order of the lessons on graphs.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: With `q = w * x + b` and $w = 3$, $x = 2$, $b = 1$, put in order what `backward(q)` does.
+        steps:
+          - '`q.grad` becomes 1.0.'
+          - 'The gradient of the product `w * x` becomes 1.0.'
+          - '`w.grad` becomes 2.0.'
+          - '`x.grad` becomes 3.0.'
+          - '`b.grad` becomes 1.0.'
+        explanation: The output is seeded with 1. Its first parent is the product, which receives 1 times the local derivative 1, and at once passes on to its own parents, w receiving 1 times 2 and x receiving 1 times 3. Only when that call has returned does the first call reach its second parent, b.
+    - text: |
+        **Old gradients.** `backward` adds to whatever is in `grad`. If the gradients are not zero when it starts, the old values are still in the sum. Call `backward(L)` twice and every gradient is doubled. Build a second expression from the same leaves and call `backward` on it, and each leaf ends with the sum of the two gradients. So **before each backward pass, the gradients of the values that will be reused are set back to zero.** In a training loop the leaves are the weights, they live from one step to the next, and forgetting to clear them is a classic bug: the engine is correct and the descent goes wrong.
+
+        **New operations.** Any function with a known derivative can be an operation. It makes one node, with one parent and one local derivative:
+
+        ```python
+        import math
+
+
+        class Value:
+            def __init__(self, data, parents=()):
+                self.data = data
+                self.parents = parents
+                self.grad = 0.0
+
+            def tanh(self):
+                t = math.tanh(self.data)
+                return Value(t, ((self, 1 - t * t),))
+
+
+        z = Value(0.0)
+        a = z.tanh()
+        print(a.data, a.parents[0][1])
+        ```
+
+        That prints `0.0 1.0`. The derivative of $\tanh$ is $1 - \tanh^2$, which is conveniently written in terms of the output, already computed. Note the comma in `((self, 1 - t * t),)`: the parents are a tuple containing one pair.
+
+        With `tanh` the engine can do the neuron from the lesson on the chain rule, $z = wx + b$, $a = \tanh z$, $L = (a - y)^2$ at $w = 0.5$, $x = 2$, $b = -1$, $y = 1$. There the gradient was found by hand, working backwards from the output, to be $\dfrac{\partial L}{\partial w} = -4$ and $\dfrac{\partial L}{\partial b} = -2$. `backward` gives the same, and it is doing the same steps in the same order.
+
+        **Two modes.** You have met the opposite way of organising the chain rule. In the lesson on differentiation rules a `Dual` number carried a value and a rate through a calculation. The rate was the derivative of each intermediate result **with respect to one chosen input**, and it travelled forwards with the values. That is **forward mode**. It needs no graph and no stored trail. But one pass answers for one input.
+
+        | | forward mode | reverse mode |
+        | --- | --- | --- |
+        | carried through the graph | $\partial v / \partial x$ for one input $x$ | $\partial L / \partial v$ for one output $L$ |
+        | direction | with the calculation | against it |
+        | one pass gives | every output's derivative by one input | one output's derivative by every input |
+        | passes for $n$ inputs, $m$ outputs | $n$ | $m$ |
+        | must keep | nothing but the current values | the whole graph until the backward pass |
+
+        Training a model means minimising **one** number, the loss, over a million inputs, the weights. That is $m = 1$ against $n = 10^6$, and reverse mode gets the whole gradient for about the cost of computing the loss a few times over. This is the reason for the whole cluster. The price is in the last row: nothing can be thrown away until the backward pass has used it, so the memory needed grows with the length of the calculation. A later lesson is about that price.
+
+        **Still wasteful.** Count the calls. `backward(L)` on the squared error calls itself 15 times for 8 nodes, since it goes down both arrows from `e` and repeats everything below. That is a quarter of the starter's 60 and still more than it need be. The gradients are right, because each walk delivers its own path's product and `+=` adds them. But the walk is still tracing paths one by one, and the next lesson shows how badly that can go and how to visit each node once.
+  formal:
+    - text: |
+        **Adjoint.** For a fixed scalar output $L$ of a computational graph, the adjoint of a node $v$ is $\bar v = \partial L / \partial v$.
+
+        **Reverse accumulation.** $\bar L = 1$, and for every other node $u$,
+
+        $$\bar u = \sum_{\text{edges } u \to v} \bar v \, \frac{\partial v}{\partial u}.$$
+
+        The adjoints of the leaves are the components of the gradient of $L$ with respect to the inputs.
+
+        **Forward accumulation.** For a fixed input $x$, the tangent of a node $v$ is $\dot v = \partial v / \partial x$, with $\dot x = 1$, the tangents of the other leaves 0, and $\dot v = \sum_{u \in \text{parents}(v)} \dfrac{\partial v}{\partial u}\,\dot u$.
+
+        **Cost.** For $f : \mathbb{R}^n \to \mathbb{R}^m$, forward mode finds all the partial derivatives in $n$ passes and reverse mode in $m$, each pass costing a small constant multiple of one evaluation of $f$. Reverse mode must store every intermediate value that a local derivative depends on.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-seed
+        type: numeric
+        system: s1
+        prompt: |
+          Before anything is passed back, what is the gradient of the output node set to?
+        answer: "1"
+        explanation: The output responds to itself at the rate 1.
+    - question:
+        id: drill-meaning
+        type: choice
+        system: s1
+        prompt: |
+          In reverse mode, what does `v.grad` hold?
+        options: ['$\partial v / \partial w$ for a chosen input $w$', '$\partial L / \partial v$ for the output $L$', 'The value of $v$', 'The number of uses of $v$']
+        answer: 1
+        explanation: How the output responds to this node.
+    - question:
+        id: drill-hand-back
+        type: numeric
+        system: s1
+        prompt: |
+          A node has gradient 3. The arrow from one of its parents carries the local derivative 4. What does that parent receive along this arrow?
+        answer: "12"
+        explanation: The node's gradient times the local derivative.
+    - question:
+        id: drill-two-uses
+        type: numeric
+        system: s1
+        prompt: |
+          A value was used in two places. It receives 5 from one and $-2$ from the other. What is its gradient?
+        answer: "3"
+        explanation: Contributions from separate uses add.
+    - question:
+        id: drill-add-node
+        type: numeric
+        system: s1
+        prompt: |
+          $s = a + b$ and the gradient of $s$ is 7. What does $a$ receive from $s$?
+        answer: "7"
+        explanation: A sum has local derivative 1 for each operand, so it passes its gradient back unchanged to both.
+    - question:
+        id: drill-mul-node
+        type: numeric
+        system: s1
+        prompt: |
+          $p = a \times b$ with $a = 2$ and $b = 5$, and the gradient of $p$ is 3. What does $a$ receive from $p$?
+        answer: "15"
+        explanation: The gradient 3 times the local derivative, which is the other factor, 5.
+    - question:
+        id: drill-square
+        type: numeric
+        system: s1
+        prompt: |
+          `L = e * e` with `e` holding 3, and `L` is the output. What is `e.grad` after the backward pass?
+        answer: "6"
+        explanation: Each of the two arrows delivers 1 times 3, and they add.
+    - question:
+        id: drill-tanh
+        type: numeric
+        system: s1
+        prompt: |
+          `a = z.tanh()` and `a` holds 0.5. What is the local derivative on the arrow from `z` to `a`?
+        answer: "0.75"
+        tolerance: "0.0001"
+        explanation: One less the square of the output.
+    - question:
+        id: drill-twice
+        type: choice
+        system: s1
+        prompt: |
+          `backward(L)` is called twice in a row, with nothing cleared in between. What do the gradients hold?
+        options: ['The correct values', 'Twice the correct values', 'Zero', 'The square of the correct values']
+        answer: 1
+        explanation: The pass adds to what is there, so the second call adds the same amounts again.
+    - question:
+        id: drill-mode-many-in
+        type: choice
+        system: s1
+        prompt: |
+          A function has 1,000,000 inputs and 1 output. Which mode gets all its partial derivatives in one pass?
+        options: ['Forward mode', 'Reverse mode', 'Either', 'Neither']
+        answer: 1
+        explanation: Reverse mode needs one pass for each output.
+    - question:
+        id: drill-forward-passes
+        type: numeric
+        system: s1
+        prompt: |
+          A function has 3 inputs and 1 output. How many passes does forward mode need for the whole gradient?
+        answer: "3"
+        explanation: One pass for each input.
+    - question:
+        id: drill-name
+        type: choice
+        system: s1
+        prompt: |
+          What is reverse mode called when the graph is a neural network and the output is its loss?
+        options: ['Gradient descent', 'Backpropagation', 'Forward propagation', 'Regularisation']
+        answer: 1
+        explanation: Backpropagation computes the gradient. Gradient descent is what is then done with it.
+    - question:
+        id: predict-backward
+        type: predict
+        system: s1
+        prompt: One backward pass over a product and a sum. What does this show?
+        code: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+                  self.grad = 0.0
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          def backward(node, upstream=1.0):
+              node.grad += upstream
+              for parent, local in node.parents:
+                  backward(parent, upstream * local)
+
+
+          a, b = Value(2.0), Value(3.0)
+          f = (a + b) * (a * b)
+          backward(f)
+          print(f.data, a.grad, b.grad)
+        output: |
+          30.0 21.0 16.0
+        explanation: The value is 5 times 6. The sum has gradient 6 and the product has gradient 5. a receives 6 from the sum and 5 times 3 from the product, 21 in all. b receives 6 from the sum and 5 times 2 from the product, 16 in all.
+    - question:
+        id: predict-twice
+        type: predict
+        system: s1
+        prompt: A backward pass, and then another without clearing. What does this show?
+        code: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+                  self.grad = 0.0
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+
+          def backward(node, upstream=1.0):
+              node.grad += upstream
+              for parent, local in node.parents:
+                  backward(parent, upstream * local)
+
+
+          a = Value(5.0)
+          d = a + a
+          backward(d)
+          print(a.grad)
+          backward(d)
+          print(a.grad, d.grad)
+        output: |
+          2.0
+          4.0 2.0
+        explanation: a is used twice in the sum and receives 1 along each arrow, so its gradient is 2. The second pass adds the same again, since nothing was set back to zero, leaving 4 on a and 2 on the output.
+  work:
+    - text: Slower now. For each question, decide what every node should hold when the pass is over, then write the code that makes it so.
+    - question:
+        id: write-backward
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `backward(node, upstream=1.0)`. It adds `upstream` to the gradient of `node`, and passes to each parent what that parent is owed along its arrow. After `backward(L)`, every value in the graph of `L` should hold the derivative of `L` with respect to it.
+        starter: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+                  self.grad = 0.0
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          def backward(node, upstream=1.0):
+              # Replace the next line with your own.
+              return None
+
+
+          w, x, b, y = Value(3.0), Value(2.0), Value(1.0), Value(5.0)
+          e = w * x + b - y
+          L = e * e
+          backward(L)
+          print(w.grad, x.grad, b.grad, y.grad)
+        solution: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+                  self.grad = 0.0
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          def backward(node, upstream=1.0):
+              node.grad += upstream
+              for parent, local in node.parents:
+                  backward(parent, upstream * local)
+
+
+          w, x, b, y = Value(3.0), Value(2.0), Value(1.0), Value(5.0)
+          e = w * x + b - y
+          L = e * e
+          backward(L)
+          print(w.grad, x.grad, b.grad, y.grad)
+        tests: |
+          _w, _x, _b, _y = Value(3.0), Value(2.0), Value(1.0), Value(5.0)
+          _e = _w * _x + _b - _y
+          _L = _e * _e
+          backward(_L)
+          assert _L.grad == 1.0, "The output's own gradient should be 1"
+          assert _e.grad == 4.0, "e is used twice in e * e, so it receives 2 along each arrow and its gradient is 4: add what arrives, do not overwrite"
+          assert (_w.grad, _x.grad, _b.grad, _y.grad) == (8.0, 12.0, 4.0, -4.0), "The gradients of w, x, b, y should be 8, 12, 4, -4"
+          _s, _t = Value(2.0), Value(3.0)
+          _f = (_s + _t) * (_s * _t)
+          backward(_f)
+          assert (_s.grad, _t.grad) == (21.0, 16.0), "For (s + t) * (s * t) at s = 2, t = 3 the gradients are 21 and 16: each value is used by two different operations"
+          _a, _c = Value(4.0), Value(-2.0)
+          _g = _a * _c
+          backward(_g, 3.0)
+          assert (_a.grad, _c.grad, _g.grad) == (-6.0, 12.0, 3.0), "Starting with an upstream gradient of 3, everything should be 3 times what it would be starting from 1"
+          assert output.strip() == "8.0 12.0 4.0 -4.0", "The program should print 8.0 12.0 4.0 -4.0"
+        wrong:
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def backward(node, upstream=1.0):
+                node.grad = upstream
+                for parent, local in node.parents:
+                    backward(parent, upstream * local)
+
+
+            print("8.0 12.0 4.0 -4.0")
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def backward(node, upstream=1.0):
+                node.grad += upstream
+                for parent, local in node.parents:
+                    backward(parent, upstream)
+
+
+            print("8.0 12.0 4.0 -4.0")
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def backward(node, upstream=1.0):
+                node.grad += upstream
+                for parent, local in node.parents:
+                    backward(parent, local)
+
+
+            print("8.0 12.0 4.0 -4.0")
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def backward(node, upstream=1.0):
+                node.grad += upstream
+                for parent, local in node.parents:
+                    backward(parent, node.grad * local)
+
+
+            print("8.0 12.0 4.0 -4.0")
+        explanation: |
+          Two lines of work. A node adds what arrives to what it has, because it may be reached again by another route. And it passes on, to each parent, **what arrived on this visit** times the local derivative.
+
+          The last wrong version passes on `node.grad * local`, the node's running total. That looks like the rule as it was stated, "a node hands its parents its gradient times the local derivative", and it is wrong here for a subtle reason. This walk visits `e` twice. On the second visit `e.grad` is already 4, and passing 4 on again, after the first visit passed 2, delivers 6 where 4 is owed. The stated rule is for a node whose gradient is **complete** and which hands back **once**. This recursive walk never waits for a gradient to be complete, so it must pass on each arriving piece separately. The next lesson arranges the visits so that each node is complete before it speaks, and then the rule can be used as stated.
+    - question:
+        id: write-tanh
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Give `Value` a method `tanh()`. It returns a new `Value` holding the hyperbolic tangent of this one's number, with this one as its only parent and the right local derivative. Use `math.tanh`. The program then runs the neuron $L = (\tanh(wx + b) - y)^2$ backwards.
+        starter: |
+          import math
+
+
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+                  self.grad = 0.0
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          def backward(node, upstream=1.0):
+              node.grad += upstream
+              for parent, local in node.parents:
+                  backward(parent, upstream * local)
+
+
+          w, x, b, y = Value(0.5), Value(2.0), Value(-1.0), Value(1.0)
+          a = (w * x + b).tanh()
+          e = a - y
+          L = e * e
+          backward(L)
+          print(L.data, w.grad, b.grad)
+        solution: |
+          import math
+
+
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+                  self.grad = 0.0
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+              def tanh(self):
+                  t = math.tanh(self.data)
+                  return Value(t, ((self, 1 - t * t),))
+
+
+          def backward(node, upstream=1.0):
+              node.grad += upstream
+              for parent, local in node.parents:
+                  backward(parent, upstream * local)
+
+
+          w, x, b, y = Value(0.5), Value(2.0), Value(-1.0), Value(1.0)
+          a = (w * x + b).tanh()
+          e = a - y
+          L = e * e
+          backward(L)
+          print(L.data, w.grad, b.grad)
+        tests: |
+          import math as _m
+          _z = Value(0.3)
+          _a = _z.tanh()
+          assert isinstance(_a, Value), "tanh should return a Value"
+          assert abs(_a.data - _m.tanh(0.3)) < 1e-12, "The new Value should hold tanh of the number"
+          assert len(_a.parents) == 1 and _a.parents[0][0] is _z, "The new Value should have the original as its only parent"
+          assert abs(_a.parents[0][1] - (1 - _m.tanh(0.3) ** 2)) < 1e-12, "The local derivative of tanh is 1 minus the square of its output"
+          assert _z.data == 0.3, "tanh should not change the Value it is called on"
+          def _loss(wv, bv):
+              return (_m.tanh(wv * 1.5 + bv) - 0.2) ** 2
+          for _wv, _bv in [(0.4, 0.1), (-0.8, 0.5), (1.2, -0.3)]:
+              _w, _x, _b, _y = Value(_wv), Value(1.5), Value(_bv), Value(0.2)
+              _e = (_w * _x + _b).tanh() - _y
+              _L = _e * _e
+              backward(_L)
+              _nw = (_loss(_wv + 1e-6, _bv) - _loss(_wv - 1e-6, _bv)) / 2e-6
+              _nb = (_loss(_wv, _bv + 1e-6) - _loss(_wv, _bv - 1e-6)) / 2e-6
+              assert abs(_w.grad - _nw) < 1e-6 and abs(_b.grad - _nb) < 1e-6, "The gradients through tanh should match a numerical derivative of the loss"
+          assert output.strip() == "1.0 -4.0 -2.0", "The program should print 1.0 -4.0 -2.0"
+        wrong:
+          - |
+            import math
+
+
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+                def tanh(self):
+                    t = math.tanh(self.data)
+                    return Value(t, ((self, 1 - t),))
+
+
+            def backward(node, upstream=1.0):
+                node.grad += upstream
+                for parent, local in node.parents:
+                    backward(parent, upstream * local)
+
+
+            print("1.0 -4.0 -2.0")
+          - |
+            import math
+
+
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+                def tanh(self):
+                    t = math.tanh(self.data)
+                    return Value(t, ((self, 1 - self.data * self.data),))
+
+
+            def backward(node, upstream=1.0):
+                node.grad += upstream
+                for parent, local in node.parents:
+                    backward(parent, upstream * local)
+
+
+            print("1.0 -4.0 -2.0")
+          - |
+            import math
+
+
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+                def tanh(self):
+                    return Value(math.tanh(self.data))
+
+
+            def backward(node, upstream=1.0):
+                node.grad += upstream
+                for parent, local in node.parents:
+                    backward(parent, upstream * local)
+
+
+            print("1.0 -4.0 -2.0")
+        explanation: |
+          A new operation needs two things, its value and its local derivative, and nothing in `backward` changes. The derivative of $\tanh$ at $z$ is $1 - \tanh^2 z$: one less the square of the **output**, not of the input. At the lesson's point the input is 0, the output is 0, and the slope is 1 whichever of those you square, so the program prints the right line with either. The tests at other points, checked against a numerical derivative, tell them apart. A `tanh` that returns a `Value` with no parents computes the right number and cuts the trail: the backward pass stops there and the weights behind it receive nothing.
+
+          The printed gradient, $-4$ for $w$ and $-2$ for $b$, is what the lesson on the chain rule found by hand.
+    - question:
+        id: fix-zero
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `train(steps)` fits $w$ so that $wx$ is near $y$ for the one data point $x = 2$, $y = 6$, by gradient descent on $L = (wx - y)^2$ with a rate of 0.05, starting from $w = 0$. The right weight is 3, and twenty steps should get within a thousandth of it. They do not. The engine is correct. Fix `train`.
+        starter: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+                  self.grad = 0.0
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          def backward(node, upstream=1.0):
+              node.grad += upstream
+              for parent, local in node.parents:
+                  backward(parent, upstream * local)
+
+
+          def train(steps):
+              w = Value(0.0)
+              for step in range(steps):
+                  x, y = Value(2.0), Value(6.0)
+                  e = w * x - y
+                  L = e * e
+                  backward(L)
+                  w.data -= 0.05 * w.grad
+              return w.data
+
+
+          print(round(train(20), 4))
+        solution: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+                  self.grad = 0.0
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          def backward(node, upstream=1.0):
+              node.grad += upstream
+              for parent, local in node.parents:
+                  backward(parent, upstream * local)
+
+
+          def train(steps):
+              w = Value(0.0)
+              for step in range(steps):
+                  x, y = Value(2.0), Value(6.0)
+                  e = w * x - y
+                  L = e * e
+                  w.grad = 0.0
+                  backward(L)
+                  w.data -= 0.05 * w.grad
+              return w.data
+
+
+          print(round(train(20), 4))
+        tests: |
+          assert abs(train(1) - 1.2) < 1e-9, "After one step from 0 the weight should be 1.2"
+          assert abs(train(2) - 1.92) < 1e-9, "After two steps the weight should be 1.92: the gradient used in the second step should be that of the second step alone"
+          assert abs(train(3) - 2.352) < 1e-9, "After three steps the weight should be 2.352"
+          assert abs(train(20) - 3.0) < 1e-3, "After twenty steps the weight should be within a thousandth of 3"
+          assert train(0) == 0.0, "With no steps the weight stays at 0"
+          assert output.strip() == "2.9999", "The program should print 2.9999"
+        wrong:
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def backward(node, upstream=1.0):
+                node.grad += upstream
+                for parent, local in node.parents:
+                    backward(parent, upstream * local)
+
+
+            def train(steps):
+                w = Value(0.0)
+                for step in range(steps):
+                    x, y = Value(2.0), Value(6.0)
+                    e = w * x - y
+                    L = e * e
+                    backward(L)
+                    w.data -= 0.05 * w.grad
+                return w.data
+
+
+            print(2.9999)
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def backward(node, upstream=1.0):
+                node.grad += upstream
+                for parent, local in node.parents:
+                    backward(parent, upstream * local)
+
+
+            def train(steps):
+                w = Value(0.0)
+                for step in range(steps):
+                    x, y = Value(2.0), Value(6.0)
+                    e = w * x - y
+                    L = e * e
+                    backward(L)
+                    w.grad = 0.0
+                    w.data -= 0.05 * w.grad
+                return w.data
+
+
+            print(2.9999)
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def backward(node, upstream=1.0):
+                node.grad += upstream
+                for parent, local in node.parents:
+                    backward(parent, upstream * local)
+
+
+            def train(steps):
+                w = Value(0.0)
+                for step in range(steps):
+                    x, y = Value(2.0), Value(6.0)
+                    e = w * x - y
+                    L = e * e
+                    L.grad = 0.0
+                    backward(L)
+                    w.data -= 0.05 * w.grad
+                return w.data
+
+
+            print(2.9999)
+        explanation: |
+          `x`, `y`, `e` and `L` are made afresh on every pass through the loop, with gradients of 0. The weight `w` is the one `Value` that lives across steps, and `backward` adds to whatever its `grad` holds. So in the second step `w.grad` was the first step's gradient plus the second's, in the third it was the sum of three, and the weight was thrown about by gradients from places it had long since left. It reached 3.12 after two steps and 4.992 after three, and after twenty it was at 0.4363.
+
+          Setting `w.grad` to zero before each backward pass gives each step its own gradient, $8w - 24$, and the weight closes on 3 by a factor of 0.6 at every step. Clearing it between the pass and the update throws the gradient away before it is used. Clearing `L.grad` does nothing useful, since `L` is new each time. In every training loop you will ever write there is a line that clears the gradients, and this is what it is for.
+    - question:
+        id: work-by-hand
+        type: numeric
+        system: s2
+        prompt: |
+          $f = (a + b) \times (a \times b)$ at $a = 2$, $b = 3$. Work backwards from $f$: give the gradient 1 to $f$, find the gradients of $s = a + b$ and $t = a \times b$, and then the gradient of $b$. What is it?
+        answer: "16"
+        explanation: |
+          $s = 5$ and $t = 6$. From $f = s \times t$: $\bar s = 1 \times t = 6$ and $\bar t = 1 \times s = 5$. Now $b$ has two uses. From $s$ it receives $6 \times 1 = 6$. From $t$ it receives $5 \times a = 10$. So $\bar b = 16$. In the same sweep $\bar a = 6 \times 1 + 5 \times 3 = 21$. Check: $f = a^2 b + ab^2$, so $\partial f / \partial b = a^2 + 2ab = 4 + 12 = 16$. Notice that $\bar s$ and $\bar t$ were each computed once and used for both inputs.
+    - question:
+        id: work-mode
+        type: choice
+        system: s2
+        prompt: |
+          A simulation takes 3 design settings and produces 1,000 measurements. You want the derivative of every measurement with respect to every setting. Which mode, and why?
+        options:
+          - 'Reverse mode, because it is always the faster of the two.'
+          - 'Forward mode. One forward pass carries the derivatives of everything with respect to one input, so 3 passes give the whole table. Reverse mode would need a pass for each of the 1,000 outputs.'
+          - 'Reverse mode, because there are more outputs than inputs.'
+          - 'Neither can do it. Numerical differences are the only way.'
+        answer: 1
+        explanation: |
+          The count of passes is the number of inputs for forward mode and the number of outputs for reverse. Here that is 3 against 1,000. Reverse mode wins in machine learning because of the shape of that one problem, a single loss over very many weights, and not because it is better in general. Forward mode also needs no stored graph. When the numbers of inputs and outputs are both large, neither is cheap, and the full table of derivatives, the Jacobian, is usually not what is wanted anyway.
+    - question:
+        id: work-memory
+        type: choice
+        system: s2
+        prompt: |
+          A calculation runs for a million operations and ends in one number. In forward mode with dual numbers, each intermediate result can be discarded as soon as it has been used. Why can reverse mode not do the same?
+        options:
+          - 'It can. The backward pass needs only the final answer.'
+          - 'The backward pass begins only when the forward calculation has finished, and it visits the operations in the opposite order. At each one it needs the local derivatives, which depend on the values that went into that operation. So every one of them must still exist, the earliest longest of all.'
+          - 'Because Python never frees memory.'
+          - 'Because gradients are larger numbers than values.'
+        answer: 1
+        explanation: |
+          Forward mode differentiates each operation at the moment it happens, with the operands in hand, and then moves on. Reverse mode cannot know how the output responds to an early value until everything after it has been accounted for, so it must wait, and while it waits the whole trail stays in memory. The first operation's record is needed last. For a long calculation this is the real cost of reverse mode: time is about that of a few forward runs, but memory grows with the number of operations. Managing that is the subject of a later lesson of this cluster.
+    - question:
+        id: work-calls
+        type: numeric
+        system: s2
+        prompt: |
+          `a` is a leaf. Then `d = a + a`, `d = d + d`, `d = d + d`: three doublings, making three new nodes. Counting the first, how many times is `backward` called by `backward(d)`?
+        answer: "15"
+        explanation: |
+          The top node is visited once. It has the node below as a parent twice, so that node is visited 2 times. Each of those visits goes down two arrows, so the next node is visited 4 times, and the leaf 8 times. $1 + 2 + 4 + 8 = 15$ calls for 4 nodes, and `a.grad` comes out as 8, correctly, built from eight separate deliveries of 1. Each further doubling doubles the count. Thirty doublings would be a graph of 31 nodes and over two thousand million calls. That is the subject of the next lesson.
+  connections:
+    - text: |
+        Sixty calls found four derivatives by walking from the output once for each input. One walk does it, if each node keeps the right thing: **its gradient, the rate at which the output responds to it**. The output's gradient is 1. Each node hands every parent its gradient times the **local derivative** on the arrow, and a parent **adds** what it receives from every use. `backward(L)` left 8, 12, 4 and $-4$ on the four leaves in one sweep.
+
+        This is **reverse mode**, and on a network it is backpropagation. One pass serves every input, which is why it is the method for a loss with a million weights. **Forward mode**, the dual numbers of an earlier lesson, serves one input per pass and every output. Reverse mode pays in memory, since the trail must be kept until the walk back.
+
+        Gradients accumulate, so they must be cleared before a pass, or yesterday's gradient is added to today's.
+
+        The walk still follows paths one at a time: 15 calls for 8 nodes, and for a value doubled thirty times, thousands of millions. A node ought to speak once, when it has heard from everyone who used it. Arranging the nodes so that this is possible is a problem you have already solved, in the lessons on algorithms, and it is the next lesson: [[e6.topological-ordering-of-the-graph]].

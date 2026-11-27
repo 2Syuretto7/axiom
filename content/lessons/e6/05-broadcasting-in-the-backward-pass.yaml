@@ -1,0 +1,1149 @@
+concept: e6.broadcasting-in-the-backward-pass
+minutes: 85
+claim: You can explain why an operand that NumPy stretched to fit receives a gradient of the wrong shape, see broadcasting as the silent copying of a value and therefore add the gradients of the copies, write the function that sums a gradient back down to an operand's shape, use it in the pulls of every two-operand operation, and state the matching rule that a sum along an axis spreads its gradient back along that axis.
+recalls: [e6.tensor-valued-autograd]
+uses: [e6.reverse-mode-on-scalars, e6.topological-ordering-of-the-graph, e5.broadcasting, e5.axis-operations-and-reductions, e5.arrays-dtype-and-shape, e5.reshaping-views-and-copies, e5.vectorisation, m12.multivariable-chain-rule, m12.gradient, e1.special-methods-and-operator-overloading, e1.classes-and-objects, e0.loops, e0.functions]
+leads: [e6.gradient-checking, e6.modules-parameters-and-optimisers, e6.training-an-mlp-on-your-own-engine, e7.autograd-in-pytorch, e7.debugging-shapes-and-nans]
+starter: |
+  # Scratch space. The line through four points again, with the intercept as a
+  # tensor of its own, on the engine of the last lesson.
+  import numpy as np
+
+
+  class Tensor:
+      def __init__(self, data, parents=()):
+          self.data = np.array(data) * 1.0
+          self.parents = parents
+          self.grad = np.zeros(self.data.shape)
+
+      def __add__(self, other):
+          return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+      def __sub__(self, other):
+          return Tensor(self.data - other.data, ((self, lambda g: g), (other, lambda g: -g)))
+
+      def __mul__(self, other):
+          return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+      def __matmul__(self, other):
+          return Tensor(self.data @ other.data, ((self, lambda g: g @ other.data.T), (other, lambda g: self.data.T @ g)))
+
+      def sum(self):
+          return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+  def topological(node):
+      order = []
+      seen = set()
+
+      def visit(v):
+          if v in seen:
+              return
+          seen.add(v)
+          for parent, pull in v.parents:
+              visit(parent)
+          order.append(v)
+
+      visit(node)
+      return order
+
+
+  def backward(node):
+      node.grad = np.ones(node.data.shape)
+      for v in topological(node)[::-1]:
+          for parent, pull in v.parents:
+              parent.grad = parent.grad + pull(v.grad)
+
+
+  X = Tensor([[0], [1], [2], [3]])
+  y = Tensor([[1], [3], [4], [6]])
+  w = Tensor([[2]])
+  b = Tensor([1])
+  r = X @ w + b - y
+  L = (r * r).sum()
+  backward(L)
+  print(float(L.data), w.grad.tolist())
+  print(b.data.shape, b.grad.shape)
+  print(b.grad.tolist())
+  print((b.data - 0.1 * b.grad).shape)
+parts:
+  recall:
+    - text: |
+        [[e6.tensor-valued-autograd]] put whole arrays in the boxes of the graph and gave each arrow a pull, a function from the gradient of a result to the share owed to an operand. It ended by admitting that every pair of operands so far had the same shape. Today they do not. Three quick pulls first.
+  puzzle:
+    - text: |
+        The starter fits the line $wx + b$ to the four points $(0, 1), (1, 3), (2, 4), (3, 6)$, at $w = 2$ and $b = 1$. This time the model is written the way anyone would write it: `X @ w + b`, with `X` holding the four values of $x$ in a column, `w` a one-by-one matrix, and `b` a tensor holding the single number 1.
+
+        `X @ w` has shape `(4, 1)` and `b` has shape `(1,)`. NumPy adds them without complaint, stretching `b` down the four rows, as the lesson on broadcasting described.
+
+        Run it. The first line shows a loss of 2.0 and a gradient of 10.0 for `w`, both right. The second line is where it goes wrong:
+
+        ```
+        (1,) (4, 1)
+        ```
+
+        `b` holds one number. Its gradient holds four: `[[0.0], [0.0], [2.0], [2.0]]`. The definition from the last lesson was that a gradient has the shape of the thing it is the gradient of, one rate for each entry. `b` has one entry. There is one number, $\dfrac{\partial L}{\partial b}$, and you know from the lessons on multivariable calculus that at this point it is 4.
+
+        The last line shows what happens next if nobody notices. A step of gradient descent, `b.data - 0.1 * b.grad`, has shape `(4, 1)`. After one update the model would have four intercepts, a private one for each data point, and no error would be raised then or ever.
+
+        **Where did four numbers come from, when `b` is one? What should be done with them to get the one that is wanted: pick one, average them, add them? And what is the rule for any pair of shapes that NumPy is willing to combine?**
+  intuition:
+    - text: |
+        Ask what NumPy did on the way forwards. It could not add a `(4, 1)` array to a `(1,)` array as they stood, so it behaved **as if** `b` had first been copied into a `(4, 1)` array, with the same number in every row, and then added entry by entry. No copy is really made in memory, but the arithmetic is the arithmetic of the copies.
+
+        So write the calculation with the copying shown as a step of its own:
+
+        ```
+        b  ──(copy into 4 rows)──▶  b4  ──┐
+                                          ├── X @ w + b4
+        X @ w  ───────────────────────────┘
+        ```
+
+        The addition is now between two arrays of the same shape, and the last lesson's rule applies to it: `b4` receives the gradient of the sum, unchanged. That is the four numbers the starter printed. They are right. They are the gradient of `b4`: how the loss responds to the copy of the intercept in row 0, in row 1, in row 2 and in row 3.
+
+        The step that the engine left out is the copy itself. How does a gradient pass back through "one number copied into four places"?
+
+        You answered that in the second lesson of this cluster, for scalars. **A value used in several places receives a share from each use, and the shares add.** The number in `b` was used four times, once in each row. The loss responds to it through all four copies at once, because nudging `b` nudges all four. So
+
+        $$\frac{\partial L}{\partial b} = 0 + 0 + 2 + 2 = 4.$$
+
+        **The four numbers are added.** Averaging would give 1, which is the gradient of a different model, one in which each row used a quarter of `b`. Picking one would ignore three of the four places where `b` acts.
+
+        That is the whole idea, and it is worth saying as a pair of mirror images:
+
+        **Forwards, broadcasting copies a value along an axis. Backwards, the gradient is summed along that axis.**
+
+        A value that was stretched from length 1 to length 4 gets back the sum of 4 gradients. A value that was not stretched gets back exactly what arrived.
+
+        The mirror works the other way round too. Take an operation that sums forwards, `a.sum()`. Its pull, in the last lesson, **spread** the gradient over all the entries. Each entry was used once in the total, and each receives the total's gradient.
+
+        | forwards | backwards |
+        | --- | --- |
+        | one value copied to many places | the many gradients are summed into one |
+        | many values summed into one | the one gradient is copied to the many places |
+
+        Copying and summing are each other's backward pass. Once you see that, the shapes in a backward pass stop being a puzzle. **The gradient always ends with the shape of the thing it belongs to**, and whichever of the two operations changed the shape going forwards, the other one changes it back.
+  derivation:
+    - text: |
+        **What broadcasting does to a shape.** Recall the rule. Two shapes are lined up from the **right**. A shape with fewer axes is given extra axes of length 1 on the left. Then along each axis the lengths must be equal, or one of them must be 1, and an axis of length 1 is stretched to match the other.
+
+        So an operand can be changed in two ways on its way into an operation:
+
+        1. **new axes are added on the left**, as when `(3,)` meets `(4, 3)` and is treated as `(1, 3)`;
+        2. **an axis of length 1 is stretched**, as when `(1, 3)` becomes `(4, 3)`, or `(4, 1)` becomes `(4, 3)`.
+
+        The gradient that arrives has the shape of the result. To bring it back to the operand's shape, undo both, in the same order:
+
+        1. **sum over the leading axes that the operand did not have**, which removes them;
+        2. **sum over each axis where the operand has length 1 and the gradient does not, keeping that axis** with length 1.
+
+        ```python
+        import numpy as np
+
+
+        def unbroadcast(grad, shape):
+            while grad.ndim > len(shape):
+                grad = grad.sum(axis=0)
+            for axis, n in enumerate(shape):
+                if n == 1 and grad.shape[axis] != 1:
+                    grad = grad.sum(axis=axis, keepdims=True)
+            return grad
+
+
+        g = np.arange(12.0).reshape(4, 3)
+        print(unbroadcast(g, (3,)).tolist())
+        print(unbroadcast(g, (4, 1)).tolist())
+        print(unbroadcast(g, (4, 3)).shape, unbroadcast(g, ()).tolist())
+        ```
+
+        That prints
+
+        ```
+        [18.0, 22.0, 26.0]
+        [[3.0], [12.0], [21.0], [30.0]]
+        (4, 3) 66.0
+        ```
+
+        For the shape `(3,)`, the gradient has one more axis than the operand, so the leading axis is summed away: the column totals. For `(4, 1)`, the number of axes agrees, and axis 1 has length 1 in the operand and 3 in the gradient, so it is summed and kept: the row totals, as a column. For `(4, 3)` nothing was stretched and nothing is done. For `()`, a single number that was stretched over everything, every axis is summed away and the total of all twelve remains.
+
+        `keepdims=True` matters in the second step. Without it the row totals would come back with shape `(4,)`, and a `(4, 1)` operand would be handed a `(4,)` gradient: the wrong shape again, one more bug of the kind this lesson is curing.
+
+        *Why summing is right.* Let operand $B$ be broadcast to $\tilde B$ with the shape of the result, so that each entry of $\tilde B$ is a copy of one entry of $B$. By the chain rule, $\dfrac{\partial L}{\partial B_p} = \sum_q \dfrac{\partial L}{\partial \tilde B_q}\,\dfrac{\partial \tilde B_q}{\partial B_p}$, and $\dfrac{\partial \tilde B_q}{\partial B_p}$ is 1 when position $q$ is a copy of position $p$ and 0 otherwise. So the gradient of $B_p$ is the sum of the gradients of its copies, and the copies of $B_p$ are exactly the positions that differ from $p$ only along the added and stretched axes. $\blacksquare$
+
+        **In the operations.** Every operation that takes two arrays and lets NumPy broadcast them needs the same repair: work out the share as before, for the full shape of the result, and then bring it down to the operand's own shape.
+
+        ```python
+        class Tensor:
+            def __init__(self, data, parents=()):
+                self.data = np.array(data) * 1.0
+                self.parents = parents
+                self.grad = np.zeros(self.data.shape)
+
+            def __add__(self, other):
+                return Tensor(self.data + other.data, (
+                    (self, lambda g: unbroadcast(g, self.data.shape)),
+                    (other, lambda g: unbroadcast(g, other.data.shape)),
+                ))
+
+            def __mul__(self, other):
+                return Tensor(self.data * other.data, (
+                    (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                    (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                ))
+        ```
+
+        Look at the order inside the pull for a product: **multiply first, then sum.** `g * other.data` is the gradient with respect to each copy, entry by entry. Only then are the copies' gradients added. Summing `g` first and multiplying afterwards gives a different number, as $\sum_i g_i a_i$ differs from $\bigl(\sum_i g_i\bigr) a$, and usually a different shape as well.
+
+        The matrix product needs no repair. `A @ B` does not broadcast in this engine: its shapes must fit exactly.
+    - question:
+        id: derivation-why-sum
+        type: choice
+        system: s2
+        prompt: |
+          `b`, of shape `(1,)`, was added to an array of shape `(4, 1)`, and the gradient of the result is `[[0.0], [0.0], [2.0], [2.0]]`. Someone proposes that the gradient of `b` should be the **mean** of the four, 1.0, "so that it does not grow with the amount of data". What is wrong with that?
+        options:
+          - 'Nothing. The mean and the sum differ only by a constant, so either can be called the gradient.'
+          - 'The gradient of `b` is a definite number: the rate at which this loss changes when `b` changes. Nudging `b` moves all four rows, so the rate is the sum of the four, 4.0. If a loss that does not grow with the amount of data is wanted, the loss should be defined as a mean, and then the factor of a quarter arrives through the backward pass of that mean.'
+          - 'The mean cannot be computed for a column.'
+          - 'The gradient should be the largest of the four.'
+        answer: 1
+        explanation: |
+          An engine reports the derivative of the function that was actually computed. Here that function is a **sum** of squared errors, and its derivative with respect to the intercept is $2\sum_i r_i = 4$. A numerical check agrees: raise $b$ by a thousandth and the loss rises by about four thousandths. Whether to average over the data is a decision about the loss, made in the forward code, where it can be seen. An engine that quietly averaged inside its backward pass would give a wrong gradient for every function, and the error would change with the batch size.
+    - text: |
+        **Sums along an axis.** The other half of the mirror. Let `a` have shape `(4, 3)` and take `s = a.sum(axis=0)`, the column totals, of shape `(3,)`. Entry `a[i, j]` contributes to `s[j]` at the rate 1. So the gradient of `a[i, j]` is the gradient of `s[j]`, for every row `i`: the gradient of `s` is **copied down the rows**. Summing forwards along an axis is broadcasting backwards along it.
+
+        The neatest way to write it is to keep the summed axis, with length 1, in the result. Then the pull is one line, and NumPy's own broadcasting does the copying:
+
+        ```python
+        class Tensor:
+            def __init__(self, data, parents=()):
+                self.data = np.array(data) * 1.0
+                self.parents = parents
+                self.grad = np.zeros(self.data.shape)
+
+            def sum(self, axis=None):
+                if axis is None:
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+                return Tensor(self.data.sum(axis=axis, keepdims=True), ((self, lambda g: g * np.ones(self.data.shape)),))
+        ```
+
+        With `axis=0` on a `(4, 3)` array the result has shape `(1, 3)`, its gradient has shape `(1, 3)`, and multiplying by ones of shape `(4, 3)` stretches it down the four rows. A mean is the same with a division: each entry contributes at the rate $\frac1n$, so the gradient is spread and divided by the number of entries averaged.
+
+        **The pair at work.** Subtract from each row of a table its own mean, as you did to standardise features: `a - a.sum(axis=1) * third`, where `third` holds $\frac13$. Forwards, the sum collapses an axis and the subtraction broadcasts the result back along it. Backwards, the subtraction's pull sums along that axis and the sum's pull broadcasts along it. Each operation's pull undoes what that operation did to the shape, and the gradient arrives at `a` with the shape of `a`.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: |
+          `c = a * b` with `a` of shape `(4, 3)` and `b` of shape `(3,)`. The gradient of `c` is `g`, of shape `(4, 3)`. Put in order the steps by which the pull produces the share for `b`.
+        steps:
+          - 'Multiply `g` by `a.data`, entry by entry, giving a `(4, 3)` array: the gradient with respect to each copy of `b`.'
+          - 'Compare shapes: that array has 2 axes and `b` has 1.'
+          - 'Sum over axis 0, the axis `b` did not have, giving shape `(3,)`.'
+          - 'No axis of `b` has length 1, so nothing more is summed, and the `(3,)` array is returned.'
+        explanation: The product comes first, because each of the four copies of an entry of b was multiplied by a different entry of a and so has a different local derivative. Then the copies' gradients are added, by summing away the axis that broadcasting put in front of b.
+  formal:
+    - text: |
+        **Broadcast as an operation.** Broadcasting an array $B$ of shape $s$ to a shape $t$ is the linear map that copies each entry of $B$ to every position of the result that agrees with it on the axes $B$ has with length greater than 1. Its pull sends a gradient $G$ of shape $t$ to the array of shape $s$ obtained by summing $G$ over the axes absent from $s$, and over the axes where $s$ has length 1 and $t$ does not, keeping the latter with length 1.
+
+        **Two-operand operations.** If $C = f(\tilde A, \tilde B)$ where $\tilde A$ and $\tilde B$ are $A$ and $B$ broadcast to a common shape, then the pull for $A$ is the pull of $f$ for $\tilde A$, followed by the pull of the broadcast.
+
+        **Reduction.** For $S = \sum_{\text{axis } k} A$, kept with length 1 on axis $k$, the pull sends $G$ to $G$ broadcast along axis $k$ to the shape of $A$. For a mean over $n$ entries, to that divided by $n$.
+
+        **Invariant.** After a backward pass, `v.grad.shape == v.data.shape` for every node $v$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-rule
+        type: choice
+        system: s1
+        prompt: |
+          A value was copied along an axis by broadcasting. What happens to the gradient along that axis on the way back?
+        options: ['It is averaged', 'It is summed', 'The first entry is taken', 'It is left as it is']
+        answer: 1
+        explanation: Each copy is a use, and the shares of separate uses add.
+    - question:
+        id: drill-bias-shape
+        type: choice
+        system: s1
+        prompt: |
+          `b` has shape `(3,)` and is added to an array of shape `(4, 3)`. What shape must `b.grad` have?
+        options: ['`(4, 3)`', '`(3,)`', '`(4,)`', '`(1,)`']
+        answer: 1
+        explanation: A gradient has the shape of the thing it belongs to.
+    - question:
+        id: drill-which-axis
+        type: choice
+        system: s1
+        prompt: |
+          `b` of shape `(3,)` was added to an array of shape `(4, 3)`. The gradient of the result has shape `(4, 3)`. Over which axis is it summed to get the share for `b`?
+        options: ['Axis 0, which is removed', 'Axis 1, which is removed', 'Axis 1, which is kept with length 1', 'Both']
+        answer: 0
+        explanation: Lined up from the right, b has the last axis and lacks the first, so the first is summed away.
+    - question:
+        id: drill-keep
+        type: choice
+        system: s1
+        prompt: |
+          `c` of shape `(4, 1)` was added to an array of shape `(4, 3)`. What is done to the `(4, 3)` gradient to get the share for `c`?
+        options: ['Sum over axis 0, removing it', 'Sum over axis 1, keeping it with length 1', 'Sum over axis 1, removing it', 'Nothing']
+        answer: 1
+        explanation: c has the axis, with length 1, so it is summed and kept, giving shape (4, 1).
+    - question:
+        id: drill-bias-value
+        type: numeric
+        system: s1
+        prompt: |
+          One number `b` was added to every entry of a column, and the gradient of the result is `[[0], [0], [2], [2]]`. What is the gradient of `b`?
+        answer: "4"
+        explanation: The sum of the gradients of its four copies.
+    - question:
+        id: drill-scalar
+        type: numeric
+        system: s1
+        prompt: |
+          A single number `c` multiplies the array `[1, 2, 3]`, and the result is summed to give the loss. What is the gradient of `c`?
+        answer: "6"
+        explanation: Each copy of c has local derivative equal to the entry it multiplied, and 1 + 2 + 3 is 6.
+    - question:
+        id: drill-same
+        type: choice
+        system: s1
+        prompt: |
+          Two operands have the same shape. What does `unbroadcast` do to the gradient?
+        options: ['Sums every axis', 'Returns it unchanged', 'Halves it', 'Raises an error']
+        answer: 1
+        explanation: Nothing was copied, so nothing is summed.
+    - question:
+        id: drill-mirror
+        type: choice
+        system: s1
+        prompt: |
+          Forwards, `s = a.sum(axis=0)`. What does the pull do with the gradient of `s`?
+        options: ['Sums it again', 'Copies it along axis 0 to the shape of `a`', 'Divides it by the number of rows', 'Transposes it']
+        answer: 1
+        explanation: Every entry of a column contributed to that column's total at the rate 1.
+    - question:
+        id: drill-mean
+        type: numeric
+        system: s1
+        prompt: |
+          `m` is the mean of 5 numbers and the gradient of `m` is 10. What does each of the 5 numbers receive?
+        answer: "2"
+        explanation: Each contributes to the mean at the rate one fifth.
+    - question:
+        id: drill-order
+        type: choice
+        system: s1
+        prompt: |
+          In the pull of a broadcast product, which comes first?
+        options: ['Sum the gradient, then multiply by the other operand', 'Multiply by the other operand, then sum', 'Either, the result is the same', 'Neither is needed']
+        answer: 1
+        explanation: Each copy has its own local derivative, so the multiplying must be done before the copies are added.
+    - question:
+        id: drill-invariant
+        type: choice
+        system: s1
+        prompt: |
+          Which check would catch a missing `unbroadcast` soonest?
+        options: ['`v.grad.sum() == 0`', '`v.grad.shape == v.data.shape`', '`v.grad.dtype == v.data.dtype`', '`len(v.parents) == 2`']
+        answer: 1
+        explanation: The gradient must always have the shape of its tensor.
+    - question:
+        id: predict-unbroadcast
+        type: predict
+        system: s1
+        prompt: A gradient of ones brought down to four different shapes. What does this show?
+        code: |
+          import numpy as np
+
+
+          def unbroadcast(grad, shape):
+              while grad.ndim > len(shape):
+                  grad = grad.sum(axis=0)
+              for axis, n in enumerate(shape):
+                  if n == 1 and grad.shape[axis] != 1:
+                      grad = grad.sum(axis=axis, keepdims=True)
+              return grad
+
+
+          g = np.ones((2, 4, 3))
+          for shape in [(3,), (4, 1), (2, 1, 1), ()]:
+              u = unbroadcast(g, shape)
+              print(u.shape, float(u.max()))
+        output: |
+          (3,) 8.0
+          (4, 1) 6.0
+          (2, 1, 1) 12.0
+          () 24.0
+        explanation: Each entry of the operand gets the number of copies that were made of it. A (3,) operand is copied 2 times 4 times. A (4, 1) operand is copied 2 times along the new axis and 3 times along the stretched one. A (2, 1, 1) operand is copied 4 times 3 times. A single number is copied into all 24 places.
+    - question:
+        id: predict-bias
+        type: predict
+        system: s1
+        prompt: An intercept added to a column, with and without the repair. What does this show?
+        code: |
+          import numpy as np
+
+          g = np.array([[0.0], [0.0], [2.0], [2.0]])
+          b = np.array([1.0])
+
+          wrong = np.zeros(b.shape) + g
+          right = np.zeros(b.shape) + g.sum(axis=0)
+          print(wrong.shape, right.shape, right.tolist())
+          print((b - 0.1 * wrong).shape, (b - 0.1 * right).tolist())
+        output: |
+          (4, 1) (1,) [4.0]
+          (4, 1) [0.6]
+
+        explanation: Adding the full gradient to a one-entry array of zeros broadcasts the zeros, and the result has four entries. Summed down the rows first, the gradient has one entry, 4. An update with the wrong gradient turns the intercept into four numbers. With the right one it stays one number, moved from 1 to 0.6.
+  work:
+    - text: Slower now. For each operand, write its shape, the shape of the result, and which axes were added or stretched.
+    - question:
+        id: write-unbroadcast
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `unbroadcast(grad, shape)`. `grad` is an array with the shape of the result of a broadcast operation, and `shape` is the shape of one operand, a tuple. Return the gradient brought down to that shape: summed over the leading axes the operand did not have, and summed, keeping the axis, wherever the operand had length 1 and the gradient does not.
+        starter: |
+          import numpy as np
+
+
+          def unbroadcast(grad, shape):
+              # Replace the next line with your own.
+              return grad
+
+
+          g = np.arange(12.0).reshape(4, 3)
+          print(unbroadcast(g, (3,)).tolist())
+          print(unbroadcast(g, (4, 1)).tolist())
+        solution: |
+          import numpy as np
+
+
+          def unbroadcast(grad, shape):
+              while grad.ndim > len(shape):
+                  grad = grad.sum(axis=0)
+              for axis, n in enumerate(shape):
+                  if n == 1 and grad.shape[axis] != 1:
+                      grad = grad.sum(axis=axis, keepdims=True)
+              return grad
+
+
+          g = np.arange(12.0).reshape(4, 3)
+          print(unbroadcast(g, (3,)).tolist())
+          print(unbroadcast(g, (4, 1)).tolist())
+        tests: |
+          import numpy as _np
+          _g = _np.arange(12.0).reshape(4, 3)
+          _keep = _g.copy()
+          _u = unbroadcast(_g, (3,))
+          assert _u.shape == (3,) and _u.tolist() == [18.0, 22.0, 26.0], "For an operand of shape (3,), sum away the leading axis: the column totals"
+          _u = unbroadcast(_g, (1, 3))
+          assert _u.shape == (1, 3) and _u.tolist() == [[18.0, 22.0, 26.0]], "For an operand of shape (1, 3), sum over axis 0 and keep it with length 1"
+          _u = unbroadcast(_g, (4, 1))
+          assert _u.shape == (4, 1) and _u.tolist() == [[3.0], [12.0], [21.0], [30.0]], "For an operand of shape (4, 1), sum over axis 1 and keep it with length 1"
+          _u = unbroadcast(_g, (4, 3))
+          assert _u.shape == (4, 3) and _np.array_equal(_u, _keep), "For an operand of the same shape, the gradient comes back unchanged"
+          _u = unbroadcast(_g, ())
+          assert _np.shape(_u) == () and float(_u) == 66.0, "For a single number, of shape (), every axis is summed away"
+          _u = unbroadcast(_g, (1, 1))
+          assert _u.shape == (1, 1) and float(_u[0, 0]) == 66.0, "For an operand of shape (1, 1), both axes are summed and kept"
+          _h = _np.ones((2, 4, 3))
+          _u = unbroadcast(_h, (4, 1))
+          assert _u.shape == (4, 1) and _u.tolist() == [[6.0], [6.0], [6.0], [6.0]], "For a (2, 4, 3) gradient and a (4, 1) operand, sum away the leading axis and sum the last axis, keeping it"
+          assert _np.array_equal(_g, _keep), "The gradient passed in should not be changed"
+          assert output.strip().splitlines() == ["[18.0, 22.0, 26.0]", "[[3.0], [12.0], [21.0], [30.0]]"], "The program should print the column totals and then the row totals as a column"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def unbroadcast(grad, shape):
+                while grad.ndim > len(shape):
+                    grad = grad.mean(axis=0)
+                for axis, n in enumerate(shape):
+                    if n == 1 and grad.shape[axis] != 1:
+                        grad = grad.mean(axis=axis, keepdims=True)
+                return grad
+
+
+            print("[18.0, 22.0, 26.0]")
+            print("[[3.0], [12.0], [21.0], [30.0]]")
+          - |
+            import numpy as np
+
+
+            def unbroadcast(grad, shape):
+                while grad.ndim > len(shape):
+                    grad = grad.sum(axis=0)
+                return grad
+
+
+            print("[18.0, 22.0, 26.0]")
+            print("[[3.0], [12.0], [21.0], [30.0]]")
+          - |
+            import numpy as np
+
+
+            def unbroadcast(grad, shape):
+                while grad.ndim > len(shape):
+                    grad = grad.sum(axis=0)
+                for axis, n in enumerate(shape):
+                    if n == 1 and grad.shape[axis] != 1:
+                        grad = grad.sum(axis=axis)
+                return grad
+
+
+            print("[18.0, 22.0, 26.0]")
+            print("[[3.0], [12.0], [21.0], [30.0]]")
+          - |
+            import numpy as np
+
+
+            def unbroadcast(grad, shape):
+                while grad.ndim > len(shape):
+                    grad = grad[0]
+                for axis, n in enumerate(shape):
+                    if n == 1 and grad.shape[axis] != 1:
+                        grad = grad.sum(axis=axis, keepdims=True)
+                return grad
+
+
+            print("[18.0, 22.0, 26.0]")
+            print("[[3.0], [12.0], [21.0], [30.0]]")
+        explanation: |
+          Two loops for the two things broadcasting can do. The first removes axes that were added on the left, always axis 0, until the number of axes matches. After that, position `axis` of the gradient corresponds to position `axis` of the operand, so the second loop can compare them one by one, and where the operand has 1 and the gradient has more, it sums and keeps.
+
+          Averaging gives the gradient of a model that used a fraction of each value. Stopping after the first loop handles a bias of shape `(3,)` and fails on one of shape `(1, 3)` or `(4, 1)`. Summing without `keepdims` drops the axis: a `(4, 1)` operand is handed a `(4,)` gradient, and when that is later added to a `(4, 1)` array NumPy broadcasts the pair to `(4, 4)`. Taking the first slice in place of the sum counts one copy and ignores the rest.
+    - question:
+        id: write-mul
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          `unbroadcast` is given. Give `Tensor` an `__mul__` that works when NumPy broadcasts the two operands: the result holds the entry-by-entry product, and each pull returns a share with the shape of its own operand.
+        starter: |
+          import numpy as np
+
+
+          def unbroadcast(grad, shape):
+              while grad.ndim > len(shape):
+                  grad = grad.sum(axis=0)
+              for axis, n in enumerate(shape):
+                  if n == 1 and grad.shape[axis] != 1:
+                      grad = grad.sum(axis=axis, keepdims=True)
+              return grad
+
+
+          class Tensor:
+              def __init__(self, data, parents=()):
+                  self.data = np.array(data) * 1.0
+                  self.parents = parents
+                  self.grad = np.zeros(self.data.shape)
+
+              def sum(self):
+                  return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+          def backward(node):
+              node.grad = np.ones(node.data.shape)
+              order = [node]
+              for v in order:
+                  for parent, pull in v.parents:
+                      parent.grad = parent.grad + pull(v.grad)
+                      order.append(parent)
+
+
+          a = Tensor([[1, 2, 3], [4, 5, 6]])
+          scale = Tensor([10, 20, 30])
+          L = (a * scale).sum()
+          backward(L)
+          print(float(L.data), scale.grad.tolist(), a.grad.tolist())
+        solution: |
+          import numpy as np
+
+
+          def unbroadcast(grad, shape):
+              while grad.ndim > len(shape):
+                  grad = grad.sum(axis=0)
+              for axis, n in enumerate(shape):
+                  if n == 1 and grad.shape[axis] != 1:
+                      grad = grad.sum(axis=axis, keepdims=True)
+              return grad
+
+
+          class Tensor:
+              def __init__(self, data, parents=()):
+                  self.data = np.array(data) * 1.0
+                  self.parents = parents
+                  self.grad = np.zeros(self.data.shape)
+
+              def __mul__(self, other):
+                  return Tensor(self.data * other.data, (
+                      (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                      (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                  ))
+
+              def sum(self):
+                  return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+          def backward(node):
+              node.grad = np.ones(node.data.shape)
+              order = [node]
+              for v in order:
+                  for parent, pull in v.parents:
+                      parent.grad = parent.grad + pull(v.grad)
+                      order.append(parent)
+
+
+          a = Tensor([[1, 2, 3], [4, 5, 6]])
+          scale = Tensor([10, 20, 30])
+          L = (a * scale).sum()
+          backward(L)
+          print(float(L.data), scale.grad.tolist(), a.grad.tolist())
+        tests: |
+          import numpy as _np
+          _a, _s = Tensor([[1, 2, 3], [4, 5, 6]]), Tensor([10, 20, 30])
+          _p = _a * _s
+          assert isinstance(_p, Tensor) and _p.data.tolist() == [[10.0, 40.0, 90.0], [40.0, 100.0, 180.0]], "The result should hold the broadcast product"
+          assert len(_p.parents) == 2 and _p.parents[0][0] is _a and _p.parents[1][0] is _s, "The parents should be the two operands, left one first"
+          _g = _np.array([[1.0, 0.0, 2.0], [3.0, 1.0, 0.0]])
+          _sa, _ss = _p.parents[0][1](_g), _p.parents[1][1](_g)
+          assert _np.shape(_sa) == (2, 3) and _np.shape(_ss) == (3,), "Each share should have the shape of its own operand"
+          assert _np.array_equal(_sa, [[10.0, 0.0, 60.0], [30.0, 20.0, 0.0]]), "The share for the left operand is the gradient times the right operand, entry by entry"
+          assert _np.array_equal(_ss, [13.0, 5.0, 6.0]), "The share for the stretched operand is the sum down the rows of gradient times left operand: multiply first, then sum"
+          _c, _x = Tensor(3.0), Tensor([1, 2, 3])
+          _L = (_c * _x).sum()
+          backward(_L)
+          assert _np.shape(_c.grad) == () and float(_c.grad) == 6.0 and _x.grad.tolist() == [3.0, 3.0, 3.0], "A single number times [1, 2, 3], summed, has gradient 6 for the number and [3, 3, 3] for the array"
+          _col, _row = Tensor([[1], [2]]), Tensor([[1, 10, 100]])
+          _L = (_col * _row).sum()
+          backward(_L)
+          assert _col.grad.tolist() == [[111.0], [111.0]] and _row.grad.tolist() == [[3.0, 3.0, 3.0]], "A (2, 1) column times a (1, 3) row: each is stretched along a different axis, and each gradient keeps its own shape"
+          _d = Tensor([1, 2])
+          _L = (_d * _d).sum()
+          backward(_L)
+          assert _d.grad.tolist() == [2.0, 4.0], "With equal shapes nothing is summed away: d * d has gradient 2d"
+          assert output.strip() == "460.0 [5.0, 7.0, 9.0] [[10.0, 20.0, 30.0], [10.0, 20.0, 30.0]]", "The program should print 460.0 [5.0, 7.0, 9.0] [[10.0, 20.0, 30.0], [10.0, 20.0, 30.0]]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def unbroadcast(grad, shape):
+                while grad.ndim > len(shape):
+                    grad = grad.sum(axis=0)
+                for axis, n in enumerate(shape):
+                    if n == 1 and grad.shape[axis] != 1:
+                        grad = grad.sum(axis=axis, keepdims=True)
+                return grad
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, (
+                        (self, lambda g: g * other.data),
+                        (other, lambda g: g * self.data),
+                    ))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                order = [node]
+                for v in order:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+                        order.append(parent)
+
+
+            print("460.0 [5.0, 7.0, 9.0] [[10.0, 20.0, 30.0], [10.0, 20.0, 30.0]]")
+          - |
+            import numpy as np
+
+
+            def unbroadcast(grad, shape):
+                while grad.ndim > len(shape):
+                    grad = grad.sum(axis=0)
+                for axis, n in enumerate(shape):
+                    if n == 1 and grad.shape[axis] != 1:
+                        grad = grad.sum(axis=axis, keepdims=True)
+                return grad
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, (
+                        (self, lambda g: unbroadcast(g, self.data.shape) * other.data),
+                        (other, lambda g: unbroadcast(g, other.data.shape) * self.data),
+                    ))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                order = [node]
+                for v in order:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+                        order.append(parent)
+
+
+            print("460.0 [5.0, 7.0, 9.0] [[10.0, 20.0, 30.0], [10.0, 20.0, 30.0]]")
+          - |
+            import numpy as np
+
+
+            def unbroadcast(grad, shape):
+                while grad.ndim > len(shape):
+                    grad = grad.sum(axis=0)
+                for axis, n in enumerate(shape):
+                    if n == 1 and grad.shape[axis] != 1:
+                        grad = grad.sum(axis=axis, keepdims=True)
+                return grad
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, (
+                        (self, lambda g: unbroadcast(g * self.data, self.data.shape)),
+                        (other, lambda g: unbroadcast(g * other.data, other.data.shape)),
+                    ))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                order = [node]
+                for v in order:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+                        order.append(parent)
+
+
+            print("460.0 [5.0, 7.0, 9.0] [[10.0, 20.0, 30.0], [10.0, 20.0, 30.0]]")
+        explanation: |
+          Each pull does the last lesson's job and then this lesson's. `g * other.data` is the gradient with respect to every copy, in the full shape of the result. `unbroadcast(..., self.data.shape)` adds the copies together. For an operand that was not stretched the second step does nothing, so one piece of code serves every pairing of shapes.
+
+          In the program, `scale` was copied down two rows, so its gradient is the column totals of `a`: 5, 7, 9. `a` was not stretched, and its gradient is `scale` in every row.
+
+          Summing before multiplying is the instructive mistake. For the stretched operand it brings `g` down to shape `(3,)` and then multiplies by `self.data` of shape `(2, 3)`, which broadcasts straight back up to `(2, 3)`: the share has the wrong shape and the wrong numbers.
+    - question:
+        id: fix-sub
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          The program measures how far the rows of a table are from a centre `m`, a tensor of shape `(1, 2)`: $L = \sum (X - m)^2$. The gradient of `m` should have shape `(1, 2)` and hold $-8$ and 8. It comes out with shape `(4, 2)`. One operation of the engine is at fault. Fix it.
+        starter: |
+          import numpy as np
+
+
+          def unbroadcast(grad, shape):
+              while grad.ndim > len(shape):
+                  grad = grad.sum(axis=0)
+              for axis, n in enumerate(shape):
+                  if n == 1 and grad.shape[axis] != 1:
+                      grad = grad.sum(axis=axis, keepdims=True)
+              return grad
+
+
+          class Tensor:
+              def __init__(self, data, parents=()):
+                  self.data = np.array(data) * 1.0
+                  self.parents = parents
+                  self.grad = np.zeros(self.data.shape)
+
+              def __sub__(self, other):
+                  return Tensor(self.data - other.data, (
+                      (self, lambda g: g),
+                      (other, lambda g: -g),
+                  ))
+
+              def __mul__(self, other):
+                  return Tensor(self.data * other.data, (
+                      (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                      (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                  ))
+
+              def sum(self):
+                  return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, pull in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          def backward(node):
+              node.grad = np.ones(node.data.shape)
+              for v in topological(node)[::-1]:
+                  for parent, pull in v.parents:
+                      parent.grad = parent.grad + pull(v.grad)
+
+
+          X = Tensor([[1, 2], [3, 4], [5, 9], [7, 1]])
+          m = Tensor([[3, 5]])
+          d = X - m
+          L = (d * d).sum()
+          backward(L)
+          print(m.grad.shape, m.grad.tolist())
+        solution: |
+          import numpy as np
+
+
+          def unbroadcast(grad, shape):
+              while grad.ndim > len(shape):
+                  grad = grad.sum(axis=0)
+              for axis, n in enumerate(shape):
+                  if n == 1 and grad.shape[axis] != 1:
+                      grad = grad.sum(axis=axis, keepdims=True)
+              return grad
+
+
+          class Tensor:
+              def __init__(self, data, parents=()):
+                  self.data = np.array(data) * 1.0
+                  self.parents = parents
+                  self.grad = np.zeros(self.data.shape)
+
+              def __sub__(self, other):
+                  return Tensor(self.data - other.data, (
+                      (self, lambda g: unbroadcast(g, self.data.shape)),
+                      (other, lambda g: unbroadcast(-g, other.data.shape)),
+                  ))
+
+              def __mul__(self, other):
+                  return Tensor(self.data * other.data, (
+                      (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                      (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                  ))
+
+              def sum(self):
+                  return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, pull in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          def backward(node):
+              node.grad = np.ones(node.data.shape)
+              for v in topological(node)[::-1]:
+                  for parent, pull in v.parents:
+                      parent.grad = parent.grad + pull(v.grad)
+
+
+          X = Tensor([[1, 2], [3, 4], [5, 9], [7, 1]])
+          m = Tensor([[3, 5]])
+          d = X - m
+          L = (d * d).sum()
+          backward(L)
+          print(m.grad.shape, m.grad.tolist())
+        tests: |
+          import numpy as _np
+          _X, _m = Tensor([[1, 2], [3, 4], [5, 9], [7, 1]]), Tensor([[3, 5]])
+          _d = _X - _m
+          _L = (_d * _d).sum()
+          backward(_L)
+          assert _m.grad.shape == (1, 2), "The gradient of m should have the shape of m, (1, 2)"
+          assert _m.grad.tolist() == [[-8.0, 8.0]], "The gradient of m should be [[-8.0, 8.0]]: minus twice the column totals of X - m"
+          assert _X.grad.shape == (4, 2) and _np.array_equal(_X.grad, 2 * (_X.data - _m.data)), "The gradient of X should be 2 (X - m), with the shape of X"
+          _c, _t = Tensor([[10], [20]]), Tensor([[1, 2, 3], [4, 5, 6]])
+          _L = (_c - _t).sum()
+          backward(_L)
+          assert _c.grad.tolist() == [[3.0], [3.0]] and _t.grad.tolist() == [[-1.0, -1.0, -1.0], [-1.0, -1.0, -1.0]], "A (2, 1) column minus a (2, 3) table, summed: the column's gradient is [[3], [3]] and the table's is all minus ones"
+          _s, _v = Tensor([5, 6, 7]), Tensor(2.0)
+          _L = (_s - _v).sum()
+          backward(_L)
+          assert _np.shape(_v.grad) == () and float(_v.grad) == -3.0, "An array of three minus a single number, summed: the number's gradient is -3, with shape ()"
+          assert output.strip() == "(1, 2) [[-8.0, 8.0]]", "The program should print (1, 2) [[-8.0, 8.0]]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def unbroadcast(grad, shape):
+                while grad.ndim > len(shape):
+                    grad = grad.sum(axis=0)
+                for axis, n in enumerate(shape):
+                    if n == 1 and grad.shape[axis] != 1:
+                        grad = grad.sum(axis=axis, keepdims=True)
+                return grad
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __sub__(self, other):
+                    return Tensor(self.data - other.data, (
+                        (self, lambda g: g),
+                        (other, lambda g: -g),
+                    ))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, (
+                        (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                        (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                    ))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+
+
+            print("(1, 2) [[-8.0, 8.0]]")
+          - |
+            import numpy as np
+
+
+            def unbroadcast(grad, shape):
+                while grad.ndim > len(shape):
+                    grad = grad.sum(axis=0)
+                for axis, n in enumerate(shape):
+                    if n == 1 and grad.shape[axis] != 1:
+                        grad = grad.sum(axis=axis, keepdims=True)
+                return grad
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __sub__(self, other):
+                    return Tensor(self.data - other.data, (
+                        (self, lambda g: g),
+                        (other, lambda g: unbroadcast(-g, other.data.shape)),
+                    ))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, (
+                        (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                        (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                    ))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+
+
+            print("(1, 2) [[-8.0, 8.0]]")
+          - |
+            import numpy as np
+
+
+            def unbroadcast(grad, shape):
+                while grad.ndim > len(shape):
+                    grad = grad.sum(axis=0)
+                for axis, n in enumerate(shape):
+                    if n == 1 and grad.shape[axis] != 1:
+                        grad = grad.sum(axis=axis, keepdims=True)
+                return grad
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __sub__(self, other):
+                    return Tensor(self.data - other.data, (
+                        (self, lambda g: unbroadcast(g, self.data.shape)),
+                        (other, lambda g: unbroadcast(g, other.data.shape)),
+                    ))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, (
+                        (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                        (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                    ))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+
+
+            print("(1, 2) [[-8.0, 8.0]]")
+        explanation: |
+          `__mul__` had been repaired and `__sub__` had not. `X - m` stretches `m` down four rows, and the pull for `m` handed back the full `(4, 2)` gradient, negated, one row for each copy. Summing the copies gives the `(1, 2)` gradient: minus twice the column totals of `X - m`, which are 4 and $-4$.
+
+          Both pulls need the repair, since either operand may be the one that was stretched: the second wrong version mends only the right-hand one and fails as soon as a column is on the left. The third mends the shapes and loses the minus sign.
+
+          Every operation that lets NumPy broadcast needs this, and it is easy to mend the ones your test happens to use and miss another. The habit that catches it is one line after any backward pass: for every tensor, the gradient's shape equals the data's shape.
+    - question:
+        id: work-by-hand
+        type: numeric
+        system: s2
+        prompt: |
+          `a` has shape `(2, 3)` and holds `[[1, 2, 3], [4, 5, 6]]`. `c` has shape `(2, 1)` and holds `[[10], [100]]`. $L$ is the sum of all the entries of `a * c`. What is the gradient of the first entry of `c`?
+        answer: "6"
+        explanation: |
+          `c` is stretched along axis 1: its first entry, 10, is copied across the three places of row 0. The gradient of `a * c` is all ones, from the sum. Multiply first: each copy's gradient is $1 \times$ the entry of `a` it met, giving `[[1, 2, 3], [4, 5, 6]]`. Then sum along axis 1, keeping it: `[[6], [15]]`. So the first entry of `c` has gradient 6. That is right, since $L = 10(1 + 2 + 3) + 100(4 + 5 + 6)$. The gradient of `a` is `c` copied across each row, `[[10, 10, 10], [100, 100, 100]]`.
+    - question:
+        id: work-mirror
+        type: choice
+        system: s2
+        prompt: |
+          A table `a` of shape `(4, 3)` has the mean of each **row** subtracted from that row: `d = a - mu`, where `mu` has shape `(4, 1)` and was made by summing `a` along axis 1, keeping the axis, and dividing by 3. In the backward pass, through which operations does the gradient's shape change, and how?
+        options:
+          - 'It never changes. Every gradient in this calculation has shape `(4, 3)`.'
+          - 'At the subtraction, the share for `mu` is summed along axis 1 down to `(4, 1)`, because `mu` was stretched along that axis. At the sum that made `mu`, that `(4, 1)` gradient is copied back along axis 1 to `(4, 3)`, because each of the three entries of a row contributed to its total.'
+          - 'At the subtraction it is copied to `(4, 3)`, and at the sum it is summed to `(4, 1)`.'
+          - 'The subtraction sums it down to a single number.'
+        answer: 1
+        explanation: |
+          Going forwards, the sum collapsed axis 1 and the subtraction stretched it out again. Going backwards each of those is undone by its mirror image: the stretch by a sum, the collapse by a stretch. `a` is used twice, directly in the subtraction and inside the mean, so it receives two shares, both of shape `(4, 3)`, and they add. If the loss is the sum of the squares of `d`, the second share turns out to be zero, since the entries of each row of `d` add up to nothing: moving a whole row up together does not change how far its entries are from their own mean.
+    - question:
+        id: work-silent
+        type: choice
+        system: s2
+        prompt: |
+          The starter's wrong gradient for `b`, of shape `(4, 1)` for a tensor of shape `(1,)`, raised no error. Why is this kind of bug so much more dangerous in array code than a mismatch of shapes usually is?
+        options:
+          - 'It is not dangerous, since the numbers were right.'
+          - 'Because the same broadcasting that hid the copying on the way forwards also hides the mistake on the way back. Adding a `(4, 1)` array to a `(1,)` array is legal, so the gradient, and then the updated parameter, quietly take the larger shape. The model becomes a different model, one that may even fit the training data better, and nothing fails.'
+          - 'Because NumPy rounds the numbers.'
+          - 'Because shapes cannot be checked in Python.'
+        answer: 1
+        explanation: |
+          A program that multiplies a `(4, 3)` matrix by a `(4, 3)` matrix stops with an error and is fixed in a minute. A program whose shapes are wrong but compatible keeps running. Here the intercept would become four intercepts, one for each training point, each free to move its own point's error towards zero: the training loss would fall beautifully, and the model would be useless on a fifth point. The defences are the invariant, gradient shape equals data shape, checked after every backward pass, and the numerical check of the next lesson, which compares each entry of each gradient with a measured slope.
+    - question:
+        id: work-count
+        type: numeric
+        system: s2
+        prompt: |
+          A bias `b` of shape `(8,)` is added to activations of shape `(32, 10, 8)`: 32 examples, 10 positions, 8 features. The gradient of the result is all ones. What is each entry of `b.grad`?
+        answer: "320"
+        explanation: |
+          Lined up from the right, `b` has the last axis and lacks the first two, so each of its 8 entries was copied into $32 \times 10 = 320$ places. The gradient is summed over both missing axes, and with ones everywhere each entry of the result is 320. This is why the gradient of a bias, or of any small parameter used across a large batch, is large when the loss is a sum over the batch, and why losses are usually defined as means.
+  connections:
+    - text: |
+        The intercept was one number and came back with four gradients. They were the gradients of its four **copies**: NumPy had stretched `b` down the rows on the way forwards, and the engine's pull returned the gradient in the stretched shape.
+
+        Copying is a use, and uses add. So the pull of every two-operand operation ends with `unbroadcast`: **sum over the axes that were added in front, and sum, keeping the axis, wherever a length of 1 was stretched.** For a product, multiply by the other operand first and sum afterwards. The four numbers $0, 0, 2, 2$ became 4, which is $\partial L / \partial b$.
+
+        The mirror image holds for reductions: **a sum along an axis sends its gradient back by copying along that axis**, and a mean does the same and divides. Copying and summing are each other's backward pass.
+
+        The test of all of it is one invariant: after a backward pass, every gradient has the shape of its tensor.
+
+        The bug in this lesson raised no error and printed a correct loss. The closure bug in the last lesson did the same. An engine can be wrong in many quiet ways, and reading the code is not a reliable way to find them. There is a mechanical one, and it uses the oldest tool you have for derivatives, the measured slope. That is the next lesson: [[e6.gradient-checking]].

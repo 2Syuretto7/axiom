@@ -1,0 +1,2633 @@
+cluster: E6
+title: Water near the well, from an empty file
+minutes: 120
+claim: You will have written a working autograd engine from an empty file, tested it against measured slopes, and used it to train a small network on a problem that no straight line can solve.
+brief: |
+  This cluster built an engine one idea at a time, and each lesson handed you the parts you were not writing that day. This project hands you nothing but NumPy. By the end, every line that runs will be one you put there.
+
+  **The project.** A surveyor has sunk test bores at ten points in a field. Four struck water and six were dry. The four wet ones lie close to an old well at the centre, and the dry ones lie all around, further out.
+
+  ```python
+  X = Tensor([[0, 0], [0.5, 0], [0, -0.5], [-0.4, 0.3],
+              [2, 0], [0, 2], [-2, 0], [0, -2], [1.5, 1.5], [-1.5, -1.5]])
+  y = Tensor([[1], [1], [1], [1], [0], [0], [0], [0], [0], [0]])
+  ```
+
+  Each row of `X` is a point, east and north of the well. The target is 1 for water and 0 for dry. You want a model that takes a point and says which.
+
+  The wet points are **surrounded** by the dry ones. A linear model, $w_1 x_1 + w_2 x_2 + b$, rises in one direction and falls in the opposite one, so it cannot be high in the middle and low all around. Trained on these ten points it settles at a loss of 2.4, answering about 0.4 everywhere. A network with one hidden layer can do it, and you will train one.
+
+  There are five stages: the tensor and its operations, the backward pass, broadcasting, the gradient check, and the training run. Each stage's program contains the finished code of the stages before, so you can see the engine grow. Nothing here is new.
+starter: |
+  # Scratch space for the engine.
+  import numpy as np
+
+  points = np.array([[0, 0], [0.5, 0], [0, -0.5], [-0.4, 0.3],
+                     [2, 0], [0, 2], [-2, 0], [0, -2], [1.5, 1.5], [-1.5, -1.5]])
+  water = np.array([1, 1, 1, 1, 0, 0, 0, 0, 0, 0])
+  print(points.shape, water.shape)
+stages:
+  - title: A tensor that remembers
+    blocks:
+      - text: |
+          A `Tensor` holds an array, a gradient of the same shape, and its **parents**: for each operand it was computed from, the operand and a **pull**, a function that turns the gradient of the result into that operand's share.
+
+          Addition, subtraction, the entry-by-entry product and the sum are written for you, for operands of equal shape. You will add the two operations that a layer of a network needs.
+      - question:
+          id: what-is-kept
+          type: choice
+          system: s1
+          concepts: [e6.scalar-computational-graph, e6.tensor-valued-autograd]
+          prompt: "After `c = a * b`, what does the tensor `c` hold in `c.parents`?"
+          options:
+            - "Two pairs: `a` with a function that multiplies a gradient by `b`'s values, and `b` with a function that multiplies a gradient by `a`'s values."
+            - "The gradients of `a` and `b`, already computed."
+            - "Copies of the arrays of `a` and `b`."
+            - "The tensors that will later be computed from `c`."
+          answer: 0
+          explanation: |
+            The forward pass computes values and records, for each result, where it came from and how a gradient should flow back. No gradient is computed yet. References run from a result to its operands, never the other way, and what is kept is the operands themselves, not copies.
+      - question:
+          id: operations
+          type: code
+          mode: write
+          system: s2
+          concepts: [e6.tensor-valued-autograd, e6.scalar-computational-graph]
+          prompt: |
+            Write two methods of `Tensor`.
+
+            `__matmul__(self, other)` returns the matrix product as a new tensor. For a gradient `g` of the result, the share of `self` is `g @ other.data.T` and the share of `other` is `self.data.T @ g`.
+
+            `tanh(self)` returns the hyperbolic tangent, entry by entry, as a new tensor. For a gradient `g` of the result, the share of `self` is `g` times one minus the square of the **result**.
+          starter: |
+            import numpy as np
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __sub__(self, other):
+                    return Tensor(self.data - other.data, ((self, lambda g: g), (other, lambda g: -g)))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+                def __matmul__(self, other):
+                    # Replace the next line with your own.
+                    return Tensor(self.data @ other.data)
+
+                def tanh(self):
+                    # Replace the next line with your own.
+                    return Tensor(np.tanh(self.data))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            A = Tensor([[1, 2], [3, 4], [5, 6]])
+            B = Tensor([[1, 0, 2, 1], [0, 1, 1, 3]])
+            C = A @ B
+            G = np.ones((3, 4))
+            print(C.data.shape, [pull(G).shape for parent, pull in C.parents])
+          solution: |
+            import numpy as np
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __sub__(self, other):
+                    return Tensor(self.data - other.data, ((self, lambda g: g), (other, lambda g: -g)))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+                def __matmul__(self, other):
+                    return Tensor(self.data @ other.data, ((self, lambda g: g @ other.data.T), (other, lambda g: self.data.T @ g)))
+
+                def tanh(self):
+                    t = np.tanh(self.data)
+                    return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            A = Tensor([[1, 2], [3, 4], [5, 6]])
+            B = Tensor([[1, 0, 2, 1], [0, 1, 1, 3]])
+            C = A @ B
+            G = np.ones((3, 4))
+            print(C.data.shape, [pull(G).shape for parent, pull in C.parents])
+          tests: |
+            import numpy as _np
+            _rng = _np.random.default_rng(0)
+            _a = Tensor(_rng.normal(size=(4, 3))); _b = Tensor(_rng.normal(size=(3, 2)))
+            _c = _a @ _b
+            assert _np.allclose(_c.data, _a.data @ _b.data), "The result should hold the matrix product"
+            assert len(_c.parents) == 2 and _c.parents[0][0] is _a and _c.parents[1][0] is _b, "The product should record its two operands as parents, self first"
+            _g = _rng.normal(size=(4, 2))
+            _sa = _c.parents[0][1](_g); _sb = _c.parents[1][1](_g)
+            assert _np.shape(_sa) == (4, 3) and _np.shape(_sb) == (3, 2), "Each share should have the shape of its operand"
+            assert _np.allclose(_sa, _g @ _b.data.T), "The share of the left operand is g @ B transposed"
+            assert _np.allclose(_sb, _a.data.T @ _g), "The share of the right operand is A transposed @ g"
+            _z = Tensor(_rng.normal(size=(2, 3)))
+            _t = _z.tanh()
+            assert _np.allclose(_t.data, _np.tanh(_z.data)), "tanh should hold the hyperbolic tangent of each entry"
+            assert len(_t.parents) == 1 and _t.parents[0][0] is _z, "tanh should record its operand as its one parent"
+            _g = _rng.normal(size=(2, 3))
+            assert _np.allclose(_t.parents[0][1](_g), _g * (1 - _np.tanh(_z.data) ** 2)), "The share through tanh is g times one minus the square of the result"
+            assert output.strip() == "(3, 4) [(3, 2), (2, 4)]", "The program should print (3, 4) [(3, 2), (2, 4)]"
+          wrong:
+            - |
+              import numpy as np
+
+
+              class Tensor:
+                  def __init__(self, data, parents=()):
+                      self.data = np.array(data) * 1.0
+                      self.parents = parents
+                      self.grad = np.zeros(self.data.shape)
+
+                  def __add__(self, other):
+                      return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                  def __sub__(self, other):
+                      return Tensor(self.data - other.data, ((self, lambda g: g), (other, lambda g: -g)))
+
+                  def __mul__(self, other):
+                      return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+                  def __matmul__(self, other):
+                      return Tensor(self.data @ other.data, ((self, lambda g: other.data.T @ g), (other, lambda g: g @ self.data.T)))
+
+                  def tanh(self):
+                      t = np.tanh(self.data)
+                      return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                  def sum(self):
+                      return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+              print("(3, 4) [(3, 2), (2, 4)]")
+            - |
+              import numpy as np
+
+
+              class Tensor:
+                  def __init__(self, data, parents=()):
+                      self.data = np.array(data) * 1.0
+                      self.parents = parents
+                      self.grad = np.zeros(self.data.shape)
+
+                  def __add__(self, other):
+                      return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                  def __sub__(self, other):
+                      return Tensor(self.data - other.data, ((self, lambda g: g), (other, lambda g: -g)))
+
+                  def __mul__(self, other):
+                      return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+                  def __matmul__(self, other):
+                      return Tensor(self.data @ other.data, ((self, lambda g: g @ other.data.T), (other, lambda g: self.data.T @ g)))
+
+                  def tanh(self):
+                      t = np.tanh(self.data)
+                      return Tensor(t, ((self, lambda g: g * (1 - self.data * self.data)),))
+
+                  def sum(self):
+                      return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+              print("(3, 4) [(3, 2), (2, 4)]")
+          explanation: |
+            Each operation is two things written side by side: the forward value, and for each operand a pull. For $C = AB$ with gradient $G$ of the result, the shares are $G B^\top$ and $A^\top G$, and the shapes leave no other choice: only $G B^\top$ has the shape of $A$. For $\tanh$ the local slope is $1 - \tanh^2$, written with the result, which the forward pass has already computed.
+
+            Swapping the two orders in the product's pulls fails on shape here because the matrices are not square, which is why the example's are 3 by 2 and 2 by 4. Squaring the operand in place of the result is right only at zero.
+  - title: Walking it backwards
+    blocks:
+      - text: |
+          The record is a graph. To turn it into gradients, set the gradient of the output to 1 and hand shares back from each tensor to its parents. A tensor must have received **all** of its own gradient before it hands any on, so the tensors are taken in an order in which every result comes before its operands.
+      - question:
+          id: why-order
+          type: choice
+          system: s2
+          concepts: [e6.topological-ordering-of-the-graph, e6.reverse-mode-on-scalars]
+          prompt: "`s = a * b`, `t = s + c`, `f = s * t`. The tensor `s` is used twice. Why must `t` be processed before `s` in the backward pass?"
+          options:
+            - "Because `t` was created after `s`, and tensors are always processed newest first."
+            - "Because part of the gradient of `s` arrives through `t`. If `s` handed its gradient to `a` and `b` first, it would hand on only the share that came directly from `f`, and the share through `t` would arrive too late to be passed on."
+            - "Because addition must be differentiated before multiplication."
+            - "It need not be. Any order gives the same gradients."
+          answer: 1
+          explanation: |
+            The gradient of `s` is a sum of two shares, one from each of its uses. Handing on a partial sum gives `a` and `b` partial gradients, with no error raised. A topological order lists every tensor after all of its parents, so its reverse lists every tensor before all of its parents, and by the time a tensor's turn comes everything computed from it has already paid in.
+      - question:
+          id: backward
+          type: code
+          mode: write
+          system: s2
+          concepts: [e6.topological-ordering-of-the-graph, e6.reverse-mode-on-scalars, e6.tensor-valued-autograd]
+          prompt: |
+            Write two functions.
+
+            `topological(node)` returns a list of every tensor in the graph of `node`, each once, with every tensor **after** all of its parents. `node` itself comes last.
+
+            `backward(node)` sets `node.grad` to an array of ones of the shape of `node.data`. Then it goes through the tensors in reverse topological order, and for each parent of each tensor adds that parent's share to the parent's gradient. Do not add in place: write `parent.grad = parent.grad + ...`.
+          starter: |
+            import numpy as np
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __sub__(self, other):
+                    return Tensor(self.data - other.data, ((self, lambda g: g), (other, lambda g: -g)))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+                def __matmul__(self, other):
+                    return Tensor(self.data @ other.data, ((self, lambda g: g @ other.data.T), (other, lambda g: self.data.T @ g)))
+
+                def tanh(self):
+                    t = np.tanh(self.data)
+                    return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                # Replace the next line with your own.
+                return [node]
+
+
+            def backward(node):
+                # Replace the next line with your own.
+                node.grad = np.ones(node.data.shape)
+
+
+            X = Tensor([[0, 1], [1, 1], [2, 1], [3, 1]])
+            w = Tensor([[2], [1]])
+            y = Tensor([[1], [3], [4], [6]])
+            d = X @ w - y
+            L = (d * d).sum()
+            backward(L)
+            print(float(L.data), w.grad.tolist())
+          solution: |
+            import numpy as np
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                def __sub__(self, other):
+                    return Tensor(self.data - other.data, ((self, lambda g: g), (other, lambda g: -g)))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+                def __matmul__(self, other):
+                    return Tensor(self.data @ other.data, ((self, lambda g: g @ other.data.T), (other, lambda g: self.data.T @ g)))
+
+                def tanh(self):
+                    t = np.tanh(self.data)
+                    return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+
+
+            X = Tensor([[0, 1], [1, 1], [2, 1], [3, 1]])
+            w = Tensor([[2], [1]])
+            y = Tensor([[1], [3], [4], [6]])
+            d = X @ w - y
+            L = (d * d).sum()
+            backward(L)
+            print(float(L.data), w.grad.tolist())
+          tests: |
+            import numpy as _np
+            _a = Tensor([2.0]); _b = Tensor([3.0]); _c = Tensor([1.0])
+            _s = _a * _b
+            _t = _s + _c
+            _f = _s * _t
+            _order = topological(_f)
+            assert len(_order) == 6 and len(set(_order)) == 6, "The graph has six tensors and each should be listed once"
+            assert _order[-1] is _f, "The node itself should come last"
+            assert all(_order.index(parent) < _i for _i, _v in enumerate(_order) for parent, _pull in _v.parents), "Every tensor should come after all of its parents"
+            backward(_f)
+            assert _f.grad.tolist() == [1.0], "The gradient of the output is 1"
+            assert _a.grad.tolist() == [39.0] and _b.grad.tolist() == [26.0] and _c.grad.tolist() == [6.0], "For s = a b, t = s + c, f = s t at 2, 3, 1 the gradients are 39, 26 and 6: a tensor used twice must collect both shares before it hands any on"
+            _p = Tensor([[1.0, 2.0], [3.0, 4.0]])
+            _q = (_p * _p).sum()
+            backward(_q)
+            assert _np.allclose(_p.grad, 2 * _p.data), "For the sum of squares the gradient is twice the input: both uses of the same tensor contribute"
+            _x = Tensor(_np.random.default_rng(1).normal(size=(5, 3)))
+            _w = Tensor(_np.random.default_rng(2).normal(size=(3, 2)))
+            _h = (_x @ _w).tanh()
+            backward(_h.sum())
+            assert _np.allclose(_w.grad, _x.data.T @ (1 - _h.data ** 2)), "The gradient should flow through tanh and the matrix product"
+            assert output.strip() == "2.0 [[10.0], [4.0]]", "The program should print 2.0 [[10.0], [4.0]]"
+          wrong:
+            - |
+              import numpy as np
+
+
+              class Tensor:
+                  def __init__(self, data, parents=()):
+                      self.data = np.array(data) * 1.0
+                      self.parents = parents
+                      self.grad = np.zeros(self.data.shape)
+
+                  def __add__(self, other):
+                      return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                  def __sub__(self, other):
+                      return Tensor(self.data - other.data, ((self, lambda g: g), (other, lambda g: -g)))
+
+                  def __mul__(self, other):
+                      return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+                  def __matmul__(self, other):
+                      return Tensor(self.data @ other.data, ((self, lambda g: g @ other.data.T), (other, lambda g: self.data.T @ g)))
+
+                  def tanh(self):
+                      t = np.tanh(self.data)
+                      return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                  def sum(self):
+                      return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+              def topological(node):
+                  order = []
+                  seen = set()
+
+                  def visit(v):
+                      if v in seen:
+                          return
+                      seen.add(v)
+                      for parent, pull in v.parents:
+                          visit(parent)
+                      order.append(v)
+
+                  visit(node)
+                  return order
+
+
+              def backward(node):
+                  node.grad = np.ones(node.data.shape)
+                  for v in topological(node):
+                      for parent, pull in v.parents:
+                          parent.grad = parent.grad + pull(v.grad)
+
+
+              print("2.0 [[10.0], [4.0]]")
+            - |
+              import numpy as np
+
+
+              class Tensor:
+                  def __init__(self, data, parents=()):
+                      self.data = np.array(data) * 1.0
+                      self.parents = parents
+                      self.grad = np.zeros(self.data.shape)
+
+                  def __add__(self, other):
+                      return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                  def __sub__(self, other):
+                      return Tensor(self.data - other.data, ((self, lambda g: g), (other, lambda g: -g)))
+
+                  def __mul__(self, other):
+                      return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+                  def __matmul__(self, other):
+                      return Tensor(self.data @ other.data, ((self, lambda g: g @ other.data.T), (other, lambda g: self.data.T @ g)))
+
+                  def tanh(self):
+                      t = np.tanh(self.data)
+                      return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                  def sum(self):
+                      return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+              def topological(node):
+                  order = []
+                  seen = set()
+
+                  def visit(v):
+                      if v in seen:
+                          return
+                      seen.add(v)
+                      for parent, pull in v.parents:
+                          visit(parent)
+                      order.append(v)
+
+                  visit(node)
+                  return order
+
+
+              def backward(node):
+                  node.grad = np.ones(node.data.shape)
+                  for v in topological(node)[::-1]:
+                      for parent, pull in v.parents:
+                          parent.grad = pull(v.grad)
+
+
+              print("2.0 [[10.0], [4.0]]")
+            - |
+              import numpy as np
+
+
+              class Tensor:
+                  def __init__(self, data, parents=()):
+                      self.data = np.array(data) * 1.0
+                      self.parents = parents
+                      self.grad = np.zeros(self.data.shape)
+
+                  def __add__(self, other):
+                      return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                  def __sub__(self, other):
+                      return Tensor(self.data - other.data, ((self, lambda g: g), (other, lambda g: -g)))
+
+                  def __mul__(self, other):
+                      return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+                  def __matmul__(self, other):
+                      return Tensor(self.data @ other.data, ((self, lambda g: g @ other.data.T), (other, lambda g: self.data.T @ g)))
+
+                  def tanh(self):
+                      t = np.tanh(self.data)
+                      return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                  def sum(self):
+                      return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+              def topological(node):
+                  order = []
+
+                  def visit(v):
+                      for parent, pull in v.parents:
+                          visit(parent)
+                      order.append(v)
+
+                  visit(node)
+                  return order
+
+
+              def backward(node):
+                  node.grad = np.ones(node.data.shape)
+                  for v in topological(node)[::-1]:
+                      for parent, pull in v.parents:
+                          parent.grad = parent.grad + pull(v.grad)
+
+
+              print("2.0 [[10.0], [4.0]]")
+            - |
+              import numpy as np
+
+
+              class Tensor:
+                  def __init__(self, data, parents=()):
+                      self.data = np.array(data) * 1.0
+                      self.parents = parents
+                      self.grad = np.zeros(self.data.shape)
+
+                  def __add__(self, other):
+                      return Tensor(self.data + other.data, ((self, lambda g: g), (other, lambda g: g)))
+
+                  def __sub__(self, other):
+                      return Tensor(self.data - other.data, ((self, lambda g: g), (other, lambda g: -g)))
+
+                  def __mul__(self, other):
+                      return Tensor(self.data * other.data, ((self, lambda g: g * other.data), (other, lambda g: g * self.data)))
+
+                  def __matmul__(self, other):
+                      return Tensor(self.data @ other.data, ((self, lambda g: g @ other.data.T), (other, lambda g: self.data.T @ g)))
+
+                  def tanh(self):
+                      t = np.tanh(self.data)
+                      return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                  def sum(self):
+                      return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+              def topological(node):
+                  order = []
+                  seen = set()
+
+                  def visit(v):
+                      if v in seen:
+                          return
+                      seen.add(v)
+                      for parent, pull in v.parents:
+                          visit(parent)
+                      order.append(v)
+
+                  visit(node)
+                  return order
+
+
+              def backward(node):
+                  node.grad = np.ones(node.data.shape)
+
+                  def walk(v):
+                      for parent, pull in v.parents:
+                          parent.grad = parent.grad + pull(v.grad)
+                          walk(parent)
+
+                  walk(node)
+
+
+              print("2.0 [[10.0], [4.0]]")
+          explanation: |
+            `topological` is a depth-first walk that appends a tensor after visiting its parents, with a set of tensors already seen so that a shared tensor is listed once. `backward` seeds the output with ones and runs through that list reversed, adding each share.
+
+            Going through the list forwards hands on gradients that are still zero. Overwriting in place of adding keeps only the last share to arrive. Leaving out the set lists a shared tensor once for every path to it, so it hands its gradient on more than once. Walking depth-first from the output without the ordering passes a partial gradient down and then passes the whole of the larger total down again.
+
+            The program is a line fitted to four points. The loss is 2 and the gradient says to lower both weights.
+  - title: The bias
+    blocks:
+      - text: |
+          A layer computes `X @ W + b`, where `X @ W` has a row for every data point and `b` has one row. NumPy stretches `b` to fit. The gradient that comes back has a row for every data point, and `b` has room for one.
+
+          Stretching is copying, and the gradient of a value that was copied is the **sum** of the gradients of its copies. The engine's two-operand operations will pass every share through a function that sums it back down to the operand's shape.
+      - question:
+          id: bias-shape
+          type: numeric
+          system: s1
+          concepts: [e6.broadcasting-in-the-backward-pass]
+          prompt: "`Z` has shape `(10, 8)` and `b` has shape `(1, 8)`. In `(Z + b).sum()`, every entry of the result has gradient 1. What is each entry of the gradient of `b`?"
+          answer: "10"
+          explanation: |
+            Each entry of `b` was copied into ten rows, and each copy has gradient 1. The gradient of `b` has shape `(1, 8)` and every entry is 10.
+      - question:
+          id: unbroadcast
+          type: code
+          mode: write
+          system: s2
+          concepts: [e6.broadcasting-in-the-backward-pass, e6.tensor-valued-autograd]
+          prompt: |
+            Write `unbroadcast(grad, shape)`. `grad` is an array that has the shape of a broadcast result, and `shape` is the shape of one operand. Return the array summed down to `shape`:
+
+            - while `grad` has more axes than `shape`, sum over axis 0;
+            - then, for each axis where `shape` has length 1 and `grad` does not, sum over that axis, keeping the axis.
+
+            The tensor class in the program already calls it.
+          starter: |
+            import numpy as np
+
+
+            def unbroadcast(grad, shape):
+                # Replace the next line with your own.
+                return grad
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, (
+                        (self, lambda g: unbroadcast(g, self.data.shape)),
+                        (other, lambda g: unbroadcast(g, other.data.shape)),
+                    ))
+
+                def __sub__(self, other):
+                    return Tensor(self.data - other.data, (
+                        (self, lambda g: unbroadcast(g, self.data.shape)),
+                        (other, lambda g: unbroadcast(-g, other.data.shape)),
+                    ))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, (
+                        (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                        (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                    ))
+
+                def __matmul__(self, other):
+                    return Tensor(self.data @ other.data, (
+                        (self, lambda g: g @ other.data.T),
+                        (other, lambda g: self.data.T @ g),
+                    ))
+
+                def tanh(self):
+                    t = np.tanh(self.data)
+                    return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+
+
+            Z = Tensor(np.ones((10, 8)))
+            b = Tensor(np.zeros((1, 8)))
+            backward((Z + b).sum())
+            print(b.grad.shape, b.grad[0].tolist())
+          solution: |
+            import numpy as np
+
+
+            def unbroadcast(grad, shape):
+                while grad.ndim > len(shape):
+                    grad = grad.sum(axis=0)
+                for axis, n in enumerate(shape):
+                    if n == 1 and grad.shape[axis] != 1:
+                        grad = grad.sum(axis=axis, keepdims=True)
+                return grad
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, (
+                        (self, lambda g: unbroadcast(g, self.data.shape)),
+                        (other, lambda g: unbroadcast(g, other.data.shape)),
+                    ))
+
+                def __sub__(self, other):
+                    return Tensor(self.data - other.data, (
+                        (self, lambda g: unbroadcast(g, self.data.shape)),
+                        (other, lambda g: unbroadcast(-g, other.data.shape)),
+                    ))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, (
+                        (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                        (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                    ))
+
+                def __matmul__(self, other):
+                    return Tensor(self.data @ other.data, (
+                        (self, lambda g: g @ other.data.T),
+                        (other, lambda g: self.data.T @ g),
+                    ))
+
+                def tanh(self):
+                    t = np.tanh(self.data)
+                    return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+
+
+            Z = Tensor(np.ones((10, 8)))
+            b = Tensor(np.zeros((1, 8)))
+            backward((Z + b).sum())
+            print(b.grad.shape, b.grad[0].tolist())
+          tests: |
+            import numpy as _np
+            _g = _np.arange(12.0).reshape(4, 3)
+            assert _np.array_equal(unbroadcast(_g, (4, 3)), _g), "A gradient that already has the operand's shape should come back unchanged"
+            _r = unbroadcast(_g, (1, 3))
+            assert _np.shape(_r) == (1, 3) and _r.tolist() == [[18.0, 22.0, 26.0]], "Down to shape (1, 3): sum over the rows and keep the axis"
+            _r = unbroadcast(_g, (3,))
+            assert _np.shape(_r) == (3,) and _r.tolist() == [18.0, 22.0, 26.0], "Down to shape (3,): sum away the extra leading axis"
+            _r = unbroadcast(_g, (4, 1))
+            assert _np.shape(_r) == (4, 1) and _r.tolist() == [[3.0], [12.0], [21.0], [30.0]], "Down to shape (4, 1): sum across each row and keep the axis"
+            _r = unbroadcast(_g, (1, 1))
+            assert _np.shape(_r) == (1, 1) and float(_r[0][0]) == 66.0, "Down to shape (1, 1): sum over both axes and keep them"
+            _r = unbroadcast(_g, ())
+            assert _np.shape(_r) == () and float(_r) == 66.0, "Down to a scalar: sum everything"
+            _x = Tensor(_np.arange(6.0).reshape(3, 2)); _m = Tensor([[1.0, 2.0]])
+            _d = _x - _m
+            backward((_d * _d).sum())
+            assert _np.shape(_m.grad) == (1, 2) and _m.grad.tolist() == [[-6.0, -6.0]], "Through a subtraction the bias-shaped operand should receive the negated gradient summed over the rows"
+            assert output.strip() == "(1, 8) [10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]", "The program should print (1, 8) [10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]"
+          wrong:
+            - |
+              import numpy as np
+
+
+              def unbroadcast(grad, shape):
+                  while grad.ndim > len(shape):
+                      grad = grad.sum(axis=0)
+                  for axis, n in enumerate(shape):
+                      if n == 1 and grad.shape[axis] != 1:
+                          grad = grad.sum(axis=axis)
+                  return grad
+
+
+              class Tensor:
+                  def __init__(self, data, parents=()):
+                      self.data = np.array(data) * 1.0
+                      self.parents = parents
+                      self.grad = np.zeros(self.data.shape)
+
+                  def __add__(self, other):
+                      return Tensor(self.data + other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(g, other.data.shape)),
+                      ))
+
+                  def __sub__(self, other):
+                      return Tensor(self.data - other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(-g, other.data.shape)),
+                      ))
+
+                  def __mul__(self, other):
+                      return Tensor(self.data * other.data, (
+                          (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                          (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                      ))
+
+                  def __matmul__(self, other):
+                      return Tensor(self.data @ other.data, (
+                          (self, lambda g: g @ other.data.T),
+                          (other, lambda g: self.data.T @ g),
+                      ))
+
+                  def tanh(self):
+                      t = np.tanh(self.data)
+                      return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                  def sum(self):
+                      return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+              def topological(node):
+                  order = []
+                  seen = set()
+
+                  def visit(v):
+                      if v in seen:
+                          return
+                      seen.add(v)
+                      for parent, pull in v.parents:
+                          visit(parent)
+                      order.append(v)
+
+                  visit(node)
+                  return order
+
+
+              def backward(node):
+                  node.grad = np.ones(node.data.shape)
+                  for v in topological(node)[::-1]:
+                      for parent, pull in v.parents:
+                          parent.grad = parent.grad + pull(v.grad)
+
+
+              print("(1, 8) [10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]")
+            - |
+              import numpy as np
+
+
+              def unbroadcast(grad, shape):
+                  while grad.ndim > len(shape):
+                      grad = grad.sum(axis=0)
+                  for axis, n in enumerate(shape):
+                      if n == 1 and grad.shape[axis] != 1:
+                          grad = grad.mean(axis=axis, keepdims=True)
+                  return grad
+
+
+              class Tensor:
+                  def __init__(self, data, parents=()):
+                      self.data = np.array(data) * 1.0
+                      self.parents = parents
+                      self.grad = np.zeros(self.data.shape)
+
+                  def __add__(self, other):
+                      return Tensor(self.data + other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(g, other.data.shape)),
+                      ))
+
+                  def __sub__(self, other):
+                      return Tensor(self.data - other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(-g, other.data.shape)),
+                      ))
+
+                  def __mul__(self, other):
+                      return Tensor(self.data * other.data, (
+                          (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                          (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                      ))
+
+                  def __matmul__(self, other):
+                      return Tensor(self.data @ other.data, (
+                          (self, lambda g: g @ other.data.T),
+                          (other, lambda g: self.data.T @ g),
+                      ))
+
+                  def tanh(self):
+                      t = np.tanh(self.data)
+                      return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                  def sum(self):
+                      return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+              def topological(node):
+                  order = []
+                  seen = set()
+
+                  def visit(v):
+                      if v in seen:
+                          return
+                      seen.add(v)
+                      for parent, pull in v.parents:
+                          visit(parent)
+                      order.append(v)
+
+                  visit(node)
+                  return order
+
+
+              def backward(node):
+                  node.grad = np.ones(node.data.shape)
+                  for v in topological(node)[::-1]:
+                      for parent, pull in v.parents:
+                          parent.grad = parent.grad + pull(v.grad)
+
+
+              print("(1, 8) [10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]")
+            - |
+              import numpy as np
+
+
+              def unbroadcast(grad, shape):
+                  for axis, n in enumerate(shape):
+                      if n == 1 and grad.shape[axis] != 1:
+                          grad = grad.sum(axis=axis, keepdims=True)
+                  return grad
+
+
+              class Tensor:
+                  def __init__(self, data, parents=()):
+                      self.data = np.array(data) * 1.0
+                      self.parents = parents
+                      self.grad = np.zeros(self.data.shape)
+
+                  def __add__(self, other):
+                      return Tensor(self.data + other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(g, other.data.shape)),
+                      ))
+
+                  def __sub__(self, other):
+                      return Tensor(self.data - other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(-g, other.data.shape)),
+                      ))
+
+                  def __mul__(self, other):
+                      return Tensor(self.data * other.data, (
+                          (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                          (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                      ))
+
+                  def __matmul__(self, other):
+                      return Tensor(self.data @ other.data, (
+                          (self, lambda g: g @ other.data.T),
+                          (other, lambda g: self.data.T @ g),
+                      ))
+
+                  def tanh(self):
+                      t = np.tanh(self.data)
+                      return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                  def sum(self):
+                      return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+              def topological(node):
+                  order = []
+                  seen = set()
+
+                  def visit(v):
+                      if v in seen:
+                          return
+                      seen.add(v)
+                      for parent, pull in v.parents:
+                          visit(parent)
+                      order.append(v)
+
+                  visit(node)
+                  return order
+
+
+              def backward(node):
+                  node.grad = np.ones(node.data.shape)
+                  for v in topological(node)[::-1]:
+                      for parent, pull in v.parents:
+                          parent.grad = parent.grad + pull(v.grad)
+
+
+              print("(1, 8) [10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]")
+          explanation: |
+            Broadcasting does two things to an operand: it adds axes on the left, and it stretches axes of length 1. The function undoes them in that order. Extra leading axes are summed away. Stretched axes are summed and kept at length 1, so that the result has exactly the operand's shape.
+
+            Dropping the kept axis gives the right numbers in the wrong shape, and the next addition into `grad` broadcasts them somewhere unintended. Averaging in place of summing divides the bias's gradient by the number of rows. Skipping the leading axes fails on an operand with fewer axes than the result.
+  - title: Trust
+    blocks:
+      - text: |
+          The engine now has everything a network needs. Before training anything with it, find out whether its gradients are right. A loss that falls does not show that: almost any direction that is roughly downhill makes a loss fall.
+
+          What does show it is a comparison with slopes that are **measured**. Nudge one entry of one parameter up by a small $h$ and down by $h$, run the model each time, and divide the change in the loss by $2h$. The functions `numeric_grad` and `relative_error` are given, as are the layers. Read them before you go on.
+      - question:
+          id: verdict
+          type: choice
+          system: s1
+          concepts: [e6.gradient-checking]
+          prompt: "A gradient check in 64-bit floats, with central differences and $h = 10^{-6}$, reports a largest relative error of 0.14. What is the verdict?"
+          options:
+            - "Correct. Numerical gradients are only approximate."
+            - "A bug. Correct gradients agree to a relative error near $10^{-10}$, and rounding cannot account for a disagreement in the first digit."
+            - "The step $h$ is too small."
+            - "No verdict is possible without training the model."
+          answer: 1
+          explanation: |
+            Central differences with a sensible step are good to nine or ten digits, so a right gradient gives an error of $10^{-7}$ or less. Wrong gradients are rarely subtly wrong: a missing factor or a wrong local slope gives an error between 0.1 and 1. The gap between the two is six orders of magnitude.
+      - question:
+          id: check
+          type: code
+          mode: write
+          system: s2
+          concepts: [e6.gradient-checking, e6.modules-parameters-and-optimisers, e6.memory-planning-and-in-place-operations]
+          prompt: |
+            Write `check_model(model, X, y)`. It returns the **largest** relative error, over all the model's parameters, between the engine's gradient of the loss and the numerical one.
+
+            Set every parameter's gradient to zeros, then run one backward pass from `loss_of(model, X, y)`. For each parameter `p`, `numeric_grad(f, p.data)` nudges the entries of `p.data` in place and calls `f`, so `f` only needs to run the model again and return the loss as a float.
+          starter: |
+            import numpy as np
+
+
+            def unbroadcast(grad, shape):
+                while grad.ndim > len(shape):
+                    grad = grad.sum(axis=0)
+                for axis, n in enumerate(shape):
+                    if n == 1 and grad.shape[axis] != 1:
+                        grad = grad.sum(axis=axis, keepdims=True)
+                return grad
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, (
+                        (self, lambda g: unbroadcast(g, self.data.shape)),
+                        (other, lambda g: unbroadcast(g, other.data.shape)),
+                    ))
+
+                def __sub__(self, other):
+                    return Tensor(self.data - other.data, (
+                        (self, lambda g: unbroadcast(g, self.data.shape)),
+                        (other, lambda g: unbroadcast(-g, other.data.shape)),
+                    ))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, (
+                        (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                        (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                    ))
+
+                def __matmul__(self, other):
+                    return Tensor(self.data @ other.data, (
+                        (self, lambda g: g @ other.data.T),
+                        (other, lambda g: self.data.T @ g),
+                    ))
+
+                def tanh(self):
+                    t = np.tanh(self.data)
+                    return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+
+
+            class Linear:
+                def __init__(self, n_in, n_out, rng):
+                    self.weight = Tensor(rng.normal(size=(n_in, n_out)) / np.sqrt(n_in))
+                    self.bias = Tensor(np.zeros((1, n_out)))
+
+                def __call__(self, x):
+                    return x @ self.weight + self.bias
+
+                def parameters(self):
+                    return [self.weight, self.bias]
+
+
+            class MLP:
+                def __init__(self, sizes, rng):
+                    self.layers = [Linear(a, b, rng) for a, b in zip(sizes, sizes[1:])]
+
+                def __call__(self, x):
+                    for layer in self.layers[:-1]:
+                        x = layer(x).tanh()
+                    return self.layers[-1](x)
+
+                def parameters(self):
+                    return [p for layer in self.layers for p in layer.parameters()]
+
+
+            def numeric_grad(f, x, h=1e-6):
+                grad = np.zeros(x.shape)
+                flat_x = x.reshape(-1)
+                flat_grad = grad.reshape(-1)
+                for i in range(x.size):
+                    old = flat_x[i]
+                    flat_x[i] = old + h
+                    up = f(x)
+                    flat_x[i] = old - h
+                    down = f(x)
+                    flat_x[i] = old
+                    flat_grad[i] = (up - down) / (2 * h)
+                return grad
+
+
+            def relative_error(a, n):
+                return float(np.abs(a - n).max() / (np.abs(a).max() + np.abs(n).max() + 1e-12))
+
+
+            def loss_of(model, X, y):
+                d = model(X) - y
+                return (d * d).sum()
+
+
+            def check_model(model, X, y):
+                # Replace the next line with your own.
+                return 0.0
+
+
+            X = Tensor([[0, 0], [0.5, 0], [0, -0.5], [-0.4, 0.3],
+                        [2, 0], [0, 2], [-2, 0], [0, -2], [1.5, 1.5], [-1.5, -1.5]])
+            y = Tensor([[1], [1], [1], [1], [0], [0], [0], [0], [0], [0]])
+            model = MLP([2, 8, 1], np.random.default_rng(0))
+            print(sum(p.data.size for p in model.parameters()), check_model(model, X, y) < 1e-6)
+          solution: |
+            import numpy as np
+
+
+            def unbroadcast(grad, shape):
+                while grad.ndim > len(shape):
+                    grad = grad.sum(axis=0)
+                for axis, n in enumerate(shape):
+                    if n == 1 and grad.shape[axis] != 1:
+                        grad = grad.sum(axis=axis, keepdims=True)
+                return grad
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, (
+                        (self, lambda g: unbroadcast(g, self.data.shape)),
+                        (other, lambda g: unbroadcast(g, other.data.shape)),
+                    ))
+
+                def __sub__(self, other):
+                    return Tensor(self.data - other.data, (
+                        (self, lambda g: unbroadcast(g, self.data.shape)),
+                        (other, lambda g: unbroadcast(-g, other.data.shape)),
+                    ))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, (
+                        (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                        (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                    ))
+
+                def __matmul__(self, other):
+                    return Tensor(self.data @ other.data, (
+                        (self, lambda g: g @ other.data.T),
+                        (other, lambda g: self.data.T @ g),
+                    ))
+
+                def tanh(self):
+                    t = np.tanh(self.data)
+                    return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+
+
+            class Linear:
+                def __init__(self, n_in, n_out, rng):
+                    self.weight = Tensor(rng.normal(size=(n_in, n_out)) / np.sqrt(n_in))
+                    self.bias = Tensor(np.zeros((1, n_out)))
+
+                def __call__(self, x):
+                    return x @ self.weight + self.bias
+
+                def parameters(self):
+                    return [self.weight, self.bias]
+
+
+            class MLP:
+                def __init__(self, sizes, rng):
+                    self.layers = [Linear(a, b, rng) for a, b in zip(sizes, sizes[1:])]
+
+                def __call__(self, x):
+                    for layer in self.layers[:-1]:
+                        x = layer(x).tanh()
+                    return self.layers[-1](x)
+
+                def parameters(self):
+                    return [p for layer in self.layers for p in layer.parameters()]
+
+
+            def numeric_grad(f, x, h=1e-6):
+                grad = np.zeros(x.shape)
+                flat_x = x.reshape(-1)
+                flat_grad = grad.reshape(-1)
+                for i in range(x.size):
+                    old = flat_x[i]
+                    flat_x[i] = old + h
+                    up = f(x)
+                    flat_x[i] = old - h
+                    down = f(x)
+                    flat_x[i] = old
+                    flat_grad[i] = (up - down) / (2 * h)
+                return grad
+
+
+            def relative_error(a, n):
+                return float(np.abs(a - n).max() / (np.abs(a).max() + np.abs(n).max() + 1e-12))
+
+
+            def loss_of(model, X, y):
+                d = model(X) - y
+                return (d * d).sum()
+
+
+            def check_model(model, X, y):
+                for p in model.parameters():
+                    p.grad = np.zeros(p.data.shape)
+                backward(loss_of(model, X, y))
+                f = lambda arr: float(loss_of(model, X, y).data)
+                return max(relative_error(p.grad, numeric_grad(f, p.data)) for p in model.parameters())
+
+
+            X = Tensor([[0, 0], [0.5, 0], [0, -0.5], [-0.4, 0.3],
+                        [2, 0], [0, 2], [-2, 0], [0, -2], [1.5, 1.5], [-1.5, -1.5]])
+            y = Tensor([[1], [1], [1], [1], [0], [0], [0], [0], [0], [0]])
+            model = MLP([2, 8, 1], np.random.default_rng(0))
+            print(sum(p.data.size for p in model.parameters()), check_model(model, X, y) < 1e-6)
+          tests: |
+            import numpy as _np
+            _X = Tensor(_np.random.default_rng(1).normal(size=(5, 3)))
+            _y = Tensor(_np.random.default_rng(2).normal(size=(5, 2)))
+            _m = MLP([3, 4, 2], _np.random.default_rng(3))
+            _keep = [p.data.copy() for p in _m.parameters()]
+            _e = check_model(_m, _X, _y)
+            assert isinstance(_e, float), "check_model should return a float"
+            assert 0.0 < _e < 1e-6, "For the correct engine the largest relative error should be tiny, and not exactly zero: compare the engine's gradient with numeric_grad for each parameter"
+            assert all(_np.array_equal(p.data, k) for p, k in zip(_m.parameters(), _keep)), "The parameters should be left as they were"
+            for _p in _m.parameters():
+                _p.grad = _np.ones(_p.data.shape)
+            assert check_model(_m, _X, _y) < 1e-6, "Gradients left over from earlier should not spoil the check: set them to zero before the backward pass"
+            _good_unbroadcast = unbroadcast
+            def unbroadcast(grad, shape):
+                _fixed = _good_unbroadcast(grad, shape)
+                return _fixed if _np.shape(grad) == tuple(shape) else 2 * _fixed
+            _bad = check_model(_m, _X, _y)
+            unbroadcast = _good_unbroadcast
+            assert _bad > 1e-3, "With a pull that doubles the gradient of every bias and leaves the weights alone, the check should report a large error: take the largest error over all the parameters"
+            _good_tanh = Tensor.tanh
+            def _wrong_tanh(self):
+                _t = _np.tanh(self.data)
+                return Tensor(_t, ((self, lambda g: g * (1 - _t)),))
+            Tensor.tanh = _wrong_tanh
+            _bad = check_model(_m, _X, _y)
+            Tensor.tanh = _good_tanh
+            assert _bad > 1e-3, "With a wrong pull for tanh the check should report a large error"
+            assert output.strip() == "33 True", "The program should print 33 True"
+          wrong:
+            - |
+              import numpy as np
+
+
+              def unbroadcast(grad, shape):
+                  while grad.ndim > len(shape):
+                      grad = grad.sum(axis=0)
+                  for axis, n in enumerate(shape):
+                      if n == 1 and grad.shape[axis] != 1:
+                          grad = grad.sum(axis=axis, keepdims=True)
+                  return grad
+
+
+              class Tensor:
+                  def __init__(self, data, parents=()):
+                      self.data = np.array(data) * 1.0
+                      self.parents = parents
+                      self.grad = np.zeros(self.data.shape)
+
+                  def __add__(self, other):
+                      return Tensor(self.data + other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(g, other.data.shape)),
+                      ))
+
+                  def __sub__(self, other):
+                      return Tensor(self.data - other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(-g, other.data.shape)),
+                      ))
+
+                  def __mul__(self, other):
+                      return Tensor(self.data * other.data, (
+                          (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                          (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                      ))
+
+                  def __matmul__(self, other):
+                      return Tensor(self.data @ other.data, (
+                          (self, lambda g: g @ other.data.T),
+                          (other, lambda g: self.data.T @ g),
+                      ))
+
+                  def tanh(self):
+                      t = np.tanh(self.data)
+                      return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                  def sum(self):
+                      return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+              def topological(node):
+                  order = []
+                  seen = set()
+
+                  def visit(v):
+                      if v in seen:
+                          return
+                      seen.add(v)
+                      for parent, pull in v.parents:
+                          visit(parent)
+                      order.append(v)
+
+                  visit(node)
+                  return order
+
+
+              def backward(node):
+                  node.grad = np.ones(node.data.shape)
+                  for v in topological(node)[::-1]:
+                      for parent, pull in v.parents:
+                          parent.grad = parent.grad + pull(v.grad)
+
+
+              class Linear:
+                  def __init__(self, n_in, n_out, rng):
+                      self.weight = Tensor(rng.normal(size=(n_in, n_out)) / np.sqrt(n_in))
+                      self.bias = Tensor(np.zeros((1, n_out)))
+
+                  def __call__(self, x):
+                      return x @ self.weight + self.bias
+
+                  def parameters(self):
+                      return [self.weight, self.bias]
+
+
+              class MLP:
+                  def __init__(self, sizes, rng):
+                      self.layers = [Linear(a, b, rng) for a, b in zip(sizes, sizes[1:])]
+
+                  def __call__(self, x):
+                      for layer in self.layers[:-1]:
+                          x = layer(x).tanh()
+                      return self.layers[-1](x)
+
+                  def parameters(self):
+                      return [p for layer in self.layers for p in layer.parameters()]
+
+
+              def numeric_grad(f, x, h=1e-6):
+                  grad = np.zeros(x.shape)
+                  flat_x = x.reshape(-1)
+                  flat_grad = grad.reshape(-1)
+                  for i in range(x.size):
+                      old = flat_x[i]
+                      flat_x[i] = old + h
+                      up = f(x)
+                      flat_x[i] = old - h
+                      down = f(x)
+                      flat_x[i] = old
+                      flat_grad[i] = (up - down) / (2 * h)
+                  return grad
+
+
+              def relative_error(a, n):
+                  return float(np.abs(a - n).max() / (np.abs(a).max() + np.abs(n).max() + 1e-12))
+
+
+              def loss_of(model, X, y):
+                  d = model(X) - y
+                  return (d * d).sum()
+
+
+              def check_model(model, X, y):
+                  backward(loss_of(model, X, y))
+                  f = lambda arr: float(loss_of(model, X, y).data)
+                  return max(relative_error(p.grad, numeric_grad(f, p.data)) for p in model.parameters())
+
+
+              print("33 True")
+            - |
+              import numpy as np
+
+
+              def unbroadcast(grad, shape):
+                  while grad.ndim > len(shape):
+                      grad = grad.sum(axis=0)
+                  for axis, n in enumerate(shape):
+                      if n == 1 and grad.shape[axis] != 1:
+                          grad = grad.sum(axis=axis, keepdims=True)
+                  return grad
+
+
+              class Tensor:
+                  def __init__(self, data, parents=()):
+                      self.data = np.array(data) * 1.0
+                      self.parents = parents
+                      self.grad = np.zeros(self.data.shape)
+
+                  def __add__(self, other):
+                      return Tensor(self.data + other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(g, other.data.shape)),
+                      ))
+
+                  def __sub__(self, other):
+                      return Tensor(self.data - other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(-g, other.data.shape)),
+                      ))
+
+                  def __mul__(self, other):
+                      return Tensor(self.data * other.data, (
+                          (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                          (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                      ))
+
+                  def __matmul__(self, other):
+                      return Tensor(self.data @ other.data, (
+                          (self, lambda g: g @ other.data.T),
+                          (other, lambda g: self.data.T @ g),
+                      ))
+
+                  def tanh(self):
+                      t = np.tanh(self.data)
+                      return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                  def sum(self):
+                      return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+              def topological(node):
+                  order = []
+                  seen = set()
+
+                  def visit(v):
+                      if v in seen:
+                          return
+                      seen.add(v)
+                      for parent, pull in v.parents:
+                          visit(parent)
+                      order.append(v)
+
+                  visit(node)
+                  return order
+
+
+              def backward(node):
+                  node.grad = np.ones(node.data.shape)
+                  for v in topological(node)[::-1]:
+                      for parent, pull in v.parents:
+                          parent.grad = parent.grad + pull(v.grad)
+
+
+              class Linear:
+                  def __init__(self, n_in, n_out, rng):
+                      self.weight = Tensor(rng.normal(size=(n_in, n_out)) / np.sqrt(n_in))
+                      self.bias = Tensor(np.zeros((1, n_out)))
+
+                  def __call__(self, x):
+                      return x @ self.weight + self.bias
+
+                  def parameters(self):
+                      return [self.weight, self.bias]
+
+
+              class MLP:
+                  def __init__(self, sizes, rng):
+                      self.layers = [Linear(a, b, rng) for a, b in zip(sizes, sizes[1:])]
+
+                  def __call__(self, x):
+                      for layer in self.layers[:-1]:
+                          x = layer(x).tanh()
+                      return self.layers[-1](x)
+
+                  def parameters(self):
+                      return [p for layer in self.layers for p in layer.parameters()]
+
+
+              def numeric_grad(f, x, h=1e-6):
+                  grad = np.zeros(x.shape)
+                  flat_x = x.reshape(-1)
+                  flat_grad = grad.reshape(-1)
+                  for i in range(x.size):
+                      old = flat_x[i]
+                      flat_x[i] = old + h
+                      up = f(x)
+                      flat_x[i] = old - h
+                      down = f(x)
+                      flat_x[i] = old
+                      flat_grad[i] = (up - down) / (2 * h)
+                  return grad
+
+
+              def relative_error(a, n):
+                  return float(np.abs(a - n).max() / (np.abs(a).max() + np.abs(n).max() + 1e-12))
+
+
+              def loss_of(model, X, y):
+                  d = model(X) - y
+                  return (d * d).sum()
+
+
+              def check_model(model, X, y):
+                  for p in model.parameters():
+                      p.grad = np.zeros(p.data.shape)
+                  backward(loss_of(model, X, y))
+                  f = lambda arr: float(loss_of(model, X, y).data)
+                  p = model.parameters()[0]
+                  return relative_error(p.grad, numeric_grad(f, p.data))
+
+
+              print("33 True")
+            - |
+              import numpy as np
+
+
+              def unbroadcast(grad, shape):
+                  while grad.ndim > len(shape):
+                      grad = grad.sum(axis=0)
+                  for axis, n in enumerate(shape):
+                      if n == 1 and grad.shape[axis] != 1:
+                          grad = grad.sum(axis=axis, keepdims=True)
+                  return grad
+
+
+              class Tensor:
+                  def __init__(self, data, parents=()):
+                      self.data = np.array(data) * 1.0
+                      self.parents = parents
+                      self.grad = np.zeros(self.data.shape)
+
+                  def __add__(self, other):
+                      return Tensor(self.data + other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(g, other.data.shape)),
+                      ))
+
+                  def __sub__(self, other):
+                      return Tensor(self.data - other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(-g, other.data.shape)),
+                      ))
+
+                  def __mul__(self, other):
+                      return Tensor(self.data * other.data, (
+                          (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                          (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                      ))
+
+                  def __matmul__(self, other):
+                      return Tensor(self.data @ other.data, (
+                          (self, lambda g: g @ other.data.T),
+                          (other, lambda g: self.data.T @ g),
+                      ))
+
+                  def tanh(self):
+                      t = np.tanh(self.data)
+                      return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                  def sum(self):
+                      return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+              def topological(node):
+                  order = []
+                  seen = set()
+
+                  def visit(v):
+                      if v in seen:
+                          return
+                      seen.add(v)
+                      for parent, pull in v.parents:
+                          visit(parent)
+                      order.append(v)
+
+                  visit(node)
+                  return order
+
+
+              def backward(node):
+                  node.grad = np.ones(node.data.shape)
+                  for v in topological(node)[::-1]:
+                      for parent, pull in v.parents:
+                          parent.grad = parent.grad + pull(v.grad)
+
+
+              class Linear:
+                  def __init__(self, n_in, n_out, rng):
+                      self.weight = Tensor(rng.normal(size=(n_in, n_out)) / np.sqrt(n_in))
+                      self.bias = Tensor(np.zeros((1, n_out)))
+
+                  def __call__(self, x):
+                      return x @ self.weight + self.bias
+
+                  def parameters(self):
+                      return [self.weight, self.bias]
+
+
+              class MLP:
+                  def __init__(self, sizes, rng):
+                      self.layers = [Linear(a, b, rng) for a, b in zip(sizes, sizes[1:])]
+
+                  def __call__(self, x):
+                      for layer in self.layers[:-1]:
+                          x = layer(x).tanh()
+                      return self.layers[-1](x)
+
+                  def parameters(self):
+                      return [p for layer in self.layers for p in layer.parameters()]
+
+
+              def numeric_grad(f, x, h=1e-6):
+                  grad = np.zeros(x.shape)
+                  flat_x = x.reshape(-1)
+                  flat_grad = grad.reshape(-1)
+                  for i in range(x.size):
+                      old = flat_x[i]
+                      flat_x[i] = old + h
+                      up = f(x)
+                      flat_x[i] = old - h
+                      down = f(x)
+                      flat_x[i] = old
+                      flat_grad[i] = (up - down) / (2 * h)
+                  return grad
+
+
+              def relative_error(a, n):
+                  return float(np.abs(a - n).max() / (np.abs(a).max() + np.abs(n).max() + 1e-12))
+
+
+              def loss_of(model, X, y):
+                  d = model(X) - y
+                  return (d * d).sum()
+
+
+              def check_model(model, X, y):
+                  for p in model.parameters():
+                      p.grad = np.zeros(p.data.shape)
+                  backward(loss_of(model, X, y))
+                  return max(relative_error(p.grad, p.grad) for p in model.parameters())
+
+
+              print("33 True")
+          explanation: |
+            Clear, run one backward pass, and then for each parameter measure the slopes and compare. The function `f` can ignore its argument, because `numeric_grad` writes each nudge into `p.data`, the very array the model reads. Writing into it is safe, since no backward pass is waiting on the graphs that `f` builds.
+
+            The largest error is the verdict. Checking only the first parameter passes an engine that mishandles biases alone, and comparing a gradient with itself reports a perfect zero for any engine at all.
+
+            The model has $2 \times 8 + 8 + 8 + 1 = 33$ parameters, and the engine you have written agrees with the measured slopes on every one of them to about ten digits. From here on, a training run that fails is not the engine's fault.
+  - title: Finding the water
+    blocks:
+      - text: |
+          What is left is the bookkeeping of training. An optimiser holds the list of parameters, sets their gradients to zero before each backward pass, and moves each parameter against its gradient afterwards. With **momentum** $\mu$ it keeps a velocity for each parameter: the velocity becomes $\mu$ times the old velocity plus the gradient, and the parameter moves by the learning rate times the velocity.
+      - question:
+          id: frozen
+          type: choice
+          system: s2
+          concepts: [e6.modules-parameters-and-optimisers, e6.training-an-mlp-on-your-own-engine]
+          prompt: "A training loop runs: forward pass, backward pass, `zero_grad`, `step`. Another runs: forward pass, `backward`, `step`, with no `zero_grad` at all. What does the loss do in each?"
+          options:
+            - "Both train normally."
+            - "The first stays exactly at its starting value, since the update reads gradients that were just set to zero. The second swings down and up without settling, since each step uses the sum of every gradient so far."
+            - "The first swings and the second stays frozen."
+            - "Both raise an error."
+          answer: 1
+          explanation: |
+            The backward pass adds to gradients, as it must for a tensor used more than once. So they have to be cleared before each pass, and they have to still hold the result when the update reads them. A loss frozen to the last digit means that the parameters are not being written to. A loss that falls, overshoots and climbs back is the mark of gradients piling up.
+      - question:
+          id: train
+          type: code
+          mode: write
+          system: s2
+          concepts: [e6.training-an-mlp-on-your-own-engine, e6.modules-parameters-and-optimisers, e6.memory-planning-and-in-place-operations]
+          prompt: |
+            Write the two methods of `SGD` and the function `train`.
+
+            `zero_grad(self)` sets every parameter's gradient to zeros of the parameter's shape.
+
+            `step(self)`, for parameter number `i`: `self.velocity[i]` becomes `momentum` times itself plus the gradient, and then the parameter's `data` becomes its `data` minus `lr` times that velocity.
+
+            `train(model, X, y, opt, steps)` runs `steps` training steps. At each it computes the loss with `loss_of`, records it **as a float, before the update**, clears the gradients, runs the backward pass and steps the optimiser. It returns the list of recorded losses.
+          starter: |
+            import numpy as np
+
+
+            def unbroadcast(grad, shape):
+                while grad.ndim > len(shape):
+                    grad = grad.sum(axis=0)
+                for axis, n in enumerate(shape):
+                    if n == 1 and grad.shape[axis] != 1:
+                        grad = grad.sum(axis=axis, keepdims=True)
+                return grad
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, (
+                        (self, lambda g: unbroadcast(g, self.data.shape)),
+                        (other, lambda g: unbroadcast(g, other.data.shape)),
+                    ))
+
+                def __sub__(self, other):
+                    return Tensor(self.data - other.data, (
+                        (self, lambda g: unbroadcast(g, self.data.shape)),
+                        (other, lambda g: unbroadcast(-g, other.data.shape)),
+                    ))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, (
+                        (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                        (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                    ))
+
+                def __matmul__(self, other):
+                    return Tensor(self.data @ other.data, (
+                        (self, lambda g: g @ other.data.T),
+                        (other, lambda g: self.data.T @ g),
+                    ))
+
+                def tanh(self):
+                    t = np.tanh(self.data)
+                    return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+
+
+            class Linear:
+                def __init__(self, n_in, n_out, rng):
+                    self.weight = Tensor(rng.normal(size=(n_in, n_out)) / np.sqrt(n_in))
+                    self.bias = Tensor(np.zeros((1, n_out)))
+
+                def __call__(self, x):
+                    return x @ self.weight + self.bias
+
+                def parameters(self):
+                    return [self.weight, self.bias]
+
+
+            class MLP:
+                def __init__(self, sizes, rng):
+                    self.layers = [Linear(a, b, rng) for a, b in zip(sizes, sizes[1:])]
+
+                def __call__(self, x):
+                    for layer in self.layers[:-1]:
+                        x = layer(x).tanh()
+                    return self.layers[-1](x)
+
+                def parameters(self):
+                    return [p for layer in self.layers for p in layer.parameters()]
+
+
+            def loss_of(model, X, y):
+                d = model(X) - y
+                return (d * d).sum()
+
+
+            class SGD:
+                def __init__(self, params, lr, momentum=0.0):
+                    self.params = params
+                    self.lr = lr
+                    self.momentum = momentum
+                    self.velocity = [np.zeros(p.data.shape) for p in params]
+
+                def zero_grad(self):
+                    # Replace the next line with your own.
+                    pass
+
+                def step(self):
+                    # Replace the next line with your own.
+                    pass
+
+
+            def train(model, X, y, opt, steps):
+                # Replace the next line with your own.
+                return [0.0] * steps
+
+
+            X = Tensor([[0, 0], [0.5, 0], [0, -0.5], [-0.4, 0.3],
+                        [2, 0], [0, 2], [-2, 0], [0, -2], [1.5, 1.5], [-1.5, -1.5]])
+            y = Tensor([[1], [1], [1], [1], [0], [0], [0], [0], [0], [0]])
+            model = MLP([2, 8, 1], np.random.default_rng(0))
+            losses = train(model, X, y, SGD(model.parameters(), 0.05, 0.9), 500)
+            right = int(((model(X).data > 0.5) == (y.data > 0.5)).sum())
+            print(round(losses[0], 4), losses[-1] < 0.01, right)
+          solution: |
+            import numpy as np
+
+
+            def unbroadcast(grad, shape):
+                while grad.ndim > len(shape):
+                    grad = grad.sum(axis=0)
+                for axis, n in enumerate(shape):
+                    if n == 1 and grad.shape[axis] != 1:
+                        grad = grad.sum(axis=axis, keepdims=True)
+                return grad
+
+
+            class Tensor:
+                def __init__(self, data, parents=()):
+                    self.data = np.array(data) * 1.0
+                    self.parents = parents
+                    self.grad = np.zeros(self.data.shape)
+
+                def __add__(self, other):
+                    return Tensor(self.data + other.data, (
+                        (self, lambda g: unbroadcast(g, self.data.shape)),
+                        (other, lambda g: unbroadcast(g, other.data.shape)),
+                    ))
+
+                def __sub__(self, other):
+                    return Tensor(self.data - other.data, (
+                        (self, lambda g: unbroadcast(g, self.data.shape)),
+                        (other, lambda g: unbroadcast(-g, other.data.shape)),
+                    ))
+
+                def __mul__(self, other):
+                    return Tensor(self.data * other.data, (
+                        (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                        (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                    ))
+
+                def __matmul__(self, other):
+                    return Tensor(self.data @ other.data, (
+                        (self, lambda g: g @ other.data.T),
+                        (other, lambda g: self.data.T @ g),
+                    ))
+
+                def tanh(self):
+                    t = np.tanh(self.data)
+                    return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                def sum(self):
+                    return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, pull in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = np.ones(node.data.shape)
+                for v in topological(node)[::-1]:
+                    for parent, pull in v.parents:
+                        parent.grad = parent.grad + pull(v.grad)
+
+
+            class Linear:
+                def __init__(self, n_in, n_out, rng):
+                    self.weight = Tensor(rng.normal(size=(n_in, n_out)) / np.sqrt(n_in))
+                    self.bias = Tensor(np.zeros((1, n_out)))
+
+                def __call__(self, x):
+                    return x @ self.weight + self.bias
+
+                def parameters(self):
+                    return [self.weight, self.bias]
+
+
+            class MLP:
+                def __init__(self, sizes, rng):
+                    self.layers = [Linear(a, b, rng) for a, b in zip(sizes, sizes[1:])]
+
+                def __call__(self, x):
+                    for layer in self.layers[:-1]:
+                        x = layer(x).tanh()
+                    return self.layers[-1](x)
+
+                def parameters(self):
+                    return [p for layer in self.layers for p in layer.parameters()]
+
+
+            def loss_of(model, X, y):
+                d = model(X) - y
+                return (d * d).sum()
+
+
+            class SGD:
+                def __init__(self, params, lr, momentum=0.0):
+                    self.params = params
+                    self.lr = lr
+                    self.momentum = momentum
+                    self.velocity = [np.zeros(p.data.shape) for p in params]
+
+                def zero_grad(self):
+                    for p in self.params:
+                        p.grad = np.zeros(p.data.shape)
+
+                def step(self):
+                    for i, p in enumerate(self.params):
+                        self.velocity[i] = self.momentum * self.velocity[i] + p.grad
+                        p.data = p.data - self.lr * self.velocity[i]
+
+
+            def train(model, X, y, opt, steps):
+                losses = []
+                for step in range(steps):
+                    L = loss_of(model, X, y)
+                    losses.append(float(L.data))
+                    opt.zero_grad()
+                    backward(L)
+                    opt.step()
+                return losses
+
+
+            X = Tensor([[0, 0], [0.5, 0], [0, -0.5], [-0.4, 0.3],
+                        [2, 0], [0, 2], [-2, 0], [0, -2], [1.5, 1.5], [-1.5, -1.5]])
+            y = Tensor([[1], [1], [1], [1], [0], [0], [0], [0], [0], [0]])
+            model = MLP([2, 8, 1], np.random.default_rng(0))
+            losses = train(model, X, y, SGD(model.parameters(), 0.05, 0.9), 500)
+            right = int(((model(X).data > 0.5) == (y.data > 0.5)).sum())
+            print(round(losses[0], 4), losses[-1] < 0.01, right)
+          tests: |
+            import numpy as _np
+            _p = Tensor([[1.0, 2.0]]); _q = Tensor([[3.0], [4.0]])
+            _o = SGD([_p, _q], 0.1)
+            _p.grad = _np.array([[10.0, -20.0]]); _q.grad = _np.array([[1.0], [2.0]])
+            _o.step()
+            assert _np.allclose(_p.data, [[0.0, 4.0]]) and _np.allclose(_q.data, [[2.9], [3.8]]), "One step at rate 0.1 should subtract a tenth of each parameter's own gradient from its data"
+            assert _o.params[0] is _p, "The optimiser should keep the same tensor objects and write to their data"
+            _o.zero_grad()
+            assert _np.shape(_p.grad) == (1, 2) and not _p.grad.any() and not _q.grad.any(), "zero_grad should set every gradient to zeros of the parameter's shape"
+            _r = Tensor([1.0])
+            _mo = SGD([_r], 0.1, 0.9)
+            for _k in range(3):
+                _r.grad = 2 * _r.data
+                _mo.step()
+            assert abs(float(_r.data[0]) - 0.062) < 1e-9, "With momentum 0.9 and rate 0.1 on w squared from 1, three steps should reach 0.062: store each parameter's velocity for the next step"
+            _X = Tensor([[0, 0], [0, 1], [1, 0], [1, 1]])
+            _y = Tensor([[0], [1], [1], [0]])
+            _m = MLP([2, 4, 1], _np.random.default_rng(3))
+            _first = float(loss_of(_m, _X, _y).data)
+            _out = train(_m, _X, _y, SGD(_m.parameters(), 0.1, 0.9), 400)
+            assert isinstance(_out, list) and len(_out) == 400, "train should return a list with one loss for each step"
+            assert all(isinstance(_v, float) for _v in _out), "Record each loss as a float, not as a tensor"
+            assert abs(_out[0] - _first) < 1e-12, "The first recorded loss should be the loss before any update"
+            assert _out[-1] < 1e-3, "After 400 steps on exclusive-or the loss should be below 0.001: clear the gradients before each backward pass, and update after it"
+            assert output.strip() == "4.6585 True 10", "The program should print 4.6585 True 10"
+          wrong:
+            - |
+              import numpy as np
+
+
+              def unbroadcast(grad, shape):
+                  while grad.ndim > len(shape):
+                      grad = grad.sum(axis=0)
+                  for axis, n in enumerate(shape):
+                      if n == 1 and grad.shape[axis] != 1:
+                          grad = grad.sum(axis=axis, keepdims=True)
+                  return grad
+
+
+              class Tensor:
+                  def __init__(self, data, parents=()):
+                      self.data = np.array(data) * 1.0
+                      self.parents = parents
+                      self.grad = np.zeros(self.data.shape)
+
+                  def __add__(self, other):
+                      return Tensor(self.data + other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(g, other.data.shape)),
+                      ))
+
+                  def __sub__(self, other):
+                      return Tensor(self.data - other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(-g, other.data.shape)),
+                      ))
+
+                  def __mul__(self, other):
+                      return Tensor(self.data * other.data, (
+                          (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                          (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                      ))
+
+                  def __matmul__(self, other):
+                      return Tensor(self.data @ other.data, (
+                          (self, lambda g: g @ other.data.T),
+                          (other, lambda g: self.data.T @ g),
+                      ))
+
+                  def tanh(self):
+                      t = np.tanh(self.data)
+                      return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                  def sum(self):
+                      return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+              def topological(node):
+                  order = []
+                  seen = set()
+
+                  def visit(v):
+                      if v in seen:
+                          return
+                      seen.add(v)
+                      for parent, pull in v.parents:
+                          visit(parent)
+                      order.append(v)
+
+                  visit(node)
+                  return order
+
+
+              def backward(node):
+                  node.grad = np.ones(node.data.shape)
+                  for v in topological(node)[::-1]:
+                      for parent, pull in v.parents:
+                          parent.grad = parent.grad + pull(v.grad)
+
+
+              class Linear:
+                  def __init__(self, n_in, n_out, rng):
+                      self.weight = Tensor(rng.normal(size=(n_in, n_out)) / np.sqrt(n_in))
+                      self.bias = Tensor(np.zeros((1, n_out)))
+
+                  def __call__(self, x):
+                      return x @ self.weight + self.bias
+
+                  def parameters(self):
+                      return [self.weight, self.bias]
+
+
+              class MLP:
+                  def __init__(self, sizes, rng):
+                      self.layers = [Linear(a, b, rng) for a, b in zip(sizes, sizes[1:])]
+
+                  def __call__(self, x):
+                      for layer in self.layers[:-1]:
+                          x = layer(x).tanh()
+                      return self.layers[-1](x)
+
+                  def parameters(self):
+                      return [p for layer in self.layers for p in layer.parameters()]
+
+
+              def loss_of(model, X, y):
+                  d = model(X) - y
+                  return (d * d).sum()
+
+
+              class SGD:
+                  def __init__(self, params, lr, momentum=0.0):
+                      self.params = params
+                      self.lr = lr
+                      self.momentum = momentum
+                      self.velocity = [np.zeros(p.data.shape) for p in params]
+
+                  def zero_grad(self):
+                      for p in self.params:
+                          p.grad = np.zeros(p.data.shape)
+
+                  def step(self):
+                      for i, p in enumerate(self.params):
+                          self.velocity[i] = self.momentum * self.velocity[i] + p.grad
+                          p.data = p.data - self.lr * self.velocity[i]
+
+
+              def train(model, X, y, opt, steps):
+                  losses = []
+                  for step in range(steps):
+                      L = loss_of(model, X, y)
+                      losses.append(float(L.data))
+                      backward(L)
+                      opt.step()
+                  return losses
+
+
+              print("4.6585 True 10")
+            - |
+              import numpy as np
+
+
+              def unbroadcast(grad, shape):
+                  while grad.ndim > len(shape):
+                      grad = grad.sum(axis=0)
+                  for axis, n in enumerate(shape):
+                      if n == 1 and grad.shape[axis] != 1:
+                          grad = grad.sum(axis=axis, keepdims=True)
+                  return grad
+
+
+              class Tensor:
+                  def __init__(self, data, parents=()):
+                      self.data = np.array(data) * 1.0
+                      self.parents = parents
+                      self.grad = np.zeros(self.data.shape)
+
+                  def __add__(self, other):
+                      return Tensor(self.data + other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(g, other.data.shape)),
+                      ))
+
+                  def __sub__(self, other):
+                      return Tensor(self.data - other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(-g, other.data.shape)),
+                      ))
+
+                  def __mul__(self, other):
+                      return Tensor(self.data * other.data, (
+                          (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                          (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                      ))
+
+                  def __matmul__(self, other):
+                      return Tensor(self.data @ other.data, (
+                          (self, lambda g: g @ other.data.T),
+                          (other, lambda g: self.data.T @ g),
+                      ))
+
+                  def tanh(self):
+                      t = np.tanh(self.data)
+                      return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                  def sum(self):
+                      return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+              def topological(node):
+                  order = []
+                  seen = set()
+
+                  def visit(v):
+                      if v in seen:
+                          return
+                      seen.add(v)
+                      for parent, pull in v.parents:
+                          visit(parent)
+                      order.append(v)
+
+                  visit(node)
+                  return order
+
+
+              def backward(node):
+                  node.grad = np.ones(node.data.shape)
+                  for v in topological(node)[::-1]:
+                      for parent, pull in v.parents:
+                          parent.grad = parent.grad + pull(v.grad)
+
+
+              class Linear:
+                  def __init__(self, n_in, n_out, rng):
+                      self.weight = Tensor(rng.normal(size=(n_in, n_out)) / np.sqrt(n_in))
+                      self.bias = Tensor(np.zeros((1, n_out)))
+
+                  def __call__(self, x):
+                      return x @ self.weight + self.bias
+
+                  def parameters(self):
+                      return [self.weight, self.bias]
+
+
+              class MLP:
+                  def __init__(self, sizes, rng):
+                      self.layers = [Linear(a, b, rng) for a, b in zip(sizes, sizes[1:])]
+
+                  def __call__(self, x):
+                      for layer in self.layers[:-1]:
+                          x = layer(x).tanh()
+                      return self.layers[-1](x)
+
+                  def parameters(self):
+                      return [p for layer in self.layers for p in layer.parameters()]
+
+
+              def loss_of(model, X, y):
+                  d = model(X) - y
+                  return (d * d).sum()
+
+
+              class SGD:
+                  def __init__(self, params, lr, momentum=0.0):
+                      self.params = params
+                      self.lr = lr
+                      self.momentum = momentum
+                      self.velocity = [np.zeros(p.data.shape) for p in params]
+
+                  def zero_grad(self):
+                      for p in self.params:
+                          p.grad = np.zeros(p.data.shape)
+
+                  def step(self):
+                      for i, p in enumerate(self.params):
+                          self.velocity[i] = self.momentum * self.velocity[i] + p.grad
+                          p.data = p.data - self.lr * self.velocity[i]
+
+
+              def train(model, X, y, opt, steps):
+                  losses = []
+                  for step in range(steps):
+                      L = loss_of(model, X, y)
+                      losses.append(float(L.data))
+                      backward(L)
+                      opt.zero_grad()
+                      opt.step()
+                  return losses
+
+
+              print("4.6585 True 10")
+            - |
+              import numpy as np
+
+
+              def unbroadcast(grad, shape):
+                  while grad.ndim > len(shape):
+                      grad = grad.sum(axis=0)
+                  for axis, n in enumerate(shape):
+                      if n == 1 and grad.shape[axis] != 1:
+                          grad = grad.sum(axis=axis, keepdims=True)
+                  return grad
+
+
+              class Tensor:
+                  def __init__(self, data, parents=()):
+                      self.data = np.array(data) * 1.0
+                      self.parents = parents
+                      self.grad = np.zeros(self.data.shape)
+
+                  def __add__(self, other):
+                      return Tensor(self.data + other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(g, other.data.shape)),
+                      ))
+
+                  def __sub__(self, other):
+                      return Tensor(self.data - other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(-g, other.data.shape)),
+                      ))
+
+                  def __mul__(self, other):
+                      return Tensor(self.data * other.data, (
+                          (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                          (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                      ))
+
+                  def __matmul__(self, other):
+                      return Tensor(self.data @ other.data, (
+                          (self, lambda g: g @ other.data.T),
+                          (other, lambda g: self.data.T @ g),
+                      ))
+
+                  def tanh(self):
+                      t = np.tanh(self.data)
+                      return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                  def sum(self):
+                      return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+              def topological(node):
+                  order = []
+                  seen = set()
+
+                  def visit(v):
+                      if v in seen:
+                          return
+                      seen.add(v)
+                      for parent, pull in v.parents:
+                          visit(parent)
+                      order.append(v)
+
+                  visit(node)
+                  return order
+
+
+              def backward(node):
+                  node.grad = np.ones(node.data.shape)
+                  for v in topological(node)[::-1]:
+                      for parent, pull in v.parents:
+                          parent.grad = parent.grad + pull(v.grad)
+
+
+              class Linear:
+                  def __init__(self, n_in, n_out, rng):
+                      self.weight = Tensor(rng.normal(size=(n_in, n_out)) / np.sqrt(n_in))
+                      self.bias = Tensor(np.zeros((1, n_out)))
+
+                  def __call__(self, x):
+                      return x @ self.weight + self.bias
+
+                  def parameters(self):
+                      return [self.weight, self.bias]
+
+
+              class MLP:
+                  def __init__(self, sizes, rng):
+                      self.layers = [Linear(a, b, rng) for a, b in zip(sizes, sizes[1:])]
+
+                  def __call__(self, x):
+                      for layer in self.layers[:-1]:
+                          x = layer(x).tanh()
+                      return self.layers[-1](x)
+
+                  def parameters(self):
+                      return [p for layer in self.layers for p in layer.parameters()]
+
+
+              def loss_of(model, X, y):
+                  d = model(X) - y
+                  return (d * d).sum()
+
+
+              class SGD:
+                  def __init__(self, params, lr, momentum=0.0):
+                      self.params = params
+                      self.lr = lr
+                      self.momentum = momentum
+                      self.velocity = [np.zeros(p.data.shape) for p in params]
+
+                  def zero_grad(self):
+                      for p in self.params:
+                          p.grad = np.zeros(p.data.shape)
+
+                  def step(self):
+                      for i, p in enumerate(self.params):
+                          p.data = p.data - self.lr * p.grad
+
+
+              def train(model, X, y, opt, steps):
+                  losses = []
+                  for step in range(steps):
+                      L = loss_of(model, X, y)
+                      losses.append(float(L.data))
+                      opt.zero_grad()
+                      backward(L)
+                      opt.step()
+                  return losses
+
+
+              print("4.6585 True 10")
+            - |
+              import numpy as np
+
+
+              def unbroadcast(grad, shape):
+                  while grad.ndim > len(shape):
+                      grad = grad.sum(axis=0)
+                  for axis, n in enumerate(shape):
+                      if n == 1 and grad.shape[axis] != 1:
+                          grad = grad.sum(axis=axis, keepdims=True)
+                  return grad
+
+
+              class Tensor:
+                  def __init__(self, data, parents=()):
+                      self.data = np.array(data) * 1.0
+                      self.parents = parents
+                      self.grad = np.zeros(self.data.shape)
+
+                  def __add__(self, other):
+                      return Tensor(self.data + other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(g, other.data.shape)),
+                      ))
+
+                  def __sub__(self, other):
+                      return Tensor(self.data - other.data, (
+                          (self, lambda g: unbroadcast(g, self.data.shape)),
+                          (other, lambda g: unbroadcast(-g, other.data.shape)),
+                      ))
+
+                  def __mul__(self, other):
+                      return Tensor(self.data * other.data, (
+                          (self, lambda g: unbroadcast(g * other.data, self.data.shape)),
+                          (other, lambda g: unbroadcast(g * self.data, other.data.shape)),
+                      ))
+
+                  def __matmul__(self, other):
+                      return Tensor(self.data @ other.data, (
+                          (self, lambda g: g @ other.data.T),
+                          (other, lambda g: self.data.T @ g),
+                      ))
+
+                  def tanh(self):
+                      t = np.tanh(self.data)
+                      return Tensor(t, ((self, lambda g: g * (1 - t * t)),))
+
+                  def sum(self):
+                      return Tensor(self.data.sum(), ((self, lambda g: g * np.ones(self.data.shape)),))
+
+
+              def topological(node):
+                  order = []
+                  seen = set()
+
+                  def visit(v):
+                      if v in seen:
+                          return
+                      seen.add(v)
+                      for parent, pull in v.parents:
+                          visit(parent)
+                      order.append(v)
+
+                  visit(node)
+                  return order
+
+
+              def backward(node):
+                  node.grad = np.ones(node.data.shape)
+                  for v in topological(node)[::-1]:
+                      for parent, pull in v.parents:
+                          parent.grad = parent.grad + pull(v.grad)
+
+
+              class Linear:
+                  def __init__(self, n_in, n_out, rng):
+                      self.weight = Tensor(rng.normal(size=(n_in, n_out)) / np.sqrt(n_in))
+                      self.bias = Tensor(np.zeros((1, n_out)))
+
+                  def __call__(self, x):
+                      return x @ self.weight + self.bias
+
+                  def parameters(self):
+                      return [self.weight, self.bias]
+
+
+              class MLP:
+                  def __init__(self, sizes, rng):
+                      self.layers = [Linear(a, b, rng) for a, b in zip(sizes, sizes[1:])]
+
+                  def __call__(self, x):
+                      for layer in self.layers[:-1]:
+                          x = layer(x).tanh()
+                      return self.layers[-1](x)
+
+                  def parameters(self):
+                      return [p for layer in self.layers for p in layer.parameters()]
+
+
+              def loss_of(model, X, y):
+                  d = model(X) - y
+                  return (d * d).sum()
+
+
+              class SGD:
+                  def __init__(self, params, lr, momentum=0.0):
+                      self.params = params
+                      self.lr = lr
+                      self.momentum = momentum
+                      self.velocity = [np.zeros(p.data.shape) for p in params]
+
+                  def zero_grad(self):
+                      for p in self.params:
+                          p.grad = np.zeros(p.data.shape)
+
+                  def step(self):
+                      for i, p in enumerate(self.params):
+                          self.velocity[i] = self.momentum * self.velocity[i] + p.grad
+                          p.data = p.data - self.lr * self.velocity[i]
+
+
+              def train(model, X, y, opt, steps):
+                  losses = []
+                  for step in range(steps):
+                      L = loss_of(model, X, y)
+                      losses.append(L)
+                      opt.zero_grad()
+                      backward(L)
+                      opt.step()
+                  return losses
+
+
+              print("4.6585 True 10")
+          explanation: |
+            The optimiser's methods are each a loop over the list. The update writes to `p.data`, outside any graph, so the parameters stay leaves and each step builds a fresh graph on top of them. `train` is the four lines of a step, with the loss recorded as a plain number so that no graph outlives its step.
+
+            The loss starts at 4.6585. It passes 2.4, where the linear model stopped for good, within the first few dozen steps, and ends below 0.01 with all ten bores classified correctly. The hidden layer has found what a line could not express: high in the middle, low all around.
+review: |
+  The file was empty, and it now holds a tensor that records its history, a backward pass, a numerical test of that pass, layers, an optimiser and a training loop. It found the water.
+
+  - A result that keeps its operands and a pull for each was [[e6.scalar-computational-graph]], and the same idea with arrays, where a pull maps a gradient of the result to a share of the operand's shape, was [[e6.tensor-valued-autograd]].
+  - Seeding the output with 1 and handing shares back, adding where paths meet, was [[e6.reverse-mode-on-scalars]]. Taking the tensors in an order that lets each collect everything before it hands anything on was [[e6.topological-ordering-of-the-graph]].
+  - Summing a gradient back down to the shape of a bias was [[e6.broadcasting-in-the-backward-pass]].
+  - Refusing to believe the engine until its gradients matched measured slopes, parameter by parameter, was [[e6.gradient-checking]].
+  - The list of parameters, the clearing, the update written to the data and the velocity kept by the optimiser were [[e6.modules-parameters-and-optimisers]].
+  - Recording the loss as a float, and nudging a parameter's array in place only when no backward pass was waiting on it, were [[e6.memory-planning-and-in-place-operations]].
+  - Knowing that a linear model would stop at 2.4 and that a hidden layer with $\tanh$ would not, and running the loop that proved it, was [[e6.training-an-mlp-on-your-own-engine]].
+
+  The engine in your file is small, and it is not a toy version of something else. The frameworks used to train the largest models are this design with more operations and faster arithmetic underneath: tensors that record their parents, a backward pass in reverse topological order, gradients that accumulate until cleared, parameters gathered into a list for an optimiser. When you next call `backward()` on someone else's engine, you will know what it is about to do, because you have done it.

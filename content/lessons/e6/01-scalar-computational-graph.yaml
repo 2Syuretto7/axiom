@@ -1,0 +1,888 @@
+concept: e6.scalar-computational-graph
+minutes: 80
+claim: You can break any calculation with numbers into single operations, draw it as a graph in which each value points back to the values it was computed from, say what the local derivative on each edge is, write a small class whose objects build that graph as a side effect of ordinary arithmetic, and get a derivative from the graph by multiplying along each path and adding over the paths.
+recalls: [e5.numerical-error-analysis-in-practice, m12.multiple-integrals-and-change-of-variables, e3.shortest-paths-and-beam-search]
+uses: [m12.multivariable-chain-rule, m12.partial-derivatives, m12.gradient, m10.differentiation-rules, m10.chain-rule, e1.classes-and-objects, e1.special-methods-and-operator-overloading, e1.recursion, e1.comprehensions-and-iterators, e3.graphs-and-traversal, e0.functions, e0.dictionaries-and-sets, e0.lists-and-tuples]
+leads: [e6.reverse-mode-on-scalars, e6.topological-ordering-of-the-graph, e6.tensor-valued-autograd, e7.autograd-in-pytorch]
+bridges:
+  m12.multiple-integrals-and-change-of-variables: |
+    Multivariable calculus ended with a promise. The chain rule said how to differentiate any composition: multiply the rates along each route from an input to the output, and add the routes. You did that by hand for one neuron. A model has millions of weights and nobody differentiates it by hand. This cluster builds the program that does it instead, an **autograd engine**, starting today with the thing the chain rule needs before it can be applied at all: a record of which routes exist.
+starter: |
+  # Scratch space. One data point, a line, and a squared error.
+  w, x, b, y = 3.0, 2.0, 1.0, 5.0
+  L = (w * x + b - y) ** 2
+  print(L)
+  print(type(L))
+
+  # The slope of L with respect to w, measured by running the formula again.
+  h = 1e-6
+  print(round((((w + h) * x + b - y) ** 2 - L) / h, 4))
+parts:
+  recall:
+    - text: |
+        Three lines of work meet here. [[m12.multiple-integrals-and-change-of-variables]] closed a calculus of functions with many inputs, whose central tool was the chain rule. [[e5.numerical-error-analysis-in-practice]] left you able to measure a slope numerically, and aware of what that costs in accuracy. And [[e3.shortest-paths-and-beam-search]] closed a study of graphs: things joined by arrows, and algorithms that walk them. Today a calculation becomes a graph, so that the chain rule can walk it. Three quick pulls first.
+  puzzle:
+    - text: |
+        A line $wx + b$ tries to predict $y$ at one data point, and its squared error is
+
+        $$L = (wx + b - y)^2.$$
+
+        The starter computes it with $w = 3$, $x = 2$, $b = 1$, $y = 5$, and prints `4.0`. Then it prints the type of the answer: `float`. Then it measures the slope of $L$ with respect to $w$ by nudging $w$ and running the whole formula a second time, and prints `8.0`.
+
+        You could have found that 8 without a second run. You would look at the formula and write $\dfrac{\partial L}{\partial w} = 2(wx + b - y)\,x = 2 \times 2 \times 2 = 8$. One look gives the slope for $w$, and with no more trouble the slopes for $b$, $x$ and $y$ as well.
+
+        The program cannot do what you did, and the second line of output says why. `L` is a `float`. It is the number 4.0 and nothing else. There is no trace in it of $w$, of the multiplication, of the square. By the time the answer exists, Python has thrown away everything about how it was reached. All the program can do is poke an input and run again, once for each input. With four inputs that is five runs. With a million weights it is a million and one.
+
+        You worked from the formula. The machine has only the float.
+
+        **What is the least that the arithmetic would have to leave behind, as it runs, for a program to be able to work out afterwards how the answer depends on every input? And can ordinary Python arithmetic, `w * x + b`, be made to leave it behind without the person who wrote `w * x + b` doing anything extra?**
+  intuition:
+    - text: |
+        Start by slowing the calculation down. However long a formula is, the machine carries it out as a sequence of **single operations**, each taking one or two numbers and producing one. Give every intermediate result a name:
+
+        ```python
+        w, x, b, y = 3.0, 2.0, 1.0, 5.0
+        p = w * x
+        q = p + b
+        e = q - y
+        L = e * e
+        print(p, q, e, L)
+        ```
+
+        That prints `6.0 7.0 2.0 4.0`. Four operations, and each one is so simple that its derivative is known at sight.
+
+        Now draw it. Write each value in a box, the four inputs and the four results. Draw an arrow into each result from the values it was computed from. `p` has arrows from `w` and `x`. `q` has arrows from `p` and `b`. `e` has arrows from `q` and `y`. And `L = e * e` has **two** arrows from `e`, because `e` was used twice.
+
+        This picture is the **computational graph** of the calculation. The figure draws it. Step forwards through the four operations and watch what is recorded at each.
+    - figure: trail-graph
+      props: { step: 0, backward: false }
+    - text: |
+        The numbers on the arrows are the answer to the puzzle's first question, so look at them closely.
+
+        Take the arrow from `w` to `p`. It carries the number 2. That is the **local derivative** of `p` with respect to `w`: since $p = wx$, nudging $w$ moves $p$ at the rate $\dfrac{\partial p}{\partial w} = x$, and $x$ is 2. The arrow from `x` to `p` carries $\dfrac{\partial p}{\partial x} = w = 3$. Each is the rate for one operation only. The multiplication knows nothing of the rest of the formula and does not need to.
+
+        The arrows into `q` both carry 1, because a sum passes a nudge in either input straight through. The arrow from `y` to `e` carries $-1$. The two arrows from `e` to `L` each carry 2, the value of the other factor, which happens also to be `e`.
+
+        Now recall the rule that the lesson on the multivariable chain rule ended with: **to differentiate an output with respect to an input, find every route from one to the other, multiply the rates along each route, and add the routes.**
+
+        The graph holds everything that rule asks for. The routes are the paths along the arrows. The rates are the numbers on them. From `w` to `L` there are two paths, because the last step can take either of the two arrows from `e`:
+
+        $$w \to p \to q \to e \to L: \qquad 2 \times 1 \times 1 \times 2 = 4, \quad\text{twice}.$$
+
+        Add the two paths: 8. That is the slope the starter needed a second run to find, and it has come from the record of the first run alone. Try `b`: two paths again, each $1 \times 1 \times 2 = 2$, so 4. Try `x`: $3 \times 1 \times 1 \times 2$, twice, so 12.
+
+        **So the least the arithmetic must leave behind is this: for each value, which values it was computed from, and the local derivative with respect to each.** Not the formula. Just, at each step, a note of where the result came from and how strongly it responds to each of its sources.
+
+        The second question was whether Python can be made to keep those notes by itself. It can, and the tool is one you have: a class with special methods. If `w` and `x` are objects of a class of your own, then `w * x` calls a method you wrote, and that method can do the multiplication **and** write the note.
+    - text: |
+        ```python
+        class Value:
+            def __init__(self, data, parents=()):
+                self.data = data
+                self.parents = parents
+
+            def __add__(self, other):
+                return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+            def __mul__(self, other):
+                return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+        w, x, b = Value(3.0), Value(2.0), Value(1.0)
+        q = w * x + b
+        print(q.data)
+        print([(parent.data, local) for parent, local in q.parents])
+        ```
+
+        That prints `7.0` and then `[(6.0, 1.0), (1.0, 1.0)]`.
+
+        A `Value` holds a number, `data`, and a tuple of `parents`. Each entry of `parents` is a pair: a `Value` this one was computed from, and the local derivative with respect to it. A `Value` you make yourself, like `Value(3.0)`, has no parents. It is an input, a **leaf** of the graph.
+
+        The line `q = w * x + b` is written exactly as it would be for floats. But `w * x` now runs `__mul__`, which returns a new `Value` holding 6.0 that remembers `w` with local derivative 2.0 and `x` with local derivative 3.0. Then `+ b` runs `__add__` on that new `Value`, which returns another, holding 7.0, that remembers the product and `b`, each with local derivative 1.0.
+
+        Nobody drew a graph. **The graph was built as a side effect of doing the arithmetic.** The answer `q` is the last box, and from it, following `parents` backwards, every box that contributed can be reached. The trail leads all the way back to the leaves.
+  derivation:
+    - text: |
+        **The graph.** A **computational graph** has a node for every value in a calculation: the inputs, and the result of every single operation. It has an edge for every use of one value in computing another. The edge is usually drawn from the value used to the value computed, the way the data flows. In the program each node stores the opposite direction, a link back to its parents, because that is the direction a derivative will need.
+
+        Three facts about its shape.
+
+        **It has no cycles.** A value is computed only from values that already exist, so following `parents` always leads to something made earlier, and can never come back round. A directed graph with no cycle is a **DAG**, the kind you put into topological order in the lessons on algorithms. The order in which the operations were carried out is one such order.
+
+        **It is not a tree.** A value may be used more than once. `e` feeds `L` twice. In `(a + b) * (a * b)` both `a` and `b` are used twice, in different operations. Wherever a value is used twice, two paths leave it, and the chain rule will add them. Sharing is where every interesting thing in this cluster happens.
+
+        **Two edges can join the same pair.** `e * e` uses one value in both places of one operation. The record must show two parents that happen to be the same object, each with its own local derivative. A design that stored parents in a set would lose one of them, and with it half the derivative.
+
+        **Local derivatives.** Each kind of operation has its own rule, known once and for all.
+
+        | operation | result | local derivative for $a$ | local derivative for $b$ |
+        | --- | --- | --- | --- |
+        | $a + b$ | sum | $1$ | $1$ |
+        | $a - b$ | difference | $1$ | $-1$ |
+        | $a \times b$ | product | $b$ | $a$ |
+        | $a \div b$ | quotient | $1 / b$ | $-a / b^2$ |
+        | $\tanh a$ | squashed | $1 - \tanh^2 a$ | |
+
+        The rule is known in advance, and its **value** is known only when the operation runs, because it depends on the numbers going in. For the product, the local derivative with respect to $a$ is whatever $b$ is at that moment. So the note is written during the forward calculation, when those numbers are in hand.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: With `w`, `x` and `b` being `Value` objects holding 3.0, 2.0 and 1.0, put in order what happens when Python runs `q = w * x + b`.
+        steps:
+          - 'Python calls `w.__mul__(x)`.'
+          - 'A new `Value` is made holding 6.0, with parents `w` (local derivative 2.0) and `x` (local derivative 3.0).'
+          - 'Python calls `__add__` on that new `Value`, with `b` as the other operand.'
+          - 'A new `Value` is made holding 7.0, with parents the product (local derivative 1.0) and `b` (local derivative 1.0).'
+          - 'The name `q` is bound to the `Value` holding 7.0.'
+        explanation: Multiplication binds tighter than addition, so the product is formed first. Each special method does two jobs, the arithmetic and the note. The product is never given a name by the programmer, yet it is not lost, because the sum holds a reference to it in its parents.
+    - text: |
+        **The derivative as a sum over paths.** Let `node` be any value in the graph and `target` any other. Write $\dfrac{\partial\,\text{node}}{\partial\,\text{target}}$ for the rate at which `node` responds to `target`. Then:
+
+        - if `node` **is** `target`, the rate is 1;
+        - otherwise, `node` responds to `target` only through its parents, so the rate is the sum, over the parents, of (local derivative for that parent) $\times$ (the rate at which that parent responds to `target`).
+
+        A leaf other than the target has no parents, the sum is empty, and the rate is 0, as it should be. That is a complete recursive definition, and it is the chain rule: each term multiplies one more edge onto a path, and the sum collects the paths.
+
+        ```python
+        def path_sum(node, target):
+            if node is target:
+                return 1.0
+            return sum(local * path_sum(parent, target) for parent, local in node.parents)
+        ```
+
+        Note `is`, not `==`. The question is whether this is the very same box, not whether two boxes hold equal numbers. Two different inputs may both be 2.0.
+
+        Follow it for $\dfrac{\partial L}{\partial w}$. `L` is not `w`. Its parents are `e` and `e`, each with local derivative 2. So the answer is $2 \times \dfrac{\partial e}{\partial w} + 2 \times \dfrac{\partial e}{\partial w}$. And $\dfrac{\partial e}{\partial w} = 1 \times \dfrac{\partial q}{\partial w} + (-1) \times \dfrac{\partial y}{\partial w} = \dfrac{\partial q}{\partial w} + 0$, and so on down to $\dfrac{\partial p}{\partial w} = 2 \times 1 + 3 \times 0 = 2$. Climbing back up: 2, 2, 2, and $2 \times 2 + 2 \times 2 = 8$.
+
+        **The record is of one run.** The graph is not the formula. It is a record of what was done on this occasion, with these numbers. If the program contains an `if`, the graph holds only the branch that was taken. If it contains a loop, the graph holds one stretch of nodes for every pass that ran. This is why a program with loops, conditions and function calls needs no special treatment: by the time the graph exists, all of that has been flattened into a plain sequence of operations. An engine that works this way is called **define-by-run**.
+    - question:
+        id: derivation-when
+        type: choice
+        system: s2
+        prompt: Why does `__mul__` store the local derivatives as numbers at the moment of multiplying, and not just the fact "this was a multiplication"?
+        options:
+          - 'It must store something, and numbers are smaller than words.'
+          - 'The local derivative of a product with respect to one factor is the value of the other factor during this run. Storing it at once makes each edge a finished number, so that a derivative is found by multiplying and adding along edges, with no need to know which operation made them.'
+          - 'Because the derivative of a product is always 1.'
+          - 'Because Python cannot remember which method was called.'
+        answer: 1
+        explanation: |
+          Either design can work. An engine could store the kind of operation and the operands, and compute the local derivatives later, and the tensor engine later in this cluster does something of that sort. What cannot be avoided is that the local derivative depends on the values in this run: for $p = wx$ it is $x = 2$ here and would be something else with other data. Storing the finished number keeps today's engine as simple as it can be. Whatever walks the graph afterwards needs only arithmetic, and never asks what kind of operation an edge came from.
+    - text: |
+        **Plain numbers.** As written, `w * 2` fails, because the float 2 has no `.data`. The usual cure is to wrap a plain number on the way in, and to supply the reflected methods for when the plain number comes first:
+
+        ```python
+        class Value:
+            def __init__(self, data, parents=()):
+                self.data = data
+                self.parents = parents
+
+            def __add__(self, other):
+                other = other if isinstance(other, Value) else Value(other)
+                return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+            def __mul__(self, other):
+                other = other if isinstance(other, Value) else Value(other)
+                return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+            def __radd__(self, other):
+                return self + other
+
+            def __rmul__(self, other):
+                return self * other
+
+            def __neg__(self):
+                return self * -1.0
+
+            def __sub__(self, other):
+                return self + (-other)
+
+
+        w = Value(3.0)
+        z = 2 * w - 1
+        print(z.data, len(z.parents))
+        ```
+
+        That prints `5.0 2`. A wrapped constant becomes a leaf like any other. Subtraction and negation are built from addition and multiplication, so they need no local derivatives of their own: `a - b` becomes `a + b * -1.0`, and the $-1$ arrives as the local derivative of that multiplication. Building new operations out of old ones costs a few extra nodes and saves writing rules.
+  formal:
+    - text: |
+        **Computational graph.** For a calculation carried out as a sequence of elementary operations, the directed graph with one node for each input and each intermediate result, and one edge from $u$ to $v$ for each use of $u$ as an operand in computing $v$. It is acyclic, and it may have several edges between the same two nodes.
+
+        **Leaf.** A node with no parents: an input or a constant.
+
+        **Local derivative.** For an edge from $u$ to $v$, the partial derivative of the operation that produced $v$ with respect to the operand $u$, evaluated at the values of this run.
+
+        **Path sum.** For nodes $t$ and $v$,
+
+        $$\frac{\partial v}{\partial t} = \sum_{\text{paths } t \to v}\ \ \prod_{\text{edges on the path}} (\text{local derivative}),$$
+
+        with the empty path counted when $v = t$, contributing 1, and the sum being 0 when there is no path. Equivalently $\dfrac{\partial v}{\partial t} = \sum_{u \in \text{parents}(v)} \dfrac{\partial v}{\partial u}\Big|_{\text{local}} \cdot \dfrac{\partial u}{\partial t}$ for $v \ne t$.
+
+        **Define-by-run.** The graph is recorded while the program executes and describes that execution only.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-local-mul
+        type: numeric
+        system: s1
+        prompt: |
+          $p = a \times b$ with $a = 4$ and $b = 7$. What is the local derivative on the edge from $a$ to $p$?
+        answer: "7"
+        explanation: The rate of a product with respect to one factor is the other factor.
+    - question:
+        id: drill-local-add
+        type: numeric
+        system: s1
+        prompt: |
+          $s = a + b$ with $a = 4$ and $b = 7$. What is the local derivative on the edge from $b$ to $s$?
+        answer: "1"
+        explanation: A sum passes a change in either input straight through.
+    - question:
+        id: drill-local-sub
+        type: numeric
+        system: s1
+        prompt: |
+          $d = a - b$. What is the local derivative on the edge from $b$ to $d$?
+        answer: "-1"
+        explanation: Raising b lowers the difference at the same rate.
+    - question:
+        id: drill-leaf
+        type: choice
+        system: s1
+        prompt: |
+          What is a leaf of a computational graph?
+        options: ['The final answer', 'A node with no parents', 'A node used twice', 'An edge with local derivative 1']
+        answer: 1
+        explanation: Inputs and constants are computed from nothing.
+    - question:
+        id: drill-rule
+        type: choice
+        system: s1
+        prompt: |
+          How is a derivative read off a computational graph?
+        options: ['Add along each path, multiply over the paths', 'Multiply along each path, add over the paths', 'Take the longest path', 'Multiply every edge in the graph']
+        answer: 1
+        explanation: Rates compound along a chain, and separate routes add.
+    - question:
+        id: drill-square-edges
+        type: numeric
+        system: s1
+        prompt: |
+          `L = e * e`, with `e` a single `Value`. How many entries has `L.parents`?
+        answer: "2"
+        explanation: One for each operand, even though both are the same object.
+    - question:
+        id: drill-path
+        type: numeric
+        system: s1
+        prompt: |
+          A path from an input to the output has edges carrying 3, 1 and $-2$. What does that path contribute to the derivative?
+        answer: "-6"
+        explanation: The product of the local derivatives along it.
+    - question:
+        id: drill-two-paths
+        type: numeric
+        system: s1
+        prompt: |
+          There are two paths from an input to the output, contributing 5 and $-2$. What is the derivative?
+        answer: "3"
+        explanation: The paths add.
+    - question:
+        id: drill-no-path
+        type: numeric
+        system: s1
+        prompt: |
+          There is no path from the input $c$ to the output. What is the derivative of the output with respect to $c$?
+        answer: "0"
+        explanation: The output does not depend on it.
+    - question:
+        id: drill-method
+        type: choice
+        system: s1
+        prompt: |
+          `a` and `b` are `Value` objects. Which method runs for `a * b`?
+        options: ['`a.__add__(b)`', '`a.__mul__(b)`', '`b.__init__(a)`', '`Value.__repr__`']
+        answer: 1
+        explanation: The star calls the left operand's multiplication method.
+    - question:
+        id: drill-nodes
+        type: numeric
+        system: s1
+        prompt: |
+          `q = w * x + b` with three leaf `Value` objects. How many nodes are in the graph of `q`, leaves included?
+        answer: "5"
+        explanation: Three leaves, the product and the sum.
+    - question:
+        id: drill-cycle
+        type: choice
+        system: s1
+        prompt: |
+          Why can a computational graph have no cycle?
+        options: ['Python forbids it', 'A value is computed only from values that already exist', 'Because every node has two parents', 'Because the leaves are constants']
+        answer: 1
+        explanation: Following parents always leads back in time.
+    - question:
+        id: predict-trail
+        type: predict
+        system: s1
+        prompt: A sum of a product and a leaf. What does this show?
+        code: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          w, x, b = Value(3.0), Value(2.0), Value(1.0)
+          q = w * x + b
+          print(q.data, len(q.parents))
+          print([parent.data for parent, local in q.parents])
+          product = q.parents[0][0]
+          print([local for parent, local in product.parents])
+        output: |
+          7.0 2
+          [6.0, 1.0]
+          [2.0, 3.0]
+        explanation: The sum holds 7 and has two parents, the unnamed product holding 6 and the leaf b holding 1. The product in turn remembers w with local derivative 2, the value of x, and x with local derivative 3, the value of w.
+    - question:
+        id: predict-square
+        type: predict
+        system: s1
+        prompt: One value used in both places of a multiplication. What does this show?
+        code: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          e = Value(2.0)
+          L = e * e
+          print(L.data, [local for parent, local in L.parents])
+          print(L.parents[0][0] is L.parents[1][0])
+          print(len(e.parents))
+        output: |
+          4.0 [2.0, 2.0]
+          True
+          0
+        explanation: The square holds 4 and has two parent entries, each with local derivative 2. Both entries are the same object, so there are two edges between one pair of nodes. The leaf e has no parents.
+  work:
+    - text: Slower now. Draw the graph on paper before you write the code that walks it.
+    - question:
+        id: write-mul
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          The class below can add. Give it `__mul__`, so that `a * b` returns a new `Value` holding the product, with `a` and `b` as its parents, each paired with the correct local derivative, in that order.
+        starter: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+
+          w, x, b = Value(3.0), Value(2.0), Value(1.0)
+          q = w * x + b
+          print(q.data)
+        solution: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          w, x, b = Value(3.0), Value(2.0), Value(1.0)
+          q = w * x + b
+          print(q.data)
+        tests: |
+          _a, _b = Value(4.0), Value(7.0)
+          _p = _a * _b
+          assert isinstance(_p, Value), "a * b should return a Value"
+          assert _p.data == 28.0, "4 times 7 should hold 28"
+          assert len(_p.parents) == 2, "A product has two parents"
+          assert _p.parents[0][0] is _a and _p.parents[1][0] is _b, "The parents should be the two operands themselves, left one first"
+          assert _p.parents[0][1] == 7.0, "The local derivative for the left operand is the value of the right one"
+          assert _p.parents[1][1] == 4.0, "The local derivative for the right operand is the value of the left one"
+          _s = _a * _a
+          assert _s.data == 16.0 and len(_s.parents) == 2 and _s.parents[0][0] is _a and _s.parents[1][0] is _a, "a * a should have two parent entries, both of them a"
+          assert _a.data == 4.0 and _a.parents == (), "Multiplying should not change the operands"
+          assert output.strip() == "7.0", "The program should print 7.0"
+        wrong:
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, self.data), (other, other.data)))
+
+
+            print(7.0)
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, 1.0), (other, 1.0)))
+
+
+            print(7.0)
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data)
+
+
+            print(7.0)
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __mul__(self, other):
+                    self.data = self.data * other.data
+                    self.parents = ((self, other.data), (other, self.data))
+                    return self
+
+
+            print(7.0)
+        explanation: |
+          The method does the arithmetic and writes the note. The note pairs each operand with the rate at which the product responds to it, which is the **other** operand's value: nudge $a$ in $a \times b$ and the product moves $b$ times as far. Pairing each operand with its own value is the easiest slip to make and gives a graph that looks right and differentiates wrongly. The last wrong version changes the left operand in place instead of making a new node. That destroys the value the operand had, which anything else computed from it still depends on, and makes the node its own parent.
+    - question:
+        id: write-path-sum
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `path_sum(node, target)`. It returns the derivative of the value `node` with respect to the value `target`, as a float, by the rule of this lesson: 1.0 if they are the same object, and otherwise the sum over the parents of `node` of the local derivative times the derivative of that parent with respect to `target`.
+        starter: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          def path_sum(node, target):
+              # Replace the next line with your own.
+              return 0.0
+
+
+          w, x, b, y = Value(3.0), Value(2.0), Value(1.0), Value(5.0)
+          e = w * x + b - y
+          L = e * e
+          print(path_sum(L, w), path_sum(L, x), path_sum(L, b), path_sum(L, y))
+        solution: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          def path_sum(node, target):
+              if node is target:
+                  return 1.0
+              return sum(local * path_sum(parent, target) for parent, local in node.parents)
+
+
+          w, x, b, y = Value(3.0), Value(2.0), Value(1.0), Value(5.0)
+          e = w * x + b - y
+          L = e * e
+          print(path_sum(L, w), path_sum(L, x), path_sum(L, b), path_sum(L, y))
+        tests: |
+          _w, _x, _b, _y = Value(3.0), Value(2.0), Value(1.0), Value(5.0)
+          _e = _w * _x + _b - _y
+          _L = _e * _e
+          assert path_sum(_L, _L) == 1.0, "A value responds to itself at the rate 1"
+          assert path_sum(_L, _e) == 4.0, "L = e * e responds to e at the rate 2e = 4: there are two edges, and they add"
+          assert path_sum(_L, _w) == 8.0, "The derivative of L with respect to w is 8"
+          assert path_sum(_L, _x) == 12.0, "The derivative of L with respect to x is 12"
+          assert path_sum(_L, _b) == 4.0, "The derivative of L with respect to b is 4"
+          assert path_sum(_L, _y) == -4.0, "The derivative of L with respect to y is -4"
+          assert path_sum(_L, Value(3.0)) == 0, "A value that was not used has derivative 0, even if it holds the same number as one that was"
+          _a, _c = Value(2.0), Value(2.0)
+          _f = _a * _c + _a
+          assert path_sum(_f, _a) == 3.0, "For f = a * c + a with a = c = 2, the derivative with respect to a is c + 1 = 3: compare objects with is, not their numbers"
+          _s, _t = Value(2.0), Value(3.0)
+          _g = (_s + _t) * (_s * _t)
+          assert path_sum(_g, _s) == 21.0, "For (s + t) * (s * t) at s = 2, t = 3 the derivative with respect to s is 21"
+          assert output.strip() == "8.0 12.0 4.0 -4.0", "The program should print 8.0 12.0 4.0 -4.0"
+        wrong:
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def path_sum(node, target):
+                if node is target:
+                    return 1.0
+                return sum(path_sum(parent, target) for parent, local in node.parents)
+
+
+            print("8.0 12.0 4.0 -4.0")
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def path_sum(node, target):
+                if node is target:
+                    return 1.0
+                for parent, local in node.parents:
+                    return local * path_sum(parent, target)
+                return 0.0
+
+
+            print("8.0 12.0 4.0 -4.0")
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def path_sum(node, target):
+                if node.data == target.data:
+                    return 1.0
+                return sum(local * path_sum(parent, target) for parent, local in node.parents)
+
+
+            print("8.0 12.0 4.0 -4.0")
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def path_sum(node, target):
+                if node is target:
+                    return 1.0
+                total = 1.0
+                for parent, local in node.parents:
+                    total = total * local * path_sum(parent, target)
+                return total
+
+
+            print("8.0 12.0 4.0 -4.0")
+        explanation: |
+          The function is the chain rule written as a recursion. Each call multiplies one more edge onto a path, and the `sum` adds the paths that part at this node. A leaf that is not the target has no parents, so its sum is empty and it returns 0, which then wipes out every path that ends there. Leaving out `local` counts the paths instead of weighing them. Returning inside the loop follows only the first parent, so every path through a second operand is lost. Comparing `.data` treats two different boxes as one whenever they hold equal numbers.
+
+          It works, and it is wasteful in a way the next two lessons repair. Each call to `path_sum` answers for one input only, and walks shared parts of the graph once for every path through them.
+    - question:
+        id: fix-count
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `count_nodes(node)` should return how many different values are in the graph that ends at `node`, leaves included. For the squared error it should say 8: four inputs and four results. It says 15. Fix it.
+        starter: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          def count_nodes(node):
+              total = 1
+              for parent, local in node.parents:
+                  total += count_nodes(parent)
+              return total
+
+
+          w, x, b, y = Value(3.0), Value(2.0), Value(1.0), Value(5.0)
+          e = w * x + b - y
+          L = e * e
+          print(count_nodes(L))
+        solution: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          def count_nodes(node, seen=None):
+              if seen is None:
+                  seen = set()
+              if node in seen:
+                  return 0
+              seen.add(node)
+              total = 1
+              for parent, local in node.parents:
+                  total += count_nodes(parent, seen)
+              return total
+
+
+          w, x, b, y = Value(3.0), Value(2.0), Value(1.0), Value(5.0)
+          e = w * x + b - y
+          L = e * e
+          print(count_nodes(L))
+        tests: |
+          _w, _x, _b, _y = Value(3.0), Value(2.0), Value(1.0), Value(5.0)
+          _e = _w * _x + _b - _y
+          _L = _e * _e
+          assert count_nodes(_L) == 8, "The squared error has 8 different values: w, x, b, y, the product, the sum, the difference and the square"
+          assert count_nodes(_L) == 8, "Counting a second time should give the same answer"
+          assert count_nodes(_w) == 1, "A leaf by itself is one node"
+          _a = Value(2.0)
+          _d = _a + _a
+          _d = _d + _d
+          _d = _d + _d
+          assert count_nodes(_d) == 4, "Doubling a value three times makes three new nodes, four in all"
+          _s, _t = Value(2.0), Value(2.0)
+          assert count_nodes(_s * _t) == 3, "Two different leaves that hold equal numbers are two nodes"
+          assert output.strip() == "8", "The program should print 8"
+        wrong:
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def count_nodes(node):
+                total = 1
+                for parent, local in node.parents:
+                    total += count_nodes(parent)
+                return total
+
+
+            print(8)
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def count_nodes(node, seen=None):
+                if seen is None:
+                    seen = set()
+                if node.data in seen:
+                    return 0
+                seen.add(node.data)
+                total = 1
+                for parent, local in node.parents:
+                    total += count_nodes(parent, seen)
+                return total
+
+
+            print(8)
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def count_nodes(node, seen=set()):
+                if node in seen:
+                    return 0
+                seen.add(node)
+                total = 1
+                for parent, local in node.parents:
+                    total += count_nodes(parent, seen)
+                return total
+
+
+            print(8)
+        explanation: |
+          The broken version walks the graph as if it were a tree. `L` has `e` as a parent twice, so everything below `e`, seven nodes, is counted twice: $1 + 7 + 7 = 15$. A graph with sharing must be walked with a record of where you have already been, exactly as in the lessons on graph traversal. The `seen` set holds the `Value` objects themselves, which Python can put in a set because each object is its own key. Remembering the numbers instead would merge different nodes that hold equal values. Making the set a default argument, `seen=set()`, creates it once for the whole program, so the second call finds everything already seen and returns 0.
+
+          The same double walking is why `path_sum` is slow, and there it is not a bug but the definition. Remember the number 15 for the next lesson but one.
+    - question:
+        id: work-two-uses
+        type: numeric
+        system: s2
+        prompt: |
+          $f = (a + b) \times (a \times b)$ with $a = 2$ and $b = 3$. Name the intermediate values $s = a + b$ and $t = a \times b$, put the local derivative on each edge, and find $\dfrac{\partial f}{\partial a}$ as a sum over paths.
+        answer: "21"
+        explanation: |
+          $s = 5$ and $t = 6$. The edges into $f$ carry $\partial f / \partial s = t = 6$ and $\partial f / \partial t = s = 5$. The edge from $a$ to $s$ carries 1, and the edge from $a$ to $t$ carries $b = 3$. There are two paths from $a$ to $f$. Through $s$: $1 \times 6 = 6$. Through $t$: $3 \times 5 = 15$. Together 21. As a check, $f = a^2 b + ab^2$, so $\partial f / \partial a = 2ab + b^2 = 12 + 9 = 21$.
+    - question:
+        id: work-count
+        type: numeric
+        system: s2
+        prompt: |
+          `a` is one `Value`. How many edges are in the graph of `a * a * a + a`? Count one edge for every parent entry of every node.
+        answer: "6"
+        explanation: |
+          Python works from the left. `a * a` is one node with 2 parent entries. Multiplying that by `a` makes a second node with 2 parent entries, the first product and `a`. Adding `a` makes a third node with 2 more. Three operations, two operands each: 6 edges, joining only 4 nodes, since `a` is used four times. There are 4 paths from `a` to the result: three through the cube, each contributing $a^2$, and one through the last addition, contributing 1. The derivative is $3a^2 + 1$, as it should be.
+    - question:
+        id: work-branch
+        type: choice
+        system: s2
+        prompt: |
+          A function contains `if x.data > 0: y = x * x` and otherwise `y = x * -1.0`, with `x` a `Value`. It is called with `x` holding 3.0. What does the graph of `y` record?
+        options:
+          - 'Both branches, with a node that chooses between them.'
+          - 'Only the multiplication `x * x`, since that is what ran. The graph describes this run. Called again with a negative number, the program would build a different graph, and that graph would be the right one to differentiate for that input.'
+          - 'Nothing, because a `Value` cannot be used in an `if`.'
+          - 'The comparison `x.data > 0`, as a node with local derivative 0.'
+        answer: 1
+        explanation: |
+          The `if` looked at `x.data`, a plain float, and Python chose a branch. Only then was any `Value` arithmetic done. The graph holds one multiplication and has no memory of a choice. This is the strength of recording by running: loops, conditions, recursion and function calls all vanish, leaving a straight list of the operations actually performed. It is also a limit to keep in mind. The derivative you get is that of the branch taken, which is the derivative of the whole function everywhere except exactly at the boundary, where the function may have a corner and no derivative at all.
+    - question:
+        id: work-why-not-rerun
+        type: choice
+        system: s2
+        prompt: |
+          The starter found $\partial L / \partial w$ by running the formula a second time with $w$ nudged. Apart from the cost of one run for each input, what else is wrong with that method, which a derivative read from the graph does not suffer from?
+        options:
+          - 'Nothing else. It is exact.'
+          - 'It is an approximation. The step must be small for the tangent to be a good stand-in for the curve, and a small step makes the difference of two nearly equal floats lose most of its digits. A path sum uses the exact local derivatives and involves no step at all.'
+          - 'It only works for squares.'
+          - 'It changes the value of $w$ permanently.'
+        answer: 1
+        explanation: |
+          The last lesson on numerical error weighed exactly this: too large a step and the curve's bend spoils the estimate, too small and rounding does. At best about half the digits survive. The graph method has no step. It multiplies and adds numbers like 2 and 3 that are the true local rates, so its answer is right to the last digit that floating-point arithmetic keeps. Numerical differences keep one honourable job, which a later lesson gives them: checking that an engine like this one has been built correctly.
+  connections:
+    - text: |
+        The float 4.0 knew nothing of where it came from, so the slope had to be measured by running again. A `Value` holding 4.0 knows its **parents** and, for each, the **local derivative**: how strongly this one operation responds to that operand. Those notes are written by `__add__` and `__mul__` during ordinary arithmetic, so the **computational graph** appears as a side effect, for any program, loops and conditions included, as a record of the one run that happened.
+
+        With the graph in hand the chain rule becomes a walk: **multiply along each path, add over the paths**. `path_sum(L, w)` returned 8 exactly, from the record of a single run.
+
+        Two things about it should bother you. It answers for one input at a time, so a million weights still means a million walks. And it follows every path separately, though most paths share most of their edges. The first fault is cured by turning the walk round: start from the output, and let each value collect its share on the way back, so that one sweep serves every input. That is [[e6.reverse-mode-on-scalars]].

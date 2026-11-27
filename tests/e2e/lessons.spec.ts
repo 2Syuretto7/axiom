@@ -391,6 +391,13 @@ test("laptop: a lesson is graded, remembers progress, and leads to one that buil
   await press(polar, "Increase angle in steps of 15°");
   await expect(polar).toContainText("from the angle 45° to 60°");
   await expect(polar).toContainText("Its exact area is 0.2945");
+  const trail = fig("A computation and its trail");
+  await expect(trail).toContainText("L = (w × x + b − y)², computed in four operations. Backwards, step 1 of 5. The output's gradient is set to 1");
+  await expect(trail).toContainText("Gradients so far: L: 1.");
+  await press(trail, "Increase step", 4);
+  await expect(trail).toContainText("Backwards, step 5 of 5. p hands back: w receives 4 × 2 = 8 and x receives 4 × 3 = 12.");
+  await expect(trail).toContainText("w: 8");
+  await expect(trail).toContainText("x: 12");
   await expect(page.locator(".prose-lesson img")).toHaveCount(0);
 
   // Wrong, then right. There is no hint ladder: hints come from the tutor. Fractions and words are handled by the grader.

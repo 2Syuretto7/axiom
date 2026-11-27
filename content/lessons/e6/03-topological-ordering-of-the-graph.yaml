@@ -1,0 +1,1146 @@
+concept: e6.topological-ordering-of-the-graph
+minutes: 85
+claim: You can show that passing gradients back along every path costs a number of steps that can double with each operation, state the condition under which a node may hand its gradient back once and for all, obtain an order that meets the condition by reversing a topological order of the computational graph, write the backward pass that visits each node once and costs one multiplication for each edge, and say why the order in which the values were created is itself such an order.
+recalls: [e6.reverse-mode-on-scalars]
+uses: [e6.scalar-computational-graph, e3.topological-sort, e3.graphs-and-traversal, e3.stacks-and-queues, e1.recursion, e1.complexity-and-big-o, e1.classes-and-objects, e1.special-methods-and-operator-overloading, e1.exceptions, m12.multivariable-chain-rule, e0.dictionaries-and-sets, e0.lists-and-tuples, e0.loops, e0.functions]
+leads: [e6.tensor-valued-autograd, e6.memory-planning-and-in-place-operations, e6.training-an-mlp-on-your-own-engine, e7.autograd-in-pytorch]
+starter: |
+  # Scratch space. A value doubled n times, and the backward pass of the last
+  # lesson with a counter on it.
+  class Value:
+      def __init__(self, data, parents=()):
+          self.data = data
+          self.parents = parents
+          self.grad = 0.0
+
+      def __add__(self, other):
+          return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+
+  calls = [0]
+
+
+  def backward(node, upstream=1.0):
+      calls[0] += 1
+      node.grad += upstream
+      for parent, local in node.parents:
+          backward(parent, upstream * local)
+
+
+  for n in [5, 10, 15]:
+      a = Value(1.0)
+      d = a
+      for i in range(n):
+          d = d + d
+      calls[0] = 0
+      backward(d)
+      print(n, a.grad, calls[0])
+parts:
+  recall:
+    - text: |
+        [[e6.reverse-mode-on-scalars]] gave every value a gradient, the rate at which the output responds to it, and filled the gradients in by a walk that starts at the output and hands each parent its share. The walk was correct and it retraced its steps. Today each value is visited once. Three quick pulls first.
+  puzzle:
+    - text: |
+        The starter builds a very plain calculation. Take a value `a` and double it $n$ times: `d = a + a`, then `d = d + d`, and so on. After $n$ doublings there are $n + 1$ nodes, and the result is $2^n a$, so the gradient of `a` should be $2^n$.
+
+        Run it. The gradients are right: 32, 1024, 32768. Now read the last column, the number of times `backward` was called.
+
+        | doublings | nodes | calls |
+        | --- | --- | --- |
+        | 5 | 6 | 63 |
+        | 10 | 11 | 2,047 |
+        | 15 | 16 | 65,535 |
+
+        Five more nodes, and the work grows by a factor of 32. At 30 doublings, a graph of 31 nodes, it would be over two thousand million calls. At 60, more calls than there have been seconds since the universe began.
+
+        Nothing about the graph is large. Sixteen nodes and thirty arrows could be drawn on a postcard. And the answer at each node is one number. A person doing it by hand would write sixteen numbers and be done: 1 at the top, then 2, then 4, each node getting twice what the one above it has.
+
+        **What is the walk doing 65,535 times that the person does 16 times? What would a node have to wait for, so that it need hand its gradient back only once? And how can a program work out, for any graph, an order of visiting in which every node has finished waiting when its turn comes?**
+  intuition:
+    - text: |
+        The walk of the last lesson delivers gradients **one path at a time**. Each call carries the product of the local derivatives along a single route from the output, and adds it in where the route ends. In the doubled value every node has two arrows down to the next, so the number of routes doubles at each level: 2 routes to the second node, 4 to the third, $2^n$ to `a`. The 32,768 at the bottom was built from 32,768 separate deliveries of 1.
+
+        The person with the pencil delivers **one node at a time**. They do not think about routes. They look at a node, see that its gradient is 4, and hand 4 down each of its two arrows. The node below receives $4 + 4 = 8$. Then they turn to that node, and it hands 8 down each of its arrows. Each node speaks once and each arrow is used once.
+
+        The rule from the last lesson was already written for that: *a node that knows its gradient hands each parent that gradient times the local derivative, and a parent adds what it is handed.* The words to notice are **knows its gradient**. A node's gradient is a sum, with one term from every place the node was used. Until all those terms have arrived, the node does not yet know its gradient. If it speaks early, it passes on a part of the truth, and nothing that arrives afterwards will ever be passed on.
+
+        So there is a condition, and it is the whole of this lesson:
+
+        **A node may hand its gradient back only after every node that used it has handed back.**
+
+        Here is a graph on which the condition bites. Three inputs $a = 2$, $b = 3$, $c = 1$, and
+
+        $$s = a \times b, \qquad t = s + c, \qquad f = s \times t.$$
+
+        So $s = 6$, $t = 7$, $f = 42$. The value $s$ is used twice: by $t$, and by $f$ directly.
+
+        ```
+           a ──┐
+               ├── s ────────────┐
+           b ──┘    \            ├── f
+                     t ──────────┘
+           c ───────/
+        ```
+
+        Start at $f$ with gradient 1. It hands $s$ its share, $1 \times t = 7$, and hands $t$ its share, $1 \times s = 6$.
+
+        Who speaks next? Suppose $s$ does, since it was handed something first. It holds 7, and passes $7 \times b = 21$ to $a$. Then $t$ speaks. It holds 6 and hands $6 \times 1 = 6$ to $s$, whose gradient becomes 13, which is right: $f = s(s + c)$, so $\partial f / \partial s = 2s + c = 13$. But $s$ has already spoken, with 7. The 6 that came late never reaches $a$. The program reports $\partial f / \partial a = 21$, and the truth is $13 \times 3 = 39$.
+
+        Now let $t$ speak before $s$. Then $s$ has heard from both of its users, holds 13, speaks once, and $a$ receives 39.
+
+        **The order is everything.** $f$ first, then $t$, then $s$, then the leaves. Each node after everything that used it.
+
+        You know what such an order is called. In the lessons on algorithms, a **topological order** of a directed graph without cycles lists the nodes so that every arrow points from earlier to later. Draw the arrows the way the data flowed, from operand to result. In a topological order every value comes after the values it was computed from, which is an order in which the calculation could have been carried out. **Read that list backwards and every value comes before the values it was computed from, which is to say after every value that used it.** That is the condition exactly.
+    - figure: trail-graph
+      props: { step: 6 }
+    - text: |
+        Step the figure on from where it stands. `L` has just spoken, and `e` holds 4, having received from both of the arrows that leave it. Only now does `e` speak. The sweep visits `L`, `e`, `q`, `p`: the four results in the reverse of the order they were computed.
+  derivation:
+    - text: |
+        **Finding the order.** The depth-first method from the lesson on topological sorting applies as it stands, with `parents` in the role of "needs". Visit a node: first visit each of its parents, then write the node down. A set records which nodes have been visited, so that a shared node is written once.
+
+        ```python
+        class Value:
+            def __init__(self, data, parents=()):
+                self.data = data
+                self.parents = parents
+                self.grad = 0.0
+
+            def __add__(self, other):
+                return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+            def __mul__(self, other):
+                return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+        def topological(node):
+            order = []
+            seen = set()
+
+            def visit(v):
+                if v in seen:
+                    return
+                seen.add(v)
+                for parent, local in v.parents:
+                    visit(parent)
+                order.append(v)
+
+            visit(node)
+            return order
+
+
+        w, x, b = Value(3.0), Value(2.0), Value(1.0)
+        q = w * x + b
+        print([v.data for v in topological(q)])
+        ```
+
+        That prints `[3.0, 2.0, 6.0, 1.0, 7.0]`: `w`, `x`, their product, `b`, and last the sum.
+
+        *Why it is a topological order.* A node is appended only after `visit` has returned for each of its parents, and by then each parent is in the list, put there either by that call or by an earlier one. So every node appears after all its parents. The output is appended last of all.
+
+        **The backward pass.** Seed the output and go through the list from the back.
+
+        ```python
+        def backward(node):
+            node.grad = 1.0
+            for v in topological(node)[::-1]:
+                for parent, local in v.parents:
+                    parent.grad += v.grad * local
+        ```
+
+        *Why it is correct.* Claim: when the loop reaches a node $v$, `v.grad` is the complete $\partial f / \partial v$. It is true of the output, which is first and holds 1. Take any other node $u$. Every node that uses $u$ comes after $u$ in the topological order, so before $u$ in the reversed one. By the time the loop reaches $u$, each user $v$ has had its turn, its gradient was complete at that turn, and it added $\bar v \times (\text{local})$ to `u.grad` once for each arrow from $u$. So `u.grad` holds $\sum \bar v\, \dfrac{\partial v}{\partial u}$ over all its uses, which is the rule for $\bar u$ from the last lesson. $\blacksquare$
+
+        **The cost.** Finding the order visits each node once and looks along each arrow once. The sweep does one multiplication and one addition for each arrow. With $V$ nodes and $E$ arrows, the whole backward pass costs $O(V + E)$. Every operation of this engine has at most two operands, so $E \le 2V$, and the cost is proportional to the number of operations in the forward calculation.
+
+        **The backward pass costs about the same as the forward pass.** That is the fact which makes training large models possible. For the value doubled 15 times it is 16 visits and 30 multiplications in place of 65,535 calls.
+    - question:
+        id: derivation-condition
+        type: choice
+        system: s2
+        prompt: |
+          With $s = a \times b$, $t = s + c$ and $f = s \times t$, a backward pass handles the nodes in the order $f$, $s$, $t$, each once. Which gradients come out wrong?
+        options:
+          - 'All of them.'
+          - 'Those of $a$ and $b$. When $s$ had its turn it had received only the share from $f$. The share from $t$ arrived afterwards, so the gradient of $s$ itself ends up right, but what $s$ passed down to $a$ and $b$ was too small.'
+          - 'Only that of $c$.'
+          - 'None. The order does not matter so long as every node is handled once.'
+        answer: 1
+        explanation: |
+          $f$ gives 7 to $s$ and 6 to $t$. Then $s$ passes on $7 \times 3 = 21$ to $a$ and $7 \times 2 = 14$ to $b$. Then $t$ gives $6 \times 1$ to $s$ and to $c$. At the end $s$ holds 13 and $c$ holds 6, both correct, but $a$ and $b$ hold 21 and 14 where 39 and 26 are owed. The mistake is not in any gradient that was received late. It is in everything downstream of the node that spoke early.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: With $a = 2$, $b = 3$, $c = 1$, $s = a \times b$, $t = s + c$, $f = s \times t$, put the steps of a correct backward pass in order.
+        steps:
+          - 'The gradient of $f$ is set to 1.'
+          - '$f$ hands back: $s$ receives 7 and $t$ receives 6.'
+          - '$t$ hands back: $s$ receives 6 more, making 13, and $c$ receives 6.'
+          - '$s$ hands back: $a$ receives 39 and $b$ receives 26.'
+        explanation: The reverse of a topological order is f, t, s and then the leaves. t must come before s because t used s, so s is not complete until t has spoken. Once s holds 13 it speaks once, passing 13 times b to a and 13 times a to b.
+    - text: |
+        **Counting uses instead.** The condition can be enforced directly, in the manner of Kahn's algorithm. First count, for every node, the arrows that leave it: its number of uses. A node is **ready** when every one of its uses has delivered. The output, used by nothing, is ready at the start. Take a ready node, deliver along each of its parent arrows, and lower that parent's count by one for each arrow. A parent whose count reaches zero becomes ready. This is the same sweep, arranged around the condition itself, and it needs no recursion.
+
+        **Deep graphs.** Recursion matters in practice. The depth-first `visit` calls itself once for every step down a chain of parents. Add to a running total ten thousand times in a loop, and the graph is a chain ten thousand nodes long, and Python stops the recursion with a `RecursionError` long before the bottom. Real engines do not recurse. They use an explicit stack, or counts of uses, or the method below.
+
+        **The tape.** There is an order that costs nothing to find. A value can only be computed from values that already exist. So **the order in which the values were created is a topological order.** An engine can simply append every new `Value` to a list as it is made. That list is called the **tape**, and the backward pass plays it in reverse.
+
+        The tape holds every value made since recording began, including ones that have nothing to do with the output being differentiated. That is harmless: such a value never receives anything, its gradient stays 0, and it hands back zeros. But the tape must be cleared between one calculation and the next, or it grows without limit.
+
+        Whichever way the order is found, the sweep is the same four lines, and those four lines are the centre of every reverse-mode engine ever written.
+  formal:
+    - text: |
+        **Readiness.** In a reverse sweep over a computational graph with output $f$, a node $u \ne f$ is **complete** when every edge $u \to v$ has contributed $\bar v\,\dfrac{\partial v}{\partial u}$ to $\bar u$. A node may propagate to its parents only when complete.
+
+        **Theorem.** Let $v_1, \dots, v_N$ be a topological order of the graph, so that every edge goes from an earlier node to a later one, with $v_N = f$. Set $\bar v_N = 1$ and all other adjoints to 0. For $k = N, N - 1, \dots, 1$ in turn, and for each parent edge $u \to v_k$, add $\bar v_k\,\dfrac{\partial v_k}{\partial u}$ to $\bar u$. Then at the end $\bar v = \dfrac{\partial f}{\partial v}$ for every node $v$, and each edge has been used exactly once.
+
+        **Cost.** $O(V + E)$ time for $V$ nodes and $E$ edges, the same order as the forward evaluation.
+
+        **Creation order.** Any order in which the nodes could have been computed, in particular the order in which they were, is a topological order.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-condition
+        type: choice
+        system: s1
+        prompt: |
+          When may a node hand its gradient back to its parents?
+        options: ['As soon as it has received anything', 'After every node that used it has handed back', 'After its parents have handed back', 'Only if it is a leaf']
+        answer: 1
+        explanation: Its gradient is a sum over its uses and must be complete first.
+    - question:
+        id: drill-reverse
+        type: choice
+        system: s1
+        prompt: |
+          In a topological order every value comes after its parents. In what order does the backward pass visit the values?
+        options: ['The same order', 'The reverse of it', 'Any order', 'Leaves first']
+        answer: 1
+        explanation: Reversed, every value comes after everything that used it.
+    - question:
+        id: drill-first
+        type: choice
+        system: s1
+        prompt: |
+          Which node does the backward pass handle first?
+        options: ['The first leaf', 'The output', 'The node with most parents', 'The node used most often']
+        answer: 1
+        explanation: Nothing used the output, so it is complete from the start, with gradient 1.
+    - question:
+        id: drill-visits
+        type: numeric
+        system: s1
+        prompt: |
+          A graph has 16 nodes and 30 arrows. How many nodes does the ordered backward pass handle?
+        answer: "16"
+        explanation: Each node once.
+    - question:
+        id: drill-mults
+        type: numeric
+        system: s1
+        prompt: |
+          A graph has 16 nodes and 30 arrows. How many times does the ordered backward pass multiply a gradient by a local derivative?
+        answer: "30"
+        explanation: Once for each arrow.
+    - question:
+        id: drill-paths
+        type: numeric
+        system: s1
+        prompt: |
+          A value is doubled 4 times by `d = d + d`. How many paths lead from the final result down to the original value?
+        answer: "16"
+        explanation: Two choices of arrow at each of 4 levels.
+    - question:
+        id: drill-cost
+        type: choice
+        system: s1
+        prompt: |
+          What is the cost of the ordered backward pass on a graph with $V$ nodes and $E$ arrows?
+        options: ['$O(V + E)$', '$O(V \times E)$', '$O(2^V)$', '$O(V^2)$']
+        answer: 0
+        explanation: One visit for each node and one multiplication for each arrow.
+    - question:
+        id: drill-uses
+        type: numeric
+        system: s1
+        prompt: |
+          $s = a \times b$, $t = s + c$, $f = s \times t$. How many uses has $s$?
+        answer: "2"
+        explanation: It is an operand of t and of f.
+    - question:
+        id: drill-s-grad
+        type: numeric
+        system: s1
+        prompt: |
+          In a backward pass, $s$ receives 7 from one use and 6 from another, and then hands back along an arrow with local derivative 3. What does that parent receive?
+        answer: "39"
+        explanation: The complete gradient, 13, times 3.
+    - question:
+        id: drill-tape
+        type: choice
+        system: s1
+        prompt: |
+          Why is the order in which values were created a topological order?
+        options: ['Because Python sorts objects by age', 'Because a value can only be computed from values that already exist', 'Because leaves are created last', 'It is not']
+        answer: 1
+        explanation: Every parent was made before its child.
+    - question:
+        id: drill-recursion
+        type: choice
+        system: s1
+        prompt: |
+          A loop adds to a running total 10,000 times, with `Value` objects. What happens when the recursive depth-first `topological` is called on the result?
+        options: ['It returns 2 nodes', 'It raises RecursionError, since the chain of parents is deeper than Python allows calls to nest', 'It loops for ever', 'It returns the nodes in the wrong order']
+        answer: 1
+        explanation: Each step down the chain is one more nested call.
+    - question:
+        id: predict-order
+        type: predict
+        system: s1
+        prompt: The depth-first order for a small expression. What does this show?
+        code: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, local in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          a, b, c = Value(2.0), Value(3.0), Value(1.0)
+          s = a * b
+          t = s + c
+          f = s * t
+          print([v.data for v in topological(f)])
+          print(len(topological(f)))
+        output: |
+          [2.0, 3.0, 6.0, 1.0, 7.0, 42.0]
+          6
+        explanation: The visit to f goes first to s, which writes down a, then b, then itself. It then goes to t, whose first parent s is already seen, so t writes down c and then itself. Last comes f. The shared node s appears once.
+    - question:
+        id: predict-doubling
+        type: predict
+        system: s1
+        prompt: Thirty doublings, with the ordered backward pass. What does this show?
+        code: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+                  self.grad = 0.0
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, local in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          a = Value(1.0)
+          d = a
+          for i in range(30):
+              d = d + d
+          order = topological(d)
+          d.grad = 1.0
+          steps = 0
+          for v in order[::-1]:
+              for parent, local in v.parents:
+                  parent.grad += v.grad * local
+                  steps += 1
+          print(len(order), steps, a.grad == 2.0 ** 30)
+        output: |
+          31 60 True
+        explanation: Thirty-one nodes, each handled once, and sixty arrows, each used once. The gradient of the original value is 2 to the power 30, found in 60 steps where the path-by-path walk would have needed over two thousand million calls.
+  work:
+    - text: Slower now. Before writing a loop, say in a sentence what must be true of a node at the moment the loop reaches it.
+    - question:
+        id: write-topological
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `topological(node)`. It returns a list of every `Value` in the graph that ends at `node`, each exactly once, in an order in which every value comes after all of its parents. `node` itself is therefore last.
+        starter: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+                  self.grad = 0.0
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          def topological(node):
+              # Replace the next line with your own.
+              return [node]
+
+
+          w, x, b, y = Value(3.0), Value(2.0), Value(1.0), Value(5.0)
+          e = w * x + b - y
+          L = e * e
+          print([v.data for v in topological(L)])
+        solution: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+                  self.grad = 0.0
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, local in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          w, x, b, y = Value(3.0), Value(2.0), Value(1.0), Value(5.0)
+          e = w * x + b - y
+          L = e * e
+          print([v.data for v in topological(L)])
+        tests: |
+          def _check(_node, _count, _what):
+              _order = topological(_node)
+              assert len(_order) == _count, _what + ": the order should hold " + str(_count) + " values, each once"
+              assert len(set(_order)) == _count, _what + ": no value should appear twice"
+              assert _order[-1] is _node, _what + ": the value asked about should come last"
+              _place = {}
+              for _i, _v in enumerate(_order):
+                  _place[_v] = _i
+              for _v in _order:
+                  for _parent, _local in _v.parents:
+                      assert _parent in _place and _place[_parent] < _place[_v], _what + ": every value should come after all of its parents"
+          _w, _x, _b, _y = Value(3.0), Value(2.0), Value(1.0), Value(5.0)
+          _e = _w * _x + _b - _y
+          _L = _e * _e
+          _check(_L, 8, "For the squared error")
+          _a, _bb, _c = Value(2.0), Value(3.0), Value(1.0)
+          _s = _a * _bb
+          _t = _s + _c
+          _check(_s * _t, 6, "For s * t with t = s + c")
+          _check(_t * _s, 6, "For t * s with t = s + c")
+          _d = Value(1.0)
+          for _i in range(25):
+              _d = _d + _d
+          _check(_d, 26, "For a value doubled 25 times")
+          _p, _q = Value(2.0), Value(2.0)
+          _check(_p * _q, 3, "For two different leaves holding equal numbers")
+          _check(_w, 1, "For a leaf")
+          assert output.strip() == "[3.0, 2.0, 6.0, 1.0, 7.0, 5.0, 2.0, 4.0]", "The program should print [3.0, 2.0, 6.0, 1.0, 7.0, 5.0, 2.0, 4.0]"
+        wrong:
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def topological(node):
+                order = []
+
+                def visit(v):
+                    for parent, local in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            print([3.0, 2.0, 6.0, 1.0, 7.0, 5.0, 2.0, 4.0])
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    order.append(v)
+                    for parent, local in v.parents:
+                        visit(parent)
+
+                visit(node)
+                return order[::-1]
+
+
+            print([3.0, 2.0, 6.0, 1.0, 7.0, 5.0, 2.0, 4.0])
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v.data in seen:
+                        return
+                    seen.add(v.data)
+                    for parent, local in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            print([3.0, 2.0, 6.0, 1.0, 7.0, 5.0, 2.0, 4.0])
+        explanation: |
+          Visit the parents first and write the node down as you leave it. That one decision, appending **after** the loop over parents, is what makes the order topological: by the time a node is written, everything it was computed from has been. The `seen` set makes a shared node appear once, and also keeps the cost down, since without it the search retraces every path and the value doubled 25 times takes sixty-seven million appends.
+
+          The second wrong version writes each node down as the search **arrives** and reverses the list at the end. That looks as if it ought to be the same thing and is not. With $f = t \times s$ and $t = s + c$, the search arrives at $f$, then $t$, then $s$, then $a$ and $b$, then $c$. Reversed, that puts $c$, $b$, $a$, $s$, $t$, $f$, which happens to work. With $f = s \times t$ it arrives at $f$, $s$, $a$, $b$, $t$, $c$, and reversed, $t$ comes before its own parent $s$. Order of arrival says nothing reliable about a node that is reached by two routes of different lengths.
+    - question:
+        id: write-backward
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          `topological` is given. Write `backward(node)`: set the gradient of `node` to 1.0, then visit every value once, in an order in which each is complete before it hands back, and have each add to every parent's gradient what that parent is owed. Do not clear any other gradient.
+        starter: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+                  self.grad = 0.0
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, local in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          def backward(node):
+              # Replace the next line with your own.
+              return None
+
+
+          a, b, c = Value(2.0), Value(3.0), Value(1.0)
+          s = a * b
+          t = s + c
+          f = s * t
+          backward(f)
+          print(a.grad, b.grad, c.grad)
+        solution: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+                  self.grad = 0.0
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+              def __sub__(self, other):
+                  return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          def topological(node):
+              order = []
+              seen = set()
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, local in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              return order
+
+
+          def backward(node):
+              node.grad = 1.0
+              for v in topological(node)[::-1]:
+                  for parent, local in v.parents:
+                      parent.grad += v.grad * local
+
+
+          a, b, c = Value(2.0), Value(3.0), Value(1.0)
+          s = a * b
+          t = s + c
+          f = s * t
+          backward(f)
+          print(a.grad, b.grad, c.grad)
+        tests: |
+          _a, _b, _c = Value(2.0), Value(3.0), Value(1.0)
+          _s = _a * _b
+          _t = _s + _c
+          _f = _s * _t
+          backward(_f)
+          assert _f.grad == 1.0, "The output's gradient should be 1"
+          assert (_s.grad, _t.grad) == (13.0, 6.0), "s should end with 7 from f and 6 from t, and t with 6"
+          assert (_a.grad, _b.grad, _c.grad) == (39.0, 26.0, 6.0), "The gradients of a, b, c should be 39, 26, 6: s must hear from t before it hands back"
+          _a, _b, _c = Value(2.0), Value(3.0), Value(1.0)
+          _s = _a * _b
+          _t = _s + _c
+          _f = _t * _s
+          backward(_f)
+          assert (_a.grad, _b.grad, _c.grad) == (39.0, 26.0, 6.0), "Writing the product the other way round, t * s, should give the same gradients"
+          _w, _x, _bb, _y = Value(3.0), Value(2.0), Value(1.0), Value(5.0)
+          _e = _w * _x + _bb - _y
+          _L = _e * _e
+          backward(_L)
+          assert (_w.grad, _x.grad, _bb.grad, _y.grad) == (8.0, 12.0, 4.0, -4.0), "For the squared error the gradients should be 8, 12, 4, -4"
+          _z = Value(1.0)
+          _d = _z
+          for _i in range(40):
+              _d = _d + _d
+          backward(_d)
+          assert _z.grad == 2.0 ** 40, "A value doubled 40 times has gradient 2 to the 40. Visit each node once: walking every path would take longer than you can wait"
+          _k = Value(5.0)
+          _k.grad = 10.0
+          _m = _k * _k
+          backward(_m)
+          assert _k.grad == 20.0, "Gradients already on a value are added to, not cleared: 10 already there plus 10 from this pass"
+          assert output.strip() == "39.0 26.0 6.0", "The program should print 39.0 26.0 6.0"
+        wrong:
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, local in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = 1.0
+                for v in topological(node):
+                    for parent, local in v.parents:
+                        parent.grad += v.grad * local
+
+
+            print("39.0 26.0 6.0")
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, local in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = 1.0
+                for v in topological(node)[::-1]:
+                    for parent, local in v.parents:
+                        parent.grad = v.grad * local
+
+
+            print("39.0 26.0 6.0")
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, local in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                node.grad = 1.0
+                for v in topological(node)[::-1]:
+                    for parent, local in v.parents:
+                        parent.grad += local
+
+
+            print("39.0 26.0 6.0")
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __sub__(self, other):
+                    return Value(self.data - other.data, ((self, 1.0), (other, -1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def topological(node):
+                order = []
+                seen = set()
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, local in v.parents:
+                        visit(parent)
+                    order.append(v)
+
+                visit(node)
+                return order
+
+
+            def backward(node):
+                for v in topological(node)[::-1]:
+                    v.grad = 1.0
+                    for parent, local in v.parents:
+                        parent.grad += v.grad * local
+
+
+            print("39.0 26.0 6.0")
+        explanation: |
+          Seed, reverse, and for each arrow one multiplication and one addition. Compare it with the recursive version of the last lesson. There, each call passed on the piece that had just arrived, because the node might not be complete. Here the loop reaches a node only when it is complete, so it passes on `v.grad`, the whole of it, and never comes back.
+
+          Going through the list forwards handles the leaves first, when they hold nothing, and the output last, when there is nobody left to tell: every gradient but the output's stays 0, apart from what the output's parents receive. Overwriting in place of adding loses all but one use of each shared value.
+    - question:
+        id: fix-eager
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          This backward pass was written to visit each node once, and it does. But for $s = a \times b$, $t = s + c$, $f = s \times t$ at $a = 2$, $b = 3$, $c = 1$ it reports the gradient of $a$ as 21, and the right answer is 39. Fix `backward`. You may add a function.
+        starter: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+                  self.grad = 0.0
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          def backward(node):
+              seen = set()
+              node.grad = 1.0
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, local in v.parents:
+                      parent.grad += v.grad * local
+                  for parent, local in v.parents:
+                      visit(parent)
+
+              visit(node)
+
+
+          a, b, c = Value(2.0), Value(3.0), Value(1.0)
+          s = a * b
+          t = s + c
+          f = s * t
+          backward(f)
+          print(a.grad, b.grad, c.grad)
+        solution: |
+          class Value:
+              def __init__(self, data, parents=()):
+                  self.data = data
+                  self.parents = parents
+                  self.grad = 0.0
+
+              def __add__(self, other):
+                  return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+              def __mul__(self, other):
+                  return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+          def backward(node):
+              seen = set()
+              order = []
+
+              def visit(v):
+                  if v in seen:
+                      return
+                  seen.add(v)
+                  for parent, local in v.parents:
+                      visit(parent)
+                  order.append(v)
+
+              visit(node)
+              node.grad = 1.0
+              for v in order[::-1]:
+                  for parent, local in v.parents:
+                      parent.grad += v.grad * local
+
+
+          a, b, c = Value(2.0), Value(3.0), Value(1.0)
+          s = a * b
+          t = s + c
+          f = s * t
+          backward(f)
+          print(a.grad, b.grad, c.grad)
+        tests: |
+          _a, _b, _c = Value(2.0), Value(3.0), Value(1.0)
+          _s = _a * _b
+          _t = _s + _c
+          _f = _s * _t
+          backward(_f)
+          assert (_a.grad, _b.grad, _c.grad) == (39.0, 26.0, 6.0), "For s * t the gradients of a, b, c should be 39, 26, 6"
+          _a, _b, _c = Value(2.0), Value(3.0), Value(1.0)
+          _s = _a * _b
+          _t = _s + _c
+          _f = _t * _s
+          backward(_f)
+          assert (_a.grad, _b.grad, _c.grad) == (39.0, 26.0, 6.0), "For t * s, the same product written the other way round, the gradients should also be 39, 26, 6"
+          _z = Value(1.0)
+          _d = _z
+          for _i in range(40):
+              _d = _d + _d
+          backward(_d)
+          assert _z.grad == 2.0 ** 40, "A value doubled 40 times has gradient 2 to the 40, and each node should still be visited only once"
+          _p, _q = Value(4.0), Value(5.0)
+          _u = _p * _q
+          _v = _u + _p
+          _w = _v * _u + _v
+          backward(_w)
+          assert (_p.grad, _q.grad) == (246.0, 180.0), "For v * u + v with u = p * q and v = u + p at p = 4, q = 5, the gradients are 246 and 180"
+          assert output.strip() == "39.0 26.0 6.0", "The program should print 39.0 26.0 6.0"
+        wrong:
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def backward(node):
+                seen = set()
+                node.grad = 1.0
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, local in v.parents:
+                        parent.grad += v.grad * local
+                    for parent, local in v.parents:
+                        visit(parent)
+
+                visit(node)
+
+
+            print("39.0 26.0 6.0")
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def backward(node):
+                seen = set()
+                node.grad = 1.0
+
+                def visit(v):
+                    if v in seen:
+                        return
+                    seen.add(v)
+                    for parent, local in v.parents[::-1]:
+                        parent.grad += v.grad * local
+                    for parent, local in v.parents[::-1]:
+                        visit(parent)
+
+                visit(node)
+
+
+            print("39.0 26.0 6.0")
+          - |
+            class Value:
+                def __init__(self, data, parents=()):
+                    self.data = data
+                    self.parents = parents
+                    self.grad = 0.0
+
+                def __add__(self, other):
+                    return Value(self.data + other.data, ((self, 1.0), (other, 1.0)))
+
+                def __mul__(self, other):
+                    return Value(self.data * other.data, ((self, other.data), (other, self.data)))
+
+
+            def backward(node):
+                node.grad = 1.0
+
+                def visit(v):
+                    for parent, local in v.parents:
+                        parent.grad += v.grad * local
+                    for parent, local in v.parents:
+                        visit(parent)
+
+                visit(node)
+
+
+            print("39.0 26.0 6.0")
+        explanation: |
+          The broken pass lets each node hand back the moment the search reaches it. $f$ gives 7 to $s$ and 6 to $t$, and then the search goes straight down into $s$, which passes on $7 \times 3 = 21$ before $t$ has had a chance to add its 6. Visiting once is necessary and it is not enough. The visits must also come in an order in which every node is complete at its turn.
+
+          Visiting the parents in the opposite order rescues this graph, since $t$ is then reached first, and breaks the same calculation written as $t \times s$. No rule about which parent to visit first can work, because how long the route to a shared node is depends on the whole graph. Taking away the `seen` set, so that nodes are revisited, does not repair it either: a revisited node hands back its whole running total again and the gradients come out too large. The repair is to separate the two jobs. First find the order, appending each node as the search leaves it. Then sweep.
+    - question:
+        id: work-uses
+        type: numeric
+        system: s2
+        prompt: |
+          $u = p \times q$, $v = u + p$, $w = v \times u + v$, at $p = 4$ and $q = 5$. In the backward pass from $w$, what is the complete gradient of $u$ at the moment it hands back?
+        answer: "45"
+        explanation: |
+          $u = 20$ and $v = 24$. Name the product $m = v \times u = 480$, so $w = m + v$. Backwards: $\bar w = 1$, so $\bar m = 1$ and $v$ receives 1 from the addition. Then $m$ hands back: $v$ receives $1 \times u = 20$, making $\bar v = 21$, and $u$ receives $1 \times v = 24$. Now $v$ is complete, since both of its uses have reported, and it hands back: $u$ receives $21 \times 1 = 21$, making $\bar u = 45$, and $p$ receives 21. Only now is $u$ complete, and it passes $45 \times 5 = 225$ to $p$ and $45 \times 4 = 180$ to $q$. So $\bar p = 21 + 225 = 246$ and $\bar q = 180$. Check with algebra: $w = (u + p)(u + 1)$, so $\partial w / \partial u = 2u + p + 1 = 45$.
+    - question:
+        id: work-tape
+        type: choice
+        system: s2
+        prompt: |
+          An engine appends every `Value` to a global list, the tape, as it is created, and its backward pass goes through the tape from the end. During one forward calculation the program also computed some statistics for logging, with `Value` objects that the loss does not depend on. What effect do those extra nodes have on the gradients of the weights?
+        options:
+          - 'They corrupt the gradients, since they are in the wrong place on the tape.'
+          - 'None. The tape is still in creation order, which is a topological order. The extra nodes receive nothing from the loss, hold gradient 0 at their turn, and hand zeros to their parents. They cost a little time and memory only.'
+          - 'The backward pass stops when it reaches the first of them.'
+          - 'They double every gradient.'
+        answer: 1
+        explanation: |
+          Creation order puts every value after its parents whatever else was created in between, so the reversed tape still meets the condition. A node that the output does not depend on has no path to it from the output, never receives a contribution, and multiplies its zero gradient by its local derivatives. The price of the tape is elsewhere: it remembers everything made since recording began, wanted or not, so it has to be cleared between calculations, and work that needs no gradient is best done with recording turned off. Both of these come back in the lesson on memory.
+    - question:
+        id: work-cost
+        type: choice
+        system: s2
+        prompt: |
+          A network's forward calculation performs ten million operations, each with at most two operands. Roughly how much work is the ordered backward pass?
+        options:
+          - 'About ten million squared steps, since every node may depend on every other.'
+          - 'At most about twenty million multiply-and-add steps, one for each arrow, on top of finding the order. That is the same order of work as the forward calculation itself.'
+          - 'It depends on the number of paths, which could be astronomically large.'
+          - 'One step, since the gradient is one vector.'
+        answer: 1
+        explanation: |
+          One visit for each node and one multiplication and addition for each arrow, and there are at most two arrows into each node. The number of paths does not enter into it at all, which is the point of the lesson: sharing, which made the path-by-path walk explode, costs the ordered sweep nothing. This is sometimes called the cheap gradient principle. The whole gradient, with respect to every one of the inputs, costs a small fixed multiple of one evaluation of the function, however many inputs there are.
+    - question:
+        id: work-kahn
+        type: numeric
+        system: s2
+        prompt: |
+          The sweep is to be organised by counting uses. For the squared error, `e = w * x + b - y` and `L = e * e`, each value's count starts as the number of arrows leaving it. What is the count of `e` at the start?
+        answer: "2"
+        explanation: |
+          `e` is the left operand and the right operand of the one multiplication, so two arrows leave it. `L` starts with count 0 and is ready. When `L` hands back, it delivers along both arrows and lowers the count of `e` twice, to 0, and only then is `e` ready. Had the count been kept as the number of different nodes that use `e`, which is 1, the bookkeeping would still come out here, but the rule that works in general is one count for each arrow, matching one delivery for each arrow.
+  connections:
+    - text: |
+        The recursive walk followed every path from the output: 65,535 calls for a value doubled fifteen times, and the number doubles with each further operation. The paths are many because values are shared, and the walk repeated itself wherever they were.
+
+        A gradient is a sum over a node's uses, so a node may hand back **only when every node that used it has handed back**. The reverse of a **topological order** meets that condition for every node at once. Find the order by a depth-first search that writes each node down as it leaves, sweep it from the back, and each node speaks once, each arrow is used once, and the cost is $O(V + E)$: about as much as the forward calculation. The order of creation is also a topological order, so an engine can keep a **tape** and play it backwards.
+
+        Visiting once is not enough if the order is wrong: a node that speaks early passes on part of its gradient, and everything below it is silently too small.
+
+        The engine is now correct and fast, for numbers. A model does not compute with single numbers. It computes with arrays of thousands of them at a time, and a node for every scalar multiplication would be millions of Python objects. The next lesson lets one node hold a whole array, and asks what the local derivative of an operation on arrays is: [[e6.tensor-valued-autograd]].
