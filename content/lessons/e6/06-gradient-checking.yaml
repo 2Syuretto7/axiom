@@ -1,0 +1,1077 @@
+concept: e6.gradient-checking
+minutes: 80
+claim: You can test any gradient, whoever computed it, against slopes measured by central differences, choose a step that balances the error of the approximation against the error of rounding, compare the two gradients by a relative error and say what size of error means a bug, write the checker for arrays of any shape, and design a check that a wrong gradient cannot slip through by testing at random points, with random weights on the output, away from kinks.
+recalls: [e6.broadcasting-in-the-backward-pass]
+uses: [e6.tensor-valued-autograd, e6.reverse-mode-on-scalars, e5.numerical-error-analysis-in-practice, e5.random-number-generation, e5.reshaping-views-and-copies, e5.arrays-dtype-and-shape, e5.vectorisation, e5.axis-operations-and-reductions, m12.directional-derivative, m12.gradient, m12.partial-derivatives, m10.taylor-approximation, m10.derivative-as-slope-and-rate, e1.testing-with-pytest, m2.composition-and-inverses, e0.functions, e0.loops]
+leads: [e6.modules-parameters-and-optimisers, e6.higher-order-gradients, e6.training-an-mlp-on-your-own-engine, e7.autograd-in-pytorch, e7.custom-autograd-functions-and-extensions]
+starter: |
+  # Scratch space. A neuron trained by gradient descent with a hand-written
+  # gradient. Watch the loss.
+  import numpy as np
+
+  x = np.array([-1.0, 0.5, 2.0, 3.0])
+  y = np.array([-0.5, 0.2, 0.9, 0.7])
+
+
+  def loss(w, b):
+      a = np.tanh(w * x + b)
+      return float(((a - y) ** 2).sum())
+
+
+  def gradient(w, b):
+      a = np.tanh(w * x + b)
+      dz = 2 * (a - y) * (1 - a * a)
+      return float(dz.sum()), float(dz.sum())
+
+
+  w, b = 0.0, 0.0
+  print(0, round(loss(w, b), 4))
+  for step in range(1, 151):
+      gw, gb = gradient(w, b)
+      w -= 0.05 * gw
+      b -= 0.05 * gb
+      if step % 50 == 0:
+          print(step, round(loss(w, b), 4))
+parts:
+  recall:
+    - text: |
+        [[e6.broadcasting-in-the-backward-pass]] repaired a gradient that had the wrong shape and raised no error, one lesson after a closure bug that gave every tensor the wrong gradient and raised no error. Both printed a correct loss. Today's subject is how to know that a gradient is right. Three quick pulls first.
+  puzzle:
+    - text: |
+        The starter trains one neuron, $a = \tanh(wx + b)$, on four data points, by gradient descent on the sum of squared errors, from $w = 0$, $b = 0$. Its gradient was written by hand.
+
+        Run it.
+
+        ```
+        0 1.59
+        50 0.5109
+        100 0.5109
+        150 0.5109
+        ```
+
+        The loss falls from 1.59 to 0.51, a drop of two thirds, and then holds perfectly steady. That is the picture of a model that has learnt what it can from its data and settled at a minimum. Anyone watching this training run would be content. Perhaps the model is a little weak. One might try a bigger one.
+
+        The gradient is wrong. Look at the last line of `gradient`: it returns `dz.sum()` twice. The first should be `(dz * x).sum()`. Somebody forgot that $w$ is multiplied by $x$. With the correct gradient the same loop reaches a loss of 0.0629, eight times lower.
+
+        Nothing in the output said so. The loss fell, as it does with almost any vector that points roughly downhill. It levelled off, because the wrong vector happened to reach zero somewhere. The program never raised an error, and no number in it was absurd.
+
+        **If a falling loss does not show that a gradient is right, what does? What could you compare a gradient with, that does not depend on the code that produced it? And how close must the two be before you believe it?**
+  intuition:
+    - text: |
+        A gradient is not defined by the code that computes it. It is defined by the function: entry $i$ of $\nabla f$ is the rate at which $f$ changes when input $i$ is nudged and the others are held still. That definition can be carried out directly, with no knowledge of how $f$ works inside. Nudge the input, run $f$, and see how far the output moved.
+
+        You did this in the last lesson on NumPy, and then spent this whole cluster getting away from it, because it needs two runs of $f$ for every input and its answer is only approximate. Both complaints are fair when the job is training. Neither matters when the job is **testing**. A test may be slow. A test may use a model with ten weights. And an answer good to seven digits is plenty to catch a gradient that is wrong in the first.
+
+        So there are two computations of the same quantity, as different in method as they could be:
+
+        | | the engine's gradient | the measured gradient |
+        | --- | --- | --- |
+        | how | chain rule through the recorded graph | nudge each input and run the function again |
+        | cost | about one extra run | two runs for every input |
+        | accuracy | exact to rounding | about 8 or 9 digits at best |
+        | can be wrong because | any pull is wrong, an order is wrong, a shape is wrong | almost nothing: it is a subtraction and a division |
+
+        **Compare them. If they agree to many digits at a point chosen at random, the engine's gradient is right there. If they do not, it is wrong.** This is **gradient checking**, and it is the one test that matters for an autograd engine.
+
+        Try it on the starter. At $w = 0$, $b = 0$ the hand-written gradient is $(-2.6, -2.6)$. Measure instead: nudge $w$ by a millionth each way and divide the change in the loss by two millionths, then the same for $b$.
+
+        ```python
+        import numpy as np
+
+        x = np.array([-1.0, 0.5, 2.0, 3.0])
+        y = np.array([-0.5, 0.2, 0.9, 0.7])
+
+
+        def loss(w, b):
+            a = np.tanh(w * x + b)
+            return float(((a - y) ** 2).sum())
+
+
+        h = 1e-6
+        print(round((loss(h, 0.0) - loss(-h, 0.0)) / (2 * h), 4))
+        print(round((loss(0.0, h) - loss(0.0, -h)) / (2 * h), 4))
+        ```
+
+        That prints `-9.0` and `-2.6`. The second entry agrees. The first is $-9$ where the code claimed $-2.6$. Four runs of the loss have found, and located, a bug that 150 steps of training hid.
+
+        Notice what kind of evidence this is. The check knows nothing about $\tanh$ or the chain rule. It cannot share a misunderstanding with the code it is checking, which is what makes it worth having. A second derivation by hand could repeat the first one's mistake.
+  derivation:
+    - text: |
+        **The measured slope.** For a function $f$ of one number, two estimates of $f'(x)$ from nearby values:
+
+        $$\text{forward: } \frac{f(x + h) - f(x)}{h}, \qquad \text{central: } \frac{f(x + h) - f(x - h)}{2h}.$$
+
+        Taylor's expansion says how wrong each is. Since $f(x \pm h) = f(x) \pm h f'(x) + \tfrac{h^2}{2} f''(x) \pm \tfrac{h^3}{6} f'''(x) + \dots$, the forward estimate is off by about $\tfrac{h}{2} f''(x)$, and in the central one the $h^2$ terms cancel, leaving an error of about $\tfrac{h^2}{6} f'''(x)$. **The central difference is accurate to order $h^2$ and costs one more run. Always use it for checking.** For $f(x) = x^3$ at $x = 2$, where the slope is 12, a step of $h = 0.001$ gives 12.006001 forwards and 12.000001 centrally.
+
+        **The step.** A smaller $h$ shrinks that error. But the lesson on numerical error showed the other side: $f(x + h)$ and $f(x - h)$ are nearly equal, subtracting them cancels their leading digits, and what is left is rounding error of about $\varepsilon \lvert f \rvert$, with $\varepsilon \approx 10^{-16}$, which is then divided by the small number $2h$. The total error is roughly
+
+        $$\frac{h^2}{6}\lvert f''' \rvert + \frac{\varepsilon \lvert f \rvert}{h},$$
+
+        large when $h$ is large and large again when $h$ is tiny. For $x^3$ at 2:
+
+        | $h$ | error of the central estimate |
+        | --- | --- |
+        | $10^{-2}$ | about $10^{-4}$ |
+        | $10^{-4}$ | about $10^{-8}$ |
+        | $10^{-6}$ | about $10^{-9}$ |
+        | $10^{-8}$ | about $10^{-7}$ |
+        | $10^{-10}$ | about $10^{-6}$ |
+        | $10^{-12}$ | about $10^{-3}$ |
+
+        The best step is near $\varepsilon^{1/3}$, about $10^{-5}$, and anything from $10^{-4}$ to $10^{-6}$ serves, for inputs of ordinary size in 64-bit floats. With 32-bit floats $\varepsilon$ is about $10^{-7}$ and the best that can be hoped for is two or three good digits. **Check gradients in 64 bits.**
+
+        **Many inputs.** For $f : \mathbb{R}^n \to \mathbb{R}$, do it one entry at a time: add $h$ to entry $i$, run $f$, subtract to get $x_i - h$, run $f$, put the entry back, and store the central difference. That is $2n$ runs. For an input that is an array of any shape, a flat view lets one loop reach every entry.
+
+        ```python
+        def numeric_grad(f, x, h=1e-6):
+            grad = np.zeros(x.shape)
+            flat_x = x.reshape(-1)
+            flat_grad = grad.reshape(-1)
+            for i in range(x.size):
+                old = flat_x[i]
+                flat_x[i] = old + h
+                up = f(x)
+                flat_x[i] = old - h
+                down = f(x)
+                flat_x[i] = old
+                flat_grad[i] = (up - down) / (2 * h)
+            return grad
+        ```
+
+        `x.reshape(-1)` is a view of the same memory, as you learnt in the lesson on reshaping, so writing to `flat_x[i]` changes `x` itself, and `f(x)` sees the nudge. The line `flat_x[i] = old` puts the entry back exactly. Restoring by subtracting $h$ again would leave rounding crumbs in the input, and forgetting to restore at all leaves every earlier entry displaced while the later ones are measured.
+
+        **Comparing.** Let $a$ be the analytic gradient, from the engine, and $n$ the numerical one. How far apart are they? The difference alone will not do. An absolute difference of $10^{-9}$ is a superb match between gradients of size 1 and a ten per cent disagreement between gradients of size $10^{-8}$. Measure the difference **relative to the size of the things compared**:
+
+        $$\text{relative error} = \frac{\max_i \lvert a_i - n_i \rvert}{\max_i \lvert a_i \rvert + \max_i \lvert n_i \rvert + 10^{-12}}.$$
+
+        The $10^{-12}$ only guards against dividing by zero when both gradients vanish. With central differences in 64 bits and $h$ about $10^{-6}$:
+
+        | relative error | reading |
+        | --- | --- |
+        | below about $10^{-7}$ | correct |
+        | $10^{-7}$ to $10^{-4}$ | probably correct. Look for a kink, or try another $h$ |
+        | above $10^{-3}$ | a bug |
+
+        A wrong gradient is seldom subtly wrong. A missing factor, a swapped operand, a dropped term or a wrong sign gives a relative error of 0.1 or 1, six or more orders of magnitude away from a correct one. The gap between "right" and "wrong" is enormous, and that is why this test is so decisive.
+    - question:
+        id: derivation-step
+        type: choice
+        system: s2
+        prompt: |
+          A gradient check uses central differences with $h = 10^{-12}$, "to be as accurate as possible", and reports a relative error of $10^{-3}$ for a gradient that is in fact correct. What has happened?
+        options:
+          - 'The analytic gradient is wrong after all.'
+          - 'The step is far too small. The two values of the function differ only in their last few digits, their difference is mostly rounding error, and dividing by $2 \times 10^{-12}$ magnifies it. The numerical gradient is the inaccurate one. A step near $10^{-5}$ would give agreement to nine digits or so.'
+          - 'Central differences do not work for small steps. Forward differences should be used.'
+          - 'The relative error should have been an absolute error.'
+        answer: 1
+        explanation: |
+          The error of the estimate is the sum of a truncation part, which shrinks like $h^2$, and a rounding part, which grows like $\varepsilon / h$. At $h = 10^{-12}$ the rounding part is about $10^{-16} / 10^{-12} = 10^{-4}$ times the size of the function, which swamps everything. A gradient check compares two computations, and either can be the faulty one. Before blaming the engine, vary $h$: a real bug stays at a relative error near 1 whatever the step, and a step problem moves with it.
+    - text: |
+        **Checking an engine's operation.** A pull maps a gradient of the result to a share for an operand. To test it, a scalar function is needed, so put a made-up loss on top of the operation. The obvious one is the sum of the result's entries, and it is a poor choice: its gradient is all ones, and a pull can be wrong in a way that only shows for other gradients. Use a **weighted** sum with random weights $R$ of the result's shape. Then the gradient of the result is $R$, a generic array, and the pull is tested on that.
+
+        ```python
+        def relative_error(a, n):
+            return float(np.abs(a - n).max() / (np.abs(a).max() + np.abs(n).max() + 1e-12))
+
+
+        rng = np.random.default_rng(0)
+        A, B, R = rng.normal(size=(4, 3)), rng.normal(size=(3, 2)), rng.normal(size=(4, 2))
+        f = lambda M: float(((M @ B) * R).sum())
+        print(relative_error(R @ B.T, numeric_grad(f, A)))
+        ```
+
+        That prints about $1.6 \times 10^{-10}$: the pull of the matrix product for its left operand, `R @ B.T`, agrees with 24 measured slopes to ten digits.
+
+        **Where to check.** A check is only as good as the point it is made at.
+
+        - **At random points.** Special inputs hide bugs. At zero, $\tanh$ has slope 1, and the wrong formulas $1 - \tanh z$ and $1 - z^2$ both give 1 as well. An input of all ones, or two operands that are equal, can make two different formulas agree by accident.
+        - **With shapes all different.** A square matrix lets a missing transpose through. Use 4 by 3 and 3 by 2. Include shapes that broadcast.
+        - **Away from kinks.** Functions such as $\max(z, 0)$ have a corner. If $z$ is within $h$ of the corner, the two nudged points fall on different sides of it, the measured slope is an average of two slopes, and it matches neither. That is a failure of the measurement and not of the engine. Random inputs seldom land so close, and when the error is in the doubtful middle range, this is the first thing to suspect.
+        - **With everything random held fixed.** If the function draws random numbers, both runs must draw the same ones, or the difference between them is noise.
+
+        **A cheaper check.** For a model too large to nudge every weight, use the directional derivative. Pick a random direction $\mathbf{v}$. The engine's gradient predicts the slope along it, $\nabla f \cdot \mathbf{v}$. Two runs measure it: $\dfrac{f(\mathbf{x} + h\mathbf{v}) - f(\mathbf{x} - h\mathbf{v})}{2h}$. One number is compared, for two runs, however many weights there are. A wrong gradient would have to be wrong in a way exactly at right angles to $\mathbf{v}$ to pass, and a few random directions make that vanishingly unlikely.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the steps of measuring one entry of a gradient by a central difference, working in place on the array `x`.
+        steps:
+          - 'Remember the entry: `old = flat_x[i]`.'
+          - 'Set the entry to `old + h` and run the function, keeping the value as `up`.'
+          - 'Set the entry to `old - h` and run the function, keeping the value as `down`.'
+          - 'Put the entry back: `flat_x[i] = old`.'
+          - 'Store `(up - down) / (2 * h)` as entry `i` of the gradient.'
+        explanation: The entry is saved first so that it can be restored exactly, with no rounding left behind. It is restored before moving on, so that when the next entry is measured this one is where it started. The two values are 2h apart, hence the division by 2h.
+  formal:
+    - text: |
+        **Central difference.** For $f : \mathbb{R}^n \to \mathbb{R}$ three times differentiable,
+
+        $$\frac{f(\mathbf{x} + h\mathbf{e}_i) - f(\mathbf{x} - h\mathbf{e}_i)}{2h} = \frac{\partial f}{\partial x_i}(\mathbf{x}) + \frac{h^2}{6}\frac{\partial^3 f}{\partial x_i^3}(\mathbf{x}) + O(h^4).$$
+
+        In floating point with unit round-off $\varepsilon$ the computed quotient carries a further error of order $\varepsilon \lvert f(\mathbf{x}) \rvert / h$. The sum is least for $h$ of order $\varepsilon^{1/3}$.
+
+        **Relative error.** For gradients $a$ and $n$, $\dfrac{\lVert a - n \rVert_\infty}{\lVert a \rVert_\infty + \lVert n \rVert_\infty + \delta}$ with a tiny $\delta > 0$.
+
+        **Gradient check.** An analytic gradient $a$ of $f$ at $\mathbf{x}$ passes if its relative error against the central-difference gradient is below a tolerance, typically $10^{-6}$ in 64-bit arithmetic with $h \approx 10^{-6}$.
+
+        **Directional check.** For a direction $\mathbf{v}$, compare $a \cdot \mathbf{v}$ with $\dfrac{f(\mathbf{x} + h\mathbf{v}) - f(\mathbf{x} - h\mathbf{v})}{2h}$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-what
+        type: choice
+        system: s1
+        prompt: |
+          What is a gradient check?
+        options: ['Watching the loss fall during training', 'Comparing a computed gradient with slopes measured by nudging each input', 'Computing the gradient twice with the same code', 'Checking that the gradient is not zero']
+        answer: 1
+        explanation: Two independent computations of the same quantity.
+    - question:
+        id: drill-central
+        type: choice
+        system: s1
+        prompt: |
+          Which is the central difference?
+        options: ['$\dfrac{f(x + h) - f(x)}{h}$', '$\dfrac{f(x + h) - f(x - h)}{2h}$', '$\dfrac{f(x + h) - f(x - h)}{h}$', '$\dfrac{f(x) - f(x - h)}{2h}$']
+        answer: 1
+        explanation: One step each side, and the two points are 2h apart.
+    - question:
+        id: drill-order
+        type: choice
+        system: s1
+        prompt: |
+          How does the error of the central difference shrink as $h$ shrinks, before rounding takes over?
+        options: ['Like $h$', 'Like $h^2$', 'Like $\sqrt{h}$', 'It does not shrink']
+        answer: 1
+        explanation: The terms in h squared cancel between the two sides, leaving an error of order h squared in the quotient.
+    - question:
+        id: drill-runs
+        type: numeric
+        system: s1
+        prompt: |
+          A function has 10 inputs. How many runs of the function does a full central-difference gradient need?
+        answer: "20"
+        explanation: Two for each input.
+    - question:
+        id: drill-step
+        type: choice
+        system: s1
+        prompt: |
+          In 64-bit floats, with inputs of ordinary size, which step is a sound choice for a central difference?
+        options: ['$10^{-1}$', '$10^{-6}$', '$10^{-12}$', '$10^{-16}$']
+        answer: 1
+        explanation: Small enough for the tangent to be accurate, large enough that rounding does not swamp the difference.
+    - question:
+        id: drill-relative
+        type: numeric
+        system: s1
+        prompt: |
+          The analytic gradient is $(2, 4)$ and the numerical one is $(2, 4.4)$. Ignoring the tiny guard term, what is the relative error, to two decimal places?
+        answer: "0.05"
+        tolerance: "0.005"
+        explanation: The largest difference is 0.4, and the two largest entries add up to 8.4.
+    - question:
+        id: drill-verdict-good
+        type: choice
+        system: s1
+        prompt: |
+          A check in 64 bits reports a relative error of $3 \times 10^{-10}$. What is the verdict?
+        options: ['Correct', 'Doubtful', 'A bug', 'The step was too large']
+        answer: 0
+        explanation: Agreement to about ten digits is as good as a measured slope gets.
+    - question:
+        id: drill-verdict-bad
+        type: choice
+        system: s1
+        prompt: |
+          A check reports a relative error of 0.33. What is the verdict?
+        options: ['Correct', 'Rounding error', 'A bug', 'A kink']
+        answer: 2
+        explanation: A third is a missing factor or a missing term, nowhere near the size of numerical noise.
+    - question:
+        id: drill-zero
+        type: choice
+        system: s1
+        prompt: |
+          Why is an input of all zeros a poor place to check the derivative of $\tanh$?
+        options: ['$\tanh$ is not defined at 0', 'Several wrong formulas for the derivative also give 1 there', 'The numerical derivative is infinite there', 'Zero cannot be nudged']
+        answer: 1
+        explanation: A special point can make different formulas agree by accident.
+    - question:
+        id: drill-kink
+        type: choice
+        system: s1
+        prompt: |
+          $f(z) = \max(z, 0)$ and $h = 10^{-6}$. What does the central difference give at $z = 0$?
+        options: ['0', '0.5', '1', 'Infinity']
+        answer: 1
+        explanation: The point to the right is on the slope-1 side and the point to the left on the flat side, so the estimate is the average of the two slopes.
+    - question:
+        id: drill-directional
+        type: numeric
+        system: s1
+        prompt: |
+          The engine's gradient is $(3, 4)$ and the check direction is $\mathbf{v} = (0.6, 0.8)$. What slope along $\mathbf{v}$ does the gradient predict?
+        answer: "5"
+        explanation: The dot product, 1.8 plus 3.2.
+    - question:
+        id: drill-bits
+        type: choice
+        system: s1
+        prompt: |
+          Why are gradients checked in 64-bit floats and not 32-bit?
+        options: ['32-bit floats cannot be subtracted', 'With 32 bits rounding leaves the measured slope only two or three good digits, too few to tell a right gradient from a slightly wrong one', '64-bit floats are faster', 'The chain rule needs 64 bits']
+        answer: 1
+        explanation: The measured slope is a small difference of nearly equal numbers, and it needs digits to spare.
+    - question:
+        id: predict-differences
+        type: predict
+        system: s1
+        prompt: The slope of the cube at 2, which is 12, measured two ways with the same step. What does this show?
+        code: |
+          f = lambda t: t ** 3
+          h = 1e-3
+          print(round((f(2 + h) - f(2)) / h, 6))
+          print(round((f(2 + h) - f(2 - h)) / (2 * h), 6))
+        output: |
+          12.006001
+          12.000001
+        explanation: The forward difference is out by about half of h times the second derivative, 12, which is 0.006. The central difference is out by a sixth of h squared times the third derivative, 6, which is one millionth. Same step, six thousand times less error.
+    - question:
+        id: predict-relative
+        type: predict
+        system: s1
+        prompt: An absolute comparison and a relative one, on a very small gradient. What does this show?
+        code: |
+          import numpy as np
+
+
+          def relative_error(a, n):
+              return float(np.abs(a - n).max() / (np.abs(a).max() + np.abs(n).max() + 1e-12))
+
+
+          a = np.array([1e-8])
+          n = np.array([1.1e-8])
+          print(abs(float(a[0] - n[0])) < 1e-6)
+          print(relative_error(a, n) < 1e-6)
+          print(round(relative_error(np.array([2.0, 4.0]), np.array([2.0, 4.4])), 4))
+        output: |
+          True
+          False
+          0.0476
+        explanation: The two tiny gradients differ by a tenth of their size, which an absolute tolerance of a millionth cannot see and a relative error, about 0.05, sees at once. The last line is 0.4 divided by 8.4.
+  work:
+    - text: Slower now. A checker is a piece of test code, and wrong test code is worse than none, so test the checker too.
+    - question:
+        id: write-numeric-grad
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `numeric_grad(f, x, h=1e-6)`. `f` takes an array and returns a float. `x` is an array of any shape. Return an array of the same shape whose entries are the central-difference estimates of the partial derivatives of `f` at `x`. Work in place on `x` through a flat view, and leave `x` exactly as you found it.
+        starter: |
+          import numpy as np
+
+
+          def numeric_grad(f, x, h=1e-6):
+              # Replace the next line with your own.
+              return np.zeros(x.shape)
+
+
+          x = np.array([[1.0, 2.0], [3.0, 4.0]])
+          g = numeric_grad(lambda v: float((v ** 3).sum()), x)
+          print([[round(float(t), 4) for t in row] for row in g])
+        solution: |
+          import numpy as np
+
+
+          def numeric_grad(f, x, h=1e-6):
+              grad = np.zeros(x.shape)
+              flat_x = x.reshape(-1)
+              flat_grad = grad.reshape(-1)
+              for i in range(x.size):
+                  old = flat_x[i]
+                  flat_x[i] = old + h
+                  up = f(x)
+                  flat_x[i] = old - h
+                  down = f(x)
+                  flat_x[i] = old
+                  flat_grad[i] = (up - down) / (2 * h)
+              return grad
+
+
+          x = np.array([[1.0, 2.0], [3.0, 4.0]])
+          g = numeric_grad(lambda v: float((v ** 3).sum()), x)
+          print([[round(float(t), 4) for t in row] for row in g])
+        tests: |
+          import numpy as _np
+          _x = _np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+          _keep = _x.copy()
+          _g = numeric_grad(lambda v: float((v ** 3).sum()), _x)
+          assert _np.shape(_g) == (2, 3), "The gradient should have the shape of x"
+          assert _np.array_equal(_x, _keep), "x should be left exactly as it was: remember each entry and put it back"
+          assert _np.abs(_g - 3 * _keep ** 2).max() < 1e-6, "For the sum of cubes the gradient is 3 x squared: use a central difference, which is accurate to order h squared"
+          _v = _np.array([0.5, -1.5, 2.0])
+          _w = _np.array([3.0, 1.0, -2.0])
+          _g = numeric_grad(lambda v: float((_w * v).sum() + v[0] * v[1]), _v)
+          assert _np.abs(_g - _np.array([3.0 - 1.5, 1.0 + 0.5, -2.0])).max() < 1e-7, "Each entry should be measured with the others at their original values"
+          _calls = [0]
+          def _counted(v):
+              _calls[0] += 1
+              return float((v * v).sum())
+          _g = numeric_grad(_counted, _np.array([1.0, 2.0, 3.0, 4.0]))
+          assert _calls[0] == 8, "A central difference needs two runs of the function for each entry"
+          _g = numeric_grad(lambda v: float(_np.sin(v).sum()), _np.array([0.3]), 1e-4)
+          assert abs(float(_g[0]) - _np.cos(0.3)) < 1e-7, "The step h passed in should be the one used"
+          assert output.strip() == "[[3.0, 12.0], [27.0, 48.0]]", "The program should print [[3.0, 12.0], [27.0, 48.0]]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def numeric_grad(f, x, h=1e-6):
+                grad = np.zeros(x.shape)
+                flat_x = x.reshape(-1)
+                flat_grad = grad.reshape(-1)
+                base = f(x)
+                for i in range(x.size):
+                    old = flat_x[i]
+                    flat_x[i] = old + h
+                    flat_grad[i] = (f(x) - base) / h
+                    flat_x[i] = old
+                return grad
+
+
+            print("[[3.0, 12.0], [27.0, 48.0]]")
+          - |
+            import numpy as np
+
+
+            def numeric_grad(f, x, h=1e-6):
+                grad = np.zeros(x.shape)
+                flat_x = x.reshape(-1)
+                flat_grad = grad.reshape(-1)
+                for i in range(x.size):
+                    old = flat_x[i]
+                    flat_x[i] = old + h
+                    up = f(x)
+                    flat_x[i] = old - h
+                    down = f(x)
+                    flat_grad[i] = (up - down) / (2 * h)
+                return grad
+
+
+            print("[[3.0, 12.0], [27.0, 48.0]]")
+          - |
+            import numpy as np
+
+
+            def numeric_grad(f, x, h=1e-6):
+                grad = np.zeros(x.shape)
+                flat_x = x.reshape(-1)
+                flat_grad = grad.reshape(-1)
+                for i in range(x.size):
+                    old = flat_x[i]
+                    flat_x[i] = old + h
+                    up = f(x)
+                    flat_x[i] = old - h
+                    down = f(x)
+                    flat_x[i] = old
+                    flat_grad[i] = (up - down) / h
+                return grad
+
+
+            print("[[3.0, 12.0], [27.0, 48.0]]")
+          - |
+            import numpy as np
+
+
+            def numeric_grad(f, x, h=1e-6):
+                up = f(x + h)
+                down = f(x - h)
+                return np.zeros(x.shape) + (up - down) / (2 * h)
+
+
+            print("[[3.0, 12.0], [27.0, 48.0]]")
+        explanation: |
+          One entry at a time: save it, nudge it up and run, nudge it down and run, restore it, store the quotient. The flat views let one index reach every entry of an array of any shape, and since they are views, writing through them changes `x` and fills `grad`.
+
+          The forward difference prints the same rounded answer for this small example and is a thousand times less accurate: for the cubes its error is about $3xh$, a few millionths, against a few hundred-millionths. A checker built on it cannot tell a correct gradient from one that is slightly off. Forgetting to restore leaves every measured entry sitting at $x_i - h$ while the rest are measured. Dividing by $h$ doubles every slope. Nudging the whole array at once measures the slope along the direction of all ones, one number, and spreads it over every entry.
+    - question:
+        id: write-check
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          `numeric_grad` is given. Write two functions.
+
+          `relative_error(a, n)` returns, as a float, the largest absolute difference between entries of the arrays `a` and `n`, divided by (the largest absolute entry of `a`, plus the largest absolute entry of `n`, plus `1e-12`).
+
+          `grad_check(f, analytic, x, tol=1e-6)` returns `True` if the array `analytic` agrees with the numerical gradient of `f` at `x` to a relative error below `tol`, and `False` otherwise.
+        starter: |
+          import numpy as np
+
+
+          def numeric_grad(f, x, h=1e-6):
+              grad = np.zeros(x.shape)
+              flat_x = x.reshape(-1)
+              flat_grad = grad.reshape(-1)
+              for i in range(x.size):
+                  old = flat_x[i]
+                  flat_x[i] = old + h
+                  up = f(x)
+                  flat_x[i] = old - h
+                  down = f(x)
+                  flat_x[i] = old
+                  flat_grad[i] = (up - down) / (2 * h)
+              return grad
+
+
+          def relative_error(a, n):
+              # Replace the next line with your own.
+              return 0.0
+
+
+          def grad_check(f, analytic, x, tol=1e-6):
+              # Replace the next line with your own.
+              return True
+
+
+          x = np.array([-1.0, 0.5, 2.0, 3.0])
+          y = np.array([-0.5, 0.2, 0.9, 0.7])
+
+
+          def loss(p):
+              a = np.tanh(p[0] * x + p[1])
+              return float(((a - y) ** 2).sum())
+
+
+          def gradient(p, forgot_x):
+              a = np.tanh(p[0] * x + p[1])
+              dz = 2 * (a - y) * (1 - a * a)
+              return np.array([dz.sum() if forgot_x else (dz * x).sum(), dz.sum()])
+
+
+          p = np.array([0.3, -0.2])
+          print(grad_check(loss, gradient(p, False), p), grad_check(loss, gradient(p, True), p))
+        solution: |
+          import numpy as np
+
+
+          def numeric_grad(f, x, h=1e-6):
+              grad = np.zeros(x.shape)
+              flat_x = x.reshape(-1)
+              flat_grad = grad.reshape(-1)
+              for i in range(x.size):
+                  old = flat_x[i]
+                  flat_x[i] = old + h
+                  up = f(x)
+                  flat_x[i] = old - h
+                  down = f(x)
+                  flat_x[i] = old
+                  flat_grad[i] = (up - down) / (2 * h)
+              return grad
+
+
+          def relative_error(a, n):
+              return float(np.abs(a - n).max() / (np.abs(a).max() + np.abs(n).max() + 1e-12))
+
+
+          def grad_check(f, analytic, x, tol=1e-6):
+              return relative_error(analytic, numeric_grad(f, x)) < tol
+
+
+          x = np.array([-1.0, 0.5, 2.0, 3.0])
+          y = np.array([-0.5, 0.2, 0.9, 0.7])
+
+
+          def loss(p):
+              a = np.tanh(p[0] * x + p[1])
+              return float(((a - y) ** 2).sum())
+
+
+          def gradient(p, forgot_x):
+              a = np.tanh(p[0] * x + p[1])
+              dz = 2 * (a - y) * (1 - a * a)
+              return np.array([dz.sum() if forgot_x else (dz * x).sum(), dz.sum()])
+
+
+          p = np.array([0.3, -0.2])
+          print(grad_check(loss, gradient(p, False), p), grad_check(loss, gradient(p, True), p))
+        tests: |
+          import numpy as _np
+          assert abs(relative_error(_np.array([2.0, 4.0]), _np.array([2.0, 4.4])) - 0.4 / 8.4) < 1e-9, "For (2, 4) against (2, 4.4) the relative error is 0.4 / 8.4"
+          assert relative_error(_np.array([1.0, -3.0]), _np.array([1.0, -3.0])) == 0.0, "Equal gradients have relative error 0"
+          assert abs(relative_error(_np.array([1.0, -3.0]), _np.array([1.0, 3.0])) - 1.0) < 1e-9, "A wrong sign on the largest entry gives a relative error of 1: use absolute values"
+          assert relative_error(_np.zeros(3), _np.zeros(3)) == 0.0, "Two zero gradients should give 0, not a division by zero"
+          assert abs(relative_error(_np.array([[1e-8, 0.0]]), _np.array([[1.1e-8, 0.0]])) - 1e-9 / (2.1e-8 + 1e-12)) < 1e-6, "The error is relative: tiny gradients that differ by a tenth of their size are far apart"
+          _f = lambda v: float((v ** 3).sum())
+          _x = _np.array([[1.0, -2.0], [0.5, 3.0]])
+          assert grad_check(_f, 3 * _x ** 2, _x) is True or grad_check(_f, 3 * _x ** 2, _x) == True, "A correct gradient should pass"
+          assert not grad_check(_f, 3 * _x ** 2 * 1.01, _x), "A gradient that is one per cent too large should fail"
+          assert not grad_check(_f, 6 * _x, _x), "A wrong formula should fail"
+          _small = lambda v: float(1e-8 * (v ** 2).sum())
+          _v = _np.array([1.0, 2.0])
+          assert grad_check(_small, 2e-8 * _v, _v), "A correct gradient of a very small function should pass"
+          assert not grad_check(_small, 3e-8 * _v, _v), "A wrong gradient of a very small function should fail: an absolute tolerance would let it through"
+          _big = lambda v: float(1e6 * (v ** 2).sum())
+          assert grad_check(_big, 2e6 * _v, _v), "A correct gradient of a very large function should pass: an absolute tolerance would reject it"
+          assert not grad_check(_f, 3 * _x ** 2 * 1.01, _x, 1e-9) and grad_check(_f, 3 * _x ** 2 * 1.01, _x, 0.1), "The tolerance passed in should be the one used"
+          assert output.strip() == "True False", "The program should print True False"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def numeric_grad(f, x, h=1e-6):
+                grad = np.zeros(x.shape)
+                flat_x = x.reshape(-1)
+                flat_grad = grad.reshape(-1)
+                for i in range(x.size):
+                    old = flat_x[i]
+                    flat_x[i] = old + h
+                    up = f(x)
+                    flat_x[i] = old - h
+                    down = f(x)
+                    flat_x[i] = old
+                    flat_grad[i] = (up - down) / (2 * h)
+                return grad
+
+
+            def relative_error(a, n):
+                return float(np.abs(a - n).max())
+
+
+            def grad_check(f, analytic, x, tol=1e-6):
+                return relative_error(analytic, numeric_grad(f, x)) < tol
+
+
+            x = np.array([-1.0, 0.5, 2.0, 3.0])
+            y = np.array([-0.5, 0.2, 0.9, 0.7])
+
+
+            def loss(p):
+                a = np.tanh(p[0] * x + p[1])
+                return float(((a - y) ** 2).sum())
+
+
+            def gradient(p, forgot_x):
+                a = np.tanh(p[0] * x + p[1])
+                dz = 2 * (a - y) * (1 - a * a)
+                return np.array([dz.sum() if forgot_x else (dz * x).sum(), dz.sum()])
+
+
+            print("True False")
+          - |
+            import numpy as np
+
+
+            def numeric_grad(f, x, h=1e-6):
+                grad = np.zeros(x.shape)
+                flat_x = x.reshape(-1)
+                flat_grad = grad.reshape(-1)
+                for i in range(x.size):
+                    old = flat_x[i]
+                    flat_x[i] = old + h
+                    up = f(x)
+                    flat_x[i] = old - h
+                    down = f(x)
+                    flat_x[i] = old
+                    flat_grad[i] = (up - down) / (2 * h)
+                return grad
+
+
+            def relative_error(a, n):
+                return float((a - n).max() / (np.abs(a).max() + np.abs(n).max() + 1e-12))
+
+
+            def grad_check(f, analytic, x, tol=1e-6):
+                return relative_error(analytic, numeric_grad(f, x)) < tol
+
+
+            x = np.array([-1.0, 0.5, 2.0, 3.0])
+            y = np.array([-0.5, 0.2, 0.9, 0.7])
+
+
+            def loss(p):
+                a = np.tanh(p[0] * x + p[1])
+                return float(((a - y) ** 2).sum())
+
+
+            def gradient(p, forgot_x):
+                a = np.tanh(p[0] * x + p[1])
+                dz = 2 * (a - y) * (1 - a * a)
+                return np.array([dz.sum() if forgot_x else (dz * x).sum(), dz.sum()])
+
+
+            print("True False")
+          - |
+            import numpy as np
+
+
+            def numeric_grad(f, x, h=1e-6):
+                grad = np.zeros(x.shape)
+                flat_x = x.reshape(-1)
+                flat_grad = grad.reshape(-1)
+                for i in range(x.size):
+                    old = flat_x[i]
+                    flat_x[i] = old + h
+                    up = f(x)
+                    flat_x[i] = old - h
+                    down = f(x)
+                    flat_x[i] = old
+                    flat_grad[i] = (up - down) / (2 * h)
+                return grad
+
+
+            def relative_error(a, n):
+                return float(np.abs(a - n).max() / (np.abs(a).max() + np.abs(n).max() + 1e-12))
+
+
+            def grad_check(f, analytic, x, tol=1e-6):
+                return abs(float(analytic.sum() - numeric_grad(f, x).sum())) < tol
+
+
+            x = np.array([-1.0, 0.5, 2.0, 3.0])
+            y = np.array([-0.5, 0.2, 0.9, 0.7])
+
+
+            def loss(p):
+                a = np.tanh(p[0] * x + p[1])
+                return float(((a - y) ** 2).sum())
+
+
+            def gradient(p, forgot_x):
+                a = np.tanh(p[0] * x + p[1])
+                dz = 2 * (a - y) * (1 - a * a)
+                return np.array([dz.sum() if forgot_x else (dz * x).sum(), dz.sum()])
+
+
+            print("True False")
+          - |
+            import numpy as np
+
+
+            def numeric_grad(f, x, h=1e-6):
+                grad = np.zeros(x.shape)
+                flat_x = x.reshape(-1)
+                flat_grad = grad.reshape(-1)
+                for i in range(x.size):
+                    old = flat_x[i]
+                    flat_x[i] = old + h
+                    up = f(x)
+                    flat_x[i] = old - h
+                    down = f(x)
+                    flat_x[i] = old
+                    flat_grad[i] = (up - down) / (2 * h)
+                return grad
+
+
+            def relative_error(a, n):
+                return float(np.abs(a - n).max() / (np.abs(a).max() + np.abs(n).max() + 1e-12))
+
+
+            def grad_check(f, analytic, x, tol=1e-6):
+                return relative_error(analytic, numeric_grad(f, x)) < 1e-6
+
+
+            x = np.array([-1.0, 0.5, 2.0, 3.0])
+            y = np.array([-0.5, 0.2, 0.9, 0.7])
+
+
+            def loss(p):
+                a = np.tanh(p[0] * x + p[1])
+                return float(((a - y) ** 2).sum())
+
+
+            def gradient(p, forgot_x):
+                a = np.tanh(p[0] * x + p[1])
+                dz = 2 * (a - y) * (1 - a * a)
+                return np.array([dz.sum() if forgot_x else (dz * x).sum(), dz.sum()])
+
+
+            print("True False")
+        explanation: |
+          `relative_error` is one line and each part of it earns its place. The absolute values stop a positive error in one entry hiding behind a negative one in another. The largest difference, not the total or the mean, means one bad entry among a million cannot be averaged away. The denominator sets the scale, and the guard keeps it from being zero.
+
+          The first wrong version compares absolutely. It rejects the correct gradient of the large function, whose honest numerical error is a few thousandths out of millions, and passes the wrong gradient of the small one, which is out by half and still within a millionth. The third compares the sums of the two gradients, so any errors that cancel go unseen, such as swapping two entries.
+
+          The program checks this lesson's neuron at a random-looking point. The correct gradient passes and the one that forgot $x$ fails. The 150 steps of training in the starter never managed to say as much.
+    - question:
+        id: fix-test-point
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `passes(grad_fn)` is a test for functions that claim to return the gradient of $\sum \tanh(v_i)$ at an array `v`. It should return `True` for a correct one and `False` for a wrong one. It returns `True` for all four candidates in the program, and only the first is correct. The checker's arithmetic is sound. Fix `passes`.
+        starter: |
+          import numpy as np
+
+
+          def numeric_grad(f, x, h=1e-6):
+              grad = np.zeros(x.shape)
+              flat_x = x.reshape(-1)
+              flat_grad = grad.reshape(-1)
+              for i in range(x.size):
+                  old = flat_x[i]
+                  flat_x[i] = old + h
+                  up = f(x)
+                  flat_x[i] = old - h
+                  down = f(x)
+                  flat_x[i] = old
+                  flat_grad[i] = (up - down) / (2 * h)
+              return grad
+
+
+          def relative_error(a, n):
+              return float(np.abs(a - n).max() / (np.abs(a).max() + np.abs(n).max() + 1e-12))
+
+
+          def passes(grad_fn):
+              v = np.zeros(5)
+              f = lambda u: float(np.tanh(u).sum())
+              return relative_error(grad_fn(v), numeric_grad(f, v)) < 1e-6
+
+
+          candidates = [
+              lambda v: 1 - np.tanh(v) ** 2,
+              lambda v: 1 - np.tanh(v),
+              lambda v: 1 - v ** 2,
+              lambda v: np.ones(v.shape),
+          ]
+          print([passes(c) for c in candidates])
+        solution: |
+          import numpy as np
+
+
+          def numeric_grad(f, x, h=1e-6):
+              grad = np.zeros(x.shape)
+              flat_x = x.reshape(-1)
+              flat_grad = grad.reshape(-1)
+              for i in range(x.size):
+                  old = flat_x[i]
+                  flat_x[i] = old + h
+                  up = f(x)
+                  flat_x[i] = old - h
+                  down = f(x)
+                  flat_x[i] = old
+                  flat_grad[i] = (up - down) / (2 * h)
+              return grad
+
+
+          def relative_error(a, n):
+              return float(np.abs(a - n).max() / (np.abs(a).max() + np.abs(n).max() + 1e-12))
+
+
+          def passes(grad_fn):
+              v = np.random.default_rng(1).normal(size=5)
+              f = lambda u: float(np.tanh(u).sum())
+              return relative_error(grad_fn(v), numeric_grad(f, v)) < 1e-6
+
+
+          candidates = [
+              lambda v: 1 - np.tanh(v) ** 2,
+              lambda v: 1 - np.tanh(v),
+              lambda v: 1 - v ** 2,
+              lambda v: np.ones(v.shape),
+          ]
+          print([passes(c) for c in candidates])
+        tests: |
+          import numpy as _np
+          assert passes(lambda v: 1 - _np.tanh(v) ** 2), "The correct gradient, 1 minus tanh squared, should pass"
+          assert not passes(lambda v: 1 - _np.tanh(v)), "1 minus tanh is wrong and should fail"
+          assert not passes(lambda v: 1 - v ** 2), "1 minus the input squared is wrong and should fail"
+          assert not passes(lambda v: _np.ones(v.shape)), "A gradient of all ones is wrong and should fail"
+          assert not passes(lambda v: (1 - _np.tanh(v) ** 2) * 1.001), "A gradient a tenth of a per cent too large should fail"
+          assert not passes(lambda v: _np.cos(v)), "The cosine agrees with the right answer only at zero and should fail"
+          assert output.strip() == "[True, False, False, False]", "The program should print [True, False, False, False]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def numeric_grad(f, x, h=1e-6):
+                grad = np.zeros(x.shape)
+                flat_x = x.reshape(-1)
+                flat_grad = grad.reshape(-1)
+                for i in range(x.size):
+                    old = flat_x[i]
+                    flat_x[i] = old + h
+                    up = f(x)
+                    flat_x[i] = old - h
+                    down = f(x)
+                    flat_x[i] = old
+                    flat_grad[i] = (up - down) / (2 * h)
+                return grad
+
+
+            def relative_error(a, n):
+                return float(np.abs(a - n).max() / (np.abs(a).max() + np.abs(n).max() + 1e-12))
+
+
+            def passes(grad_fn):
+                v = np.zeros(5)
+                f = lambda u: float(np.tanh(u).sum())
+                return relative_error(grad_fn(v), numeric_grad(f, v)) < 1e-6
+
+
+            print("[True, False, False, False]")
+          - |
+            import numpy as np
+
+
+            def numeric_grad(f, x, h=1e-6):
+                grad = np.zeros(x.shape)
+                flat_x = x.reshape(-1)
+                flat_grad = grad.reshape(-1)
+                for i in range(x.size):
+                    old = flat_x[i]
+                    flat_x[i] = old + h
+                    up = f(x)
+                    flat_x[i] = old - h
+                    down = f(x)
+                    flat_x[i] = old
+                    flat_grad[i] = (up - down) / (2 * h)
+                return grad
+
+
+            def relative_error(a, n):
+                return float(np.abs(a - n).max() / (np.abs(a).max() + np.abs(n).max() + 1e-12))
+
+
+            def passes(grad_fn):
+                v = np.zeros(5)
+                f = lambda u: float(np.tanh(u).sum())
+                return relative_error(grad_fn(v), numeric_grad(f, v)) < 1e-12
+
+
+            print("[True, False, False, False]")
+          - |
+            import numpy as np
+
+
+            def numeric_grad(f, x, h=1e-6):
+                grad = np.zeros(x.shape)
+                flat_x = x.reshape(-1)
+                flat_grad = grad.reshape(-1)
+                for i in range(x.size):
+                    old = flat_x[i]
+                    flat_x[i] = old + h
+                    up = f(x)
+                    flat_x[i] = old - h
+                    down = f(x)
+                    flat_x[i] = old
+                    flat_grad[i] = (up - down) / (2 * h)
+                return grad
+
+
+            def relative_error(a, n):
+                return float(np.abs(a - n).max() / (np.abs(a).max() + np.abs(n).max() + 1e-12))
+
+
+            def passes(grad_fn):
+                v = np.random.default_rng(1).normal(size=5)
+                f = lambda u: float(np.tanh(u).sum())
+                return relative_error(grad_fn(v), numeric_grad(f, v)) < 0.5
+
+
+            print("[True, False, False, False]")
+          - |
+            import numpy as np
+
+
+            def numeric_grad(f, x, h=1e-6):
+                grad = np.zeros(x.shape)
+                flat_x = x.reshape(-1)
+                flat_grad = grad.reshape(-1)
+                for i in range(x.size):
+                    old = flat_x[i]
+                    flat_x[i] = old + h
+                    up = f(x)
+                    flat_x[i] = old - h
+                    down = f(x)
+                    flat_x[i] = old
+                    flat_grad[i] = (up - down) / (2 * h)
+                return grad
+
+
+            def relative_error(a, n):
+                return float(np.abs(a - n).max() / (np.abs(a).max() + np.abs(n).max() + 1e-12))
+
+
+            def passes(grad_fn):
+                v = np.random.default_rng(1).normal(size=5) * 0.0
+                f = lambda u: float(np.tanh(u).sum())
+                return relative_error(grad_fn(v), numeric_grad(f, v)) < 1e-6
+
+
+            print("[True, False, False, False]")
+        explanation: |
+          The test was made at $v = 0$, the one point where all four candidates agree: $\tanh 0 = 0$, so $1 - \tanh^2$, $1 - \tanh$, $1 - v^2$ and the constant 1 are all exactly 1 there. The arithmetic of the check was faultless and the check was worthless, because it asked its question where every answer is the same.
+
+          At five random points the candidates separate at once. Tightening the tolerance at zero changes nothing, since the wrong formulas are not approximately right there but exactly right. Loosening it to a half at random points lets the near misses through.
+
+          This is the bug in the second lesson of this cluster seen from the other side. There a `tanh` with the wrong local derivative printed the correct gradient for the neuron, because the lesson's example happened to have a weighted input of 0. **Zeros, ones, equal operands, square shapes and symmetric matrices are the inputs people reach for when writing a test, and they are the inputs on which wrong code is most often right.**
+    - question:
+        id: work-weights
+        type: choice
+        system: s2
+        prompt: |
+          To check an operation's pull, a scalar is made from its result $C$ by a weighted sum $\sum R_{ij} C_{ij}$ with random weights $R$, in place of the plain sum $\sum C_{ij}$. Why?
+        options:
+          - 'Because the plain sum has no gradient.'
+          - 'With the plain sum, the gradient of $C$ is all ones, so the pull is only ever tested on that one input. A pull that is wrong for general gradients can still be right for all ones. With random weights the gradient of $C$ is $R$, a generic array, and a pull that passes is right in general.'
+          - 'Because random numbers make the test faster.'
+          - 'Because the weights make the function non-linear.'
+        answer: 1
+        explanation: |
+          A pull is a linear map from gradients of the result to shares for the operand. Testing it on a single input, all ones, checks one direction out of many. A pull that summed where it should not, or that ignored its argument and used ones, or that mixed up rows in a way that ones cannot reveal, would pass. A random $R$ has no special structure for a bug to hide behind. This is the same principle as testing at a random point, applied to the gradient flowing in as well as to the values.
+    - question:
+        id: work-kink
+        type: choice
+        system: s2
+        prompt: |
+          An engine's `relu`, which computes $\max(z, 0)$ entry by entry, is checked on 1,000 random inputs. The relative error is about $10^{-10}$ on 999 of them and 0.3 on one. The pull is `g * (z > 0)`. What is the likeliest explanation?
+        options:
+          - 'The pull is wrong, and 999 passes were luck.'
+          - 'In the one failing case some entry of $z$ lay within $h$ of zero. The two nudged points fell on opposite sides of the corner, so the measured slope there was neither 0 nor 1. The pull is right and the measurement is not valid at that point. Looking at the entry with the largest error, and re-running with a smaller $h$ or another random input, would confirm it.'
+          - 'Floating-point numbers cannot represent the slope of relu.'
+          - 'The tolerance should be raised to 0.5.'
+        answer: 1
+        explanation: |
+          At a corner the function has no derivative, the central difference returns something between the two one-sided slopes, and the engine has had to pick one convention, here 0. Neither is wrong, and they disagree. The signs to look for are that the failures are rare, that they come and go with the random inputs, and that the entry at fault has an input of tiny size. A real bug fails every time. Raising the tolerance to make the report go away would also blind the test to real bugs, which is the one thing a test must not do.
+    - question:
+        id: work-directional
+        type: numeric
+        system: s2
+        prompt: |
+          $f(x, y) = x^2 y$. Someone's code claims that the gradient at $(1, 2)$ is $(4, 2)$. Check it along the direction $\mathbf{v} = (0.6, -0.8)$ using exact values in place of nudges: the true slope of $f$ along $\mathbf{v}$ at that point is $\nabla f \cdot \mathbf{v}$ with the true gradient. What slope does the **claimed** gradient predict along $\mathbf{v}$?
+        answer: "0.8"
+        tolerance: "0.001"
+        explanation: |
+          The claimed gradient predicts $4 \times 0.6 + 2 \times (-0.8) = 2.4 - 1.6 = 0.8$. The true gradient is $(2xy, x^2) = (4, 1)$, and the true slope along $\mathbf{v}$ is $2.4 - 0.8 = 1.6$, which is what two runs of $f$ would measure. The prediction is off by a factor of 2, so the claim is wrong, and one direction was enough to show it, though it does not say which entry is at fault. Had $\mathbf{v}$ been $(1, 0)$, both would have said 4 and the wrong second entry would have gone unseen. That is why the direction is random, and why a careful test uses a few.
+    - question:
+        id: work-cost
+        type: choice
+        system: s2
+        prompt: |
+          A model has ten million weights and one evaluation of its loss takes a second. Why is a full gradient check not run on it, and what is done instead?
+        options:
+          - 'It is run before every training step, since correctness matters most.'
+          - 'A full check needs two evaluations for every weight: twenty million seconds, most of a year. So the engine is checked where checking is cheap. Each operation is tested by itself on small random arrays, small versions of the model are checked in full, and on the real model a few random directions, or a random sample of individual weights, are compared.'
+          - 'Large models do not need checking, because errors average out.'
+          - 'The check is run in 32 bits to save time.'
+        answer: 1
+        explanation: |
+          The cost of numerical differentiation that made it useless for training makes it expensive for testing too, so it is spent where it buys the most. An engine's correctness lives in its operations, and an operation's pull is the same code whether the array has six entries or six million, so testing each on tiny inputs tests the code that the big model will run. A directional check costs two evaluations whatever the size. And a model's own composite logic, such as weights shared between layers, can be exercised on a version of it with a handful of units.
+  connections:
+    - text: |
+        The loss fell from 1.59 to 0.51 and sat there, and the gradient that produced that reassuring curve had forgotten a factor of $x$. **A falling loss is not evidence that a gradient is right.** Almost anything roughly downhill makes a loss fall.
+
+        The evidence is a comparison with **measured slopes**. Nudge each input by $h$ each way and take the **central difference**, accurate to order $h^2$. Choose $h$ near $10^{-6}$ in 64 bits: larger and the curve's bend intrudes, smaller and rounding does. Compare by **relative error**: below about $10^{-7}$ is agreement, above $10^{-3}$ is a bug, and real bugs are usually near 1.
+
+        A check proves something only at the point where it is made. So make it at **random** points, with shapes that are all different, with **random weights** on the output so that the pull meets a generic gradient, and away from kinks. For a large model, check a few random directions.
+
+        With this, the engine can be trusted, and extended without fear: any new operation is a forward line, a pull, and a check. What it still lacks is convenience. A model with a dozen weight arrays needs them created, gathered, cleared before each backward pass and updated after it, and so far all of that has been done by hand. Organising it is the next lesson: [[e6.modules-parameters-and-optimisers]].
