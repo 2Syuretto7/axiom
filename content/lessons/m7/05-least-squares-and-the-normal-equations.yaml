@@ -1,0 +1,698 @@
+concept: m7.least-squares-and-the-normal-equations
+minutes: 90
+claim: You can recognise a system with more equations than unknowns as one that usually has no solution, replace it by the problem of making the sum of squared misses as small as possible, derive the normal equations for the minimiser both from the right angle of projection and from setting the gradient to zero, say when the minimiser is unique, build the design matrix for a model that is linear in its coefficients, and solve the problem in code by the normal equations and by a library routine.
+recalls: [m7.projection-onto-a-subspace]
+uses: [m7.gram-schmidt-and-qr, m7.orthogonal-subspaces, m5.elimination-and-linear-systems, m5.identity-and-inverse, m5.transpose, m5.rank, m5.column-space-and-null-space, m4.linear-independence, m4.norms-and-distance, m12.gradient, m12.hessian-and-symmetry-of-mixed-partials, e6.modules-parameters-and-optimisers, e5.linear-algebra-routines, e5.indexing-and-slicing, e5.arrays-dtype-and-shape, e5.axis-operations-and-reductions, e0.functions, e0.loops]
+leads: [m7.pseudo-inverse, m7.conditioning, l2.linear-regression-in-closed-form-and-as-geometry, l2.ridge-and-lasso, l2.basis-and-polynomial-features, m8.positive-definite-matrices-and-cholesky]
+starter: |
+  # Scratch space. Four points, and a line has two unknowns: intercept and slope.
+  # Any two of the four equations can be solved exactly. Try every pair.
+  import numpy as np
+
+  X = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+  y = np.array([1.0, 3.0, 4.0, 6.0])
+
+  for i in range(4):
+      for j in range(i + 1, 4):
+          w = np.linalg.solve(np.array([X[i], X[j]]), np.array([y[i], y[j]]))
+          print(i, j, [round(float(v), 4) for v in w])
+parts:
+  recall:
+    - text: |
+        [[m7.projection-onto-a-subspace]] found the nearest point of a column space and wrote it as a matrix. Today turns the same fact to face the other way: from a vector and a subspace, to a system of equations that has no solution and needs one anyway. Three quick pulls first.
+  puzzle:
+    - text: |
+        A line $y = c + mx$ through the four points $(0, 1)$, $(1, 3)$, $(2, 4)$, $(3, 6)$ would have to satisfy four equations in two unknowns:
+
+        $$c = 1, \qquad c + m = 3, \qquad c + 2m = 4, \qquad c + 3m = 6.$$
+
+        Two equations are enough to fix two unknowns. The starter takes the equations two at a time and solves each pair exactly.
+
+        ```
+        0 1 [1.0, 2.0]
+        0 2 [1.0, 1.5]
+        0 3 [1.0, 1.6667]
+        1 2 [2.0, 1.0]
+        1 3 [1.5, 1.5]
+        2 3 [0.0, 2.0]
+        ```
+
+        Six pairs, six different lines. The slopes run from 1 to 2 and the intercepts from 0 to 2. Each line passes exactly through its own two points and misses the other two, and no pair has a better claim than another. Elimination on all four equations at once reports what it must: the system is inconsistent.
+
+        And yet a single answer is wanted. The four measurements are all the evidence there is, and each is a little wrong. Throwing two away to make the algebra work discards half the evidence and trusts the other half completely.
+
+        **If no line satisfies all four equations, what should "the solution" mean? And is the line that gradient descent crept towards, intercept 1.1 and slope 1.6, one of a kind, or just one more candidate?**
+  intuition:
+    - text: |
+        Write the four equations as $A\mathbf{x} = \mathbf{b}$, with $\mathbf{x} = (c, m)$, the column of ones and the column of $x$ values in $A$, and the heights in $\mathbf{b}$. As $\mathbf{x}$ varies, $A\mathbf{x}$ sweeps out the column space of $A$, a plane in $\mathbb{R}^4$. The system has a solution exactly when $\mathbf{b}$ lies in that plane. Four measured numbers have no reason to lie in a particular plane, and these do not.
+
+        So change the question. Instead of demanding $A\mathbf{x} = \mathbf{b}$, ask for the $\mathbf{x}$ that makes $A\mathbf{x}$ **as close to $\mathbf{b}$ as possible**:
+
+        $$\text{minimise} \quad \lVert A\mathbf{x} - \mathbf{b}\rVert^2 = \sum_i (\text{row } i \text{ of } A\mathbf{x} - b_i)^2.$$
+
+        The quantity is the sum of the squares of the misses, one for each equation. This is the **least squares** problem. Every equation gets a say, none is satisfied exactly, and the total disagreement is as small as it can be.
+
+        You have already solved it. The point of the column space nearest to $\mathbf{b}$ is the projection $\mathbf{p}$, and the $\hat{\mathbf{x}}$ with $A\hat{\mathbf{x}} = \mathbf{p}$ solves $A^\top A\,\hat{\mathbf{x}} = A^\top\mathbf{b}$. Nothing new has to be computed. What is new is the reading: **least squares replaces an unsolvable right-hand side by the nearest solvable one, and solves that.**
+
+        The figure starts at the line through the first and third points, one of the puzzle's six.
+    - figure: line-fit
+      props: { slope: 1.5, intercept: 1 }
+    - text: |
+        That line misses the second and fourth points by 0.5 each, for a sum of squares of 0.5. Its misses add up to 1 and, weighted by $x$, to 2. All of its error falls on two points and none on the other two. Raise the intercept by one tenth and the slope by one tenth: now every point is missed, by at most 0.3, the sum of squares is 0.2, and both sums are zero. The best line passes through none of the points. It spreads the disagreement so that the misses cancel, both plainly and when weighted by $x$.
+  derivation:
+    - text: |
+        **From geometry.** The minimiser satisfies $A^\top(\mathbf{b} - A\hat{\mathbf{x}}) = \mathbf{0}$, the leftover orthogonal to every column. Rearranged:
+
+        $$A^\top A\,\hat{\mathbf{x}} = A^\top\mathbf{b}.$$
+
+        These are the **normal equations**. "Normal" is an old word for perpendicular. They are what you get by multiplying both sides of the unsolvable $A\mathbf{x} = \mathbf{b}$ by $A^\top$, and that is the usual way to remember them. Multiplying by $A^\top$ is not an innocent step: it turns $m$ equations that cannot all hold into $n$ equations that can.
+
+        **From calculus.** Forget the geometry and treat $E(\mathbf{x}) = \lVert A\mathbf{x} - \mathbf{b}\rVert^2$ as a function of several variables to be minimised. The autograd cluster computed its gradient many times:
+
+        $$\nabla E(\mathbf{x}) = 2A^\top(A\mathbf{x} - \mathbf{b}).$$
+
+        At a minimum the gradient is zero, and $2A^\top(A\mathbf{x} - \mathbf{b}) = \mathbf{0}$ is the normal equations again. **The right angle and the zero gradient are one condition.** Gradient descent moves $\mathbf{x}$ by a multiple of $-A^\top(A\mathbf{x} - \mathbf{b})$ at each step. It stops moving exactly when the leftover has no component along any column, which is when the leftover is orthogonal to the column space.
+
+        **Is it really the minimum?** For any other $\mathbf{x} = \hat{\mathbf{x}} + \mathbf{d}$, the miss is $A\mathbf{x} - \mathbf{b} = (A\hat{\mathbf{x}} - \mathbf{b}) + A\mathbf{d}$. The first part is orthogonal to the column space and the second lies in it, so by Pythagoras
+
+        $$E(\hat{\mathbf{x}} + \mathbf{d}) = E(\hat{\mathbf{x}}) + \lVert A\mathbf{d}\rVert^2.$$
+
+        This is exact, with no higher-order terms. The loss is a bowl whose bottom is at $\hat{\mathbf{x}}$, and moving away by $\mathbf{d}$ costs $\lVert A\mathbf{d}\rVert^2$. There are no other valleys for descent to be trapped in. The minimiser is unique exactly when $A\mathbf{d} = \mathbf{0}$ forces $\mathbf{d} = \mathbf{0}$, that is, when the columns of $A$ are independent.
+
+        **The line, by hand.** For the four points,
+
+        $$A^\top A = \begin{pmatrix} 4 & 6 \\ 6 & 14 \end{pmatrix}, \qquad A^\top\mathbf{b} = \begin{pmatrix} 14 \\ 29 \end{pmatrix}.$$
+
+        The entries are sums over the data: the number of points, the sum of the $x$ values, the sum of their squares, the sum of the heights, and the sum of the products $x_i y_i$. Solve $4c + 6m = 14$ and $6c + 14m = 29$. One and a half times the first is $6c + 9m = 21$. Subtracting, $5m = 8$, so $m = 1.6$ and $c = (14 - 9.6)/4 = 1.1$.
+
+        The least value of the sum of squares does not need the misses. By Pythagoras it is $\lVert\mathbf{b}\rVert^2 - \lVert\mathbf{p}\rVert^2 = 62 - 61.8 = 0.2$.
+
+        Gradient descent, after 40 steps from zero with learning rate 0.02, stood at intercept 1.0591 and slope 1.6192, with a loss of 0.2024. It was heading for this point all along.
+    - question:
+        id: derivation-two-equations
+        type: numeric
+        system: s2
+        prompt: |
+          Two instruments measure the same quantity $x$. The first is known to read double, and shows 2. The second reads true, and shows 3. So $2x = 2$ and $x = 3$, which cannot both hold. What is the least squares solution? Give it as a decimal.
+        answer: "1.4"
+        explanation: |
+          $A$ is the single column $(2, 1)$ and $\mathbf{b} = (2, 3)$. The normal equation is $A^\top A\,x = A^\top\mathbf{b}$, which is $5x = 4 + 3 = 7$, so $x = 1.4$. It is not the average of the two separate answers, 1 and 3. The first equation carries more weight because its coefficient is larger: a change in $x$ moves its miss twice as fast. The misses are $2.8 - 2 = 0.8$ and $1.4 - 3 = -1.6$, and $(0.8, -1.6)$ is orthogonal to the column $(2, 1)$.
+    - text: |
+        **Design matrices.** Nothing above used the fact that the model was a line. What was used is that the prediction is $A\mathbf{x}$: a **linear combination of fixed columns**, with the unknowns as coefficients. The columns themselves may be anything computed from the data.
+
+        To fit a parabola $y = c_0 + c_1 x + c_2 x^2$, give $A$ three columns: ones, the $x$ values, and their squares. To fit $y = c_0 + c_1\sin x$, use ones and $\sin x_i$. The matrix whose row $i$ holds the features of data point $i$ is the **design matrix**. "Linear" in "linear least squares" refers to the coefficients. The curve fitted can be as bent as the columns allow.
+
+        A model such as $y = c\,e^{kx}$ is different in kind: $k$ is not a coefficient of a fixed column. Its loss is not a bowl, the normal equations do not apply, and it is back to descent.
+
+        **Fitting a constant.** With one column of ones, the normal equation is $m\,c = \sum_i b_i$. The least squares fit of a constant to a list of numbers is their **mean**. For the four heights it is 3.5, with a sum of squares of 13. Bringing in the slope lowers that to 0.2.
+
+        **Adding columns.** A larger design matrix has a larger column space, which contains the old one. The nearest point of a larger subspace is at least as near. So adding a feature never increases the least sum of squares **on the data used for fitting**. With as many independent columns as data points, the column space is everything and the misses are all zero. That is not a triumph. A model that can reproduce any measurements whatever has learned nothing from the ones it was given.
+
+        **In code.** `np.linalg.solve(A.T @ A, A.T @ b)` solves the normal equations. `np.linalg.lstsq(A, b, rcond=None)` solves the least squares problem by a more careful route and returns four things: the minimiser, the least sum of squares, the rank of $A$, and a fourth array that the next cluster explains.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the steps of fitting a model that is linear in its coefficients to data by least squares.
+        steps:
+          - 'Choose the features: the functions of the input whose combination will be the prediction.'
+          - 'Build the design matrix $A$, one row for each data point and one column for each feature, and the vector $\mathbf{b}$ of measured values.'
+          - 'Form $A^\top A$ and $A^\top\mathbf{b}$.'
+          - 'Solve the normal equations for the coefficients.'
+          - 'Compute the misses $A\hat{\mathbf{x}} - \mathbf{b}$ and check that $A^\top$ times them is zero.'
+        explanation: The choice of features is the modelling decision and everything after it is mechanical. The final check is the same right angle as always, and it is also the statement that the gradient of the loss is zero.
+  formal:
+    - text: |
+        Let $A \in \mathbb{R}^{m \times n}$ and $\mathbf{b} \in \mathbb{R}^m$.
+
+        **Least squares problem.** Find $\hat{\mathbf{x}} \in \mathbb{R}^n$ minimising $E(\mathbf{x}) = \lVert A\mathbf{x} - \mathbf{b}\rVert^2$. The vector $\mathbf{r} = \mathbf{b} - A\hat{\mathbf{x}}$ is the **residual**.
+
+        **Normal equations.** $\hat{\mathbf{x}}$ is a minimiser if and only if $A^\top A\,\hat{\mathbf{x}} = A^\top\mathbf{b}$, equivalently $A^\top\mathbf{r} = \mathbf{0}$, equivalently $\nabla E(\hat{\mathbf{x}}) = \mathbf{0}$. The normal equations always have at least one solution.
+
+        **Uniqueness.** For any minimiser $\hat{\mathbf{x}}$ and any $\mathbf{d}$, $E(\hat{\mathbf{x}} + \mathbf{d}) = E(\hat{\mathbf{x}}) + \lVert A\mathbf{d}\rVert^2$. The minimiser is unique if and only if the columns of $A$ are linearly independent, and then $\hat{\mathbf{x}} = (A^\top A)^{-1}A^\top\mathbf{b}$. Otherwise the minimisers form the set $\hat{\mathbf{x}} + N(A)$. In every case the fitted vector $A\hat{\mathbf{x}}$ is the same: the projection of $\mathbf{b}$ onto the column space.
+
+        **Least value.** $E(\hat{\mathbf{x}}) = \lVert\mathbf{b}\rVert^2 - \lVert A\hat{\mathbf{x}}\rVert^2$.
+
+        **With QR.** If $A = QR$ with independent columns, the normal equations reduce to $R\,\hat{\mathbf{x}} = Q^\top\mathbf{b}$.
+
+        **Hessian.** $\nabla^2 E = 2A^\top A$, constant, with $\mathbf{d}^\top(2A^\top A)\mathbf{d} = 2\lVert A\mathbf{d}\rVert^2 \ge 0$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-solvable
+        type: choice
+        system: s1
+        prompt: |
+          $A\mathbf{x} = \mathbf{b}$ has a solution exactly when
+        options: ['$A$ is tall', '$\mathbf{b}$ is in the column space of $A$', '$\mathbf{b}$ is in the null space of $A$', '$A$ has more rows than columns']
+        answer: 1
+        explanation: $A\mathbf{x}$ is always a combination of the columns.
+    - question:
+        id: drill-minimise
+        type: choice
+        system: s1
+        prompt: |
+          What does least squares minimise?
+        options: ['The largest miss', 'The sum of the squares of the misses', 'The sum of the misses', 'The number of equations missed']
+        answer: 1
+        explanation: $\lVert A\mathbf{x} - \mathbf{b}\rVert^2$.
+    - question:
+        id: drill-normal
+        type: choice
+        system: s1
+        prompt: |
+          The normal equations are
+        options: ['$A\mathbf{x} = \mathbf{b}$', '$A^\top A\,\mathbf{x} = A^\top\mathbf{b}$', '$AA^\top\mathbf{x} = \mathbf{b}$', '$A^\top\mathbf{x} = \mathbf{b}$']
+        answer: 1
+        explanation: Multiply both sides of the unsolvable system by $A^\top$.
+    - question:
+        id: drill-gradient
+        type: choice
+        system: s1
+        prompt: |
+          The gradient of $\lVert A\mathbf{x} - \mathbf{b}\rVert^2$ with respect to $\mathbf{x}$ is
+        options: ['$2(A\mathbf{x} - \mathbf{b})$', '$2A^\top(A\mathbf{x} - \mathbf{b})$', '$A^\top\mathbf{b}$', '$2A(A\mathbf{x} - \mathbf{b})$']
+        answer: 1
+        explanation: Setting it to zero gives the normal equations.
+    - question:
+        id: drill-normal-word
+        type: choice
+        system: s1
+        prompt: |
+          What does "normal" mean in "normal equations"?
+        options: ['Usual', 'Perpendicular', 'Of length 1', 'Bell-shaped']
+        answer: 1
+        explanation: The residual is perpendicular to the column space.
+    - question:
+        id: drill-unique
+        type: choice
+        system: s1
+        prompt: |
+          The least squares solution is unique exactly when
+        options: ['$\mathbf{b}$ is in the column space', 'the columns of $A$ are independent', '$A$ is square', 'the residual is zero']
+        answer: 1
+        explanation: Then $A\mathbf{d} = \mathbf{0}$ only for $\mathbf{d} = \mathbf{0}$.
+    - question:
+        id: drill-shape
+        type: choice
+        system: s1
+        prompt: |
+          $A$ has 100 rows and 3 columns. What shape is $A^\top A$?
+        options: ['100 by 100', '3 by 3', '100 by 3', '3 by 100']
+        answer: 1
+        explanation: One row and one column for each unknown.
+    - question:
+        id: drill-entry
+        type: numeric
+        system: s1
+        prompt: |
+          A line is fitted to points with $x$ values 0, 1, 2, 3. The design matrix has a column of ones and a column of $x$. What is the top-left entry of $A^\top A$?
+        answer: "4"
+        explanation: The column of ones dotted with itself, the number of points.
+    - question:
+        id: drill-constant
+        type: numeric
+        system: s1
+        prompt: |
+          What single number is the least squares solution of $x = 1$, $x = 2$, $x = 6$?
+        answer: "3"
+        explanation: The mean.
+    - question:
+        id: drill-columns
+        type: numeric
+        system: s1
+        prompt: |
+          How many columns has the design matrix for fitting $y = c_0 + c_1x + c_2x^2$?
+        answer: "3"
+        explanation: Ones, $x$ and $x^2$.
+    - question:
+        id: drill-linear
+        type: choice
+        system: s1
+        prompt: |
+          Which model can be fitted by linear least squares?
+        options: ['$y = c\,e^{kx}$, unknowns $c$ and $k$', '$y = c_0 + c_1\sin x$, unknowns $c_0$ and $c_1$', '$y = \sin(kx)$, unknown $k$', '$y = (x - k)^2$, unknown $k$']
+        answer: 1
+        explanation: It is a combination of fixed columns, ones and $\sin x_i$.
+    - question:
+        id: drill-residual
+        type: choice
+        system: s1
+        prompt: |
+          At the least squares solution, what is $A^\top$ times the residual?
+        options: ['$\mathbf{b}$', 'The zero vector', 'The residual itself', '$A^\top\mathbf{b}$']
+        answer: 1
+        explanation: The residual is orthogonal to every column.
+    - question:
+        id: drill-more-columns
+        type: choice
+        system: s1
+        prompt: |
+          A column is added to a design matrix. On the same data, the least sum of squares
+        options: ['may go up or down', 'stays the same or goes down', 'always goes up', 'always halves']
+        answer: 1
+        explanation: The column space has grown, and still contains the old nearest point.
+    - question:
+        id: predict-descent
+        type: predict
+        system: s1
+        prompt: Forty steps of gradient descent on the line fit, then the normal equations. What does this show?
+        code: |
+          import numpy as np
+
+          X = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          w = np.zeros(2)
+          for step in range(40):
+              w = w - 0.02 * 2 * X.T @ (X @ w - y)
+          print([round(float(v), 4) for v in w], round(float(((X @ w - y) ** 2).sum()), 4))
+          w = np.linalg.solve(X.T @ X, X.T @ y)
+          print([round(float(v), 4) for v in w], round(float(((X @ w - y) ** 2).sum()), 4))
+          print([round(abs(float(v)), 4) for v in 2 * X.T @ (X @ w - y)])
+        output: |
+          [1.0591, 1.6192] 0.2024
+          [1.1, 1.6] 0.2
+          [0.0, 0.0]
+        explanation: Descent is close after forty steps and still moving. Solving the normal equations lands on the bottom at once, where the gradient, printed last, is zero. The update that descent applies is a multiple of the very quantity the normal equations set to zero.
+    - question:
+        id: predict-lstsq
+        type: predict
+        system: s1
+        prompt: The library routine on the same problem. What does this show?
+        code: |
+          import numpy as np
+
+          X = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          w, sse, rank, _ = np.linalg.lstsq(X, y, rcond=None)
+          print([round(float(v), 4) for v in w], [round(float(v), 4) for v in sse], int(rank))
+          print(round(float(y @ y - (X @ w) @ (X @ w)), 4))
+        output: |
+          [1.1, 1.6] [0.2] 2
+          0.2
+        explanation: The routine returns the minimiser, the least sum of squares in an array of its own, and the rank, 2, which says the two columns are independent and the answer is unique. The last line gets the same 0.2 from Pythagoras, as the squared length of the heights minus that of the fitted values.
+  work:
+    - text: Slower now. The mathematics is two lines. The care goes into building the matrix that the two lines are applied to.
+    - question:
+        id: write-least-squares
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `least_squares(A, b)`. `A` has independent columns. Return the pair `(x_hat, sse)`: the solution of the normal equations, and the least sum of squares $\lVert A\hat{\mathbf{x}} - \mathbf{b}\rVert^2$ as a float. Use `np.linalg.solve`, not `np.linalg.lstsq`.
+        starter: |
+          import numpy as np
+
+
+          def least_squares(A, b):
+              # Solve the normal equations, then measure what is left.
+              return np.zeros(A.shape[1]), 0.0
+
+
+          X = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          w, sse = least_squares(X, y)
+          print([round(float(v), 4) for v in w], round(sse, 4))
+        solution: |
+          import numpy as np
+
+
+          def least_squares(A, b):
+              x_hat = np.linalg.solve(A.T @ A, A.T @ b)
+              r = A @ x_hat - b
+              return x_hat, float(r @ r)
+
+
+          X = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          w, sse = least_squares(X, y)
+          print([round(float(v), 4) for v in w], round(sse, 4))
+        tests: |
+          import numpy as _np
+          _X = _np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+          _y = _np.array([1.0, 3.0, 4.0, 6.0])
+          _r = least_squares(_X, _y)
+          assert isinstance(_r, tuple) and len(_r) == 2, "least_squares should return the pair (x_hat, sse)"
+          _w, _s = _r
+          assert _np.shape(_w) == (2,), "x_hat has one entry for each column of A"
+          assert _np.allclose(_w, [1.1, 1.6]), "For the four points the solution is intercept 1.1 and slope 1.6: solve with A.T @ A on the left and A.T @ b on the right"
+          assert isinstance(_s, float), "The sum of squares should be returned as a float"
+          assert abs(_s - 0.2) < 1e-9, "For the four points the least sum of squares is 0.2: the sum of the squares of A @ x_hat - b"
+          _w, _s = least_squares(_np.array([[2.0], [1.0]]), _np.array([2.0, 3.0]))
+          assert _np.allclose(_w, [1.4]) and abs(_s - 3.2) < 1e-9, "For 2x = 2 and x = 3 the solution is 1.4 and the sum of squares is 3.2"
+          _w, _s = least_squares(_np.array([[1.0], [1.0], [1.0]]), _np.array([1.0, 2.0, 6.0]))
+          assert _np.allclose(_w, [3.0]) and abs(_s - 14.0) < 1e-9, "Fitting a constant to 1, 2, 6 gives their mean, 3, with a sum of squares of 14"
+          _A = _np.random.default_rng(0).normal(size=(8, 3))
+          _b = _np.random.default_rng(1).normal(size=8)
+          _w, _s = least_squares(_A, _b)
+          assert _np.allclose(_A.T @ (_A @ _w - _b), 0), "For a random 8 by 3 problem the residual should be orthogonal to the columns"
+          assert abs(_s - float(_b @ _b - (_A @ _w) @ (_A @ _w))) < 1e-9, "The sum of squares should equal the squared length of b minus that of the fitted vector"
+          _w, _s = least_squares(_A, _A @ _np.array([1.0, -2.0, 0.5]))
+          assert _np.allclose(_w, [1.0, -2.0, 0.5]) and abs(_s) < 1e-12, "When b is in the column space the solution is exact and the sum of squares is 0"
+          assert output.strip() == "[1.1, 1.6] 0.2", "The program should print [1.1, 1.6] 0.2"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def least_squares(A, b):
+                x_hat = np.linalg.solve(A.T @ A, A.T @ b)
+                r = A @ x_hat - b
+                return x_hat, float(r.sum())
+
+
+            print("[1.1, 1.6] 0.2")
+          - |
+            import numpy as np
+
+
+            def least_squares(A, b):
+                x_hat = np.linalg.solve(A.T @ A, A.T @ b)
+                r = A @ x_hat - b
+                return x_hat, float(np.linalg.norm(r))
+
+
+            print("[1.1, 1.6] 0.2")
+          - |
+            import numpy as np
+
+
+            def least_squares(A, b):
+                x_hat = A.T @ b
+                r = A @ x_hat - b
+                return x_hat, float(r @ r)
+
+
+            print("[1.1, 1.6] 0.2")
+          - |
+            import numpy as np
+
+
+            def least_squares(A, b):
+                x_hat = np.linalg.solve(A.T @ A, A.T @ b)
+                return x_hat, float(b @ b)
+
+
+            print("[1.1, 1.6] 0.2")
+        explanation: |
+          The first line is the normal equations. The second and third measure the residual and take its squared length, as a dot product with itself.
+
+          Summing the residual without squaring gives zero whenever there is a column of ones, since the residual is orthogonal to that column. A loss that is always zero is a warning sign. Taking the norm without squaring gives the length, 0.4472 for the line fit, where 0.2 is wanted.
+
+          For this problem the function replaces the whole training loop of the autograd cluster. That loop is still needed for models that are not linear in their weights. Where the model **is** linear, as in the last layer of a network with everything before it held fixed, this is the exact answer that the loop approximates.
+    - question:
+        id: write-polynomial
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `design(x, degree)`, returning the design matrix for a polynomial of the given degree: one row for each entry of the array `x`, and columns $x^0, x^1, \dots, x^{\text{degree}}$ in that order, so the first column is all ones. Then write `fit_polynomial(x, y, degree)`, returning the least squares coefficients, lowest power first.
+
+          `np.stack(columns, axis=1)` turns a list of equally long arrays into the columns of a matrix.
+        starter: |
+          import numpy as np
+
+
+          def design(x, degree):
+              return np.zeros((len(x), degree + 1))
+
+
+          def fit_polynomial(x, y, degree):
+              return np.zeros(degree + 1)
+
+
+          x = np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
+          y = np.array([7.5, 3.5, 1.0, 2.5, 10.5])
+          print(design(x, 2).tolist()[0])
+          print([round(float(v), 4) for v in fit_polynomial(x, y, 2)])
+        solution: |
+          import numpy as np
+
+
+          def design(x, degree):
+              return np.stack([x ** k for k in range(degree + 1)], axis=1)
+
+
+          def fit_polynomial(x, y, degree):
+              A = design(x, degree)
+              return np.linalg.solve(A.T @ A, A.T @ y)
+
+
+          x = np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
+          y = np.array([7.5, 3.5, 1.0, 2.5, 10.5])
+          print(design(x, 2).tolist()[0])
+          print([round(float(v), 4) for v in fit_polynomial(x, y, 2)])
+        tests: |
+          import numpy as _np
+          _x = _np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
+          _y = _np.array([7.5, 3.5, 1.0, 2.5, 10.5])
+          _A = design(_x, 2)
+          assert _np.shape(_A) == (5, 3), "For five points and degree 2 the design matrix is 5 by 3"
+          assert _np.allclose(_A[:, 0], 1.0), "The first column should be all ones, the power 0"
+          assert _np.allclose(_A[:, 1], _x), "The second column should be x itself"
+          assert _np.allclose(_A[:, 2], _x ** 2), "The third column should be the squares of x"
+          assert _np.shape(design(_x, 0)) == (5, 1) and _np.allclose(design(_x, 0), 1.0), "Degree 0 is a single column of ones"
+          assert _np.allclose(design(_np.array([3.0]), 3), [[1.0, 3.0, 9.0, 27.0]]), "For x = 3 and degree 3 the row is 1, 3, 9, 27"
+          _c = fit_polynomial(_x, _y, 2)
+          assert _np.shape(_c) == (3,), "A polynomial of degree 2 has three coefficients"
+          assert _np.allclose(_c, [1.0, 0.5, 2.0]), "For these five points the best parabola is 1 + 0.5 x + 2 x squared, lowest power first"
+          assert _np.allclose(fit_polynomial(_x, _y, 1), [5.0, 0.5]), "For these five points the best line is 5 + 0.5 x"
+          assert _np.allclose(fit_polynomial(_x, _y, 0), [5.0]), "The best constant is the mean of y, 5"
+          _t = _np.array([0.0, 1.0, 2.0, 3.0])
+          assert _np.allclose(fit_polynomial(_t, _np.array([1.0, 3.0, 4.0, 6.0]), 1), [1.1, 1.6]), "For the four points of the line fit the coefficients are 1.1 and 1.6"
+          assert _np.allclose(fit_polynomial(_t, 2 - _t + 3 * _t ** 3, 3), [2.0, -1.0, 0.0, 3.0]), "Data that is exactly a cubic should give back its coefficients"
+          assert output.strip() == "[1.0, -2.0, 4.0]\n[1.0, 0.5, 2.0]", "The program should print [1.0, -2.0, 4.0] and then [1.0, 0.5, 2.0]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def design(x, degree):
+                return np.stack([x ** k for k in range(degree)], axis=1)
+
+
+            def fit_polynomial(x, y, degree):
+                A = design(x, degree)
+                return np.linalg.solve(A.T @ A, A.T @ y)
+
+
+            print("[1.0, -2.0, 4.0]\n[1.0, 0.5, 2.0]")
+          - |
+            import numpy as np
+
+
+            def design(x, degree):
+                return np.stack([x ** k for k in range(1, degree + 1)], axis=1)
+
+
+            def fit_polynomial(x, y, degree):
+                A = design(x, degree)
+                return np.linalg.solve(A.T @ A, A.T @ y)
+
+
+            print("[1.0, -2.0, 4.0]\n[1.0, 0.5, 2.0]")
+          - |
+            import numpy as np
+
+
+            def design(x, degree):
+                return np.stack([x ** k for k in range(degree + 1)], axis=0)
+
+
+            def fit_polynomial(x, y, degree):
+                A = design(x, degree)
+                return np.linalg.solve(A.T @ A, A.T @ y)
+
+
+            print("[1.0, -2.0, 4.0]\n[1.0, 0.5, 2.0]")
+          - |
+            import numpy as np
+
+
+            def design(x, degree):
+                return np.stack([x ** k for k in range(degree, -1, -1)], axis=1)
+
+
+            def fit_polynomial(x, y, degree):
+                A = design(x, degree)
+                return np.linalg.solve(A.T @ A, A.T @ y)
+
+
+            print("[1.0, -2.0, 4.0]\n[1.0, 0.5, 2.0]")
+          - |
+            import numpy as np
+
+
+            def design(x, degree):
+                return np.stack([x ** k for k in range(degree + 1)], axis=1)
+
+
+            def fit_polynomial(x, y, degree):
+                A = design(x, degree)
+                return A.T @ y
+
+
+            print("[1.0, -2.0, 4.0]\n[1.0, 0.5, 2.0]")
+        explanation: |
+          The design matrix is where the model is stated. Each column is one feature evaluated at every data point, and `x ** 0` is the column of ones that gives the polynomial its constant term. After that, the fit is the same two lines as for any other design matrix.
+
+          Stopping the range at `degree` loses the highest power. Starting it at 1 loses the constant. Stacking along axis 0 puts the features in rows. Running the powers downwards is a legitimate convention, and some libraries use it, but then the coefficients come back highest power first and anything that reads them the other way is wrong without an error.
+
+          The five points were made from the parabola $1 + 0.5x + 2x^2$ plus small errors chosen to be orthogonal to all three columns, which is why the fit returns the parabola exactly. The best line through the same points, $5 + 0.5x$, has a sum of squares of 58.5 against 2.5 for the parabola.
+    - question:
+        id: fix-no-intercept
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `fitted_line(x, y)` should return the heights of the least squares line at the given `x` values. For the four points it should return $(1.1, 2.7, 4.3, 5.9)$. It returns $(0, 2.0714, 4.1429, 6.2143)$: a line, and a plausible one, but with a sum of squared misses of 1.93 where 0.2 is possible. Fix it. One line needs to change.
+        starter: |
+          import numpy as np
+
+
+          def fitted_line(x, y):
+              A = np.stack([x], axis=1)
+              w = np.linalg.solve(A.T @ A, A.T @ y)
+              return A @ w
+
+
+          x = np.array([0.0, 1.0, 2.0, 3.0])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          print([round(float(v), 4) for v in fitted_line(x, y)])
+        solution: |
+          import numpy as np
+
+
+          def fitted_line(x, y):
+              A = np.stack([np.ones(len(x)), x], axis=1)
+              w = np.linalg.solve(A.T @ A, A.T @ y)
+              return A @ w
+
+
+          x = np.array([0.0, 1.0, 2.0, 3.0])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          print([round(float(v), 4) for v in fitted_line(x, y)])
+        tests: |
+          import numpy as _np
+          _x = _np.array([0.0, 1.0, 2.0, 3.0])
+          _y = _np.array([1.0, 3.0, 4.0, 6.0])
+          _f = fitted_line(_x, _y)
+          assert _np.shape(_f) == (4,), "There should be one fitted height for each point"
+          assert _np.allclose(_f, [1.1, 2.7, 4.3, 5.9]), "For the four points the fitted heights are 1.1, 2.7, 4.3, 5.9: the line needs an intercept, which is the coefficient of a column of ones"
+          assert abs(float((_y - _f).sum())) < 1e-9, "With an intercept in the model the misses should add up to zero"
+          assert _np.allclose(fitted_line(_x, _np.array([5.0, 5.0, 5.0, 5.0])), 5.0), "Points at a constant height of 5 should be fitted by the horizontal line at 5"
+          assert _np.allclose(fitted_line(_np.array([10.0, 11.0, 12.0]), _np.array([3.0, 5.0, 7.0])), [3.0, 5.0, 7.0]), "Three points on the line y = 2x - 17 should be fitted exactly"
+          assert _np.allclose(fitted_line(_x, 2 * _x), 2 * _x), "Points on a line through the origin should still be fitted exactly"
+          assert output.strip() == "[1.1, 2.7, 4.3, 5.9]", "The program should print [1.1, 2.7, 4.3, 5.9]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def fitted_line(x, y):
+                A = np.stack([x], axis=1)
+                w = np.linalg.solve(A.T @ A, A.T @ y)
+                return A @ w
+
+
+            print("[1.1, 2.7, 4.3, 5.9]")
+          - |
+            import numpy as np
+
+
+            def fitted_line(x, y):
+                A = np.stack([x, x], axis=1)
+                w = np.linalg.solve(A.T @ A + 1e-9 * np.eye(2), A.T @ y)
+                return A @ w
+
+
+            print("[1.1, 2.7, 4.3, 5.9]")
+          - |
+            import numpy as np
+
+
+            def fitted_line(x, y):
+                A = np.stack([np.zeros(len(x)) + y.mean(), x - x.mean()], axis=1)
+                w = np.linalg.solve(A.T @ A + 1e-9 * np.eye(2), A.T @ y)
+                return x * w[1]
+
+
+            print("[1.1, 2.7, 4.3, 5.9]")
+          - |
+            import numpy as np
+
+
+            def fitted_line(x, y):
+                A = np.stack([x], axis=1)
+                w = np.linalg.solve(A.T @ A, A.T @ y)
+                return A @ w + y[0]
+
+
+            print("[1.1, 2.7, 4.3, 5.9]")
+        explanation: |
+          The design matrix had one column, the $x$ values. The model it describes is $y = mx$, a line forced through the origin, and least squares found the best such line, with slope $29/14 = 2.0714$. The code solved correctly the problem it was given. The problem was the wrong one.
+
+          An intercept is not built into least squares. It is the coefficient of a feature that equals 1 for every data point, and that feature has to be put into the matrix like any other. Libraries differ in whether they add it for you, which makes this one of the commonest mistakes in fitting.
+
+          There is a quick test for it. With a column of ones in the model, the residual is orthogonal to that column, so the misses add up to zero. Here they add up to 1.57. Misses that do not sum to zero mean that the fit could be improved by shifting it up or down, and so that the model has no constant term.
+
+          Adding the first height afterwards, as the last wrong version does, puts the line through the first point and is not a least squares fit of anything.
+    - question:
+        id: work-same-condition
+        type: choice
+        system: s2
+        prompt: |
+          The normal equations were derived twice, from orthogonality and from the gradient. Why do the two derivations give the same equations?
+        options:
+          - 'By coincidence, for this loss.'
+          - 'The gradient of the squared distance is $2A^\top(A\mathbf{x} - \mathbf{b})$, whose entries are twice the dot products of the columns with the miss. Entry $j$ says how fast the loss changes when coefficient $j$ changes, which moves $A\mathbf{x}$ along column $j$. The loss stops changing in that direction exactly when the miss has no component along the column.'
+          - 'Because $A^\top A$ is symmetric.'
+          - 'Because gradient descent was used to derive both.'
+        answer: 1
+        explanation: |
+          Moving coefficient $j$ slides the fitted point along column $j$. If the miss leans along that column, sliding one way shortens it, and the derivative is not zero. The derivative vanishes for every $j$ exactly when the miss is orthogonal to every column. Calculus and geometry are describing the same picture: the calculus speaks of the coefficients, and the geometry of the fitted vector. This identification holds for squared distance. Another measure of misfit, such as the sum of absolute misses, has a minimum too, but it is not a projection and has no normal equations.
+    - question:
+        id: work-sse
+        type: numeric
+        system: s2
+        prompt: |
+          A vector $\mathbf{b}$ with $\lVert\mathbf{b}\rVert^2 = 50$ is fitted by least squares, and the fitted vector $A\hat{\mathbf{x}}$ has squared length 41. What is the least sum of squared misses?
+        answer: "9"
+        explanation: |
+          The fitted vector and the residual are orthogonal and add up to $\mathbf{b}$, so $50 = 41 + \lVert\mathbf{r}\rVert^2$ and the sum of squares is 9. The misses themselves were not needed. This holds only at the least squares solution. For any other choice of coefficients the two parts are not orthogonal and the squared lengths do not add.
+    - question:
+        id: work-exact-fit
+        type: choice
+        system: s2
+        prompt: |
+          Five data points are fitted with a polynomial of degree 4, which has five coefficients. The sum of squared misses is 0. What should be concluded?
+        options:
+          - 'The data follows a polynomial of degree 4.'
+          - 'Nothing about the data. With five independent columns the column space is all of $\mathbb{R}^5$, so any five heights whatever are fitted exactly. The zero says that the model had as much freedom as there were measurements.'
+          - 'Least squares has failed.'
+          - 'The points lie on a line.'
+        answer: 1
+        explanation: |
+          A square design matrix with independent columns is invertible, and $A\mathbf{x} = \mathbf{b}$ has an exact solution for every $\mathbf{b}$. A fit says something only when it could have failed: when there are more measurements than coefficients, the column space is a small part of the whole, and the data lands near it anyway. The honest test of a model is its miss on points it was not fitted to, which the learning track takes up.
+    - question:
+        id: work-dependent
+        type: choice
+        system: s2
+        prompt: |
+          A design matrix has columns ones, temperature in degrees Celsius, and temperature in kelvin, which is Celsius plus 273.15. What happens to least squares?
+        options:
+          - 'It works as usual and gives one answer.'
+          - 'The third column is the second plus 273.15 times the first, so the columns are dependent. The fitted values are still uniquely determined, as the projection onto the column space, but infinitely many coefficient vectors produce them, $A^\top A$ is singular, and solving the normal equations fails or returns nonsense.'
+          - 'There is no best fit at all.'
+          - 'The fit improves, since there is an extra feature.'
+        answer: 1
+        explanation: |
+          The column space is the same plane as without the third column, so the nearest point and the misses are unchanged. What is lost is uniqueness of the coefficients: any amount can be moved from the Celsius coefficient to the kelvin one, with the intercept compensating, and the predictions do not change. $A^\top A$ has a non-zero null space and no inverse. Choosing one answer among the infinitely many, in a principled way, is the business of the next lesson.
+  connections:
+    - text: |
+        Six pairs of equations gave six lines, and none had a claim to be the answer. **Least squares** stops asking for $A\mathbf{x} = \mathbf{b}$ and asks for the $\mathbf{x}$ that makes $\lVert A\mathbf{x} - \mathbf{b}\rVert^2$ least. The answer solves the **normal equations**, $A^\top A\,\hat{\mathbf{x}} = A^\top\mathbf{b}$, which say at once that the residual is orthogonal to the columns and that the gradient of the loss is zero.
+
+        The loss is an exact bowl, $E(\hat{\mathbf{x}} + \mathbf{d}) = E(\hat{\mathbf{x}}) + \lVert A\mathbf{d}\rVert^2$, so there is nothing to tune and nowhere to get stuck. The model enters only through the **design matrix**, and anything linear in its coefficients qualifies: lines, polynomials, combinations of any fixed features. With independent columns the solution is unique.
+
+        That last condition has been assumed since the middle of this cluster. The final question above shows what happens without it: the fit survives and the coefficients do not. And there is the opposite shape of problem, with fewer equations than unknowns, where there is no misfit at all and still infinitely many solutions. Both need a rule for picking one answer, and a single matrix that plays, for every $A$, the part that $A^{-1}$ plays for an invertible one. That is the next lesson: [[m7.pseudo-inverse]].
