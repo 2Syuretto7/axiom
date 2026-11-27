@@ -1,0 +1,671 @@
+concept: m8.perron-frobenius-and-power-iteration
+minutes: 90
+claim: You can find the dominant eigenvalue and eigenvector of a matrix by power iteration, explain its convergence from the expansion in eigenvectors, give its rate as the ratio of the two largest eigenvalue sizes, say when it fails, state the Perron-Frobenius theorem for positive matrices, and apply both to a column-stochastic matrix to explain why a Markov chain forgets its starting point and how PageRank is computed.
+recalls: [m8.jordan-form-and-the-matrix-exponential]
+uses: [m8.operator-and-frobenius-norms, m8.eigenvalues-and-eigenvectors, m8.diagonalisation, m8.spectral-theorem, m8.quadratic-forms-and-the-rayleigh-quotient, m8.singular-value-decomposition, m8.pca-as-svd, m4.norms-and-distance, m5.matrix-vector-product, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e5.axis-operations-and-reductions, e0.functions, e0.loops]
+leads: [m13.derivatives-with-respect-to-vectors]
+starter: |
+  # Scratch space. Three web pages. Column j says where a reader of page j goes next.
+  # Start everyone on one page and follow the crowd.
+  import numpy as np
+
+  M = np.array([[0.0, 0.0, 1.0], [0.5, 0.0, 0.0], [0.5, 1.0, 0.0]])
+  for start in [np.array([1.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0])]:
+      x = start
+      for step in range(50):
+          x = M @ x
+      print([round(float(v), 4) for v in x])
+parts:
+  recall:
+    - text: |
+        [[m8.jordan-form-and-the-matrix-exponential]] ended on the remark that after many applications of a matrix only the largest eigenvalue is left standing. Today that remark becomes an algorithm, and a theorem says what it finds. Three quick pulls first.
+  puzzle:
+    - text: |
+        Three web pages. Page 1 links to pages 2 and 3. Page 2 links to page 3. Page 3 links to page 1. A reader on a page clicks one of its links at random.
+
+        Put the habits in a matrix, with column $j$ saying where the readers of page $j$ go:
+
+        $$M = \begin{pmatrix} 0 & 0 & 1 \\ 0.5 & 0 & 0 \\ 0.5 & 1 & 0 \end{pmatrix}.$$
+
+        If $\mathbf{x}$ holds the share of readers on each page, $M\mathbf{x}$ holds the shares one click later. The starter puts everyone on page 1 and follows them for 50 clicks. Then it starts again with everyone on page 2.
+
+        ```
+        [0.4, 0.2, 0.4]
+        [0.4, 0.2, 0.4]
+        ```
+
+        The same shares, wherever the crowd began: 40%, 20%, 40%. These are a fair measure of how important each page is, and this is in essence how web pages were first ranked.
+
+        **Why does the crowd settle at all? Why does the starting point not matter? And could some other web of links have two different resting states, or none?**
+  intuition:
+    - text: |
+        A resting state is a vector that one more click leaves unchanged: $M\mathbf{x} = \mathbf{x}$. That is an **eigenvector with eigenvalue 1**. The shares $(0.4, 0.2, 0.4)$ are one: check that $M$ sends them to themselves.
+
+        Why does every start lead there? Write the starting vector as a combination of eigenvectors of $M$. Each click multiplies each piece by its eigenvalue. After $k$ clicks the pieces are multiplied by $\lambda_i^k$. For this $M$ the eigenvalues have sizes $1$, $0.71$ and $0.71$. The first piece is untouched, and the other two shrink by $0.71$ per click. After 50 clicks they are gone, and only the eigenvector for 1 is left. The starting point decided only the pieces that died.
+
+        Nothing in that argument is special to web pages. Take **any** matrix whose largest eigenvalue, in absolute value, stands alone. Multiply any vector by it again and again. The piece along the top eigenvector outgrows all the others, and the vector turns towards it. Rescale after each step to keep the numbers in range. This is **power iteration**, and it needs nothing but matrix-vector products.
+
+        Two things could spoil the web example. The eigenvalue 1 might have two independent eigenvectors, giving many resting states. Or another eigenvalue might also have size 1, such as $-1$, and the crowd would slosh back and forth for ever. The **Perron-Frobenius theorem** says when neither happens: for a matrix with positive entries, the largest eigenvalue is real, positive, alone at the top, and its eigenvector has all entries positive. Positivity means mixing, and mixing forgets.
+  derivation:
+    - text: |
+        **Power iteration.** Start from a vector $\mathbf{x}_0$. Repeat
+
+        $$\mathbf{y} = A\mathbf{x}_k, \qquad \mathbf{x}_{k+1} = \mathbf{y}/\|\mathbf{y}\|.$$
+
+        **Why it converges.** Suppose $A$ is diagonalisable with eigenvalues ordered $|\lambda_1| > |\lambda_2| \ge \dots \ge |\lambda_n|$ and eigenvectors $\mathbf{v}_i$. Write $\mathbf{x}_0 = c_1\mathbf{v}_1 + \dots + c_n\mathbf{v}_n$. Then
+
+        $$A^k\mathbf{x}_0 = \lambda_1^k\Big(c_1\mathbf{v}_1 + c_2\big(\tfrac{\lambda_2}{\lambda_1}\big)^k\mathbf{v}_2 + \dots + c_n\big(\tfrac{\lambda_n}{\lambda_1}\big)^k\mathbf{v}_n\Big).$$
+
+        Every ratio $\lambda_i/\lambda_1$ has size below 1, so all terms but the first die away. The normalisation removes the factor $\lambda_1^k$. So $\mathbf{x}_k$ approaches the direction of $\mathbf{v}_1$, provided $c_1 \ne 0$.
+
+        **The rate.** The error shrinks by the factor $|\lambda_2/\lambda_1|$ per step. A wide gap means fast convergence, and a ratio near 1 means slow.
+
+        **The eigenvalue.** Estimate it by the Rayleigh quotient $\mathbf{x}_k^\top A\mathbf{x}_k$ of the unit vector $\mathbf{x}_k$. For symmetric $A$ its error is the **square** of the error of the vector, so it converges like $|\lambda_2/\lambda_1|^{2k}$.
+
+        **When it fails.**
+
+        - *A tie at the top.* If $|\lambda_1| = |\lambda_2|$ with $\lambda_1 \ne \lambda_2$, such as $1$ and $-1$ or a complex pair, the vector never settles. $\begin{pmatrix} 0 & 1 \\ 1 & 0 \end{pmatrix}$ just swaps the two coordinates for ever.
+        - *$c_1 = 0$.* A start with no component along $\mathbf{v}_1$ converges, in exact arithmetic, to the next eigenvector. In floating point, rounding usually supplies a small component, and a random start avoids the problem.
+        - *A defective top eigenvalue* converges, but only like $1/k$.
+
+        **Cost.** One product with $A$ per step. $A$ is never changed, so it may be sparse, or available only as a function that multiplies a vector. That is why this old method is used on the largest problems.
+
+        *The puzzle.* The eigenvalues of $M$ are $1$ and $-\tfrac12 \pm \tfrac12 i$, of size $1/\sqrt2 = 0.7071$. So the error halves every two clicks, and after 50 it is about $0.7071^{50} \approx 3 \times 10^{-8}$.
+    - question:
+        id: derivation-rate
+        type: numeric
+        system: s2
+        prompt: |
+          A matrix has eigenvalues $5, 2, 1$. By what factor does the error of power iteration shrink at each step?
+        answer: "0.4"
+        explanation: |
+          The ratio $|\lambda_2/\lambda_1| = 2/5$. The component along the second eigenvector is the slowest to die, and it loses the factor $0.4$ per step relative to the first. After 10 steps the error has shrunk by $0.4^{10} \approx 10^{-4}$. Had the eigenvalues been $5$ and $4.9$, the factor would be $0.98$, and the same accuracy would need about 460 steps.
+    - text: |
+        **Theorem (Perron-Frobenius, for positive matrices).** Let $A$ be a square matrix with every entry positive. Then:
+
+        1. $A$ has a positive real eigenvalue $r$ equal to its spectral radius, the **Perron root**.
+        2. $r$ has an eigenvector with all entries positive, the **Perron vector**.
+        3. $r$ is a simple eigenvalue: its eigenvector is unique up to scaling.
+        4. Every other eigenvalue satisfies $|\lambda| < r$ strictly.
+        5. No other eigenvector has all entries nonnegative.
+
+        Points 3 and 4 are exactly what power iteration needs. So for a positive matrix it converges from every nonnegative nonzero start, to the Perron vector.
+
+        **Nonnegative matrices.** The same five conclusions hold if $A$ has nonnegative entries and some power $A^m$ is positive. Such a matrix is called **primitive**. In terms of links: every page can be reached from every other, and the possible numbers of clicks for a round trip have no common divisor. The matrix $M$ of the puzzle has zeros, but $M^5$ is positive.
+
+        Without that, things can fail in two ways. If the web splits into parts with no links between them, the top eigenvalue is repeated and there are many resting states. If the web is a pure cycle, other eigenvalues share the top size and the crowd rotates for ever.
+
+        **Bounds.** For a nonnegative matrix the Perron root lies between the smallest and the largest row sum, and likewise for column sums.
+
+        **Stochastic matrices.** A matrix is **column-stochastic** if its entries are nonnegative and every column sums to 1. Then:
+
+        - $\mathbf{1}^\top M = \mathbf{1}^\top$, so 1 is an eigenvalue, and totals are preserved: the shares still add up to 1 after a click.
+        - $\|M\|_1 = 1$, so no eigenvalue is larger than 1 in size. The Perron root is 1.
+        - If $M$ is primitive, there is exactly one vector $\boldsymbol\pi$ with positive entries summing to 1 and $M\boldsymbol\pi = \boldsymbol\pi$, the **stationary distribution**, and $M^k\mathbf{x} \to \boldsymbol\pi$ for every starting distribution $\mathbf{x}$. The rate is the size of the second eigenvalue.
+
+        A process that moves between states with fixed probabilities like this is a **Markov chain**.
+
+        **PageRank.** A real web is neither connected nor free of cycles. The repair is to let the reader, with probability $1 - \alpha$, jump to a page chosen uniformly at random:
+
+        $$G = \alpha M + \frac{1 - \alpha}{n}\mathbf{1}\mathbf{1}^\top.$$
+
+        Every entry of $G$ is positive, so Perron-Frobenius applies in full. Moreover the second eigenvalue of $G$ has size at most $\alpha$, so with the usual $\alpha = 0.85$ power iteration gains a guaranteed factor $0.85$ per step whatever the web looks like. For a distribution $\mathbf{x}$ the product is $G\mathbf{x} = \alpha M\mathbf{x} + (1 - \alpha)/n$, which costs one sparse product.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the argument that power iteration converges to the dominant eigenvector.
+        steps:
+          - 'Write the starting vector as a combination of the eigenvectors, $\mathbf{x}_0 = \sum_i c_i\mathbf{v}_i$.'
+          - 'Apply $A$ $k$ times: each term is multiplied by $\lambda_i^k$.'
+          - 'Factor out $\lambda_1^k$, leaving the ratios $(\lambda_i/\lambda_1)^k$ on the other terms.'
+          - 'Since $|\lambda_i/\lambda_1| < 1$ for $i \ge 2$, those terms tend to zero.'
+          - 'After normalising, what remains is the direction of $\mathbf{v}_1$, provided $c_1 \ne 0$.'
+        explanation: Repeated multiplication is a race between eigen-directions, and the largest eigenvalue wins it.
+  formal:
+    - text: |
+        **Power iteration.** $\mathbf{x}_{k+1} = A\mathbf{x}_k/\|A\mathbf{x}_k\|$. If $|\lambda_1| > |\lambda_2|$ and $\mathbf{x}_0$ has a component along $\mathbf{v}_1$, the angle to $\mathbf{v}_1$ satisfies $\tan\theta_k = O(|\lambda_2/\lambda_1|^k)$. For symmetric $A$, $|\mathbf{x}_k^\top A\mathbf{x}_k - \lambda_1| = O(|\lambda_2/\lambda_1|^{2k})$.
+
+        **Variants.** *Inverse iteration* applies $(A - \mu I)^{-1}$ and converges to the eigenvector whose eigenvalue is nearest to $\mu$, at rate $|\lambda_{\text{nearest}} - \mu|/|\lambda_{\text{next}} - \mu|$. *Rayleigh quotient iteration* updates $\mu$ to the current Rayleigh quotient and converges cubically for symmetric $A$. *Subspace iteration* applies $A$ to $k$ vectors and re-orthonormalises them by QR.
+
+        **Singular values.** Power iteration on $A^\top A$, as $\mathbf{x} \mapsto A^\top(A\mathbf{x})$, gives $\mathbf{v}_1$ and $\sigma_1^2$, at rate $(\sigma_2/\sigma_1)^2$.
+
+        **Perron-Frobenius.** For $A > 0$ entrywise: $\rho(A)$ is a simple eigenvalue with a positive eigenvector, $|\lambda| < \rho(A)$ for all other eigenvalues, and
+
+        $$\lim_{k \to \infty}\frac{A^k}{\rho(A)^k} = \mathbf{v}\mathbf{w}^\top, \qquad A\mathbf{v} = \rho\mathbf{v},\ \ \mathbf{w}^\top A = \rho\mathbf{w}^\top,\ \ \mathbf{w}^\top\mathbf{v} = 1,$$
+
+        with $\mathbf{v}, \mathbf{w} > 0$. The same holds for $A \ge 0$ primitive. For $A \ge 0$ irreducible: $\rho(A)$ is a simple eigenvalue with a positive eigenvector, but there may be $h > 1$ eigenvalues of modulus $\rho$, the $h$th roots of unity times $\rho$, where $h$ is the period.
+
+        **Collatz-Wielandt.** For $A \ge 0$ and any $\mathbf{x} > 0$: $\min_i\frac{(A\mathbf{x})_i}{x_i} \le \rho(A) \le \max_i\frac{(A\mathbf{x})_i}{x_i}$. With $\mathbf{x} = \mathbf{1}$ these are the row-sum bounds.
+
+        **Stochastic matrices.** $M \ge 0$, $\mathbf{1}^\top M = \mathbf{1}^\top$ $\Rightarrow$ $\rho(M) = 1$. $M$ primitive $\Rightarrow$ unique stationary $\boldsymbol\pi > 0$ and $\|M^k\mathbf{x} - \boldsymbol\pi\|_1 \le C|\lambda_2|^k$.
+
+        **Google matrix.** $G = \alpha M + (1 - \alpha)\mathbf{u}\mathbf{1}^\top$ with $\mathbf{u}$ a distribution: eigenvalues $1, \alpha\lambda_2(M), \dots, \alpha\lambda_n(M)$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-finds
+        type: choice
+        system: s1
+        prompt: |
+          Power iteration finds
+        options: ['all eigenvalues at once', 'the eigenvector of the eigenvalue of largest absolute value', 'the eigenvector of the smallest eigenvalue', 'the determinant']
+        answer: 1
+        explanation: The direction that grows fastest under repeated multiplication.
+    - question:
+        id: drill-step
+        type: choice
+        system: s1
+        prompt: |
+          One step of power iteration is
+        options: ['solve $A\mathbf{y} = \mathbf{x}$', 'multiply by $A$, then rescale to unit length', 'subtract the diagonal', 'compute $A^2$']
+        answer: 1
+        explanation: Multiply and normalise.
+    - question:
+        id: drill-rate
+        type: numeric
+        system: s1
+        prompt: |
+          Eigenvalues $10, 5, 1$. By what factor does the error shrink per step?
+        answer: "0.5"
+        explanation: $|\lambda_2/\lambda_1|$.
+    - question:
+        id: drill-normalise
+        type: choice
+        system: s1
+        prompt: |
+          The vector is rescaled at every step in order to
+        options: ['change its direction', 'keep the numbers from overflowing or underflowing', 'make the matrix symmetric', 'speed up convergence']
+        answer: 1
+        explanation: The direction is unaffected. The length would otherwise grow like $|\lambda_1|^k$.
+    - question:
+        id: drill-estimate
+        type: choice
+        system: s1
+        prompt: |
+          Given the current unit vector $\mathbf{x}$, the eigenvalue is estimated by
+        options: ['$\mathbf{x}^\top\mathbf{x}$', '$\mathbf{x}^\top A\mathbf{x}$', 'the trace of $A$', 'the first entry of $\mathbf{x}$']
+        answer: 1
+        explanation: The Rayleigh quotient.
+    - question:
+        id: drill-tie
+        type: choice
+        system: s1
+        prompt: |
+          Power iteration on $\begin{pmatrix} 0 & 1 \\ 1 & 0 \end{pmatrix}$ from the start $(1, 0)$
+        options: ['converges to $(1, 1)/\sqrt2$', 'alternates between $(1, 0)$ and $(0, 1)$ for ever', 'converges to zero', 'overflows']
+        answer: 1
+        explanation: The eigenvalues $1$ and $-1$ tie in size.
+    - question:
+        id: drill-cost
+        type: choice
+        system: s1
+        prompt: |
+          Each step of power iteration costs
+        options: ['one matrix-vector product', 'one matrix inversion', 'one determinant', 'one eigendecomposition']
+        answer: 0
+        explanation: Which is why it works on enormous sparse matrices.
+    - question:
+        id: drill-perron-root
+        type: choice
+        system: s1
+        prompt: |
+          For a matrix with all entries positive, the eigenvalue of largest absolute value is
+        options: ['possibly complex', 'real and positive', 'zero', 'negative']
+        answer: 1
+        explanation: The Perron root.
+    - question:
+        id: drill-perron-vector
+        type: choice
+        system: s1
+        prompt: |
+          The eigenvector of the Perron root of a positive matrix can be chosen with
+        options: ['all entries positive', 'entries of mixed sign', 'exactly one nonzero entry', 'entries summing to zero']
+        answer: 0
+        explanation: And no other eigenvector has this property.
+    - question:
+        id: drill-stochastic
+        type: numeric
+        system: s1
+        prompt: |
+          What is the largest eigenvalue of a matrix with nonnegative entries whose columns each sum to 1?
+        answer: "1"
+        explanation: The row of ones is a left eigenvector with eigenvalue 1, and the 1-norm is 1.
+    - question:
+        id: drill-row-sums
+        type: numeric
+        system: s1
+        prompt: |
+          A positive matrix has every row summing to 3. What is its Perron root?
+        answer: "3"
+        explanation: The vector of ones is a positive eigenvector, $A\mathbf{1} = 3\mathbf{1}$.
+    - question:
+        id: drill-stationary
+        type: choice
+        system: s1
+        prompt: |
+          A stationary distribution of a column-stochastic matrix $M$ is a distribution $\boldsymbol\pi$ with
+        options: ['$M\boldsymbol\pi = \mathbf{0}$', '$M\boldsymbol\pi = \boldsymbol\pi$', '$M\boldsymbol\pi = \mathbf{1}$', '$\boldsymbol\pi^\top\boldsymbol\pi = 1$']
+        answer: 1
+        explanation: One more step leaves it unchanged.
+    - question:
+        id: drill-damping
+        type: numeric
+        system: s1
+        prompt: |
+          PageRank with $\alpha = 0.85$. The second eigenvalue of the Google matrix has size at most what?
+        answer: "0.85"
+        explanation: The random jump shrinks every eigenvalue except the top one by the factor $\alpha$.
+    - question:
+        id: predict-clicks
+        type: predict
+        system: s1
+        prompt: The crowd of the puzzle, starting on page 1, after 1, 2, 3, 6 and 12 clicks. What does this show?
+        code: |
+          import numpy as np
+
+          M = np.array([[0.0, 0.0, 1.0], [0.5, 0.0, 0.0], [0.5, 1.0, 0.0]])
+          x = np.array([1.0, 0.0, 0.0])
+          for k in range(1, 13):
+              x = M @ x
+              if k in [1, 2, 3, 6, 12]:
+                  print(k, [round(float(v), 4) for v in x], round(float(x.sum()), 4))
+        output: |
+          1 [0.0, 0.5, 0.5] 1.0
+          2 [0.5, 0.0, 0.5] 1.0
+          3 [0.5, 0.25, 0.25] 1.0
+          6 [0.375, 0.25, 0.375] 1.0
+          12 [0.3906, 0.2031, 0.4062] 1.0
+        explanation: The shares always add up to 1, because the columns of M do. They spiral in towards (0.4, 0.2, 0.4), with the distance halving about every two clicks, since the other eigenvalues have size 0.7071.
+    - question:
+        id: predict-estimates
+        type: predict
+        system: s1
+        prompt: Power iteration on a symmetric matrix with eigenvalues 4, 2 and 1, from the start (1, 0, 0). The eigenvalue estimate after each of the first steps. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          x = np.array([1.0, 0.0, 0.0])
+          for k in range(1, 7):
+              y = A @ x
+              x = y / np.linalg.norm(y)
+              print(k, round(float(x @ A @ x), 4))
+        output: |
+          1 3.0
+          2 3.6667
+          3 3.9091
+          4 3.9767
+          5 3.9942
+          6 3.9985
+        explanation: The estimates climb to 4, the largest eigenvalue. The gap to 4 shrinks by about a factor of 4 per step, the square of the ratio 2/4, because the Rayleigh quotient of a symmetric matrix is accurate to the square of the error of the vector.
+  work:
+    - text: Slower now. The first task is the algorithm.
+    - question:
+        id: write-power
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `power_iteration(A, steps)`. Start from the vector of all ones. At each step multiply by `A` and rescale to unit length. Return the pair `(value, x)`: the Rayleigh quotient `x @ A @ x` of the final unit vector, as a float, and that vector.
+        starter: |
+          import numpy as np
+
+
+          def power_iteration(A, steps):
+              x = np.ones(len(A))
+              return 0.0, x
+
+
+          A = np.array([[1.0, 2.0], [3.0, 2.0]])
+          value, x = power_iteration(A, 60)
+          print(round(value, 4), [round(float(v), 4) for v in x])
+        solution: |
+          import numpy as np
+
+
+          def power_iteration(A, steps):
+              x = np.ones(len(A))
+              x = x / np.linalg.norm(x)
+              for step in range(steps):
+                  y = A @ x
+                  x = y / np.linalg.norm(y)
+              return float(x @ A @ x), x
+
+
+          A = np.array([[1.0, 2.0], [3.0, 2.0]])
+          value, x = power_iteration(A, 60)
+          print(round(value, 4), [round(float(v), 4) for v in x])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[1.0, 2.0], [3.0, 2.0]])
+          _out = power_iteration(_A, 60)
+          assert isinstance(_out, tuple) and len(_out) == 2, "power_iteration should return the pair (value, x)"
+          _val, _x = _out
+          assert abs(float(_np.linalg.norm(_x)) - 1.0) < 1e-9, "The returned vector should have unit length. Rescale after every multiplication"
+          assert abs(_val - 4.0) < 1e-8, "[[1, 2], [3, 2]] has eigenvalues 4 and -1, so the dominant eigenvalue is 4"
+          assert _np.allclose(_x, _np.array([2.0, 3.0]) / 13 ** 0.5), "The dominant eigenvector of [[1, 2], [3, 2]] is (2, 3), scaled to unit length. Multiply by A itself, not by its transpose"
+          _S = _np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          _val, _x = power_iteration(_S, 40)
+          assert abs(_val - 4.0) < 1e-9 and _np.allclose(_x, _np.array([1.0, 2.0, 1.0]) / 6 ** 0.5), "For the symmetric matrix with eigenvalues 4, 2, 1 the result should be 4 and (1, 2, 1) scaled to unit length"
+          _val, _x = power_iteration(-_S, 41)
+          assert abs(_val + 4.0) < 1e-9, "For the negative of that matrix the dominant eigenvalue is -4. The Rayleigh quotient has the right sign, where the length of A x would not"
+          _val, _x = power_iteration(_np.diag([3.0, 1.0]), 0)
+          assert abs(_val - 2.0) < 1e-9 and abs(float(_np.linalg.norm(_x)) - 1.0) < 1e-9, "With 0 steps the vector is the start (1, 1) scaled to unit length, whose Rayleigh quotient for diag(3, 1) is 2"
+          assert output.strip() == "4.0 [0.5547, 0.8321]", "The program should print 4.0 [0.5547, 0.8321]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def power_iteration(A, steps):
+                x = np.ones(len(A))
+                for step in range(steps):
+                    x = A @ x
+                return float(x @ A @ x / (x @ x)), x
+
+
+            print("4.0 [0.5547, 0.8321]")
+          - |
+            import numpy as np
+
+
+            def power_iteration(A, steps):
+                x = np.ones(len(A))
+                x = x / np.linalg.norm(x)
+                for step in range(steps):
+                    y = A.T @ x
+                    x = y / np.linalg.norm(y)
+                return float(x @ A @ x), x
+
+
+            print("4.0 [0.5547, 0.8321]")
+          - |
+            import numpy as np
+
+
+            def power_iteration(A, steps):
+                x = np.ones(len(A))
+                x = x / np.linalg.norm(x)
+                for step in range(steps):
+                    y = A @ x
+                    x = y / np.linalg.norm(y)
+                return float(np.linalg.norm(A @ x)), x
+
+
+            print("4.0 [0.5547, 0.8321]")
+          - |
+            import numpy as np
+
+
+            def power_iteration(A, steps):
+                x = np.ones(len(A))
+                x = x / np.linalg.norm(x)
+                for step in range(steps):
+                    y = A @ x
+                    x = y / np.linalg.norm(y)
+                return float(x @ x), x
+
+
+            print("4.0 [0.5547, 0.8321]")
+        explanation: |
+          Multiply, rescale, repeat, and read off the Rayleigh quotient at the end. The eigenvalues of this matrix are $4$ and $-1$, so the error shrinks by a factor of 4 per step, and 60 steps are far more than enough.
+
+          The first wrong version never rescales. It returns a correct direction with an enormous length, here about $4^{60} \approx 10^{36}$. With more steps or a larger eigenvalue the entries overflow to infinity and the result is lost.
+
+          The third wrong version uses $\|A\mathbf{x}\|$ as the estimate. That is $|\lambda_1|$, and loses the sign. For a matrix whose dominant eigenvalue is negative the vector flips sign at every step, which is harmless, and the Rayleigh quotient still reports the eigenvalue correctly.
+    - question:
+        id: write-pagerank
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `pagerank(M, alpha, steps)` for a column-stochastic link matrix `M`. Start from the uniform distribution. At each step replace `x` by `alpha * (M @ x) + (1 - alpha) / n`, where `n` is the number of pages. Return the final `x`. Do not form the dense Google matrix.
+        starter: |
+          import numpy as np
+
+
+          def pagerank(M, alpha, steps):
+              n = len(M)
+              return np.ones(n) / n
+
+
+          M = np.array([[0.0, 0.0, 1.0], [0.5, 0.0, 0.0], [0.5, 1.0, 0.0]])
+          print([round(float(v), 4) for v in pagerank(M, 0.85, 100)])
+          print([round(float(v), 4) for v in pagerank(M, 1.0, 200)])
+        solution: |
+          import numpy as np
+
+
+          def pagerank(M, alpha, steps):
+              n = len(M)
+              x = np.ones(n) / n
+              for step in range(steps):
+                  x = alpha * (M @ x) + (1 - alpha) / n
+              return x
+
+
+          M = np.array([[0.0, 0.0, 1.0], [0.5, 0.0, 0.0], [0.5, 1.0, 0.0]])
+          print([round(float(v), 4) for v in pagerank(M, 0.85, 100)])
+          print([round(float(v), 4) for v in pagerank(M, 1.0, 200)])
+        tests: |
+          import numpy as _np
+          _M = _np.array([[0.0, 0.0, 1.0], [0.5, 0.0, 0.0], [0.5, 1.0, 0.0]])
+          _p = pagerank(_M, 0.85, 100)
+          assert _np.shape(_p) == (3,), "The result has one entry per page"
+          assert abs(float(_p.sum()) - 1.0) < 1e-9, "The ranks should add up to 1. The random jump adds (1 - alpha) / n to every page"
+          assert _np.allclose(_p, [0.38778971, 0.21481063, 0.39739966]), "For the three pages with alpha = 0.85 the ranks are about (0.3878, 0.2148, 0.3974)"
+          assert _np.allclose(pagerank(_M, 1.0, 200), [0.4, 0.2, 0.4]), "With alpha = 1 there are no random jumps and the result is the stationary distribution (0.4, 0.2, 0.4)"
+          assert _np.allclose(pagerank(_M, 0.0, 5), [1 / 3, 1 / 3, 1 / 3]), "With alpha = 0 every step is a random jump and all pages are equal"
+          assert _np.allclose(pagerank(_M, 0.85, 1), 0.85 * (_M @ _np.ones(3) / 3) + 0.05), "After one step from the uniform start the result is 0.85 M x + 0.05"
+          _L = _np.array([[0.0, 0.0, 1.0, 0.5], [1 / 3, 0.0, 0.0, 0.0], [1 / 3, 0.5, 0.0, 0.5], [1 / 3, 0.5, 0.0, 0.0]])
+          _q = pagerank(_L, 0.85, 200)
+          _G = 0.85 * _L + 0.15 / 4
+          assert _np.allclose(_G @ _q, _q) and abs(float(_q.sum()) - 1.0) < 1e-9, "For a web of four pages the result should be a distribution left unchanged by the Google matrix"
+          assert output.strip() == "[0.3878, 0.2148, 0.3974]\n[0.4, 0.2, 0.4]", "The program should print [0.3878, 0.2148, 0.3974] and then [0.4, 0.2, 0.4]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def pagerank(M, alpha, steps):
+                n = len(M)
+                x = np.ones(n) / n
+                for step in range(steps):
+                    x = alpha * (M @ x)
+                return x
+
+
+            print("[0.3878, 0.2148, 0.3974]\n[0.4, 0.2, 0.4]")
+          - |
+            import numpy as np
+
+
+            def pagerank(M, alpha, steps):
+                n = len(M)
+                x = np.ones(n) / n
+                for step in range(steps):
+                    x = alpha * (M @ x) + (1 - alpha)
+                return x
+
+
+            print("[0.3878, 0.2148, 0.3974]\n[0.4, 0.2, 0.4]")
+          - |
+            import numpy as np
+
+
+            def pagerank(M, alpha, steps):
+                n = len(M)
+                x = np.ones(n) / n
+                for step in range(steps):
+                    x = alpha * (M.T @ x) + (1 - alpha) / n
+                return x
+
+
+            print("[0.3878, 0.2148, 0.3974]\n[0.4, 0.2, 0.4]")
+          - |
+            import numpy as np
+
+
+            def pagerank(M, alpha, steps):
+                n = len(M)
+                x = np.ones(n) / n
+                for step in range(steps):
+                    x = M @ x
+                return x
+
+
+            print("[0.3878, 0.2148, 0.3974]\n[0.4, 0.2, 0.4]")
+        explanation: |
+          This is power iteration on $G = \alpha M + \frac{1 - \alpha}{n}\mathbf{1}\mathbf{1}^\top$. Because the entries of $\mathbf{x}$ sum to 1, the second part of $G\mathbf{x}$ is the same number $(1 - \alpha)/n$ in every entry. So the dense matrix $G$ is never needed, only a product with the sparse $M$ and one addition. No rescaling is needed either: $G$ is column-stochastic, so the sum stays 1.
+
+          With $\alpha = 0.85$ the ranks are $(0.388, 0.215, 0.397)$, a little flatter than the $(0.4, 0.2, 0.4)$ of the pure links. Page 3 now edges ahead of page 1, since two pages link to it.
+
+          The third wrong version multiplies by $M^\top$. The transpose of a column-stochastic matrix sends the uniform distribution to itself, since its rows sum to 1, so that version returns equal ranks for everything and looks plausibly converged. Whether the columns or the rows of a transition matrix sum to 1 is a convention that differs between books, and it has to be checked each time.
+    - question:
+        id: fix-overflow
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `dominant(A, steps)` should return the dominant eigenvalue by power iteration. For this matrix it should print `4.0`. With 1000 steps it prints `nan`. Fix it, keeping 1000 steps.
+        starter: |
+          import numpy as np
+
+
+          def dominant(A, steps):
+              x = np.ones(len(A))
+              for step in range(steps):
+                  x = A @ x
+              return float(x @ A @ x / (x @ x))
+
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          print(round(dominant(A, 1000), 4))
+        solution: |
+          import numpy as np
+
+
+          def dominant(A, steps):
+              x = np.ones(len(A))
+              for step in range(steps):
+                  x = A @ x
+                  x = x / np.linalg.norm(x)
+              return float(x @ A @ x / (x @ x))
+
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          print(round(dominant(A, 1000), 4))
+        tests: |
+          import numpy as _np
+          _A = _np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          assert abs(dominant(_A, 1000) - 4.0) < 1e-9, "With 1000 steps the result should be 4. Without rescaling the entries grow like 4 to the power 1000, which overflows"
+          assert abs(dominant(_A, 30) - 4.0) < 1e-9, "With 30 steps the result should already be 4"
+          assert abs(dominant(0.001 * _A, 1000) - 0.004) < 1e-12, "For 0.001 times the matrix the dominant eigenvalue is 0.004. Without rescaling the entries shrink to zero"
+          assert abs(dominant(_np.array([[1.0, 2.0], [3.0, 2.0]]), 2000) - 4.0) < 1e-9, "For [[1, 2], [3, 2]] with 2000 steps the result should be 4"
+          assert abs(dominant(_np.diag([3.0, 1.0]), 0) - 2.0) < 1e-12, "With 0 steps the estimate is the Rayleigh quotient of the start (1, 1), which for diag(3, 1) is 2"
+          assert output.strip() == "4.0", "The program should print 4.0"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def dominant(A, steps):
+                x = np.ones(len(A))
+                for step in range(steps):
+                    x = A @ x
+                return float(x @ A @ x / (x @ x))
+
+
+            print("4.0")
+          - |
+            import numpy as np
+
+
+            def dominant(A, steps):
+                x = np.ones(len(A))
+                for step in range(steps):
+                    x = A @ x
+                x = x / np.linalg.norm(x)
+                return float(x @ A @ x / (x @ x))
+
+
+            print("4.0")
+          - |
+            import numpy as np
+
+
+            def dominant(A, steps):
+                x = np.ones(len(A))
+                for step in range(min(steps, 100)):
+                    x = A @ x
+                return float(x @ A @ x / (x @ x))
+
+
+            print("4.0")
+          - |
+            import numpy as np
+
+
+            def dominant(A, steps):
+                x = np.ones(len(A))
+                for step in range(steps):
+                    x = A @ x
+                    x = x / np.linalg.norm(x)
+                return float(x @ x)
+
+
+            print("4.0")
+        explanation: |
+          Without rescaling, the vector after $k$ steps has length about $4^k$. Floating-point numbers end near $1.8 \times 10^{308}$, which $4^k$ passes at $k = 512$. From then on the entries are infinite, and infinity divided by infinity is `nan`.
+
+          Rescaling inside the loop keeps the vector at length 1 and changes nothing else, since only the direction matters. Rescaling once after the loop is too late: the damage is done.
+
+          The opposite failure is as real. For a matrix with dominant eigenvalue $0.004$, the unscaled vector underflows to exactly zero after about 135 steps, and the quotient becomes zero divided by zero. The third wrong version, which quietly caps the number of steps, survives the first matrix and is caught by this one.
+    - question:
+        id: work-steps
+        type: numeric
+        system: s2
+        prompt: |
+          A stochastic matrix has second eigenvalue of size $0.5$. How many steps of power iteration are needed to shrink the error by a factor of at least 1000?
+        answer: "10"
+        explanation: |
+          The error shrinks by $0.5$ per step, and $0.5^{10} = 1/1024$, the first power below $1/1000$. In general the number of steps for a factor $\varepsilon$ is $\ln\varepsilon/\ln|\lambda_2/\lambda_1|$. With a second eigenvalue of $0.99$ the same accuracy needs 688 steps, and with $0.999$ about 6900. The quantity $1 - |\lambda_2|$ is called the **spectral gap**, and the number of steps is roughly proportional to its reciprocal. A chain with a small gap mixes slowly.
+    - question:
+        id: work-two-webs
+        type: choice
+        system: s2
+        prompt: |
+          A web consists of two groups of pages with no links between the groups. What does this do to the link matrix and to the ranking, without the random jump?
+        options:
+          - 'Nothing: there is still one stationary distribution.'
+          - 'The eigenvalue 1 now has at least two independent eigenvectors, one stationary distribution for each group. The limit depends on how the starting readers were split between the groups, so there is no single ranking. The matrix is not primitive, and Perron-Frobenius does not promise uniqueness.'
+          - 'The largest eigenvalue becomes 2.'
+          - 'Power iteration overflows.'
+        answer: 1
+        explanation: |
+          Readers can never move between the groups, so whatever share starts in a group stays there. Each group settles to its own stationary distribution, and any mixture of the two is stationary for the whole. The matrix is block diagonal, with an eigenvalue 1 from each block. This is the failure that the random jump repairs: with $\alpha < 1$ every entry of the Google matrix is positive, the top eigenvalue is simple, and the ranking is unique. The price is that the ranks now depend a little on $\alpha$.
+    - question:
+        id: work-spectral-norm
+        type: choice
+        system: s2
+        prompt: |
+          A layer of a network is a linear map available only as code that computes $W\mathbf{x}$ and $W^\top\mathbf{y}$, with no access to the entries of $W$. How can its spectral norm be estimated?
+        options:
+          - 'It cannot, without the entries.'
+          - 'By power iteration on $W^\top W$: repeat $\mathbf{x} \leftarrow W^\top(W\mathbf{x})$ and rescale. The vector converges to the first right singular vector, and $\|W\mathbf{x}\|$ to $\sigma_1$.'
+          - 'By adding up the outputs for random inputs.'
+          - 'By taking the largest output entry for the input of all ones.'
+        answer: 1
+        explanation: |
+          $W^\top W$ is symmetric positive semidefinite with eigenvalues $\sigma_i^2$, so its dominant eigenvector is $\mathbf{v}_1$, and power iteration converges at rate $(\sigma_2/\sigma_1)^2$. Each step costs one product with $W$ and one with $W^\top$. This is how spectral normalisation keeps the norm of every layer of a network near 1 during training, with a single such step per update. The same trick finds the largest eigenvalue of a Hessian, which sets the largest stable learning rate, from products of the Hessian with vectors alone.
+  connections:
+    - text: |
+        The crowd settles because a click multiplies each eigen-piece of the distribution by its eigenvalue, and every eigenvalue but the top one is smaller than 1 in size. **Power iteration** is that observation as an algorithm: multiply, rescale, repeat. It converges to the dominant eigenvector at the rate $|\lambda_2/\lambda_1|$, using only matrix-vector products.
+
+        The **Perron-Frobenius theorem** says when the answer is unique and meaningful: a positive matrix, or a primitive nonnegative one, has a real positive dominant eigenvalue, alone at the top, with a positive eigenvector. For a column-stochastic matrix that eigenvalue is 1 and the eigenvector is the stationary distribution. PageRank adds a random jump to make the matrix positive, and then iterates.
+
+        That closes spectral theory. Eigenvalues and singular values now describe what a matrix does, how big it is, how it can be compressed, and what its powers do in the long run.
+
+        The last task pointed at what comes next. The largest eigenvalue of a Hessian limits the learning rate, and it can be found from products of the Hessian with vectors. But the Hessian of a network's loss has more entries than could ever be stored, and even its gradient is a derivative with respect to millions of numbers at once. To get at either, derivatives have to be taken with respect to whole vectors and matrices, with rules that never write out the entries. That begins here: [[m13.derivatives-with-respect-to-vectors]].
