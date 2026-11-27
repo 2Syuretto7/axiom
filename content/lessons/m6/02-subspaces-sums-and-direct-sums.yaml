@@ -1,0 +1,679 @@
+concept: m6.subspaces-sums-and-direct-sums
+minutes: 85
+claim: You can decide whether a subset of a vector space is a subspace by checking closure alone, show that an intersection of subspaces is a subspace while a union usually is not, form the sum of two subspaces and compute its dimension from the dimensions of the two and of their intersection, say when a sum is direct and prove that this is exactly when every vector splits in one way only, and split a matrix into symmetric and skew-symmetric parts and a polynomial into even and odd parts.
+recalls: [m6.fields-and-the-vector-space-axioms]
+uses: [m7.orthogonal-subspaces, m5.column-space-and-null-space, m5.rank, m5.basis-and-dimension, m5.transpose, m4.linear-combinations-and-span, m4.linear-independence, m4.lines-planes-and-hyperplanes, m3.direct-proof, m3.contrapositive-and-contradiction, m3.cases-and-counterexamples, m2.sets, m1.polynomials, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e5.reshaping-views-and-copies, e0.functions, e0.lists-and-tuples]
+leads: [m6.linear-maps-kernel-and-image, m6.rank-nullity-theorem, m6.inner-product-spaces, m8.diagonalisation, m8.spectral-theorem]
+starter: |
+  # Scratch space. A matrix written as a symmetric one plus a skew-symmetric one.
+  import numpy as np
+
+  A = np.array([[1.0, 2.0], [4.0, 3.0]])
+  S = (A + A.T) / 2
+  K = (A - A.T) / 2
+  print(S.tolist(), K.tolist())
+  print(np.allclose(S + K, A), np.allclose(S, S.T), np.allclose(K, -K.T))
+parts:
+  recall:
+    - text: |
+        [[m6.fields-and-the-vector-space-axioms]] defined a vector space by two operations and eight rules, and noticed that most examples were found inside larger ones by imposing a condition. Today is about those spaces within spaces, and about how two of them fit together. Three quick pulls first.
+  puzzle:
+    - text: |
+        A square matrix is **symmetric** if it equals its transpose and **skew-symmetric** if it equals minus its transpose. The starter takes a matrix that is neither and writes it as one of each.
+
+        ```
+        [[1.0, 3.0], [3.0, 3.0]] [[0.0, -1.0], [1.0, 0.0]]
+        True True True
+        ```
+
+        $$\begin{pmatrix} 1 & 2 \\ 4 & 3 \end{pmatrix} = \begin{pmatrix} 1 & 3 \\ 3 & 3 \end{pmatrix} + \begin{pmatrix} 0 & -1 \\ 1 & 0 \end{pmatrix}.$$
+
+        Compare this with something from the last cluster. A vector in space can be written as a vector in the floor plus a vector in a wall. But there it can be done in many ways: $(1, 2, 3)$ is $(1, 2, 0) + (0, 0, 3)$ and also $(1, 0, 0) + (0, 2, 3)$, the first piece in the floor and the second in the wall each time.
+
+        For the matrix there seems to be no such freedom. Try to move something from the symmetric part to the skew part and one of them stops being what it should be.
+
+        **Why does one of these splittings allow many answers and the other only one? What has to be true of two subspaces for every vector to be the sum of a piece from each, in exactly one way?**
+  intuition:
+    - text: |
+        A **subspace** is a subset of a vector space that is a vector space in its own right, with the same operations. The eight rules hold automatically, since they hold for all vectors of the larger space. What can fail is closure: a sum or a multiple might leave the subset. So a subspace is a subset that contains the zero vector and is closed under addition and scaling. The floor is a subspace of ordinary space. So is the wall. The symmetric matrices are a subspace of all square matrices, since sums and multiples of symmetric matrices are symmetric, and so are the skew-symmetric ones.
+
+        Given two subspaces $U$ and $W$, what can be reached by adding a vector of one to a vector of the other? That set is their **sum**, $U + W$. The floor plus the wall is all of space. The symmetric plus the skew-symmetric matrices are all square matrices, as the starter's formula shows.
+
+        Now the difference. The floor and the wall **share a line**, where they meet. A vector along that line can be counted as belonging to either. So in any splitting, a piece along the shared line can be moved from the floor's share to the wall's, and the total does not change. That is the freedom seen in the puzzle: $(0, 2, 0)$ was moved across.
+
+        The symmetric and the skew-symmetric matrices share nothing. A matrix that is both satisfies $A^\top = A$ and $A^\top = -A$, so $A = -A$ and $A = 0$. With only the zero matrix in common there is nothing to move across, and the splitting is forced.
+
+        **Overlap is freedom.** Two subspaces whose only common vector is zero fit together without redundancy, and their sum is then called **direct**.
+  derivation:
+    - text: |
+        **The subspace test.** A subset $U$ of a vector space $V$ is a subspace if and only if
+
+        1. $\mathbf{0} \in U$,
+        2. $\mathbf{u} + \mathbf{w} \in U$ whenever $\mathbf{u}, \mathbf{w} \in U$,
+        3. $a\mathbf{u} \in U$ whenever $\mathbf{u} \in U$ and $a$ is a scalar.
+
+        Negatives come free: $-\mathbf{u} = (-1)\mathbf{u}$ is in $U$ by the third condition. Every span is a subspace, and so is every null space.
+
+        *Example.* In $P_2$, let $U$ be the polynomials with $p(1) = 0$. The zero polynomial qualifies. If $p(1) = 0$ and $q(1) = 0$ then $(p + q)(1) = 0$ and $(ap)(1) = 0$. So $U$ is a subspace. It has the basis $x - 1$, $x^2 - 1$ and dimension 2: one linear condition has removed one dimension from the three of $P_2$.
+
+        **Intersections and unions.** If $U$ and $W$ are subspaces, so is $U \cap W$: zero is in both, and a sum or multiple of vectors lying in both lies in both.
+
+        The union is another matter. Take the two axes of the plane. $(1, 0)$ is in the union and so is $(0, 1)$. Their sum $(1, 1)$ is on neither axis. A union of two subspaces is a subspace only when one contains the other.
+
+        **Sums.** The right way to combine is the sum:
+
+        $$U + W = \{\mathbf{u} + \mathbf{w} : \mathbf{u} \in U,\ \mathbf{w} \in W\}.$$
+
+        It is a subspace, and it is the smallest one containing both. If $U$ is spanned by some vectors and $W$ by others, $U + W$ is spanned by all of them together.
+
+        **Counting dimensions.** In $\mathbb{R}^3$, let $U$ be the floor, spanned by $(1, 0, 0)$ and $(0, 1, 0)$, and $W$ the wall, spanned by $(0, 1, 0)$ and $(0, 0, 1)$. Putting the four spanning vectors together gives all of $\mathbb{R}^3$, of dimension 3, not 4: the vector $(0, 1, 0)$ was counted twice, once for each subspace. It spans the intersection. In general,
+
+        $$\dim(U + W) = \dim U + \dim W - \dim(U \cap W).$$
+
+        *Why.* Start with a basis of $U \cap W$, with $k$ vectors. Extend it to a basis of $U$ by adding $r$ vectors, and separately to a basis of $W$ by adding $s$ vectors. The $k + r + s$ vectors together span $U + W$, and one checks that they are independent. So $\dim(U + W) = k + r + s = (k + r) + (k + s) - k$.
+
+        The formula is a way to find an intersection without looking at it. Two planes through the origin in $\mathbb{R}^3$ have a sum of dimension at most 3, so their intersection has dimension at least $2 + 2 - 3 = 1$. They always share a line.
+    - question:
+        id: derivation-dimension
+        type: numeric
+        system: s2
+        prompt: |
+          $U$ and $W$ are subspaces of $\mathbb{R}^5$, each of dimension 3. What is the smallest dimension their intersection can have?
+        answer: "1"
+        explanation: |
+          $\dim(U \cap W) = \dim U + \dim W - \dim(U + W) = 6 - \dim(U + W)$, and $U + W$ is a subspace of $\mathbb{R}^5$, so its dimension is at most 5. The intersection has dimension at least 1. Two three-dimensional subspaces of a five-dimensional space cannot avoid each other: there is not enough room. In code, $\dim(U + W)$ is the rank of the matrix whose columns are the spanning vectors of both.
+    - text: |
+        **Direct sums.** The sum $U + W$ is **direct**, written $U \oplus W$, when $U \cap W = \{\mathbf{0}\}$. The dimension formula then loses its last term: $\dim(U \oplus W) = \dim U + \dim W$.
+
+        *Theorem.* The sum is direct if and only if every vector of $U + W$ can be written as $\mathbf{u} + \mathbf{w}$, with $\mathbf{u} \in U$ and $\mathbf{w} \in W$, in exactly one way.
+
+        *Proof.* Suppose $U \cap W = \{\mathbf{0}\}$ and $\mathbf{u} + \mathbf{w} = \mathbf{u}' + \mathbf{w}'$. Rearranging, $\mathbf{u} - \mathbf{u}' = \mathbf{w}' - \mathbf{w}$. The left side is in $U$ and the right side is in $W$, and they are the same vector, so it lies in $U \cap W$ and is zero. Hence $\mathbf{u} = \mathbf{u}'$ and $\mathbf{w} = \mathbf{w}'$.
+
+        Conversely, suppose splittings are unique, and let $\mathbf{x} \in U \cap W$. Then $\mathbf{0} = \mathbf{0} + \mathbf{0}$ and also $\mathbf{0} = \mathbf{x} + (-\mathbf{x})$, with $\mathbf{x} \in U$ and $-\mathbf{x} \in W$. By uniqueness $\mathbf{x} = \mathbf{0}$. $\blacksquare$
+
+        **Three direct sums.**
+
+        *Matrices.* Every square matrix is $\tfrac12(A + A^\top) + \tfrac12(A - A^\top)$, symmetric plus skew-symmetric, and the two subspaces meet only in zero. For 2 by 2 matrices the dimensions are $3 + 1 = 4$.
+
+        *Polynomials.* A polynomial is **even** if it has only even powers and **odd** if it has only odd ones. Every polynomial is its even-power terms plus its odd-power terms, and only the zero polynomial is both. In $P_3$: $2 + x - 4x^2 + 5x^3 = (2 - 4x^2) + (x + 5x^3)$, with dimensions $2 + 2 = 4$.
+
+        *Row space and null space.* The last cluster showed that every vector of $\mathbb{R}^n$ is uniquely a row space part plus a null space part. That was a direct sum, $\mathbb{R}^n = C(A^\top) \oplus N(A)$, with something extra: the two pieces were orthogonal.
+
+        **Complements are not unique.** If $V = U \oplus W$, then $W$ is called a complement of $U$. In the plane, the horizontal axis has the vertical axis as a complement, and equally the diagonal line through $(1, 1)$, or any other line through the origin but itself. A general vector space has no notion of a right angle, so no complement is preferred. Choosing one needs more structure, an inner product, which comes later in this cluster.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the steps of the proof that if U and W meet only in the zero vector, a vector can be split as u + w in only one way.
+        steps:
+          - 'Suppose $\mathbf{u} + \mathbf{w} = \mathbf{u}'' + \mathbf{w}''$ with $\mathbf{u}, \mathbf{u}''$ in $U$ and $\mathbf{w}, \mathbf{w}''$ in $W$.'
+          - 'Rearrange to $\mathbf{u} - \mathbf{u}'' = \mathbf{w}'' - \mathbf{w}$.'
+          - 'The left side lies in $U$ and the right side in $W$, since each is a subspace.'
+          - 'So this one vector lies in $U \cap W$, and is therefore zero.'
+          - 'Hence $\mathbf{u} = \mathbf{u}''$ and $\mathbf{w} = \mathbf{w}''$.'
+        explanation: The difference between two splittings is a vector that belongs to both subspaces. If the only such vector is zero, the splittings were the same.
+  formal:
+    - text: |
+        Let $V$ be a vector space over a field $F$.
+
+        **Subspace.** A subset $U \subseteq V$ with $\mathbf{0} \in U$, closed under addition and under scalar multiplication. Equivalently, a non-empty subset with $a\mathbf{u} + b\mathbf{w} \in U$ for all $\mathbf{u}, \mathbf{w} \in U$ and $a, b \in F$.
+
+        **Intersection.** Any intersection of subspaces is a subspace.
+
+        **Sum.** $U + W = \{\mathbf{u} + \mathbf{w} : \mathbf{u} \in U, \mathbf{w} \in W\}$ is the smallest subspace containing $U$ and $W$.
+
+        **Dimension formula.** For finite-dimensional subspaces, $\dim(U + W) = \dim U + \dim W - \dim(U \cap W)$.
+
+        **Direct sum.** The sum is direct, written $U \oplus W$, if $U \cap W = \{\mathbf{0}\}$. Equivalent conditions: every vector of $U + W$ has a unique expression $\mathbf{u} + \mathbf{w}$; the only expression of $\mathbf{0}$ is $\mathbf{0} + \mathbf{0}$; a basis of $U$ together with a basis of $W$ is a basis of $U + W$; $\dim(U + W) = \dim U + \dim W$.
+
+        **Complement.** If $V = U \oplus W$, then $W$ is a complement of $U$ in $V$. Every subspace of a finite-dimensional space has a complement, and it is in general not unique. All complements of $U$ have dimension $\dim V - \dim U$.
+
+        **More than two.** $U_1 + \dots + U_k$ is direct if every vector of it has a unique expression $\mathbf{u}_1 + \dots + \mathbf{u}_k$ with $\mathbf{u}_i \in U_i$. For three or more subspaces it is not enough that they meet pairwise in zero.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-test
+        type: choice
+        system: s1
+        prompt: |
+          To show that a subset of a vector space is a subspace, it is enough to check
+        options: ['all eight axioms', 'that it contains zero and is closed under addition and scaling', 'that it is closed under addition', 'that it is finite']
+        answer: 1
+        explanation: The eight rules are inherited from the larger space.
+    - question:
+        id: drill-line
+        type: choice
+        system: s1
+        prompt: |
+          Is the line $y = x + 1$ a subspace of the plane?
+        options: ['Yes', 'No, it does not contain the origin', 'Yes, every line is', 'Only over the rationals']
+        answer: 1
+        explanation: A subspace must contain the zero vector.
+    - question:
+        id: drill-intersection
+        type: choice
+        system: s1
+        prompt: |
+          The intersection of two subspaces is
+        options: ['never a subspace', 'always a subspace', 'a subspace only if one contains the other', 'empty']
+        answer: 1
+        explanation: Sums and multiples of vectors in both lie in both.
+    - question:
+        id: drill-union
+        type: choice
+        system: s1
+        prompt: |
+          The union of the two axes of the plane is not a subspace because
+        options: ['it does not contain zero', '$(1, 0) + (0, 1)$ is on neither axis', 'it is not closed under scaling', 'it is infinite']
+        answer: 1
+        explanation: Not closed under addition.
+    - question:
+        id: drill-sum
+        type: choice
+        system: s1
+        prompt: |
+          $U + W$ consists of
+        options: ['the vectors in $U$ or in $W$', 'all $\mathbf{u} + \mathbf{w}$ with $\mathbf{u}$ in $U$ and $\mathbf{w}$ in $W$', 'the vectors in both', 'the vectors in neither']
+        answer: 1
+        explanation: Everything reachable by adding one from each.
+    - question:
+        id: drill-formula
+        type: numeric
+        system: s1
+        prompt: |
+          $\dim U = 3$, $\dim W = 4$ and $\dim(U \cap W) = 2$. What is $\dim(U + W)$?
+        answer: "5"
+        explanation: $3 + 4 - 2$.
+    - question:
+        id: drill-direct
+        type: choice
+        system: s1
+        prompt: |
+          The sum $U + W$ is direct when
+        options: ['$U = W$', '$U \cap W = \{\mathbf{0}\}$', '$U \cap W$ is empty', '$U$ and $W$ have the same dimension']
+        answer: 1
+        explanation: Only zero in common. The intersection is never empty, since both contain zero.
+    - question:
+        id: drill-direct-dim
+        type: numeric
+        system: s1
+        prompt: |
+          $U \oplus W$ with $\dim U = 2$ and $\dim W = 3$. What is its dimension?
+        answer: "5"
+        explanation: With no overlap the dimensions add.
+    - question:
+        id: drill-symmetric-dim
+        type: numeric
+        system: s1
+        prompt: |
+          What is the dimension of the space of symmetric 2 by 2 real matrices?
+        answer: "3"
+        explanation: Two diagonal entries and one shared off-diagonal entry.
+    - question:
+        id: drill-skew
+        type: choice
+        system: s1
+        prompt: |
+          What is the skew-symmetric part of $\begin{pmatrix} 1 & 2 \\ 4 & 3 \end{pmatrix}$?
+        options: ['$\begin{pmatrix} 1 & 3 \\ 3 & 3 \end{pmatrix}$', '$\begin{pmatrix} 0 & -1 \\ 1 & 0 \end{pmatrix}$', '$\begin{pmatrix} 0 & 2 \\ -4 & 0 \end{pmatrix}$', '$\begin{pmatrix} 0 & 0 \\ 0 & 0 \end{pmatrix}$']
+        answer: 1
+        explanation: Half of $A - A^\top$.
+    - question:
+        id: drill-even
+        type: choice
+        system: s1
+        prompt: |
+          What is the even part of $2 + x - 4x^2 + 5x^3$?
+        options: ['$x + 5x^3$', '$2 - 4x^2$', '$2 + x$', '$-4x^2 + 5x^3$']
+        answer: 1
+        explanation: The terms with even powers.
+    - question:
+        id: drill-planes
+        type: choice
+        system: s1
+        prompt: |
+          Two different planes through the origin in $\mathbb{R}^3$ meet in
+        options: ['the origin only', 'a line', 'a plane', 'nothing']
+        answer: 1
+        explanation: $2 + 2 - 3 = 1$.
+    - question:
+        id: drill-complement
+        type: choice
+        system: s1
+        prompt: |
+          How many complements does the horizontal axis have in the plane?
+        options: ['One, the vertical axis', 'Infinitely many: every other line through the origin', 'None', 'Two']
+        answer: 1
+        explanation: Any line through the origin other than the axis itself meets it only at zero and together they span the plane.
+    - question:
+        id: predict-rank
+        type: predict
+        system: s1
+        prompt: The floor and the wall, each given by two spanning columns. What does this show?
+        code: |
+          import numpy as np
+
+          U = np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]])
+          W = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+          both = np.concatenate([U, W], axis=1)
+          r = int(np.linalg.matrix_rank(both))
+          print(both.shape, r, 2 + 2 - r)
+        output: |
+          (3, 4) 3 1
+        explanation: The four spanning columns side by side have rank 3, the dimension of the sum. The dimension formula then gives the intersection without computing it, 2 + 2 - 3 = 1, the line the floor and the wall share.
+    - question:
+        id: predict-split
+        type: predict
+        system: s1
+        prompt: A 3 by 3 matrix split into its two parts. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[1.0, 2.0, 0.0], [0.0, 5.0, 6.0], [4.0, 0.0, 9.0]])
+          S = (A + A.T) / 2
+          K = (A - A.T) / 2
+          print(S[0].tolist(), K[0].tolist())
+          print(float(np.trace(K)), np.allclose(S + K, A))
+        output: |
+          [1.0, 1.0, 2.0] [0.0, 1.0, -2.0]
+          0.0 True
+        explanation: The symmetric part averages each entry with its mirror image and the skew part takes half their difference. A skew-symmetric matrix has zeros on its diagonal, since each diagonal entry equals its own negative. For 3 by 3 matrices the dimensions are 6 and 3, adding to 9.
+  work:
+    - text: Slower now. Dimensions of sums and intersections come from ranks, and the care is in what the columns you were handed actually span.
+    - question:
+        id: write-dimensions
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Two subspaces of $\mathbb{R}^n$ are given by arrays `U` and `W` whose columns span them. The columns need not be independent. Write `dimensions(U, W)`, returning four ints: the dimension of the first subspace, of the second, of their sum, and of their intersection. Use `np.linalg.matrix_rank`, and `np.concatenate` with `axis=1` to put the columns side by side.
+        starter: |
+          import numpy as np
+
+
+          def dimensions(U, W):
+              return 0, 0, 0, 0
+
+
+          U = np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]])
+          W = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+          print(dimensions(U, W))
+        solution: |
+          import numpy as np
+
+
+          def dimensions(U, W):
+              u = int(np.linalg.matrix_rank(U))
+              w = int(np.linalg.matrix_rank(W))
+              both = int(np.linalg.matrix_rank(np.concatenate([U, W], axis=1)))
+              return u, w, both, u + w - both
+
+
+          U = np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]])
+          W = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+          print(dimensions(U, W))
+        tests: |
+          import numpy as _np
+          _U = _np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]])
+          _W = _np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+          _d = dimensions(_U, _W)
+          assert isinstance(_d, tuple) and len(_d) == 4, "dimensions should return four numbers"
+          assert all(isinstance(_v, int) for _v in _d), "Each dimension should be an int"
+          assert _d == (2, 2, 3, 1), "The floor and the wall have dimensions 2 and 2, their sum has dimension 3 and their intersection dimension 1"
+          _x = _np.array([[1.0], [0.0], [0.0]])
+          _z = _np.array([[0.0], [0.0], [1.0]])
+          assert dimensions(_x, _z) == (1, 1, 2, 0), "Two different axes have a sum of dimension 2 and meet only in zero"
+          assert dimensions(_U, _U) == (2, 2, 2, 2), "A subspace added to itself is itself, and so is the intersection"
+          _R = _np.array([[1.0, 2.0, 3.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+          assert dimensions(_R, _z) == (1, 1, 2, 0), "Three columns that all lie along one axis span a subspace of dimension 1: use the rank, not the number of columns"
+          assert dimensions(_U, _x) == (2, 1, 2, 1), "A line inside a plane: the sum is the plane and the intersection is the line"
+          _A = _np.random.default_rng(0).normal(size=(5, 3))
+          _B = _np.random.default_rng(1).normal(size=(5, 3))
+          assert dimensions(_A, _B) == (3, 3, 5, 1), "Two random 3-dimensional subspaces of a 5-dimensional space have a sum of dimension 5 and so meet in a line"
+          assert output.strip() == "(2, 2, 3, 1)", "The program should print (2, 2, 3, 1)"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def dimensions(U, W):
+                u = U.shape[1]
+                w = W.shape[1]
+                both = int(np.linalg.matrix_rank(np.concatenate([U, W], axis=1)))
+                return u, w, both, u + w - both
+
+
+            print("(2, 2, 3, 1)")
+          - |
+            import numpy as np
+
+
+            def dimensions(U, W):
+                u = int(np.linalg.matrix_rank(U))
+                w = int(np.linalg.matrix_rank(W))
+                both = u + w
+                return u, w, both, 0
+
+
+            print("(2, 2, 3, 1)")
+          - |
+            import numpy as np
+
+
+            def dimensions(U, W):
+                u = int(np.linalg.matrix_rank(U))
+                w = int(np.linalg.matrix_rank(W))
+                both = int(np.linalg.matrix_rank(np.concatenate([U, W], axis=0)))
+                return u, w, both, u + w - both
+
+
+            print("(2, 2, 3, 1)")
+          - |
+            import numpy as np
+
+
+            def dimensions(U, W):
+                u = int(np.linalg.matrix_rank(U))
+                w = int(np.linalg.matrix_rank(W))
+                both = int(np.linalg.matrix_rank(np.concatenate([U, W], axis=1)))
+                return u, w, both, both - u
+
+
+            print("(2, 2, 3, 1)")
+        explanation: |
+          The dimension of a span is the rank of the matrix of spanning columns. The sum of two subspaces is spanned by both sets of columns together, so its dimension is the rank of the matrices side by side. The intersection is the one quantity that is awkward to compute directly, and the dimension formula gives it from the other three.
+
+          Counting columns in place of taking the rank assumes that the spanning vectors are independent, which nobody promised. Adding the two dimensions assumes that the sum is direct, the very thing in question. Stacking along axis 0 puts one matrix under the other, which is a different matrix with a different meaning.
+
+          The last test is the lesson's counting argument: two random three-dimensional subspaces of $\mathbb{R}^5$ fill it, and are then forced to share a line.
+    - question:
+        id: write-even-odd
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A polynomial is a list of coefficients, lowest power first. Write `even_odd(p)`, returning two lists of the same length as `p`: the even part, with the coefficients of odd powers replaced by 0.0, and the odd part, with the coefficients of even powers replaced by 0.0. Do not change `p`.
+
+          Then write `is_direct_split(p)`, which returns `True` if the two parts add up, entry by entry, to `p`, and no power has a non-zero coefficient in both.
+        starter: |
+          def even_odd(p):
+              return list(p), list(p)
+
+
+          def is_direct_split(p):
+              return False
+
+
+          p = [2.0, 1.0, -4.0, 5.0]
+          print(even_odd(p))
+          print(is_direct_split(p))
+        solution: |
+          def even_odd(p):
+              even = [c if k % 2 == 0 else 0.0 for k, c in enumerate(p)]
+              odd = [c if k % 2 == 1 else 0.0 for k, c in enumerate(p)]
+              return even, odd
+
+
+          def is_direct_split(p):
+              even, odd = even_odd(p)
+              for k in range(len(p)):
+                  if even[k] + odd[k] != p[k]:
+                      return False
+                  if even[k] != 0.0 and odd[k] != 0.0:
+                      return False
+              return True
+
+
+          p = [2.0, 1.0, -4.0, 5.0]
+          print(even_odd(p))
+          print(is_direct_split(p))
+        tests: |
+          _p = [2.0, 1.0, -4.0, 5.0]
+          _out = even_odd(_p)
+          assert _p == [2.0, 1.0, -4.0, 5.0], "p should be left as it was"
+          assert isinstance(_out, tuple) and len(_out) == 2, "even_odd should return the pair (even, odd)"
+          _e, _o = _out
+          assert len(_e) == 4 and len(_o) == 4, "Both parts should be as long as p"
+          assert _e == [2.0, 0.0, -4.0, 0.0], "The even part of 2 + x - 4x^2 + 5x^3 is 2 - 4x^2: keep the coefficients at even positions"
+          assert _o == [0.0, 1.0, 0.0, 5.0], "The odd part of 2 + x - 4x^2 + 5x^3 is x + 5x^3: keep the coefficients at odd positions"
+          assert even_odd([7.0]) == ([7.0], [0.0]), "A constant is even: its odd part is zero"
+          assert even_odd([0.0, 3.0]) == ([0.0, 0.0], [0.0, 3.0]), "3x is odd: its even part is zero"
+          assert even_odd([]) == ([], []), "The empty list splits into two empty lists"
+          _q = [1.0, -1.0, 2.0, 0.5, 3.0]
+          _e, _o = even_odd(_q)
+          for _x in [0.5, 2.0, -1.5]:
+              _ev = sum(c * _x ** k for k, c in enumerate(_e))
+              _evm = sum(c * (-_x) ** k for k, c in enumerate(_e))
+              _od = sum(c * _x ** k for k, c in enumerate(_o))
+              _odm = sum(c * (-_x) ** k for k, c in enumerate(_o))
+              assert abs(_ev - _evm) < 1e-9, "The even part should take the same value at x and at -x"
+              assert abs(_od + _odm) < 1e-9, "The odd part should take opposite values at x and at -x"
+          assert is_direct_split(_p) is True and is_direct_split(_q) is True and is_direct_split([]) is True, "With a correct even_odd, every polynomial splits directly"
+          assert output.strip() == "([2.0, 0.0, -4.0, 0.0], [0.0, 1.0, 0.0, 5.0])\nTrue", "The program should print the two parts and then True"
+        wrong:
+          - |
+            def even_odd(p):
+                even = [c if k % 2 == 1 else 0.0 for k, c in enumerate(p)]
+                odd = [c if k % 2 == 0 else 0.0 for k, c in enumerate(p)]
+                return even, odd
+
+
+            def is_direct_split(p):
+                even, odd = even_odd(p)
+                for k in range(len(p)):
+                    if even[k] + odd[k] != p[k]:
+                        return False
+                    if even[k] != 0.0 and odd[k] != 0.0:
+                        return False
+                return True
+
+
+            print("([2.0, 0.0, -4.0, 0.0], [0.0, 1.0, 0.0, 5.0])\nTrue")
+          - |
+            def even_odd(p):
+                even = [c for k, c in enumerate(p) if k % 2 == 0]
+                odd = [c for k, c in enumerate(p) if k % 2 == 1]
+                return even, odd
+
+
+            def is_direct_split(p):
+                even, odd = even_odd(p)
+                for k in range(len(p)):
+                    if even[k] + odd[k] != p[k]:
+                        return False
+                    if even[k] != 0.0 and odd[k] != 0.0:
+                        return False
+                return True
+
+
+            print("([2.0, 0.0, -4.0, 0.0], [0.0, 1.0, 0.0, 5.0])\nTrue")
+          - |
+            def even_odd(p):
+                even = [c if c % 2 == 0 else 0.0 for k, c in enumerate(p)]
+                odd = [c if c % 2 == 1 else 0.0 for k, c in enumerate(p)]
+                return even, odd
+
+
+            def is_direct_split(p):
+                even, odd = even_odd(p)
+                for k in range(len(p)):
+                    if even[k] + odd[k] != p[k]:
+                        return False
+                    if even[k] != 0.0 and odd[k] != 0.0:
+                        return False
+                return True
+
+
+            print("([2.0, 0.0, -4.0, 0.0], [0.0, 1.0, 0.0, 5.0])\nTrue")
+          - |
+            def even_odd(p):
+                even = [c if k % 2 == 0 else 0.0 for k, c in enumerate(p)]
+                odd = [c if k % 2 == 1 else 0.0 for k, c in enumerate(p)]
+                return even, odd
+
+
+            def is_direct_split(p):
+                even, odd = even_odd(p)
+                return even != odd
+
+
+            print("([2.0, 0.0, -4.0, 0.0], [0.0, 1.0, 0.0, 5.0])\nTrue")
+        explanation: |
+          In coordinates the two subspaces are easy to see: the even polynomials are the lists with zeros at odd positions, and the odd polynomials the lists with zeros at even positions. A list in both has zeros everywhere. Splitting is a matter of sending each coefficient to the part that is allowed to hold it.
+
+          Dropping the unwanted coefficients, the second wrong version, moves the survivors to the wrong powers: `[2.0, -4.0]` is $2 - 4x$, not $2 - 4x^2$. Testing whether the **coefficient** is even, the third, confuses the value with its position.
+
+          `is_direct_split` checks the two halves of the definition for this one vector: the parts add up to the whole, and they do not overlap. The tests also confirm what "even" and "odd" mean for functions: $e(-x) = e(x)$ and $o(-x) = -o(x)$. The same splitting works for any function, as $\tfrac12(f(x) + f(-x))$ plus $\tfrac12(f(x) - f(-x))$, the formula for matrices with "transpose" replaced by "reflect the input".
+    - question:
+        id: fix-direct
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `is_direct(U, W)` should say whether the sum of the subspaces spanned by the columns of `U` and of `W` is direct. In the program, `U` spans the first axis of $\mathbb{R}^3$, given by two columns that point along it, and `W` spans the third axis. The two axes meet only in zero, so the sum is direct, but the function returns `False`. Fix it. One line needs to change.
+        starter: |
+          import numpy as np
+
+
+          def is_direct(U, W):
+              together = int(np.linalg.matrix_rank(np.concatenate([U, W], axis=1)))
+              return together == U.shape[1] + W.shape[1]
+
+
+          U = np.array([[1.0, 2.0], [0.0, 0.0], [0.0, 0.0]])
+          W = np.array([[0.0], [0.0], [1.0]])
+          print(is_direct(U, W))
+        solution: |
+          import numpy as np
+
+
+          def is_direct(U, W):
+              together = int(np.linalg.matrix_rank(np.concatenate([U, W], axis=1)))
+              return together == int(np.linalg.matrix_rank(U)) + int(np.linalg.matrix_rank(W))
+
+
+          U = np.array([[1.0, 2.0], [0.0, 0.0], [0.0, 0.0]])
+          W = np.array([[0.0], [0.0], [1.0]])
+          print(is_direct(U, W))
+        tests: |
+          import numpy as _np
+          _U = _np.array([[1.0, 2.0], [0.0, 0.0], [0.0, 0.0]])
+          _W = _np.array([[0.0], [0.0], [1.0]])
+          assert is_direct(_U, _W) == True, "Two columns along the first axis span a line, and it meets the third axis only in zero: compare with the dimensions of the subspaces, which are ranks, not with the numbers of columns"
+          _F = _np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]])
+          _G = _np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+          assert is_direct(_F, _G) == False, "The floor and the wall share a line, so their sum is not direct"
+          assert is_direct(_F, _W) == True, "The floor and the vertical axis meet only in zero"
+          assert is_direct(_F, _F) == False, "A non-zero subspace does not form a direct sum with itself"
+          assert is_direct(_W, _np.array([[0.0, 0.0], [0.0, 0.0], [1.0, 3.0]])) == False, "A line and the same line given by two columns: the sum is not direct"
+          _A = _np.random.default_rng(0).normal(size=(6, 2))
+          _B = _np.random.default_rng(1).normal(size=(6, 3))
+          assert is_direct(_A, _B) == True, "Random subspaces of dimensions 2 and 3 in a 6-dimensional space meet only in zero"
+          assert is_direct(_A, _np.concatenate([_B, _A[:, :1]], axis=1)) == False, "If W contains a column of U the sum is not direct"
+          assert output.strip() == "True", "The program should print True"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def is_direct(U, W):
+                together = int(np.linalg.matrix_rank(np.concatenate([U, W], axis=1)))
+                return together == U.shape[1] + W.shape[1]
+
+
+            print("True")
+          - |
+            import numpy as np
+
+
+            def is_direct(U, W):
+                together = int(np.linalg.matrix_rank(np.concatenate([U, W], axis=1)))
+                return together >= int(np.linalg.matrix_rank(U))
+
+
+            print("True")
+          - |
+            import numpy as np
+
+
+            def is_direct(U, W):
+                together = int(np.linalg.matrix_rank(np.concatenate([U, W], axis=1)))
+                return together == U.shape[0]
+
+
+            print("True")
+          - |
+            import numpy as np
+
+
+            def is_direct(U, W):
+                together = int(np.linalg.matrix_rank(np.concatenate([U, W], axis=1)))
+                return together == max(int(np.linalg.matrix_rank(U)), int(np.linalg.matrix_rank(W)))
+
+
+            print("True")
+        explanation: |
+          A sum is direct exactly when $\dim(U + W) = \dim U + \dim W$. The function compared $\dim(U + W)$ with the number of **columns** it had been given. Those agree when the columns are bases. Here `U` has two columns and spans a line, so the function demanded a rank of 3 where the dimensions add up to 2.
+
+          The distinction is between a subspace and a description of it. Many matrices have the same column space, and a question about the subspace must have the same answer for all of them. Rank respects that. A count of columns does not.
+
+          Comparing with the number of rows, the third wrong version, asks whether the sum is the whole space, which is a different question: two axes in $\mathbb{R}^3$ form a direct sum that is not everything.
+    - question:
+        id: work-union
+        type: choice
+        system: s2
+        prompt: |
+          $U$ and $W$ are subspaces of $V$, and neither contains the other. Why is $U \cup W$ not a subspace?
+        options:
+          - 'It does not contain the zero vector.'
+          - 'Pick $\mathbf{u}$ in $U$ but not in $W$, and $\mathbf{w}$ in $W$ but not in $U$. If $\mathbf{u} + \mathbf{w}$ were in $U$, then $\mathbf{w} = (\mathbf{u} + \mathbf{w}) - \mathbf{u}$ would be in $U$. If it were in $W$, then $\mathbf{u}$ would be in $W$. Both are false, so the sum is in neither, and the union is not closed under addition.'
+          - 'It is not closed under scaling.'
+          - 'Unions of sets are never subspaces.'
+        answer: 1
+        explanation: |
+          The argument uses that each of $U$ and $W$ is closed under subtraction. The union does contain zero and is closed under scaling, since a multiple of a vector in $U$ is in $U$. Addition is what fails. If one subspace contains the other, the union is just the larger one and is a subspace. The sum $U + W$ is exactly what the union lacks: all the sums of one from each.
+    - question:
+        id: work-three
+        type: choice
+        system: s2
+        prompt: |
+          In the plane, take three different lines through the origin: the two axes and the diagonal through $(1, 1)$. Each pair meets only in zero. Is the sum of all three direct?
+        options:
+          - 'Yes, since each pair meets only in zero.'
+          - 'No. $(1, 1) = (1, 0) + (0, 1) + (0, 0)$ and also $(1, 1) = (0, 0) + (0, 0) + (1, 1)$: two different ways to write one vector as a sum of a piece from each line. The dimensions give it away too, since $1 + 1 + 1 = 3$ exceeds the dimension of the plane.'
+          - 'Yes, since the sum is the whole plane.'
+          - 'It cannot be decided.'
+        answer: 1
+        explanation: |
+          For three or more subspaces the condition for a direct sum is uniqueness of the splitting, or equivalently that each subspace meets the sum of the others only in zero. Here the diagonal lies inside the sum of the two axes. Pairwise intersections are not enough, which is the same phenomenon as three vectors that are pairwise independent and jointly dependent.
+    - question:
+        id: work-skew-dim
+        type: numeric
+        system: s2
+        prompt: |
+          The 4 by 4 real matrices form a space of dimension 16, the direct sum of the symmetric and the skew-symmetric ones. A skew-symmetric matrix is determined by its entries above the diagonal. What is the dimension of the symmetric 4 by 4 matrices?
+        answer: "10"
+        explanation: |
+          There are $4 \cdot 3/2 = 6$ entries above the diagonal, so the skew-symmetric matrices have dimension 6. For a direct sum the dimensions add, so the symmetric ones have dimension $16 - 6 = 10$. A direct count agrees: 6 entries above the diagonal plus 4 on it. In general the dimensions are $n(n+1)/2$ and $n(n-1)/2$.
+    - question:
+        id: work-orthogonal
+        type: choice
+        system: s2
+        prompt: |
+          The last cluster wrote every vector of $\mathbb{R}^n$ as a part in a subspace $S$ plus a part in its orthogonal complement. How does that relate to today?
+        options:
+          - 'It is unrelated, since it used dot products.'
+          - 'It is a direct sum, $\mathbb{R}^n = S \oplus S^\perp$: a vector in both is orthogonal to itself, so it is zero, and the dimensions add to $n$. Among the many complements of $S$, the dot product singles out one, the complement at right angles, and with it one preferred splitting, the projection.'
+          - 'It is a sum that is not direct.'
+          - 'It shows that complements are unique.'
+        answer: 1
+        explanation: |
+          $\mathbf{x} \cdot \mathbf{x} = 0$ forces $\mathbf{x} = \mathbf{0}$, so $S \cap S^\perp = \{\mathbf{0}\}$. Without a dot product, a subspace has many complements and none is special. Each gives its own way of splitting vectors, and the "projection" onto $S$ along a slanted complement is the non-symmetric projection met in the lesson on projection matrices. The orthogonal complement is what an inner product adds to the bare vector space, and that structure is introduced for general spaces later in this cluster.
+  connections:
+    - text: |
+        A vector splits between the floor and the wall in many ways, and a matrix into symmetric and skew-symmetric parts in only one. The floor and the wall share a line, and whatever lies along it can be moved from one piece to the other. A **subspace** is a subset closed under the two operations. Two subspaces have a **sum**, with $\dim(U + W) = \dim U + \dim W - \dim(U \cap W)$, and the sum is **direct** when the intersection is zero, which is exactly when every splitting is unique.
+
+        Symmetric and skew-symmetric matrices, even and odd polynomials, and row space and null space are all direct sums. Complements exist and are not unique, until an inner product chooses one.
+
+        Every subspace met so far has arisen in one of two ways: as everything a rule **produces**, such as a span or a column space, or as everything a rule **sends to zero**, such as a null space or the polynomials vanishing at 1. The rules in question were all of one kind. They respected addition and scaling. Matrices are such rules, and so are differentiation, evaluation at a point, and transposition. The next lesson studies them as objects in their own right, with no matrix in sight: [[m6.linear-maps-kernel-and-image]].
