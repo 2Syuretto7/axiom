@@ -1,0 +1,627 @@
+concept: m8.eckart-young-theorem
+minutes: 85
+claim: You can form the truncated singular value decomposition of a matrix, state the Eckart-Young theorem that it is the closest matrix of its rank in both the spectral and the Frobenius norm, compute both errors from the discarded singular values without forming the approximation, explain why no matrix of that rank can do better, choose a rank from the share of squared singular values kept, and read the smallest singular value as the distance to the nearest singular matrix.
+recalls: [m8.singular-value-decomposition]
+uses: [m8.courant-fischer-min-max-theorem, m8.spectral-theorem, m6.rank-nullity-theorem, m6.cauchy-schwarz-and-the-triangle-inequality, m7.orthonormal-bases, m7.conditioning, m5.rank, m5.column-space-and-null-space, e5.linear-algebra-routines, e5.axis-operations-and-reductions, e5.vectorisation, e5.arrays-dtype-and-shape, e0.functions, e0.loops]
+leads: [m8.pca-as-svd, m8.operator-and-frobenius-norms]
+starter: |
+  # Scratch space. A table of marks: 4 students, 3 tests.
+  # A rank-one table needs only one column and one row to store.
+  import numpy as np
+
+  M = np.array([[8.0, 6.0, 4.0], [6.0, 5.0, 3.0], [4.0, 3.0, 1.0], [9.0, 7.0, 6.0]])
+  guess = np.outer(M.mean(axis=1), M.mean(axis=0)) / M.mean()
+  print(round(float(np.linalg.norm(M - guess)), 4))
+
+  U, s, Vt = np.linalg.svd(M, full_matrices=False)
+  first = s[0] * np.outer(U[:, 0], Vt[0])
+  print(round(float(np.linalg.norm(M - first)), 4))
+parts:
+  recall:
+    - text: |
+        [[m8.singular-value-decomposition]] wrote every matrix as a sum of rank-one pieces, ordered by size, and ended by suggesting that the sum be cut short. Today's theorem says exactly how good the shortened sum is. Three quick pulls first.
+  puzzle:
+    - text: |
+        Four students sat three tests.
+
+        $$M = \begin{pmatrix} 8 & 6 & 4 \\ 6 & 5 & 3 \\ 4 & 3 & 1 \\ 9 & 7 & 6 \end{pmatrix}$$
+
+        The rows look like multiples of each other: a strong student is strong everywhere, and the third test was hard for everyone. If that were exactly true, the table would be "strength of student times easiness of test", a matrix of rank 1, and 7 numbers would store all 12.
+
+        It is not exactly true, so some rank-one table must be chosen. The sensible guess is row averages times column averages, divided by the overall average. The starter measures how far that is from $M$, adding up the squared errors of all 12 entries and taking the root. Then it does the same for the first term of the singular value decomposition.
+
+        ```
+        1.6581
+        1.5529
+        ```
+
+        The first term of the SVD is closer than the sensible guess. There are infinitely many rank-one tables to try.
+
+        **Is there one that gets closer than 1.5529? And how could anyone know without trying them all?**
+  intuition:
+    - text: |
+        Write the decomposition as a sum, largest piece first:
+
+        $$A = \sigma_1\mathbf{u}_1\mathbf{v}_1^\top + \sigma_2\mathbf{u}_2\mathbf{v}_2^\top + \dots + \sigma_r\mathbf{u}_r\mathbf{v}_r^\top.$$
+
+        Keep the first $k$ terms and call the result $A_k$. It has rank $k$. What is thrown away is the rest of the sum, and the rest of the sum is itself a singular value decomposition, whose largest singular value is $\sigma_{k+1}$. So the error $A - A_k$ stretches no vector by more than $\sigma_{k+1}$.
+
+        Why can no other matrix $B$ of rank $k$ do better? Because $B$ is blind in too many directions. Its null space has dimension $n - k$. The vectors $\mathbf{v}_1, \dots, \mathbf{v}_{k+1}$ span a space of dimension $k + 1$. The two dimensions add up to $n + 1$, more than the space has room for, so they share a nonzero vector $\mathbf{x}$.
+
+        On that $\mathbf{x}$, the matrix $B$ outputs zero, so the error $(A - B)\mathbf{x}$ is all of $A\mathbf{x}$. And $\mathbf{x}$ lies in the span of the $k + 1$ directions that $A$ stretches most, where $A$ stretches everything by at least $\sigma_{k+1}$.
+
+        So every rank-$k$ matrix makes an error of at least $\sigma_{k+1}$ somewhere, and $A_k$ makes an error of exactly $\sigma_{k+1}$. Nothing beats it. For the puzzle, nothing gets closer than the first term of the SVD.
+  derivation:
+    - text: |
+        Let $A$ be $m \times n$ with singular value decomposition $A = \sum_i \sigma_i\mathbf{u}_i\mathbf{v}_i^\top$, $\sigma_1 \ge \sigma_2 \ge \dots$. The **truncated SVD** of rank $k$ is
+
+        $$A_k = \sum_{i=1}^{k} \sigma_i\mathbf{u}_i\mathbf{v}_i^\top = U_k\Sigma_kV_k^\top,$$
+
+        with $U_k$ and $V_k$ the first $k$ columns of $U$ and $V$.
+
+        **Two ways to measure a matrix.** The **spectral norm** $\|E\|_2$ is the largest stretch, $\max\|E\mathbf{x}\|/\|\mathbf{x}\| = \sigma_1(E)$. The **Frobenius norm** $\|E\|_F$ is the root of the sum of the squares of all entries, and it equals $\sqrt{\sigma_1(E)^2 + \sigma_2(E)^2 + \dots}$, because orthogonal factors do not change a sum of squares. The puzzle measured its errors in the Frobenius norm.
+
+        **The error of truncation.** $A - A_k = \sum_{i > k} \sigma_i\mathbf{u}_i\mathbf{v}_i^\top$ has singular values $\sigma_{k+1}, \sigma_{k+2}, \dots$. So
+
+        $$\|A - A_k\|_2 = \sigma_{k+1}, \qquad \|A - A_k\|_F = \sqrt{\sigma_{k+1}^2 + \sigma_{k+2}^2 + \dots + \sigma_r^2}.$$
+
+        Both errors are known from the singular values alone, before any approximation is formed.
+
+        **Theorem (Eckart-Young).** For every matrix $B$ of rank at most $k$,
+
+        $$\|A - B\|_2 \ge \|A - A_k\|_2 \qquad\text{and}\qquad \|A - B\|_F \ge \|A - A_k\|_F.$$
+
+        **Proof for the spectral norm.** Let $B$ have rank at most $k$. By rank-nullity $\dim\ker B \ge n - k$. Let $S = \operatorname{span}(\mathbf{v}_1, \dots, \mathbf{v}_{k+1})$. Since $(n - k) + (k + 1) > n$, there is a unit vector $\mathbf{x}$ in both. Write $\mathbf{x} = c_1\mathbf{v}_1 + \dots + c_{k+1}\mathbf{v}_{k+1}$ with $\sum c_i^2 = 1$. Then $B\mathbf{x} = \mathbf{0}$ and
+
+        $$\|(A - B)\mathbf{x}\|^2 = \|A\mathbf{x}\|^2 = \sum_{i=1}^{k+1} \sigma_i^2c_i^2 \ge \sigma_{k+1}^2.$$
+
+        So $\|A - B\|_2 \ge \sigma_{k+1}$. $\blacksquare$
+
+        The Frobenius case uses the same idea once for every singular value of the error, through the min-max theorem: $\sigma_i(A - B) \ge \sigma_{k+i}(A)$ for each $i$. Squaring and adding gives the claim.
+
+        *The puzzle.* The singular values of $M$ are $19.3801$, $1.5183$ and $0.3260$. The best rank-one table has Frobenius error $\sqrt{1.5183^2 + 0.3260^2} = 1.5529$. That is the number the starter printed, and no rank-one table can get below it.
+    - question:
+        id: derivation-error
+        type: numeric
+        system: s2
+        prompt: |
+          A matrix has singular values $13, 4, 3$. What is the Frobenius norm of the error of its best rank-one approximation?
+        answer: "5"
+        explanation: |
+          The discarded singular values are 4 and 3, and the Frobenius error is $\sqrt{4^2 + 3^2} = 5$. In the spectral norm the same approximation has error 4, the largest discarded value. The two norms give different numbers for the same error matrix, but the same approximation is the best in both.
+    - text: |
+        **How much is kept.** Since $\|A\|_F^2 = \sum\sigma_i^2$, the truncation keeps the share
+
+        $$\frac{\sigma_1^2 + \dots + \sigma_k^2}{\sigma_1^2 + \dots + \sigma_r^2}$$
+
+        of the total squared size, and loses the rest. For the marks table the first term keeps $19.3801^2/378 = 99.4\%$. A common way to choose $k$ is to take the smallest one that keeps a required share, such as 95% or 99%.
+
+        **Storage.** $A_k$ is stored as $k$ left vectors, $k$ right vectors and $k$ numbers: $k(m + n + 1)$ values in place of $mn$. Multiplying a vector by $A_k$ costs about $k(m + n)$ operations in place of $mn$.
+
+        **Uniqueness.** If $\sigma_k > \sigma_{k+1}$ the best approximation of rank $k$ is unique. If $\sigma_k = \sigma_{k+1}$ there are several equally good ones, since any direction in the shared singular space could be the one kept.
+
+        **Distance to lower rank.** Read the theorem the other way: $\sigma_{k+1}$ is the distance from $A$ to the nearest matrix of rank $k$. In particular, for a square invertible matrix, $\sigma_n$ is the distance to the nearest singular matrix. A matrix with a tiny smallest singular value is nearly singular in this exact sense, which is the geometric meaning of a large condition number $\sigma_1/\sigma_n$. And the **numerical rank**, the number of singular values above a tolerance, is the smallest rank within that tolerance of $A$.
+
+        **Noise.** Data that is truly of rank $k$ plus small noise has $k$ large singular values followed by a floor of small ones. Truncating at the gap removes most of the noise and keeps most of the signal.
+
+        **In NumPy.**
+
+        ```python
+        U, s, Vt = np.linalg.svd(A, full_matrices=False)
+        Ak = (U[:, :k] * s[:k]) @ Vt[:k]
+        ```
+
+        Columns of `U`, rows of `Vt`. Multiplying by `s[:k]` scales each kept column.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the proof that no matrix B of rank k is closer to A than sigma k+1 in the spectral norm.
+        steps:
+          - 'By rank-nullity, the null space of $B$ has dimension at least $n - k$.'
+          - 'The span of $\mathbf{v}_1, \dots, \mathbf{v}_{k+1}$ has dimension $k + 1$, so the two subspaces share a unit vector $\mathbf{x}$.'
+          - 'Since $B\mathbf{x} = \mathbf{0}$, the error satisfies $(A - B)\mathbf{x} = A\mathbf{x}$.'
+          - 'Since $\mathbf{x}$ is a combination of the first $k + 1$ right singular vectors, $\|A\mathbf{x}\| \ge \sigma_{k+1}$.'
+          - 'Hence $\|A - B\|_2 \ge \sigma_{k+1}$, which is the error of the truncated SVD.'
+        explanation: A matrix of rank k ignores a subspace too large to avoid the k + 1 directions A stretches most.
+  formal:
+    - text: |
+        **Truncated SVD.** $A_k = \sum_{i=1}^{k} \sigma_i\mathbf{u}_i\mathbf{v}_i^\top$, for $0 \le k \le r = \operatorname{rank}A$.
+
+        **Norms.** $\|E\|_2 = \sigma_1(E)$. $\|E\|_F = \sqrt{\sum_{ij} e_{ij}^2} = \sqrt{\operatorname{tr}(E^\top E)} = \sqrt{\sum_i \sigma_i(E)^2}$.
+
+        **Theorem (Eckart-Young; Schmidt, Mirsky).**
+
+        $$\min_{\operatorname{rank}B \le k}\|A - B\|_2 = \sigma_{k+1}, \qquad \min_{\operatorname{rank}B \le k}\|A - B\|_F = \sqrt{\textstyle\sum_{i > k}\sigma_i^2},$$
+
+        and both minima are attained at $B = A_k$. The same holds for every norm that is unchanged by orthogonal factors on either side (Mirsky).
+
+        **Uniqueness.** In the Frobenius norm the minimiser is unique if and only if $\sigma_k > \sigma_{k+1}$.
+
+        **Weyl for singular values.** $\sigma_{i+j-1}(A + E) \le \sigma_i(A) + \sigma_j(E)$. With $\operatorname{rank}B \le k$: $\sigma_{k+i}(A) \le \sigma_i(A - B)$.
+
+        **Distance to singularity.** For $A \in \mathbb{R}^{n \times n}$: $\min\{\|E\|_2 : A + E \text{ singular}\} = \sigma_n(A)$, and relative to $\|A\|_2$ this is $1/\kappa_2(A)$.
+
+        **Projections.** $A_k = U_kU_k^\top A = AV_kV_k^\top$: the truncation projects the columns of $A$ onto the span of the first $k$ left singular vectors, or equivalently the rows onto the first $k$ right singular vectors.
+
+        **Retained share.** $\|A_k\|_F^2/\|A\|_F^2 = \sum_{i \le k}\sigma_i^2/\sum_i\sigma_i^2$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-define
+        type: choice
+        system: s1
+        prompt: |
+          The truncated SVD of rank $k$ keeps
+        options: ['the $k$ smallest singular values and their vectors', 'the $k$ largest singular values and their vectors', 'the first $k$ rows of $A$', 'the first $k$ columns of $A$']
+        answer: 1
+        explanation: The largest pieces of the sum.
+    - question:
+        id: drill-statement
+        type: choice
+        system: s1
+        prompt: |
+          The Eckart-Young theorem says that the truncated SVD of rank $k$ is
+        options: ['a good approximation of rank $k$', 'the closest matrix of rank at most $k$', 'equal to $A$', 'always invertible']
+        answer: 1
+        explanation: The best, not just a good one.
+    - question:
+        id: drill-spectral
+        type: numeric
+        system: s1
+        prompt: |
+          Singular values $10, 6, 2, 1$. What is the spectral norm of the error of the best rank-2 approximation?
+        answer: "2"
+        explanation: The first discarded singular value.
+    - question:
+        id: drill-frobenius
+        type: numeric
+        system: s1
+        prompt: |
+          Singular values $9, 4, 3$. What is the Frobenius error of the best rank-1 approximation?
+        answer: "5"
+        explanation: $\sqrt{16 + 9}$.
+    - question:
+        id: drill-rank
+        type: numeric
+        system: s1
+        prompt: |
+          A matrix has singular values $7, 5, 3, 2$. What is the rank of its truncated SVD $A_3$?
+        answer: "3"
+        explanation: Three nonzero terms are kept.
+    - question:
+        id: drill-fro-def
+        type: numeric
+        system: s1
+        prompt: |
+          What is the Frobenius norm of $\begin{pmatrix} 1 & 2 \\ 2 & 4 \end{pmatrix}$?
+        answer: "5"
+        explanation: $\sqrt{1 + 4 + 4 + 16}$.
+    - question:
+        id: drill-fro-sv
+        type: choice
+        system: s1
+        prompt: |
+          In terms of singular values, $\|A\|_F^2$ equals
+        options: ['$\sigma_1$', '$\sigma_1^2$', '$\sum_i \sigma_i^2$', '$\sum_i \sigma_i$']
+        answer: 2
+        explanation: Orthogonal factors do not change a sum of squares.
+    - question:
+        id: drill-share
+        type: numeric
+        system: s1
+        prompt: |
+          Singular values 4 and 3. What share of $\|A\|_F^2$ does the best rank-1 approximation keep? Answer as a decimal.
+        answer: "0.64"
+        explanation: $16/25$.
+    - question:
+        id: drill-storage
+        type: numeric
+        system: s1
+        prompt: |
+          A rank-1 approximation of a $100 \times 50$ matrix is stored as one left vector, one right vector and one singular value. How many numbers is that?
+        answer: "151"
+        explanation: $100 + 50 + 1$, in place of 5000.
+    - question:
+        id: drill-singular
+        type: numeric
+        system: s1
+        prompt: |
+          A square matrix has singular values $8, 3, 0.2$. How far is it, in the spectral norm, from the nearest singular matrix?
+        answer: "0.2"
+        explanation: The smallest singular value.
+    - question:
+        id: drill-unique
+        type: choice
+        system: s1
+        prompt: |
+          Singular values $5, 5, 1$. The best rank-1 approximation is
+        options: ['unique', 'not unique', 'the zero matrix', 'undefined']
+        answer: 1
+        explanation: The two largest are tied, so either direction, or any mix, serves equally well.
+    - question:
+        id: drill-both
+        type: choice
+        system: s1
+        prompt: |
+          The truncated SVD is the best approximation of its rank in
+        options: ['the spectral norm only', 'the Frobenius norm only', 'both the spectral and the Frobenius norm', 'neither']
+        answer: 2
+        explanation: The same matrix wins in both.
+    - question:
+        id: drill-numpy
+        type: choice
+        system: s1
+        prompt: |
+          After `U, s, Vt = np.linalg.svd(A, full_matrices=False)`, the best rank-`k` approximation is
+        options: ['`(U[:, :k] * s[:k]) @ Vt[:k]`', '`(U[:k] * s[:k]) @ Vt[:, :k]`', '`(U[:, -k:] * s[-k:]) @ Vt[-k:]`', '`U[:, :k] @ Vt[:k]`']
+        answer: 0
+        explanation: First k columns of U, first k singular values, first k rows of Vt.
+    - question:
+        id: predict-errors
+        type: predict
+        system: s1
+        prompt: The marks table and its best rank-one approximation. What does this show?
+        code: |
+          import numpy as np
+
+          M = np.array([[8.0, 6.0, 4.0], [6.0, 5.0, 3.0], [4.0, 3.0, 1.0], [9.0, 7.0, 6.0]])
+          U, s, Vt = np.linalg.svd(M, full_matrices=False)
+          A1 = s[0] * np.outer(U[:, 0], Vt[0])
+          print([round(float(v), 4) for v in s])
+          print(round(float(np.linalg.norm(M - A1)), 4), round(float(np.sqrt(s[1] ** 2 + s[2] ** 2)), 4))
+          print(round(float(np.linalg.norm(M - A1, 2)), 4))
+        output: |
+          [19.3801, 1.5183, 0.326]
+          1.5529 1.5529
+          1.5183
+        explanation: The Frobenius error of the first term is the root of the sum of squares of the discarded singular values. The spectral error is the first discarded singular value.
+    - question:
+        id: predict-ranks
+        type: predict
+        system: s1
+        prompt: A symmetric matrix with singular values 4, 2, 1, truncated at rank 1 and at rank 2. Each line shows the rank, the spectral error and the Frobenius error. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          U, s, Vt = np.linalg.svd(A)
+          for k in [1, 2]:
+              Ak = (U[:, :k] * s[:k]) @ Vt[:k]
+              E = A - Ak
+              print(int(np.linalg.matrix_rank(Ak)), round(float(np.linalg.norm(E, 2)), 4), round(float(np.linalg.norm(E)), 4))
+        output: |
+          1 2.0 2.2361
+          2 1.0 1.0
+        explanation: At rank 1 the discarded values are 2 and 1, giving spectral error 2 and Frobenius error root 5. At rank 2 only the value 1 is discarded, and the two norms agree.
+  work:
+    - text: Slower now. The first task is the approximation itself.
+    - question:
+        id: write-truncate
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `truncate(A, k)` returning the best approximation of `A` of rank `k`, as a matrix of the same shape as `A`. Use `np.linalg.svd(A, full_matrices=False)`.
+        starter: |
+          import numpy as np
+
+
+          def truncate(A, k):
+              return A * 0.0
+
+
+          A = np.array([[3.0, 0.0], [4.0, 5.0]])
+          A1 = truncate(A, 1)
+          print([[round(float(v), 4) for v in row] for row in A1])
+          print(round(float(np.linalg.norm(A - A1)), 4))
+        solution: |
+          import numpy as np
+
+
+          def truncate(A, k):
+              U, s, Vt = np.linalg.svd(A, full_matrices=False)
+              return (U[:, :k] * s[:k]) @ Vt[:k]
+
+
+          A = np.array([[3.0, 0.0], [4.0, 5.0]])
+          A1 = truncate(A, 1)
+          print([[round(float(v), 4) for v in row] for row in A1])
+          print(round(float(np.linalg.norm(A - A1)), 4))
+        tests: |
+          import numpy as _np
+          _A = _np.array([[3.0, 0.0], [4.0, 5.0]])
+          _A1 = truncate(_A, 1)
+          assert _np.shape(_A1) == (2, 2), "The approximation has the same shape as A"
+          assert _np.allclose(_A1, [[1.5, 1.5], [4.5, 4.5]]), "The best rank-one approximation of [[3, 0], [4, 5]] is [[1.5, 1.5], [4.5, 4.5]]"
+          assert _np.allclose(truncate(_A, 2), _A), "Keeping every singular value should give back A"
+          _M = _np.array([[8.0, 6.0, 4.0], [6.0, 5.0, 3.0], [4.0, 3.0, 1.0], [9.0, 7.0, 6.0]])
+          _s = _np.linalg.svd(_M, compute_uv=False)
+          _M1 = truncate(_M, 1)
+          assert _np.shape(_M1) == (4, 3) and _np.linalg.matrix_rank(_M1) == 1, "For the 4 by 3 marks table the result should be 4 by 3 and of rank 1"
+          assert abs(float(_np.linalg.norm(_M - _M1, 2)) - _s[1]) < 1e-9, "The spectral error of the rank-one approximation should be the second singular value"
+          assert abs(float(_np.linalg.norm(_M - truncate(_M, 2))) - _s[2]) < 1e-9, "The error of the rank-two approximation of the marks table should be its third singular value"
+          _W = _np.random.default_rng(0).normal(size=(3, 6))
+          _sw = _np.linalg.svd(_W, compute_uv=False)
+          _W2 = truncate(_W, 2)
+          assert _np.shape(_W2) == (3, 6) and _np.linalg.matrix_rank(_W2) == 2, "For a wide 3 by 6 matrix and k = 2 the result should be 3 by 6 and of rank 2"
+          assert abs(float(_np.linalg.norm(_W - _W2)) - _sw[2]) < 1e-9, "For the wide matrix the error at rank 2 should be the third singular value"
+          assert output.strip() == "[[1.5, 1.5], [4.5, 4.5]]\n2.2361", "The program should print [[1.5, 1.5], [4.5, 4.5]] and then 2.2361"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def truncate(A, k):
+                U, s, Vt = np.linalg.svd(A, full_matrices=False)
+                return (U[:, -k:] * s[-k:]) @ Vt[-k:]
+
+
+            print("[[1.5, 1.5], [4.5, 4.5]]\n2.2361")
+          - |
+            import numpy as np
+
+
+            def truncate(A, k):
+                U, s, Vt = np.linalg.svd(A, full_matrices=False)
+                return U[:, :k] @ Vt[:k]
+
+
+            print("[[1.5, 1.5], [4.5, 4.5]]\n2.2361")
+          - |
+            import numpy as np
+
+
+            def truncate(A, k):
+                U, s, Vt = np.linalg.svd(A, full_matrices=False)
+                return (U[:, :k] * s[:k]) @ Vt[:, :k].T
+
+
+            print("[[1.5, 1.5], [4.5, 4.5]]\n2.2361")
+          - |
+            import numpy as np
+
+
+            def truncate(A, k):
+                B = A * 0.0
+                B[:, :k] = A[:, :k]
+                return B
+
+
+            print("[[1.5, 1.5], [4.5, 4.5]]\n2.2361")
+        explanation: |
+          `U[:, :k] * s[:k]` scales the $j$th kept column by $\sigma_j$, by broadcasting, and the product with the first `k` rows of `Vt` adds up the $k$ rank-one pieces.
+
+          The answer for the matrix of the last lesson is worth looking at. $\begin{pmatrix} 1.5 & 1.5 \\ 4.5 & 4.5 \end{pmatrix}$ has two equal columns and its second row is three times its first: rank 1, as required. Its distance from $A$ is $\sqrt5 = 2.2361$, the second singular value.
+
+          The last wrong version keeps the first `k` columns of $A$ and zeroes the rest. That is also a matrix of rank at most `k`, and for the same matrix its error is 5, more than twice as large. Dropping columns, or rows, is the obvious way to shrink a table. The theorem says that the right things to drop are singular directions, which mix all the rows and columns.
+    - question:
+        id: write-rank-for-share
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `rank_for_share(A, share)` returning the smallest `k` such that the best rank-`k` approximation keeps at least the fraction `share` of the squared Frobenius norm of `A`. Work from the singular values alone. Allow a tolerance of `1e-12` in the comparison, so that `share = 1.0` returns the full rank and not one more.
+        starter: |
+          import numpy as np
+
+
+          def rank_for_share(A, share):
+              return 0
+
+
+          M = np.array([[8.0, 6.0, 4.0], [6.0, 5.0, 3.0], [4.0, 3.0, 1.0], [9.0, 7.0, 6.0]])
+          print(rank_for_share(M, 0.99), rank_for_share(M, 0.999))
+        solution: |
+          import numpy as np
+
+
+          def rank_for_share(A, share):
+              s = np.linalg.svd(A, compute_uv=False)
+              kept = np.cumsum(s ** 2) / np.sum(s ** 2)
+              return int((kept < share - 1e-12).sum()) + 1
+
+
+          M = np.array([[8.0, 6.0, 4.0], [6.0, 5.0, 3.0], [4.0, 3.0, 1.0], [9.0, 7.0, 6.0]])
+          print(rank_for_share(M, 0.99), rank_for_share(M, 0.999))
+        tests: |
+          import numpy as _np
+          _M = _np.array([[8.0, 6.0, 4.0], [6.0, 5.0, 3.0], [4.0, 3.0, 1.0], [9.0, 7.0, 6.0]])
+          assert rank_for_share(_M, 0.99) == 1, "The first singular value of the marks table carries 99.4% of the squared norm, so rank 1 keeps 99%"
+          assert rank_for_share(_M, 0.999) == 2, "Rank 1 keeps 99.4%, short of 99.9%. Rank 2 keeps 99.97%"
+          assert rank_for_share(_M, 1.0) == 3, "Keeping everything needs the full rank, 3"
+          _D = _np.array([[3.0, 0.0], [0.0, 4.0]])
+          assert rank_for_share(_D, 0.6) == 1, "diag(3, 4) has singular values 4 and 3. Rank 1 keeps 16/25 = 64%, which is at least 60%. Shares are of squared singular values"
+          assert rank_for_share(_D, 0.64) == 1, "Rank 1 keeps exactly 64%, which counts as at least 64%"
+          assert rank_for_share(_D, 0.65) == 2, "Rank 1 keeps 64%, short of 65%"
+          assert rank_for_share(_np.eye(5), 0.5) == 3, "The identity of size 5 has five equal singular values, so each keeps 20%, and 50% needs three"
+          assert isinstance(rank_for_share(_D, 0.5), int), "Return a Python int"
+          assert output.strip() == "1 2", "The program should print 1 2"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def rank_for_share(A, share):
+                s = np.linalg.svd(A, compute_uv=False)
+                kept = np.cumsum(s) / np.sum(s)
+                return int((kept < share - 1e-12).sum()) + 1
+
+
+            print("1 2")
+          - |
+            import numpy as np
+
+
+            def rank_for_share(A, share):
+                s = np.linalg.svd(A, compute_uv=False)
+                kept = np.cumsum(s ** 2) / np.sum(s ** 2)
+                return int((kept < share - 1e-12).sum())
+
+
+            print("1 2")
+          - |
+            import numpy as np
+
+
+            def rank_for_share(A, share):
+                s = np.linalg.svd(A, compute_uv=False)
+                kept = np.cumsum(s ** 2) / np.sum(s ** 2)
+                return int((kept <= share + 1e-12).sum()) + 1
+
+
+            print("1 2")
+          - |
+            import numpy as np
+
+
+            def rank_for_share(A, share):
+                s = np.linalg.svd(A, compute_uv=False)
+                kept = s ** 2 / np.sum(s ** 2)
+                return int((kept < share - 1e-12).sum()) + 1
+
+
+            print("1 2")
+        explanation: |
+          `np.cumsum(s ** 2)` holds the squared size kept by rank 1, rank 2, and so on. Dividing by the total gives the kept share for each rank, an increasing sequence ending at 1. The number of ranks that fall short, plus one, is the first rank that suffices.
+
+          The shares are of **squared** singular values, because the Frobenius norm squared is the sum of the squares. The first wrong version uses the singular values themselves. For `diag(3, 4)` it thinks rank 1 keeps $4/7 = 57\%$, when in fact it keeps 64%.
+
+          This is how a rank is usually chosen in practice. The function never forms an approximation: by the theorem, the singular values already say how good each one would be.
+    - question:
+        id: fix-rows
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `low_rank_error(A, k)` should return the Frobenius distance from `A` to its best approximation of rank `k`. For this matrix and `k = 1` the answer should be about `4.8436`, the root of the sum of the squares of the two discarded singular values. The program prints something much larger. Fix it.
+        starter: |
+          import numpy as np
+
+
+          def low_rank_error(A, k):
+              U, s, Vt = np.linalg.svd(A)
+              Ak = U[:, :k] @ np.diag(s[:k]) @ Vt[:, :k].T
+              return float(np.linalg.norm(A - Ak))
+
+
+          A = np.array([[1.0, 2.0, 3.0], [0.0, 1.0, 4.0], [5.0, 6.0, 0.0]])
+          print(round(low_rank_error(A, 1), 4))
+        solution: |
+          import numpy as np
+
+
+          def low_rank_error(A, k):
+              U, s, Vt = np.linalg.svd(A)
+              Ak = U[:, :k] @ np.diag(s[:k]) @ Vt[:k]
+              return float(np.linalg.norm(A - Ak))
+
+
+          A = np.array([[1.0, 2.0, 3.0], [0.0, 1.0, 4.0], [5.0, 6.0, 0.0]])
+          print(round(low_rank_error(A, 1), 4))
+        tests: |
+          import numpy as _np
+          _A = _np.array([[1.0, 2.0, 3.0], [0.0, 1.0, 4.0], [5.0, 6.0, 0.0]])
+          _s = _np.linalg.svd(_A, compute_uv=False)
+          assert abs(low_rank_error(_A, 1) - float(_np.sqrt(_s[1] ** 2 + _s[2] ** 2))) < 1e-9, "At rank 1 the error should be the root of the sum of squares of the second and third singular values, about 4.8436. The right singular vectors are the rows of Vt"
+          assert abs(low_rank_error(_A, 2) - _s[2]) < 1e-9, "At rank 2 the error should be the third singular value, about 0.0249"
+          assert abs(low_rank_error(_A, 3)) < 1e-9, "At full rank the error should be zero"
+          _B = _np.random.default_rng(0).normal(size=(5, 5))
+          _sb = _np.linalg.svd(_B, compute_uv=False)
+          assert abs(low_rank_error(_B, 2) - float(_np.sqrt((_sb[2:] ** 2).sum()))) < 1e-9, "For a random 5 by 5 matrix and k = 2 the error should be the root of the sum of squares of the last three singular values"
+          assert output.strip() == "4.8436", "The program should print 4.8436"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def low_rank_error(A, k):
+                U, s, Vt = np.linalg.svd(A)
+                Ak = U[:, :k] @ np.diag(s[:k]) @ Vt[:, :k].T
+                return float(np.linalg.norm(A - Ak))
+
+
+            print("4.8436")
+          - |
+            import numpy as np
+
+
+            def low_rank_error(A, k):
+                U, s, Vt = np.linalg.svd(A)
+                Ak = U[:, :k] @ np.diag(s[:k]) @ Vt[:k]
+                return float(np.linalg.norm(A - Ak, 2))
+
+
+            print("4.8436")
+          - |
+            import numpy as np
+
+
+            def low_rank_error(A, k):
+                U, s, Vt = np.linalg.svd(A)
+                Ak = U[:, :k] @ Vt[:k]
+                return float(np.linalg.norm(A - Ak))
+
+
+            print("4.8436")
+          - |
+            import numpy as np
+
+
+            def low_rank_error(A, k):
+                U, s, Vt = np.linalg.svd(A)
+                return float(np.sqrt((s[:k] ** 2).sum()))
+
+
+            print("4.8436")
+        explanation: |
+          The right singular vectors are the rows of `Vt`. `Vt[:k]` is $V_k^\top$, of shape $k \times n$, which is what the product needs. `Vt[:, :k].T` has the same shape, so nothing fails, but it holds the first `k` entries of every right singular vector, not the first `k` vectors. The result is still a matrix of rank `k`. It is just not near $A$.
+
+          The theorem gives a test that costs nothing: the error must come out as $\sqrt{\sigma_{k+1}^2 + \dots}$. Anything larger means the approximation was assembled wrongly. And nothing smaller is possible, so a smaller number would mean the error was measured wrongly.
+
+          In fact the whole function can be replaced by `float(np.sqrt((s[k:] ** 2).sum()))`. The last wrong version tries that and sums the kept values, where the discarded ones were wanted.
+    - question:
+        id: work-storage
+        type: numeric
+        system: s2
+        prompt: |
+          A greyscale image is a $1000 \times 800$ matrix. Its rank-50 truncated SVD is stored as 50 left vectors, 50 right vectors and 50 singular values. How many numbers is that?
+        answer: "90050"
+        explanation: |
+          $50 \times (1000 + 800 + 1) = 90\,050$, against $800\,000$ for the image: about a ninth. Whether rank 50 is enough depends on how quickly the singular values of the image fall, and for photographs they fall quickly, because neighbouring rows resemble each other. The same count explains low-rank layers in neural networks: a $1000 \times 800$ weight matrix replaced by a product of a $1000 \times 50$ and a $50 \times 800$ matrix has 90 000 parameters and costs a ninth of the multiplications.
+    - question:
+        id: work-nearly-singular
+        type: choice
+        system: s2
+        prompt: |
+          A $3 \times 3$ matrix has singular values $5, 2, 10^{-9}$ and determinant about $10^{-8}$. Its entries were measured to 6 decimal places. What should be concluded?
+        options:
+          - 'The determinant is not zero, so the matrix is invertible and can be used as it is.'
+          - 'Within the accuracy of the measurements the matrix cannot be told apart from a singular one, since a change of size $10^{-9}$ makes it singular. Its numerical rank is 2, and it should be treated as a rank-2 matrix.'
+          - 'The matrix has rank 1.'
+          - 'Nothing can be said without the eigenvalues.'
+        answer: 1
+        explanation: |
+          By Eckart-Young the nearest matrix of rank 2 is at distance $\sigma_3 = 10^{-9}$, a thousand times smaller than the uncertainty of the entries. So the data are consistent with an exactly singular matrix, and inverting would amplify the measurement errors by $1/\sigma_3 = 10^9$. The honest description is "rank 2 to within the accuracy of the data". The distance to rank 1 is $\sigma_2 = 2$, which is large, so it is not close to rank 1. This is why rank, for measured data, is always decided from singular values against a tolerance.
+    - question:
+        id: work-columns
+        type: choice
+        system: s2
+        prompt: |
+          To approximate a $100 \times 100$ matrix by one of rank 10, someone keeps its 10 columns of largest length and sets the other columns to zero. How does the error compare with that of the truncated SVD of rank 10?
+        options:
+          - 'It is the same, since both have rank 10.'
+          - 'It is at least as large, in both norms, and usually much larger. The column choice is one particular matrix of rank at most 10, and the theorem says none of those beats the truncated SVD.'
+          - 'It is smaller, because real columns of the data are kept exactly.'
+          - 'It depends on the norm: better in the Frobenius norm, worse in the spectral norm.'
+        answer: 1
+        explanation: |
+          Eckart-Young is a statement about **every** matrix of rank at most $k$, however it was produced. Choosing columns, choosing rows, clustering, or training a factorisation by gradient descent all produce matrices of rank at most $k$, so the truncated SVD is a floor for all of them. It is the standard baseline: a low-rank method is judged by how close it gets to $\sqrt{\sigma_{k+1}^2 + \dots}$. Keeping actual columns does have a merit, since they can be interpreted, and that is paid for in error.
+  connections:
+    - text: |
+        No rank-one table gets closer to the marks than the first term of the singular value decomposition. The **Eckart-Young theorem**: the truncated SVD $A_k$ is the closest matrix of rank $k$ to $A$, with error $\sigma_{k+1}$ in the spectral norm and $\sqrt{\sigma_{k+1}^2 + \dots + \sigma_r^2}$ in the Frobenius norm. The reason is a count of dimensions. A matrix of rank $k$ ignores a subspace of dimension $n - k$, which must meet the $k + 1$ directions that $A$ stretches most.
+
+        So the singular values say in advance how well a matrix can be compressed to each rank, and the smallest one says how close the matrix is to being singular.
+
+        In the marks table the single kept direction had a meaning: overall strength of a student. When the rows of a matrix are observations and the columns are measured quantities, the best low-rank approximation finds the few directions along which the observations really differ. With one preparatory step, subtracting the average, that is the most used method of data analysis there is: [[m8.pca-as-svd]].
