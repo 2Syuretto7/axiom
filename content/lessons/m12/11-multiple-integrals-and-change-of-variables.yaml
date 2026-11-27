@@ -1,0 +1,615 @@
+concept: m12.multiple-integrals-and-change-of-variables
+minutes: 90
+claim: You can define the integral of a function over a region of the plane as the limit of sums over small cells, compute it as an iterated integral with the right limits for rectangles and for regions with curved or slanting edges, estimate it numerically with broadcasting, change variables with the absolute value of the Jacobian determinant as the local factor on area, integrate over discs in polar coordinates, and evaluate the Gaussian integral.
+recalls: [m12.inverse-and-implicit-function-theorems]
+uses: [m12.jacobian, m12.functions-of-several-variables, m12.multivariable-chain-rule, m12.total-derivative-as-best-linear-approximation, m10.integral-as-accumulation, m10.fundamental-theorem-of-calculus, m10.integration-techniques, m10.limits-and-continuity, m5.determinant, m5.matrices-as-linear-maps, m2.the-exponential-and-e, m2.trigonometric-functions-on-the-unit-circle, m2.summation-and-product-notation, m1.coordinates-and-the-plane, e5.broadcasting, e5.arrays-dtype-and-shape, e5.axis-operations-and-reductions, e5.vectorisation, e5.indexing-and-slicing, e5.random-number-generation, e5.linear-algebra-routines, e0.functions, e0.loops]
+leads: [e6.scalar-computational-graph, m15.change-of-variables-for-densities, m15.multivariate-gaussian, m17.monte-carlo-estimation-and-variance-reduction, m18.maximum-likelihood]
+starter: |
+  # Scratch space. A bell-shaped hill, exp(-(x^2 + y^2)), over the plane.
+  # Chop the square from -5 to 5 each way into a million small cells, and add
+  # up (height at the middle of the cell) x (area of the cell).
+  import numpy as np
+
+  n = 1000
+  edges = np.linspace(-5.0, 5.0, n + 1)
+  mid = (edges[:-1] + edges[1:]) / 2
+  d = 10.0 / n
+
+  x = mid[:, np.newaxis]
+  y = mid[np.newaxis, :]
+  print("volume under the hill ", round(float((np.exp(-(x * x + y * y)) * d * d).sum()), 6))
+  print("area under exp(-x^2)  ", round(float((np.exp(-mid * mid) * d).sum()), 6))
+parts:
+  recall:
+    - text: |
+        [[m12.inverse-and-implicit-function-theorems]] completed the derivative in several variables. The other half of calculus is the integral, which for one variable was the area under a curve, found as a limit of sums of thin strips. Today it is taken up to the plane. Three quick pulls first.
+  puzzle:
+    - text: |
+        The function $e^{-x^2}$ is the bell curve, the shape at the centre of probability and statistics. You will need the area under it, over the whole line:
+
+        $$I = \int_{-\infty}^{\infty} e^{-x^2}\,dx.$$
+
+        Try the methods of the lesson on integration techniques. Substitution wants a factor of $x$ outside the exponential, and there is none. Integration by parts makes it worse. In fact $e^{-x^2}$ has **no antiderivative** that can be written with the functions you know. The fundamental theorem of calculus is of no use.
+
+        The starter computes the area numerically, and also something that looks like a harder problem: the **volume** under the two-dimensional bell $e^{-(x^2 + y^2)}$, a round hill over the plane.
+
+        Run it. The area under the curve is 1.772454. The volume under the hill is **3.141593**.
+
+        That is $\pi$. And 1.772454 is $\sqrt{\pi}$.
+
+        There is no circle anywhere in $\int e^{-x^2}\,dx$. It is a function of one variable on a straight line.
+
+        **What does it mean to integrate over a plane? Why is the volume the square of the area? And where does $\pi$ come from?**
+  intuition:
+    - text: |
+        **Adding up over a region.** The integral of a function of one variable added up, over an interval, the value of the function times the width of a small piece of the interval. Thin strips, each a height times a width, and their total was the area under the curve.
+
+        Do the same over a region of the plane. Chop the region into small cells. For each cell multiply the value of the function there by the **area** of the cell. Add. If the function is a height, each product is the volume of a thin column standing on its cell, and the total is the volume under the surface. As the cells shrink the total settles to a limit, and that limit is the **double integral**:
+
+        $$\iint_R f(x, y)\,dA.$$
+
+        The starter did exactly this with a million square cells.
+
+        The function need not be a height. If $f$ is the density of a metal plate, in grams per square centimetre, the integral is its mass. If $f$ is a probability density, the integral over a region is the probability of landing there. If $f$ is 1 everywhere, the integral is the area of the region. **An integral is a sum of value times size, over small pieces.** That sentence holds in any number of dimensions.
+
+        **One variable at a time.** How do you compute such a thing exactly? Slice a loaf of bread. The volume of the loaf is the sum of the volumes of the slices, and each slice is its face area times its thickness. So: fix $x$, and find the area of the cross-section of the solid at that $x$, which is an ordinary integral over $y$. Call it $A(x)$. Then integrate $A(x)$ over $x$.
+
+        $$\iint_R f\,dA = \int \left( \int f(x, y)\,dy \right) dx.$$
+
+        A double integral is two single integrals, one inside the other. In the inner one $x$ is frozen, exactly as it was for a partial derivative. This is called an **iterated integral**, and you could equally slice the other way, integrating over $x$ first. The loaf has the same volume however it is sliced.
+
+        That explains the square. The hill is $e^{-(x^2 + y^2)} = e^{-x^2} \cdot e^{-y^2}$, a function of $x$ times a function of $y$. In the inner integral over $y$ the factor $e^{-x^2}$ is a constant and comes out, leaving $\int e^{-y^2}\,dy = I$. Then the outer integral is $I \int e^{-x^2}\,dx = I \cdot I$. **The volume under the hill is $I^2$.**
+
+        **Other cells.** Now the $\pi$. The hill is round: its height depends only on the distance $r$ from the origin, since $x^2 + y^2 = r^2$. Square cells suit it badly. Chop the plane instead into the cells of polar coordinates, bounded by circles and by rays from the origin.
+
+        These cells are not all the same size. The lesson on the Jacobian measured them: a cell that is $dr$ wide in distance and $d\theta$ wide in angle has sides $dr$ and $r\,d\theta$, since an angle sweeps a longer arc further out. **Its area is $r\,dr\,d\theta$.** The figure shows such a cell.
+    - figure: polar-cell
+      props: { r: 2 }
+    - text: |
+        So in polar coordinates the volume under the hill is the sum of $e^{-r^2}$ times $r\,dr\,d\theta$. And that extra $r$, which is nothing but the area of the cell, is the very factor that substitution was missing. With $r$ present, $e^{-r^2}\,r$ has an antiderivative, $-\tfrac12 e^{-r^2}$. The integral over $r$ from 0 to $\infty$ is $\tfrac12$. The integral over the angle, once round, multiplies by $2\pi$. The volume is $\pi$.
+
+        Therefore $I^2 = \pi$ and $I = \sqrt{\pi}$. The circle was hidden in the square of the integral: two copies of a line make a plane, and the plane has rotational symmetry that the line has not.
+
+        The general lesson is in the factor $r$. **When you change the variables of an integral, you must also account for the change in the size of the cells**, and the factor that does it is the Jacobian determinant of the change of variables, the local magnification of area.
+  derivation:
+    - text: |
+        **Definition.** Let $f$ be continuous on a rectangle $R = [a, b] \times [c, d]$. Divide $[a, b]$ into $n$ pieces of width $\Delta x$ and $[c, d]$ into $m$ pieces of width $\Delta y$, and choose a point $(x_i, y_j)$ in each cell. The **double integral** is the limit of the Riemann sums:
+
+        $$\iint_R f\,dA = \lim \sum_{i=1}^{n}\sum_{j=1}^{m} f(x_i, y_j)\,\Delta x\,\Delta y.$$
+
+        For a region $D$ that is not a rectangle, enclose it in one and take $f$ to be 0 outside $D$.
+
+        **Fubini's theorem.** For continuous $f$ on a rectangle,
+
+        $$\iint_R f\,dA = \int_a^b\!\left( \int_c^d f(x, y)\,dy \right) dx = \int_c^d\!\left( \int_a^b f(x, y)\,dx \right) dy.$$
+
+        The Riemann sum is a table of numbers added up. Adding along each row and then adding the row totals gives the same as adding down each column and then adding the column totals. The theorem says this survives the limit.
+
+        *Example.* $\displaystyle\int_0^1\!\!\int_0^2 xy^2\,dy\,dx$. Inner integral, with $x$ frozen: $x\left[\tfrac{y^3}{3}\right]_0^2 = \tfrac{8}{3}x$. Outer: $\tfrac83\left[\tfrac{x^2}{2}\right]_0^1 = \tfrac43$. Because the integrand is a product of a function of $x$ and a function of $y$, and the region is a rectangle, the answer is also the product of two single integrals, $\tfrac12 \times \tfrac83$.
+
+        **Regions with slanting or curved edges.** If the region is described by $a \le x \le b$ and, for each such $x$, $g(x) \le y \le h(x)$, the inner limits depend on the outer variable:
+
+        $$\iint_D f\,dA = \int_a^b\!\left( \int_{g(x)}^{h(x)} f(x, y)\,dy \right) dx.$$
+
+        *Example.* Integrate $xy$ over the triangle with corners $(0, 0)$, $(1, 0)$ and $(1, 1)$. For each $x$ from 0 to 1, $y$ runs from 0 up to the line $y = x$.
+
+        $$\int_0^1\!\!\int_0^x xy\,dy\,dx = \int_0^1 x \cdot \frac{x^2}{2}\,dx = \left[\frac{x^4}{8}\right]_0^1 = \frac18.$$
+
+        The limits of the **outer** integral are always constants. Limits that contain a variable can only be on an inner integral, and may contain only variables that are still to be integrated. To reverse the order, redescribe the region: the same triangle is $0 \le y \le 1$ with $y \le x \le 1$.
+
+        **Numerically.** The midpoint rule: put the sample point at the centre of each cell. With the midpoints of the $x$ pieces in a column and those of the $y$ pieces in a row, broadcasting evaluates $f$ on every cell at once, and `(f(x, y) * dx * dy).sum()` is the Riemann sum. With $n$ pieces each way the error falls as $1/n^2$ and the work grows as $n^2$. In $k$ dimensions the work grows as $n^k$, and beyond a handful of dimensions grids are hopeless. The integrals of probability in high dimensions are estimated instead by averaging the function at random points, a method taken up in [[m17.monte-carlo-estimation-and-variance-reduction]].
+    - question:
+        id: derivation-limits
+        type: choice
+        system: s2
+        prompt: |
+          A student writes the integral of $f$ over the triangle with corners $(0, 0)$, $(1, 0)$, $(1, 1)$ as $\displaystyle\int_0^x\!\!\int_0^1 f(x, y)\,dx\,dy$. What is wrong?
+        options:
+          - 'Nothing. The order of integration can always be chosen freely.'
+          - 'The outer integral has a limit containing $x$, a variable that the inner integral has already integrated away. The result would still contain $x$ and so would not be a number. Outer limits must be constants. With $y$ outermost the triangle is $0 \le y \le 1$, and for each such $y$, $x$ runs from $y$ to 1.'
+          - 'The integrand should be multiplied by $x$.'
+          - 'A triangle cannot be integrated over.'
+        answer: 1
+        explanation: |
+          An iterated integral is worked from the inside out, and each integration removes its own variable. Whatever is left for the outermost integral must be a function of the outermost variable only, and its limits must be numbers. The order can indeed be chosen freely, but changing the order means describing the region afresh, not just swapping the symbols. Sketch the region, choose which variable goes outside, read off its full range, and then for a typical value of it read off the range of the other.
+    - text: |
+        **Change of variables.** Suppose the points of a region $D$ in the $(x, y)$ plane are described by new coordinates $(u, v)$ ranging over a region $D^{*}$, through a one-to-one map $(x, y) = \mathbf{T}(u, v)$ with continuous partial derivatives. A small rectangle of area $du\,dv$ in the $(u, v)$ plane is sent by $\mathbf{T}$ to a small patch in the $(x, y)$ plane. Near any point $\mathbf{T}$ acts as its Jacobian matrix, so the area of the patch is $|\det J_{\mathbf{T}}|\,du\,dv$. Adding up $f$ times the area of the patch:
+
+        $$\iint_D f(x, y)\,dx\,dy = \iint_{D^{*}} f(\mathbf{T}(u, v))\;\bigl|\det J_{\mathbf{T}}(u, v)\bigr|\;du\,dv.$$
+
+        Three things change together: the integrand is rewritten in the new variables, the region is redescribed in them, and **the area element picks up the absolute value of the Jacobian determinant**. In one variable this is substitution, $\int f(x)\,dx = \int f(g(u))\,g'(u)\,du$, where $g'$ is the 1 by 1 Jacobian.
+
+        *Polar coordinates.* $x = r\cos\theta$, $y = r\sin\theta$, $\det J = r$:
+
+        $$dx\,dy = r\,dr\,d\theta.$$
+
+        The area of a disc of radius $R$ is $\displaystyle\int_0^{2\pi}\!\!\int_0^R r\,dr\,d\theta = 2\pi \cdot \frac{R^2}{2} = \pi R^2$. The disc, awkward in $x$ and $y$, is a rectangle in $r$ and $\theta$.
+
+        *The Gaussian integral.* With $I = \int_{-\infty}^{\infty} e^{-x^2}\,dx$,
+
+        $$I^2 = \iint e^{-(x^2 + y^2)}\,dx\,dy = \int_0^{2\pi}\!\!\int_0^{\infty} e^{-r^2}\,r\,dr\,d\theta = 2\pi\left[-\tfrac12 e^{-r^2}\right]_0^{\infty} = \pi.$$
+
+        So $\displaystyle\int_{-\infty}^{\infty} e^{-x^2}\,dx = \sqrt{\pi}$. Rescaling $x$ gives $\displaystyle\int_{-\infty}^{\infty} e^{-x^2/2}\,dx = \sqrt{2\pi}$, which is why the bell curve of probability carries the factor $\dfrac{1}{\sqrt{2\pi}}$: it makes the total area 1.
+
+        *A linear change.* For $\mathbf{x} = A\mathbf{u}$ with $A$ an invertible matrix, the Jacobian is $A$ at every point and $d\mathbf{x} = |\det A|\,d\mathbf{u}$. The ellipse $\dfrac{x^2}{a^2} + \dfrac{y^2}{b^2} \le 1$ is the image of the unit disc under $x = au$, $y = bv$, with determinant $ab$, so its area is $\pi ab$.
+
+        **Densities.** If points are scattered over the $(u, v)$ plane with density $p(u, v)$ and each point is moved by $\mathbf{T}$, the same points now occupy patches $|\det J|$ times as large, so their density in the $(x, y)$ plane is $p$ **divided** by $|\det J|$. A map that stretches space thins out whatever is spread over it. This rule for transforming probability densities is the change of variables formula read backwards, and it is developed in [[m15.change-of-variables-for-densities]].
+
+        **Three variables and more.** A triple integral adds up value times volume over a solid, as three nested single integrals. The change of variables formula is the same, with the determinant of a 3 by 3 Jacobian as the factor on volume. In $n$ dimensions the determinant of the $n$ by $n$ Jacobian is the factor on $n$-dimensional volume, which is what the lesson on the determinant said a determinant is.
+    - question:
+        id: order-polar
+        type: order
+        system: s2
+        prompt: Put in order the steps for finding the volume under $z = 1 - x^2 - y^2$ above the unit disc.
+        steps:
+          - 'Notice that both the region and the integrand depend only on the distance from the origin, and choose polar coordinates.'
+          - 'Rewrite the integrand: $1 - x^2 - y^2 = 1 - r^2$.'
+          - 'Redescribe the region: $0 \le r \le 1$ and $0 \le \theta \le 2\pi$.'
+          - 'Replace the area element: $dx\,dy = r\,dr\,d\theta$.'
+          - 'Integrate over $r$: $\int_0^1 (r - r^3)\,dr = \tfrac12 - \tfrac14 = \tfrac14$.'
+          - 'Integrate over $\theta$: $2\pi \times \tfrac14 = \tfrac{\pi}{2}$.'
+        explanation: Three replacements are made together. The integrand, the limits and the area element each change. Leaving out the factor r is the commonest mistake, and it would give 2π times two thirds, which is the integral of a different thing. A check on the answer is that the solid sits inside a cylinder of volume π and fills half of it.
+  formal:
+    - text: |
+        **Double integral.** For $f$ continuous on a closed bounded region $D \subset \mathbb{R}^2$ with a reasonable boundary, $\iint_D f\,dA$ is the limit of the Riemann sums $\sum f(\mathbf{p}_k)\,\Delta A_k$ over subdivisions of $D$ into cells of area $\Delta A_k$ whose diameters tend to 0, with $\mathbf{p}_k$ in the $k$-th cell.
+
+        **Fubini's theorem.** If $f$ is continuous on $R = [a, b] \times [c, d]$, then $\iint_R f\,dA = \int_a^b \int_c^d f\,dy\,dx = \int_c^d \int_a^b f\,dx\,dy$. If $D = \{(x, y) : a \le x \le b,\ g(x) \le y \le h(x)\}$ with $g, h$ continuous, then $\iint_D f\,dA = \int_a^b \int_{g(x)}^{h(x)} f\,dy\,dx$.
+
+        **Properties.** Linearity: $\iint (\alpha f + \beta g) = \alpha \iint f + \beta \iint g$. Additivity over regions that overlap only along edges. If $f \le g$ on $D$ then $\iint_D f \le \iint_D g$. $\iint_D 1\,dA$ is the area of $D$.
+
+        **Change of variables.** Let $\mathbf{T} : D^{*} \to D$ be a bijection of class $C^1$ between regions of $\mathbb{R}^n$ with $\det J_{\mathbf{T}} \ne 0$, except possibly on a set of zero volume. Then for continuous $f$,
+
+        $$\int_D f(\mathbf{x})\,d\mathbf{x} = \int_{D^{*}} f(\mathbf{T}(\mathbf{u}))\,\lvert \det J_{\mathbf{T}}(\mathbf{u}) \rvert\,d\mathbf{u}.$$
+
+        **Polar coordinates.** $dx\,dy = r\,dr\,d\theta$.
+
+        **Gaussian integral.** $\displaystyle\int_{-\infty}^{\infty} e^{-x^2}\,dx = \sqrt{\pi}$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-constant
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\displaystyle\iint_R 5\,dA$ over the rectangle $0 \le x \le 2$, $0 \le y \le 3$?
+        answer: "30"
+        explanation: A constant height of 5 over an area of 6.
+    - question:
+        id: drill-area
+        type: choice
+        system: s1
+        prompt: |
+          What does $\displaystyle\iint_D 1\,dA$ give?
+        options: ['The area of $D$', 'The perimeter of $D$', '1', '0']
+        answer: 0
+        explanation: Adding up the areas of the cells gives the area of the region.
+    - question:
+        id: drill-inner
+        type: choice
+        system: s1
+        prompt: |
+          What is the inner integral $\displaystyle\int_0^2 xy^2\,dy$, with $x$ frozen?
+        options: ['$\tfrac83 x$', '$2x$', '$4x$', '$\tfrac83$']
+        answer: 0
+        explanation: The integral of y squared from 0 to 2 is 8 over 3, and x is a constant factor.
+    - question:
+        id: drill-product
+        type: numeric
+        system: s1
+        prompt: |
+          What is $\displaystyle\int_0^1\!\!\int_0^1 xy\,dy\,dx$?
+        answer: "0.25"
+        tolerance: "0.0001"
+        explanation: It is the product of two integrals, each a half.
+    - question:
+        id: drill-polar-element
+        type: choice
+        system: s1
+        prompt: |
+          In polar coordinates, what replaces $dx\,dy$?
+        options: ['$dr\,d\theta$', '$r\,dr\,d\theta$', '$r^2\,dr\,d\theta$', '$\tfrac{1}{r}\,dr\,d\theta$']
+        answer: 1
+        explanation: A polar cell has sides dr and r dθ.
+    - question:
+        id: drill-jacobian-factor
+        type: choice
+        system: s1
+        prompt: |
+          Under a change of variables $\mathbf{x} = \mathbf{T}(\mathbf{u})$, what multiplies $d\mathbf{u}$?
+        options: ['$\det J_{\mathbf{T}}$', '$\lvert \det J_{\mathbf{T}} \rvert$', '$1 / \lvert \det J_{\mathbf{T}} \rvert$', 'Nothing']
+        answer: 1
+        explanation: Areas are positive, and the map scales them by the absolute value of its Jacobian determinant.
+    - question:
+        id: drill-linear
+        type: numeric
+        system: s1
+        prompt: |
+          The map $x = 2u$, $y = 3v$ sends a region of area 5 in the $(u, v)$ plane to a region of what area?
+        answer: "30"
+        explanation: The Jacobian determinant is 6.
+    - question:
+        id: drill-gauss
+        type: choice
+        system: s1
+        prompt: |
+          What is $\displaystyle\int_{-\infty}^{\infty} e^{-x^2}\,dx$?
+        options: ['$\pi$', '$\sqrt{\pi}$', '$1$', '$2\pi$']
+        answer: 1
+        explanation: Its square is the volume under the round hill, which is π.
+    - question:
+        id: drill-outer
+        type: choice
+        system: s1
+        prompt: |
+          In an iterated integral, which limits may contain a variable?
+        options: ['Only the outermost', 'Only inner ones, and only variables not yet integrated', 'Any of them', 'None of them']
+        answer: 1
+        explanation: The outermost integral must produce a number, so its limits are constants.
+    - question:
+        id: drill-disc
+        type: choice
+        system: s1
+        prompt: |
+          The disc $x^2 + y^2 \le 9$ is which region in polar coordinates?
+        options: ['$0 \le r \le 9$, $0 \le \theta \le 2\pi$', '$0 \le r \le 3$, $0 \le \theta \le 2\pi$', '$0 \le r \le 3$, $0 \le \theta \le \pi$', '$-3 \le r \le 3$, $0 \le \theta \le 2\pi$']
+        answer: 1
+        explanation: The radius is 3, and the angle goes once round.
+    - question:
+        id: drill-grid-cost
+        type: choice
+        system: s1
+        prompt: |
+          A grid with 100 points along each axis is used to integrate over a region of 6-dimensional space. How many function evaluations is that?
+        options: ['600', '$10^6$', '$10^{12}$', '$6^{100}$']
+        answer: 2
+        explanation: A hundred to the power 6.
+    - question:
+        id: drill-density
+        type: choice
+        system: s1
+        prompt: |
+          Points with density $p$ are moved by a map whose Jacobian determinant is 4 near some point. What is their density there afterwards?
+        options: ['$4p$', '$p / 4$', '$p$', '$16p$']
+        answer: 1
+        explanation: The same points are spread over four times the area.
+    - question:
+        id: predict-riemann
+        type: predict
+        system: s1
+        prompt: A midpoint sum over a rectangle. What does this show?
+        code: |
+          import numpy as np
+
+          n = 200
+          x = ((np.arange(n) + 0.5) / n)[:, np.newaxis]
+          y = (2 * (np.arange(n) + 0.5) / n)[np.newaxis, :]
+          cells = x * y ** 2 * (1 / n) * (2 / n)
+          print(cells.shape)
+          print(round(float(cells.sum()), 3))
+          print(round(float(cells.sum(axis=1)[n - 1] * n), 3))
+        output: |
+          (200, 200)
+          1.333
+          2.66
+        explanation: Two hundred pieces each way make forty thousand cells. Their total is close to four thirds, the exact integral. Summing one row adds up over y with x frozen, an inner integral times the width of the row. For the last row, where x is 0.9975, the inner integral is eight thirds of that.
+    - question:
+        id: predict-polar
+        type: predict
+        system: s1
+        prompt: The area of a disc of radius 2, added up over polar cells, with and without the factor r. What does this show?
+        code: |
+          import numpy as np
+
+          n = 400
+          dr = 2.0 / n
+          dt = 2 * np.pi / n
+          r = ((np.arange(n) + 0.5) * dr)[:, np.newaxis]
+          ones = np.ones((n, n))
+          print(round(float((ones * r * dr * dt).sum()), 4))
+          print(round(float((ones * dr * dt).sum()), 4))
+        output: |
+          12.5664
+          12.5664
+        explanation: With the factor r each cell has its true area and the total is π times 2 squared, 12.5664. Without it every cell is counted as dr times dθ, and the total is the area of the rectangle 2 by 2π in the plane of r and θ, which is 4π, also 12.5664. For radius 2 the two happen to coincide. For any other radius they differ, πR² against 2πR.
+  work:
+    - text: Slower now. Before each integral, describe the region in words - which variable runs over what, and what the other does for each value of it.
+    - question:
+        id: write-double
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `double_integral(f, a, b, c, d, n)` to estimate $\displaystyle\int_a^b\!\!\int_c^d f(x, y)\,dy\,dx$ by the midpoint rule with `n` pieces along each axis. `f` is written with array arithmetic and broadcasts. Return a float. Use no Python loop.
+        starter: |
+          import numpy as np
+
+          def double_integral(f, a, b, c, d, n):
+              # Replace the next line with your own.
+              return 0.0
+
+          print(round(double_integral(lambda x, y: x * y ** 2, 0.0, 1.0, 0.0, 2.0, 200), 4))
+        solution: |
+          import numpy as np
+
+          def double_integral(f, a, b, c, d, n):
+              dx = (b - a) / n
+              dy = (d - c) / n
+              x = (a + (np.arange(n) + 0.5) * dx)[:, np.newaxis]
+              y = (c + (np.arange(n) + 0.5) * dy)[np.newaxis, :]
+              return float((f(x, y) * dx * dy).sum())
+
+          print(round(double_integral(lambda x, y: x * y ** 2, 0.0, 1.0, 0.0, 2.0, 200), 4))
+        tests: |
+          import numpy as _np
+          assert abs(double_integral(lambda x, y: x * y ** 2, 0.0, 1.0, 0.0, 2.0, 200) - 4.0 / 3.0) < 1e-4, "The integral of x y squared over 0..1 by 0..2 is four thirds"
+          assert abs(double_integral(lambda x, y: 5.0 + 0 * x + 0 * y, 0.0, 2.0, 0.0, 3.0, 10) - 30.0) < 1e-9, "A constant 5 over a 2 by 3 rectangle integrates to 30"
+          assert abs(double_integral(lambda x, y: x + y, 0.0, 2.0, 1.0, 3.0, 4) - 12.0) < 1e-9, "The midpoint rule is exact for x + y: over 0..2 by 1..3 the integral is 12"
+          assert abs(double_integral(lambda x, y: x + 0 * y, 1.0, 3.0, 0.0, 10.0, 5) - 40.0) < 1e-9, "The integral of x over 1..3 by 0..10 is 40, which needs the two widths kept apart"
+          assert abs(double_integral(lambda x, y: _np.exp(-(x * x + y * y)), -5.0, 5.0, -5.0, 5.0, 400) - _np.pi) < 1e-6, "The volume under the round bell is pi"
+          assert abs(double_integral(lambda x, y: x * y, 0.0, 1.0, 0.0, 1.0, 1) - 0.25) < 1e-12, "With one cell the estimate is the value at the centre times the area"
+          assert "for " not in source and "while " not in source, "Do it without a loop"
+          assert output.strip() == "1.3333", "The program should print 1.3333"
+        wrong:
+          - |
+            import numpy as np
+
+            def double_integral(f, a, b, c, d, n):
+                dx = (b - a) / n
+                dy = (d - c) / n
+                x = (a + np.arange(n) * dx)[:, np.newaxis]
+                y = (c + np.arange(n) * dy)[np.newaxis, :]
+                return float((f(x, y) * dx * dy).sum())
+
+            print(1.3333)
+          - |
+            import numpy as np
+
+            def double_integral(f, a, b, c, d, n):
+                dx = (b - a) / n
+                dy = (d - c) / n
+                x = (a + (np.arange(n) + 0.5) * dx)[:, np.newaxis]
+                y = (c + (np.arange(n) + 0.5) * dy)[np.newaxis, :]
+                return float((f(x, y) * dx * dx).sum())
+
+            print(1.3333)
+          - |
+            import numpy as np
+
+            def double_integral(f, a, b, c, d, n):
+                dx = (b - a) / n
+                dy = (d - c) / n
+                x = a + (np.arange(n) + 0.5) * dx
+                y = c + (np.arange(n) + 0.5) * dy
+                return float((f(x, y) * dx * dy).sum())
+
+            print(1.3333)
+          - |
+            import numpy as np
+
+            def double_integral(f, a, b, c, d, n):
+                dx = (b - a) / n
+                dy = (d - c) / n
+                x = (a + (np.arange(n) + 0.5) * dx)[:, np.newaxis]
+                y = (c + (np.arange(n) + 0.5) * dy)[np.newaxis, :]
+                return float(f(x, y).sum())
+
+            print(1.3333)
+        explanation: |
+          The midpoints of the pieces along $x$ go in a column and those along $y$ in a row, so that broadcasting gives the value of $f$ at the centre of every cell. Each value is multiplied by the area of a cell, $\Delta x\,\Delta y$, and everything is added. Sampling at the corners of the cells in place of the centres is the left-endpoint rule, which is wrong for a function as simple as $x + y$. The midpoint rule is exact for it, because over each cell the overestimate on one side of the centre cancels the underestimate on the other. Keeping the arrays one-dimensional pairs the first $x$ with the first $y$ only, the diagonal of the grid.
+    - question:
+        id: write-polar
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `disc_integral(g, R, n)` to estimate the integral, over the disc of radius `R` centred at the origin, of a function given in polar form as `g(r, theta)`. Use the midpoint rule with `n` pieces in $r$ from 0 to `R` and `n` pieces in $\theta$ from 0 to $2\pi$. `g` broadcasts. Return a float, with no Python loop.
+        starter: |
+          import numpy as np
+
+          def disc_integral(g, R, n):
+              # Replace the next line with your own.
+              return 0.0
+
+          print(round(disc_integral(lambda r, t: 1 - r ** 2 + 0 * t, 1.0, 300), 4))
+        solution: |
+          import numpy as np
+
+          def disc_integral(g, R, n):
+              dr = R / n
+              dt = 2 * np.pi / n
+              r = ((np.arange(n) + 0.5) * dr)[:, np.newaxis]
+              t = ((np.arange(n) + 0.5) * dt)[np.newaxis, :]
+              return float((g(r, t) * r * dr * dt).sum())
+
+          print(round(disc_integral(lambda r, t: 1 - r ** 2 + 0 * t, 1.0, 300), 4))
+        tests: |
+          import numpy as _np
+          assert abs(disc_integral(lambda r, t: 1 - r ** 2 + 0 * t, 1.0, 300) - _np.pi / 2) < 1e-4, "The volume under 1 - r squared over the unit disc is pi over 2"
+          assert abs(disc_integral(lambda r, t: 1.0 + 0 * r + 0 * t, 3.0, 50) - 9 * _np.pi) < 1e-9, "Integrating 1 over a disc of radius 3 gives its area, 9 pi"
+          assert abs(disc_integral(lambda r, t: 1.0 + 0 * r + 0 * t, 1.0, 50) - _np.pi) < 1e-9, "Integrating 1 over the unit disc gives pi"
+          assert abs(disc_integral(lambda r, t: _np.exp(-r ** 2) + 0 * t, 6.0, 400) - _np.pi) < 1e-4, "The volume under the round bell is pi"
+          assert abs(disc_integral(lambda r, t: (r * _np.cos(t)) ** 2, 1.0, 400) - _np.pi / 4) < 1e-4, "The integral of x squared over the unit disc is pi over 4"
+          assert abs(disc_integral(lambda r, t: r * _np.cos(t), 2.0, 200)) < 1e-9, "The integral of x over a disc centred at the origin is 0, by symmetry"
+          assert "for " not in source and "while " not in source, "Do it without a loop"
+          assert output.strip() == "1.5708", "The program should print 1.5708"
+        wrong:
+          - |
+            import numpy as np
+
+            def disc_integral(g, R, n):
+                dr = R / n
+                dt = 2 * np.pi / n
+                r = ((np.arange(n) + 0.5) * dr)[:, np.newaxis]
+                t = ((np.arange(n) + 0.5) * dt)[np.newaxis, :]
+                return float((g(r, t) * dr * dt).sum())
+
+            print(1.5708)
+          - |
+            import numpy as np
+
+            def disc_integral(g, R, n):
+                dr = R / n
+                dt = np.pi / n
+                r = ((np.arange(n) + 0.5) * dr)[:, np.newaxis]
+                t = ((np.arange(n) + 0.5) * dt)[np.newaxis, :]
+                return float((g(r, t) * r * dr * dt).sum())
+
+            print(1.5708)
+          - |
+            import numpy as np
+
+            def disc_integral(g, R, n):
+                dr = R / n
+                dt = 2 * np.pi / n
+                r = ((np.arange(n) + 0.5) * dr)[:, np.newaxis]
+                t = ((np.arange(n) + 0.5) * dt)[np.newaxis, :]
+                return float((g(r, t) * R * dr * dt).sum())
+
+            print(1.5708)
+        explanation: |
+          The grid is a plain rectangle in the plane of $r$ and $\theta$, and the disc's roundness is carried entirely by the factor $r$: the cell at distance $r$ has area $r\,dr\,d\theta$. Leave it out and you have integrated over a rectangle of sides $R$ and $2\pi$, counting the tiny cells near the centre as heavily as the large ones at the rim. The factor is the $r$ of each cell, not the radius $R$ of the disc. Because the midpoint rule is exact for a function linear in $r$, the area of a disc comes out exactly, with any number of pieces.
+    - question:
+        id: fix-triangle
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `triangle_integral(f, n)` should estimate the integral of `f` over the triangle with corners $(0, 0)$, $(1, 0)$ and $(1, 1)$: the points with $0 \le y \le x \le 1$. It lays a grid over the unit square and should keep only the cells whose centres are in the triangle. For $f = 1$ it should give the triangle's area, one half, and it gives 1. Fix it.
+        starter: |
+          import numpy as np
+
+          def triangle_integral(f, n):
+              d = 1.0 / n
+              x = ((np.arange(n) + 0.5) * d)[:, np.newaxis]
+              y = ((np.arange(n) + 0.5) * d)[np.newaxis, :]
+              inside = (y <= 1.0) + 0.0 * x
+              return float((f(x, y) * inside * d * d).sum())
+
+          print(round(triangle_integral(lambda x, y: 1.0 + 0 * x + 0 * y, 400), 3), round(triangle_integral(lambda x, y: x * y, 400), 3))
+        solution: |
+          import numpy as np
+
+          def triangle_integral(f, n):
+              d = 1.0 / n
+              x = ((np.arange(n) + 0.5) * d)[:, np.newaxis]
+              y = ((np.arange(n) + 0.5) * d)[np.newaxis, :]
+              inside = y <= x
+              return float((f(x, y) * inside * d * d).sum())
+
+          print(round(triangle_integral(lambda x, y: 1.0 + 0 * x + 0 * y, 400), 3), round(triangle_integral(lambda x, y: x * y, 400), 3))
+        tests: |
+          import numpy as _np
+          _one = lambda x, y: 1.0 + 0 * x + 0 * y
+          assert abs(triangle_integral(_one, 400) - 0.5) < 2e-3, "The area of the triangle is one half"
+          assert abs(triangle_integral(lambda x, y: x * y, 400) - 0.125) < 2e-3, "The integral of xy over the triangle is one eighth"
+          assert abs(triangle_integral(lambda x, y: x + 0 * y, 400) - 1.0 / 3.0) < 2e-3, "The integral of x over the triangle is one third"
+          assert abs(triangle_integral(lambda x, y: y + 0 * x, 400) - 1.0 / 6.0) < 2e-3, "The integral of y over the triangle is one sixth, which tells this triangle from its mirror image"
+          assert output.strip() == "0.501 0.125", "The program should print 0.501 0.125"
+        wrong:
+          - |
+            import numpy as np
+
+            def triangle_integral(f, n):
+                d = 1.0 / n
+                x = ((np.arange(n) + 0.5) * d)[:, np.newaxis]
+                y = ((np.arange(n) + 0.5) * d)[np.newaxis, :]
+                inside = (y <= 1.0) + 0.0 * x
+                return float((f(x, y) * inside * d * d).sum())
+
+            print("0.501 0.125")
+          - |
+            import numpy as np
+
+            def triangle_integral(f, n):
+                d = 1.0 / n
+                x = ((np.arange(n) + 0.5) * d)[:, np.newaxis]
+                y = ((np.arange(n) + 0.5) * d)[np.newaxis, :]
+                inside = x <= y
+                return float((f(x, y) * inside * d * d).sum())
+
+            print("0.501 0.125")
+          - |
+            import numpy as np
+
+            def triangle_integral(f, n):
+                d = 1.0 / n
+                x = ((np.arange(n) + 0.5) * d)[:, np.newaxis]
+                y = ((np.arange(n) + 0.5) * d)[np.newaxis, :]
+                return float((f(x, y) * 0.5 * d * d).sum())
+
+            print("0.501 0.125")
+        explanation: |
+          A region that is not a rectangle is handled by integrating over a rectangle that contains it a function that is zero outside. The array `inside` is that zero-or-one factor, and it must encode the region's defining condition, $y \le x$. The condition $y \le 1$ is true of the whole square. Comparing the row of $y$ values with the column of $x$ values broadcasts to a table of `True` and `False`, which count as 1 and 0 in arithmetic. In the exact iterated integral the same condition appears as the upper limit of the inner integral: $y$ runs from 0 to $x$. Halving the integral over the square gives the right area and the wrong answer for anything that is not symmetric about the diagonal.
+    - question:
+        id: work-triangle
+        type: numeric
+        system: s2
+        prompt: |
+          Evaluate $\displaystyle\int_0^2\!\!\int_0^x (x + y)\,dy\,dx$.
+        answer: "4"
+        explanation: |
+          Inner integral, with $x$ frozen: $\left[xy + \tfrac{y^2}{2}\right]_0^x = x^2 + \tfrac{x^2}{2} = \tfrac32 x^2$. Outer: $\tfrac32\left[\tfrac{x^3}{3}\right]_0^2 = \tfrac32 \cdot \tfrac83 = 4$. The region is the triangle under the line $y = x$ out to $x = 2$, of area 2, and the average value of $x + y$ over it is 2.
+    - question:
+        id: work-puzzle
+        type: choice
+        system: s2
+        prompt: |
+          In the puzzle, the area under $e^{-x^2}$ came to $\sqrt{\pi}$. Where did $\pi$ come from?
+        options:
+          - 'From the numerical method, which uses circles.'
+          - 'The square of the area is the volume under $e^{-(x^2 + y^2)}$, since that function is a product of a function of $x$ and one of $y$. This hill depends only on the distance from the origin. In polar coordinates the cells have area $r\,dr\,d\theta$, the factor $r$ makes the integral over $r$ elementary and equal to $\tfrac12$, and the integral over the angle, once round, contributes $2\pi$.'
+          - 'From the number $e$, which is related to $\pi$.'
+          - 'It is a coincidence of the particular limits $-5$ and $5$.'
+        answer: 1
+        explanation: |
+          Three ideas of this lesson are used in turn. Fubini's theorem turns the product of two single integrals into one double integral. The change of variables to polar coordinates suits the rotational symmetry of the integrand. And the Jacobian factor $r$ supplies exactly what the single integral lacked for a substitution. The $2\pi$ is the total angle round a point: a pair of independent bell curves, taken together, is a round hill. The limits $\pm 5$ only cut off tails that are already smaller than $10^{-10}$.
+    - question:
+        id: work-ellipse
+        type: numeric
+        system: s2
+        prompt: |
+          The map $x = 3u$, $y = 2v$ sends the unit disc $u^2 + v^2 \le 1$ onto the ellipse $\dfrac{x^2}{9} + \dfrac{y^2}{4} \le 1$. Use the change of variables formula to find the integral of the constant function 5 over the ellipse. Give it to two decimal places.
+        answer: "94.25"
+        tolerance: "0.01"
+        explanation: |
+          The Jacobian of the map is $\begin{pmatrix} 3 & 0 \\ 0 & 2 \end{pmatrix}$, with determinant 6, so $dx\,dy = 6\,du\,dv$. The integral is $\iint 5 \cdot 6\,du\,dv$ over the unit disc, which is $30\pi \approx 94.25$. Equivalently, the area of the ellipse is 6 times that of the disc, $6\pi$, and a constant 5 over it gives $30\pi$. A linear map multiplies every area by the same factor, its determinant, so the factor comes outside the integral.
+    - question:
+        id: work-density
+        type: choice
+        system: s2
+        prompt: |
+          A random number generator scatters points uniformly over the unit square of the $(u, v)$ plane, with density 1. Each point is then moved by $\mathbf{x} = A\mathbf{u}$, where $A = \begin{pmatrix} 2 & 1 \\ 0 & 3 \end{pmatrix}$. What is the density of the moved points in the region they cover?
+        options:
+          - '6, since the map magnifies by 6.'
+          - '$\tfrac16$. The square, of area 1, is sent to a parallelogram of area $\lvert \det A \rvert = 6$. The same points are now spread over six times the area, so there are a sixth as many per unit of area. Density is divided by the Jacobian determinant, where area is multiplied by it.'
+          - '1, since moving points does not change how many there are.'
+          - '$\tfrac15$, the reciprocal of the sum of the entries.'
+        answer: 1
+        explanation: |
+          The total amount of probability is fixed at 1: the points are only moved. The integral of the new density over the parallelogram must therefore be 1, and the parallelogram has area 6, so the density is $\tfrac16$. In general, if $\mathbf{x} = \mathbf{T}(\mathbf{u})$ then the density of $\mathbf{x}$ at a point is the density of $\mathbf{u}$ at the corresponding point divided by $\lvert \det J_{\mathbf{T}} \rvert$. Models that build a complicated distribution by pushing a simple one through an invertible map rely on this formula, and must be able to compute that determinant.
+    - question:
+        id: work-order
+        type: choice
+        system: s2
+        prompt: |
+          The integral $\displaystyle\int_0^1\!\!\int_x^1 e^{y^2}\,dy\,dx$ cannot be done as written, since $e^{y^2}$ has no elementary antiderivative. What does reversing the order of integration give?
+        options:
+          - 'The same impossible integral.'
+          - 'The region is $0 \le x \le y \le 1$. With $y$ outside, $x$ runs from 0 to $y$: $\displaystyle\int_0^1\!\!\int_0^y e^{y^2}\,dx\,dy = \int_0^1 y\,e^{y^2}\,dy = \tfrac12(e - 1)$. The inner integral supplied the factor $y$ that makes the substitution work.'
+          - '$\displaystyle\int_x^1\!\!\int_0^1 e^{y^2}\,dx\,dy$, which equals $e - 1$.'
+          - 'Zero, since the region has no area.'
+        answer: 1
+        explanation: |
+          The region is the triangle above the line $y = x$ in the unit square. Described with $y$ outermost, $y$ runs over $[0, 1]$ and for each $y$, $x$ runs from 0 to $y$. The integrand does not depend on $x$, so the inner integral is just the length of that run, $y$. Then $\int_0^1 y\,e^{y^2}\,dy$ yields to the substitution $u = y^2$ and equals $\tfrac12(e - 1) \approx 0.859$. The same thing happened in the Gaussian integral, where the area of the polar cell supplied a factor $r$. A double integral offers a choice of order and of coordinates, and the right choice can turn an impossible single integral into an easy one.
+  connections:
+    - text: |
+        The area under $e^{-x^2}$ is $\sqrt{\pi}$. Its square is the volume under the round hill $e^{-(x^2 + y^2)}$, and in polar coordinates, where each cell has area $r\,dr\,d\theta$, that volume is $2\pi \times \tfrac12 = \pi$.
+
+        A **double integral** adds up value times area over small cells of a region. By **Fubini's theorem** it is an iterated integral, one variable at a time with the other frozen, in either order. For a region with slanting or curved edges the inner limits depend on the outer variable.
+
+        Under a **change of variables** $\mathbf{x} = \mathbf{T}(\mathbf{u})$ three things change together: the integrand, the description of the region, and the size of the cells, $d\mathbf{x} = \lvert \det J_{\mathbf{T}} \rvert\,d\mathbf{u}$. For polar coordinates the factor is $r$. For a linear map it is the determinant of the matrix. Densities transform by the reciprocal factor.
+
+        That closes the cluster. You began with a loss that depended on two knobs and no notion of its slope. You now have the partial derivatives, the linear approximation that makes them meaningful, the gradient that points uphill, the rate along any direction or path, the chain rule that multiplies rates along routes and adds over them, the Jacobian and Hessian matrices, the quadratic model, the local undoing of functions and equations, and the integral over a region with its Jacobian factor.
+
+        One of these is about to be turned into a machine. The chain rule, worked backwards from the output, gave the gradient of a neuron's loss from a handful of local rates. Every step was mechanical: each operation knew its own derivative, and the rates were multiplied along routes and added where routes met. Nothing in it needed a person. A program can record a computation as it runs, as a graph of operations, and then walk that graph backwards. Building that program, from an empty file, is the next cluster, and it begins with [[e6.scalar-computational-graph]].

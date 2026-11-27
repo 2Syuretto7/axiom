@@ -1,0 +1,612 @@
+concept: m12.multivariable-chain-rule
+minutes: 90
+claim: You can differentiate a function along a moving point as the dot product of its gradient with the velocity, differentiate through intermediate variables by adding one product of rates for every route from the input to the output, tell a partial derivative from a total one when an input influences the output both directly and through another, state the rule as a product of the matrices of two linear approximations, and work out the gradient of a small network's loss by passing rates backwards from the output.
+recalls: [m12.directional-derivative]
+uses: [m12.gradient, m12.total-derivative-as-best-linear-approximation, m12.partial-derivatives, m12.functions-of-several-variables, m10.chain-rule, m10.differentiation-rules, m10.derivatives-of-exp-log-and-trig, m5.matrix-multiplication-as-composition, m5.matrices-as-linear-maps, m5.matrix-vector-product, m4.dot-product, m2.composition-and-inverses, m2.trigonometric-functions-on-the-unit-circle, m2.summation-and-product-notation, e5.vectorisation, e5.arrays-dtype-and-shape, e5.axis-operations-and-reductions, e5.numerical-error-analysis-in-practice, e0.functions, e0.loops]
+leads: [m12.jacobian, m12.inverse-and-implicit-function-theorems, m12.multiple-integrals-and-change-of-variables, e6.scalar-computational-graph, e6.reverse-mode-on-scalars, m13.computational-graphs]
+starter: |
+  # Scratch space. A metal plate is hot in a fixed pattern. An ant walks round
+  # the unit circle on it, and feels the temperature under its feet change.
+  import math
+
+  def temperature(x, y):
+      return x * x + 4 * y * y
+
+  def felt(t):
+      return temperature(math.cos(t), math.sin(t))
+
+  h = 1e-5
+  for t in [0.0, math.pi / 6, math.pi / 4, math.pi / 2]:
+      rate = (felt(t + h) - felt(t - h)) / (2 * h)
+      print(round(t, 4), round(felt(t), 4), round(rate, 4))
+parts:
+  recall:
+    - text: |
+        [[m12.directional-derivative]] gave the rate of change of a function along a straight line through a point, $\nabla f \cdot \mathbf{u}$, and ended with a road that is not straight and a weight that reaches the loss only through other quantities. Today's rule handles both. Three quick pulls first.
+  puzzle:
+    - text: |
+        A metal plate is heated unevenly. The temperature at the point $(x, y)$ is $T(x, y) = x^2 + 4y^2$, and it does not change with time. The plate just sits there, hot in a fixed pattern.
+
+        An ant walks on the plate, round the circle of radius 1, so that at time $t$ it is at $(\cos t, \sin t)$. It moves at a steady speed of 1.
+
+        The plate's temperature is constant in time. But ask the ant, and it will say the temperature is changing: as it walks, the plate under its feet is warmer or cooler from moment to moment. The starter measures the temperature the ant feels and how fast that is changing, at four moments.
+
+        Run it. At $t = 0$ the ant is at $(1, 0)$, feels a temperature of 1, and feels it changing at a rate of 0. At $t = \pi/6$ the rate is 2.598. At $t = \pi/4$ it is 3. At $t = \pi/2$, where the ant is at $(0, 1)$ and the temperature is 4, the rate is 0 again.
+
+        Two things are known separately. The plate has a gradient at every point, which says how temperature varies with **position**. The ant has a velocity at every moment, which says how its position varies with **time**.
+
+        **How do those two combine into the rate the ant feels? Why is that rate zero at $t = 0$, where the plate is far from flat? And if the temperature at the end of a chain depends on position, which depends on time, which might depend on something else again, what is the rule for the whole chain?**
+  intuition:
+    - text: |
+        In one variable you had a rule for chains. If $y$ depends on $u$ and $u$ depends on $x$, then $\dfrac{dy}{dx} = \dfrac{dy}{du} \cdot \dfrac{du}{dx}$. Rates multiply along a chain. A gear that turns three times as fast as the one driving it, driven by one that turns twice as fast as the first, turns six times as fast as the first.
+
+        The ant's case is a chain with a wide middle. Time determines **two** quantities, $x$ and $y$, and the temperature depends on both.
+
+        ```
+                  x
+                /   \
+              t       T
+                \   /
+                  y
+        ```
+
+        Take a short interval of time, $dt$. During it the ant's $x$ changes by about $\dfrac{dx}{dt}\,dt$ and its $y$ by about $\dfrac{dy}{dt}\,dt$. That is a small step in the plane. And the lesson on the total derivative said what a small step does to a differentiable function: the change is the sum of the separate effects.
+
+        $$dT \approx \frac{\partial T}{\partial x}\,dx + \frac{\partial T}{\partial y}\,dy = \frac{\partial T}{\partial x}\frac{dx}{dt}\,dt + \frac{\partial T}{\partial y}\frac{dy}{dt}\,dt.$$
+
+        Divide by $dt$:
+
+        $$\frac{dT}{dt} = \frac{\partial T}{\partial x}\frac{dx}{dt} + \frac{\partial T}{\partial y}\frac{dy}{dt}.$$
+
+        **Time reaches the temperature by two routes, one through $x$ and one through $y$. Along each route the rates multiply, as in the old chain rule. And the routes add.**
+
+        That is the whole of the multivariable chain rule. *Multiply along each path, add over the paths.* Everything else in this lesson is that sentence applied to diagrams of different shapes.
+
+        Look at the right-hand side once more. It is the dot product of $\left(\dfrac{\partial T}{\partial x}, \dfrac{\partial T}{\partial y}\right)$ with $\left(\dfrac{dx}{dt}, \dfrac{dy}{dt}\right)$: **the gradient of the plate dotted with the velocity of the ant.**
+
+        Now the puzzle's zero is plain. At $t = 0$ the ant is at $(1, 0)$, where the gradient is $(2, 0)$, pointing straight out along the $x$-axis. The ant on its circle is moving straight up, with velocity $(0, 1)$. The two are at right angles. The plate is not flat there, but the ant is walking exactly across the slope, along the contour, and feels no change. At $t = \pi/4$ it is cutting across contours at a slant, and the rate is 3.
+
+        This is the last lesson's directional derivative with one improvement: the path need not be straight and the speed need not be 1. Only the velocity at the instant matters, because to first order every smooth path is a straight line.
+  derivation:
+    - text: |
+        **Along a path.** Let $f : \mathbb{R}^n \to \mathbb{R}$ be differentiable and let $\mathbf{x}(t)$ be a differentiable path in $\mathbb{R}^n$, with velocity $\mathbf{x}'(t) = (x_1'(t), \dots, x_n'(t))$. Then
+
+        $$\frac{d}{dt} f(\mathbf{x}(t)) = \nabla f(\mathbf{x}(t)) \cdot \mathbf{x}'(t) = \sum_{i=1}^{n} \frac{\partial f}{\partial x_i}\,\frac{dx_i}{dt}.$$
+
+        *Why.* Over a short time $h$, the point moves by $\mathbf{x}(t + h) - \mathbf{x}(t) = h\,\mathbf{x}'(t) + (\text{an error small beside } h)$. By differentiability of $f$, the value changes by $\nabla f \cdot (\text{that step})$ plus an error small beside the step. Dividing by $h$ and letting $h \to 0$ leaves $\nabla f \cdot \mathbf{x}'(t)$. $\blacksquare$
+
+        **The ant.** $\nabla T = (2x, 8y)$, which on the path is $(2\cos t, 8\sin t)$. The velocity is $(-\sin t, \cos t)$. So
+
+        $$\frac{dT}{dt} = (2\cos t)(-\sin t) + (8\sin t)(\cos t) = 6\sin t\cos t.$$
+
+        At $t = \pi/6$ this is $6 \times \tfrac12 \times \tfrac{\sqrt3}{2} \approx 2.598$, and at $\pi/4$ it is 3: the starter's numbers. As a check, substitute first and differentiate after: on the path $T = \cos^2 t + 4\sin^2 t = 1 + 3\sin^2 t$, with derivative $6\sin t\cos t$. The chain rule gives the same answer **without ever writing the composite function out**, which matters when the composite is a network with a hundred layers.
+
+        **The gradient and level sets, properly.** Suppose a path stays inside one level set, so $f(\mathbf{x}(t)) = c$ for all $t$. Differentiate both sides: $\nabla f \cdot \mathbf{x}'(t) = 0$. Every velocity tangent to the level set is at right angles to the gradient. That is the proof of the claim made in the lesson on the gradient.
+
+        **Several inputs at the start.** Let $z = f(x, y)$ where $x = g(s, t)$ and $y = h(s, t)$. Now there are two inputs at the start and two partial derivatives to find. Freeze $t$, and the path rule applies with $s$ as the moving variable:
+
+        $$\frac{\partial z}{\partial s} = \frac{\partial z}{\partial x}\frac{\partial x}{\partial s} + \frac{\partial z}{\partial y}\frac{\partial y}{\partial s}, \qquad \frac{\partial z}{\partial t} = \frac{\partial z}{\partial x}\frac{\partial x}{\partial t} + \frac{\partial z}{\partial y}\frac{\partial y}{\partial t}.$$
+
+        Draw the diagram of what depends on what. To differentiate the output with respect to an input, find every route from that input to the output, multiply the rates along each route, and add the routes.
+
+        *Polar coordinates.* With $x = r\cos\theta$ and $y = r\sin\theta$,
+
+        $$\frac{\partial z}{\partial r} = \frac{\partial z}{\partial x}\cos\theta + \frac{\partial z}{\partial y}\sin\theta, \qquad \frac{\partial z}{\partial \theta} = -\frac{\partial z}{\partial x}\,r\sin\theta + \frac{\partial z}{\partial y}\,r\cos\theta.$$
+
+        The first is the directional derivative straight outwards. The second is $r$ times the directional derivative round the circle, since a change in angle moves a point further the further out it is.
+
+        **Old rules as special cases.** The product rule is this rule. Let $z = uv$ with $u$ and $v$ both functions of $x$. Then $\dfrac{dz}{dx} = \dfrac{\partial z}{\partial u}\dfrac{du}{dx} + \dfrac{\partial z}{\partial v}\dfrac{dv}{dx} = v\,u' + u\,v'$. Two routes from $x$ to $z$, one through each factor. The quotient rule and the rule for $u^v$ come the same way.
+    - question:
+        id: derivation-zero
+        type: choice
+        system: s2
+        prompt: |
+          At $t = 0$ the ant is at $(1, 0)$, where $\nabla T = (2, 0)$ is not zero, yet the temperature the ant feels is momentarily not changing. Why?
+        options:
+          - 'Because the ant is momentarily at rest.'
+          - 'Because the rate felt is $\nabla T \cdot \mathbf{x}''(t)$, and at that moment the velocity is $(0, 1)$, at right angles to the gradient. The ant is moving along a contour of the temperature, so it feels no change even though the plate has a slope there.'
+          - 'Because the gradient is zero at $(1, 0)$.'
+          - 'Because the temperature of the plate does not depend on time.'
+        answer: 1
+        explanation: |
+          The ant always moves at speed 1. The plate does have a gradient at $(1, 0)$, of length 2, pointing outwards. What the ant feels is neither of these alone but their dot product. The level curve of $T$ through $(1, 0)$ is an ellipse, and the unit circle touches that ellipse there, so for an instant the ant is walking along the level curve. The plate's being constant in time explains why there is no further term for a direct dependence on $t$, and does not make the rate zero in general: at $t = \pi/4$ it is 3.
+    - text: |
+        **Partial against total.** Notation is treacherous when a variable influences the output in two ways. Let $f(x, y) = xy$, and suppose that $y$ is tied to $x$ by $y = x^2$. What is "the derivative of $f$ with respect to $x$"?
+
+        There are two honest answers, to two different questions.
+
+        The **partial** derivative $\dfrac{\partial f}{\partial x} = y$ answers: how does $f$ respond to $x$ if $y$ is held still? It ignores the tie.
+
+        The **total** derivative $\dfrac{df}{dx}$ answers: how does $f$ respond to $x$ when everything that depends on $x$ is allowed to follow? There are two routes from $x$ to $f$, the direct one and the one through $y$:
+
+        $$\frac{df}{dx} = \frac{\partial f}{\partial x} + \frac{\partial f}{\partial y}\frac{dy}{dx} = y + x \cdot 2x = 3x^2.$$
+
+        Indeed $f = x \cdot x^2 = x^3$. The curly $\partial$ means "this route only, others frozen". The straight $d$ means "all routes".
+
+        This is exactly the situation of a weight that is used in two places in a model, or a quantity that feeds two later computations. **Its influence is the sum over every use.** Forgetting one use is the commonest error in a hand-written gradient.
+
+        **The rule as a matrix product.** Here is the same rule said once for all cases. Let $\mathbf{g} : \mathbb{R}^k \to \mathbb{R}^n$ and $\mathbf{f} : \mathbb{R}^n \to \mathbb{R}^m$ be differentiable. Near a point $\mathbf{a}$, $\mathbf{g}$ is approximately a linear map, its total derivative $D\mathbf{g}(\mathbf{a})$, an $n$ by $k$ matrix. Near $\mathbf{g}(\mathbf{a})$, $\mathbf{f}$ is approximately $D\mathbf{f}(\mathbf{g}(\mathbf{a}))$, an $m$ by $n$ matrix. Do one after the other, and the composite is approximately the composite of the two linear maps. And you know, from the lesson on matrix multiplication, that composing linear maps is multiplying their matrices:
+
+        $$D(\mathbf{f} \circ \mathbf{g})(\mathbf{a}) = D\mathbf{f}(\mathbf{g}(\mathbf{a}))\;D\mathbf{g}(\mathbf{a}).$$
+
+        **The derivative of a composition is the product of the derivatives.** It is the single-variable chain rule with matrices in place of numbers. Write out entry $(i, j)$ of the product and you get $\sum_{l} \dfrac{\partial f_i}{\partial y_l}\dfrac{\partial y_l}{\partial x_j}$: a sum over the intermediate variables, one term for each route. "Multiply along paths and add over paths" is what matrix multiplication does.
+
+        **A small network.** One neuron with a squashing function, and a squared-error loss, computed in stages:
+
+        $$z = wx + b, \qquad a = \tanh z, \qquad L = (a - y)^2.$$
+
+        The knobs are $w$ and $b$. The data, $x$ and $y$, are fixed. Take $x = 2$, $y = 1$, $w = 0.5$, $b = -1$. Forwards: $z = 0$, $a = 0$, $L = 1$.
+
+        Now the rates, starting from the **output** and working back. $\dfrac{dL}{da} = 2(a - y) = -2$. Next, $\dfrac{da}{dz} = 1 - \tanh^2 z = 1 - a^2 = 1$, so $\dfrac{dL}{dz} = -2 \times 1 = -2$. Finally $z$ depends on both knobs: $\dfrac{\partial z}{\partial w} = x = 2$ and $\dfrac{\partial z}{\partial b} = 1$. So
+
+        $$\frac{\partial L}{\partial w} = -2 \times 2 = -4, \qquad \frac{\partial L}{\partial b} = -2 \times 1 = -2.$$
+
+        Notice the economy. The rate $\dfrac{dL}{dz} = -2$ was computed once and used for both knobs. In a network with a million weights, the rates of the loss with respect to the quantities late in the computation are shared by every weight that feeds them. Working **backwards from the output**, each shared rate is computed once. That order of work is called backpropagation, and a later cluster builds a program that does it for any computation.
+    - question:
+        id: order-backward
+        type: order
+        system: s2
+        prompt: Put in order the computation of $\partial L / \partial w$ for $z = wx + b$, $a = \tanh z$, $L = (a - y)^2$, working backwards from the output.
+        steps:
+          - 'Run the computation forwards to get the values of $z$, $a$ and $L$.'
+          - 'Differentiate the last stage: $dL/da = 2(a - y)$.'
+          - 'Multiply by the rate of the stage before: $dL/dz = dL/da \times (1 - a^2)$.'
+          - 'Multiply by the rate of $z$ with respect to the knob: $\partial L/\partial w = dL/dz \times x$.'
+        explanation: The forward pass must come first, since the rates depend on the values at which they are taken. Then each stage hands its rate back to the stage before, multiplying as it goes. The rate with respect to z serves the other knob as well, multiplied by 1 in place of x.
+  formal:
+    - text: |
+        **Chain rule along a path.** If $\mathbf{x} : \mathbb{R} \to \mathbb{R}^n$ is differentiable at $t$ and $f : \mathbb{R}^n \to \mathbb{R}$ is differentiable at $\mathbf{x}(t)$, then $\dfrac{d}{dt} f(\mathbf{x}(t)) = \nabla f(\mathbf{x}(t)) \cdot \mathbf{x}'(t)$.
+
+        **Chain rule.** If $\mathbf{g} : \mathbb{R}^k \to \mathbb{R}^n$ is differentiable at $\mathbf{a}$ and $\mathbf{f} : \mathbb{R}^n \to \mathbb{R}^m$ is differentiable at $\mathbf{g}(\mathbf{a})$, then $\mathbf{f} \circ \mathbf{g}$ is differentiable at $\mathbf{a}$ and
+
+        $$D(\mathbf{f} \circ \mathbf{g})(\mathbf{a}) = D\mathbf{f}(\mathbf{g}(\mathbf{a}))\,D\mathbf{g}(\mathbf{a}).$$
+
+        **In coordinates.** With $\mathbf{y} = \mathbf{g}(\mathbf{x})$ and $\mathbf{z} = \mathbf{f}(\mathbf{y})$,
+
+        $$\frac{\partial z_i}{\partial x_j} = \sum_{l=1}^{n} \frac{\partial z_i}{\partial y_l}\,\frac{\partial y_l}{\partial x_j}.$$
+
+        **Total derivative with a tied variable.** If $y = y(x)$, then $\dfrac{d}{dx} f(x, y(x)) = \dfrac{\partial f}{\partial x} + \dfrac{\partial f}{\partial y}\,\dfrac{dy}{dx}$.
+
+        The partial derivatives of the outer function are evaluated at the values of the intermediate variables, and those of the inner at the original point.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-path
+        type: numeric
+        system: s1
+        prompt: |
+          At a point on a path, $\nabla f = (2, 3)$ and the velocity is $(4, -1)$. What is $\dfrac{d}{dt} f(\mathbf{x}(t))$?
+        answer: "5"
+        explanation: The dot product is 8 less 3.
+    - question:
+        id: drill-path-zero
+        type: numeric
+        system: s1
+        prompt: |
+          At a point on a path, $\nabla f = (2, 3)$ and the velocity is $(3, -2)$. What is $\dfrac{d}{dt} f(\mathbf{x}(t))$?
+        answer: "0"
+        explanation: The velocity is at right angles to the gradient, so the path is running along a level curve.
+    - question:
+        id: drill-routes
+        type: numeric
+        system: s1
+        prompt: |
+          $z$ depends on $x$ and $y$, and both $x$ and $y$ depend on $t$. How many terms has $dz/dt$?
+        answer: "2"
+        explanation: One for the route through x and one for the route through y.
+    - question:
+        id: drill-rule
+        type: choice
+        system: s1
+        prompt: |
+          What is the rule for differentiating through a diagram of dependencies?
+        options: ['Add along each path, multiply over the paths', 'Multiply along each path, add over the paths', 'Multiply everything', 'Take the largest rate']
+        answer: 1
+        explanation: Rates compound along a chain, and separate influences add.
+    - question:
+        id: drill-speed
+        type: choice
+        system: s1
+        prompt: |
+          The ant walks the same circle twice as fast. What happens to the rate of change of temperature it feels at each point?
+        options: ['It doubles', 'It is unchanged', 'It halves', 'It is squared']
+        answer: 0
+        explanation: The velocity doubles and the gradient at each point is the same, so their dot product doubles.
+    - question:
+        id: drill-total
+        type: choice
+        system: s1
+        prompt: |
+          $f(x, y) = xy$ and $y = x^2$. What is the total derivative $df/dx$?
+        options: ['$y$', '$x^2$', '$3x^2$', '$2x$']
+        answer: 2
+        explanation: The direct route gives y, which is x squared, and the route through y gives x times 2x.
+    - question:
+        id: drill-partial-sym
+        type: choice
+        system: s1
+        prompt: |
+          What does the curly $\partial$ in $\partial f / \partial x$ promise?
+        options: ['Every route from $x$ to $f$ is counted', 'Only the direct dependence on $x$ is counted, with the other listed inputs frozen', 'The derivative is approximate', 'The function has two outputs']
+        answer: 1
+        explanation: A partial derivative holds the other inputs still, even if in the problem at hand they are tied to this one.
+    - question:
+        id: drill-shape
+        type: choice
+        system: s1
+        prompt: |
+          $\mathbf{g} : \mathbb{R}^2 \to \mathbb{R}^3$ and $\mathbf{f} : \mathbb{R}^3 \to \mathbb{R}^4$. The derivative of $\mathbf{f} \circ \mathbf{g}$ is a matrix of what shape?
+        options: ['4 by 2', '2 by 4', '3 by 3', '4 by 3']
+        answer: 0
+        explanation: A 4 by 3 matrix times a 3 by 2 matrix.
+    - question:
+        id: drill-order
+        type: choice
+        system: s1
+        prompt: |
+          In $D(\mathbf{f} \circ \mathbf{g})(\mathbf{a}) = D\mathbf{f}(\,?\,)\,D\mathbf{g}(\mathbf{a})$, at which point is the derivative of the outer function taken?
+        options: ['$\mathbf{a}$', '$\mathbf{g}(\mathbf{a})$', '$\mathbf{f}(\mathbf{a})$', 'The origin']
+        answer: 1
+        explanation: The outer function receives the output of the inner one.
+    - question:
+        id: drill-tanh
+        type: numeric
+        system: s1
+        prompt: |
+          $a = \tanh z$ and at some input $a = 0.6$. What is $da/dz$ there?
+        answer: "0.64"
+        tolerance: "0.0001"
+        explanation: The derivative of tanh is 1 less its square.
+    - question:
+        id: drill-neuron
+        type: numeric
+        system: s1
+        prompt: |
+          For $z = wx + b$ with $x = 3$, the rate $dL/dz$ is $-2$. What is $\partial L / \partial w$?
+        answer: "-6"
+        explanation: The rate of z with respect to w is x, and rates multiply along the path.
+    - question:
+        id: drill-polar
+        type: choice
+        system: s1
+        prompt: |
+          $z = x^2 + y^2$ with $x = r\cos\theta$, $y = r\sin\theta$. What is $\partial z / \partial \theta$?
+        options: ['$2r$', '$0$', '$2r^2$', '$-2r\sin\theta$']
+        answer: 1
+        explanation: The function is r squared, which does not depend on the angle.
+    - question:
+        id: predict-ant
+        type: predict
+        system: s1
+        prompt: The rate the ant feels, as gradient dotted with velocity. What does this show?
+        code: |
+          import numpy as np
+
+          for t in [0.0, np.pi / 4, np.pi / 2]:
+              x, y = np.cos(t), np.sin(t)
+              grad = np.array([2 * x, 8 * y])
+              velocity = np.array([-y, x])
+              print(round(float(grad @ velocity), 4))
+        output: |
+          0.0
+          3.0
+          0.0
+        explanation: At the start and a quarter of the way round, the ant's velocity is at right angles to the gradient, so the rate is zero. At 45 degrees the rate is 6 times sine times cosine, which is 6 times a half.
+    - question:
+        id: predict-backward
+        type: predict
+        system: s1
+        prompt: A neuron, forwards and then backwards. What does this show?
+        code: |
+          import numpy as np
+
+          x, y = 2.0, 1.0
+          w, b = 0.5, -1.0
+          z = w * x + b
+          a = np.tanh(z)
+          dL_da = 2 * (a - y)
+          dL_dz = dL_da * (1 - a * a)
+          print(float(z), float(a), float((a - y) ** 2))
+          print(float(dL_dz * x), float(dL_dz))
+        output: |
+          0.0 0.0 1.0
+          -4.0 -2.0
+        explanation: Forwards, the weighted input is 0, tanh of 0 is 0, and the loss is 1. Backwards, the loss changes at minus 2 per unit of the output, tanh has slope 1 at 0, and the weighted input changes at 2 per unit of w and 1 per unit of b.
+  work:
+    - text: Slower now. Draw the diagram of what depends on what before writing any derivative.
+    - question:
+        id: write-rate-along
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `rate_along(grad, path, velocity, t)`. `grad` takes a point (an array) and returns the gradient of some function there. `path` takes a time and returns the position, an array, and `velocity` takes a time and returns the velocity, an array. Return the rate of change of the function as felt by something moving along the path, at time `t`, as a float.
+        starter: |
+          import numpy as np
+
+          def rate_along(grad, path, velocity, t):
+              # Replace the next line with your own.
+              return 0.0
+
+          grad = lambda p: np.array([2 * p[0], 8 * p[1]])
+          path = lambda t: np.array([np.cos(t), np.sin(t)])
+          velocity = lambda t: np.array([-np.sin(t), np.cos(t)])
+          print(round(rate_along(grad, path, velocity, np.pi / 4), 6))
+        solution: |
+          import numpy as np
+
+          def rate_along(grad, path, velocity, t):
+              return float(grad(path(t)) @ velocity(t))
+
+          grad = lambda p: np.array([2 * p[0], 8 * p[1]])
+          path = lambda t: np.array([np.cos(t), np.sin(t)])
+          velocity = lambda t: np.array([-np.sin(t), np.cos(t)])
+          print(round(rate_along(grad, path, velocity, np.pi / 4), 6))
+        tests: |
+          import numpy as _np
+          _grad = lambda p: _np.array([2 * p[0], 8 * p[1]])
+          _path = lambda t: _np.array([_np.cos(t), _np.sin(t)])
+          _vel = lambda t: _np.array([-_np.sin(t), _np.cos(t)])
+          assert abs(rate_along(_grad, _path, _vel, _np.pi / 4) - 3.0) < 1e-9, "A quarter of the way to the top the ant feels a rate of 3"
+          assert abs(rate_along(_grad, _path, _vel, 0.0)) < 1e-9, "At the start the ant feels a rate of 0"
+          assert abs(rate_along(_grad, _path, _vel, _np.pi / 6) - 6 * 0.5 * _np.sqrt(3) / 2) < 1e-9, "At pi/6 the rate is 6 sin t cos t"
+          _line = lambda t: _np.array([1.0 + 3 * t, 2.0 - t])
+          _lv = lambda t: _np.array([3.0, -1.0])
+          assert abs(rate_along(lambda p: _np.array([p[1], p[0]]), _line, _lv, 1.0) - (-1.0)) < 1e-9, "For f = xy along the line (1 + 3t, 2 - t), the rate at t = 1 is 1 * 3 + 4 * (-1)"
+          assert abs(rate_along(lambda p: 2 * p, lambda t: _np.array([t, t * t, 1.0]), lambda t: _np.array([1.0, 2 * t, 0.0]), 2.0) - 36.0) < 1e-9, "It should work in three dimensions"
+          assert abs(rate_along(lambda p: _np.array([p[0] ** 2, 1.0]), lambda t: _np.array([2 * t, 5.0]), lambda t: _np.array([2.0, 0.0]), 1.0) - 8.0) < 1e-9, "The gradient is taken at the position and dotted with the velocity, not the other way round"
+          assert abs(float(output.strip()) - 3.0) < 1e-6, "The program should print 3.0"
+        wrong:
+          - |
+            import numpy as np
+
+            def rate_along(grad, path, velocity, t):
+                return float(grad(velocity(t)) @ path(t))
+
+            print(3.0)
+          - |
+            import numpy as np
+
+            def rate_along(grad, path, velocity, t):
+                return float(grad(path(t)).sum())
+
+            print(3.0)
+          - |
+            import numpy as np
+
+            def rate_along(grad, path, velocity, t):
+                return float(grad(path(0.0)) @ velocity(t))
+
+            print(3.0)
+          - |
+            import numpy as np
+
+            def rate_along(grad, path, velocity, t):
+                return float(np.linalg.norm(grad(path(t))) * np.linalg.norm(velocity(t)))
+
+            print(3.0)
+        explanation: |
+          The gradient is evaluated **where the moving point is**, `path(t)`, and dotted with how it is moving, `velocity(t)`. Each of the two functions is asked the question it can answer: the field is asked about a position, the path about a time. The product of the two lengths is the largest rate that speed could produce at that place, attained only when moving straight up the gradient. The dot product accounts for the angle.
+    - question:
+        id: write-neuron
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A neuron predicts $a_i = \tanh(w x_i + b)$ for each data point, and the loss is $L = \sum_i (a_i - y_i)^2$. Write `neuron_gradient(w, b, xs, ys)` to return the list `[dL_dw, dL_db]` as floats, by the chain rule and with no loop and no numerical differences. `xs` and `ys` are arrays.
+        starter: |
+          import numpy as np
+
+          def neuron_gradient(w, b, xs, ys):
+              # Replace the next line with your own.
+              return [0.0, 0.0]
+
+          print(neuron_gradient(0.5, -1.0, np.array([2.0]), np.array([1.0])))
+        solution: |
+          import numpy as np
+
+          def neuron_gradient(w, b, xs, ys):
+              a = np.tanh(w * xs + b)
+              dz = 2 * (a - ys) * (1 - a * a)
+              return [float((dz * xs).sum()), float(dz.sum())]
+
+          print(neuron_gradient(0.5, -1.0, np.array([2.0]), np.array([1.0])))
+        tests: |
+          import numpy as _np
+          _g = neuron_gradient(0.5, -1.0, _np.array([2.0]), _np.array([1.0]))
+          assert len(_g) == 2, "Return a list of two numbers"
+          assert abs(_g[0] + 4.0) < 1e-9 and abs(_g[1] + 2.0) < 1e-9, "For the lesson's single point the gradient is (-4, -2)"
+          _xs = _np.array([-1.0, 0.5, 2.0, 3.0])
+          _ys = _np.array([-0.5, 0.2, 0.9, 0.7])
+          def _L(w, b):
+              return float(((_np.tanh(w * _xs + b) - _ys) ** 2).sum())
+          for _w, _b in [(0.3, 0.1), (-0.7, 0.4), (1.5, -1.0)]:
+              _g = neuron_gradient(_w, _b, _xs, _ys)
+              _nw = (_L(_w + 1e-5, _b) - _L(_w - 1e-5, _b)) / 2e-5
+              _nb = (_L(_w, _b + 1e-5) - _L(_w, _b - 1e-5)) / 2e-5
+              assert abs(_g[0] - _nw) < 1e-6, "The first entry should match a central difference in w"
+              assert abs(_g[1] - _nb) < 1e-6, "The second entry should match a central difference in b"
+          assert "for " not in source, "Do it without a loop"
+          assert output.strip() == "[-4.0, -2.0]", "The program should print [-4.0, -2.0]"
+        wrong:
+          - |
+            import numpy as np
+
+            def neuron_gradient(w, b, xs, ys):
+                a = np.tanh(w * xs + b)
+                dz = 2 * (a - ys)
+                return [float((dz * xs).sum()), float(dz.sum())]
+
+            print([-4.0, -2.0])
+          - |
+            import numpy as np
+
+            def neuron_gradient(w, b, xs, ys):
+                a = np.tanh(w * xs + b)
+                dz = 2 * (a - ys) * (1 - a * a)
+                return [float(dz.sum()), float((dz * xs).sum())]
+
+            print([-4.0, -2.0])
+          - |
+            import numpy as np
+
+            def neuron_gradient(w, b, xs, ys):
+                a = np.tanh(w * xs + b)
+                dz = 2 * (a - ys) * (1 - a)
+                return [float((dz * xs).sum()), float(dz.sum())]
+
+            print([-4.0, -2.0])
+          - |
+            import numpy as np
+
+            def neuron_gradient(w, b, xs, ys):
+                a = np.tanh(w * xs + b)
+                dz = 2 * (a - ys) * (1 - a * a)
+                return [float(dz.sum() * xs.sum()), float(dz.sum())]
+
+            print([-4.0, -2.0])
+        explanation: |
+          Each data point contributes its own chain: the loss responds to its output at $2(a_i - y_i)$, the output to its weighted input at $1 - a_i^2$, and the weighted input to $w$ at $x_i$ and to $b$ at 1. Multiply along each chain. The knob $w$ is used once for every data point, so there is a route through every point, and the routes add: that is the sum. The array `dz`, the rate of the loss with respect to each weighted input, is computed once and shared by both knobs. At the lesson's single point the tanh has slope exactly 1, so leaving that factor out goes unnoticed there. The tests with several points, compared against central differences, find it.
+    - question:
+        id: fix-two-routes
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          A point moves on the unit circle, $x = \cos t$, $y = \sin t$, and $z = x^2 y$. `dz_dt(t)` should return the rate of change of $z$ with time. The check against a numerical derivative fails. Fix `dz_dt`.
+        starter: |
+          import math
+
+          def z(t):
+              return math.cos(t) ** 2 * math.sin(t)
+
+          def dz_dt(t):
+              x, y = math.cos(t), math.sin(t)
+              dz_dx = 2 * x * y
+              dx_dt = -math.sin(t)
+              return dz_dx * dx_dt
+
+          numeric = (z(1.0 + 1e-5) - z(1.0 - 1e-5)) / 2e-5
+          print(abs(dz_dt(1.0) - numeric) < 1e-8)
+        solution: |
+          import math
+
+          def z(t):
+              return math.cos(t) ** 2 * math.sin(t)
+
+          def dz_dt(t):
+              x, y = math.cos(t), math.sin(t)
+              dz_dx = 2 * x * y
+              dx_dt = -math.sin(t)
+              dz_dy = x * x
+              dy_dt = math.cos(t)
+              return dz_dx * dx_dt + dz_dy * dy_dt
+
+          numeric = (z(1.0 + 1e-5) - z(1.0 - 1e-5)) / 2e-5
+          print(abs(dz_dt(1.0) - numeric) < 1e-8)
+        tests: |
+          import math as _m
+          def _num(t):
+              _z = lambda s: _m.cos(s) ** 2 * _m.sin(s)
+              return (_z(t + 1e-5) - _z(t - 1e-5)) / 2e-5
+          for _t in [0.0, 0.5, 1.0, 2.0, 4.0]:
+              assert abs(dz_dt(_t) - _num(_t)) < 1e-8, "dz_dt should agree with a numerical derivative of z at several times"
+          assert abs(dz_dt(0.0) - 1.0) < 1e-12, "At t = 0 the rate is 1"
+          assert abs(dz_dt(_m.pi / 2) - 0.0) < 1e-12, "At t = pi/2 the rate is 0"
+          assert output.strip() == "True", "The program should print True"
+        wrong:
+          - |
+            import math
+
+            def z(t):
+                return math.cos(t) ** 2 * math.sin(t)
+
+            def dz_dt(t):
+                x, y = math.cos(t), math.sin(t)
+                dz_dx = 2 * x * y
+                dx_dt = -math.sin(t)
+                return dz_dx * dx_dt
+
+            print(True)
+          - |
+            import math
+
+            def z(t):
+                return math.cos(t) ** 2 * math.sin(t)
+
+            def dz_dt(t):
+                x, y = math.cos(t), math.sin(t)
+                return 2 * x * y * -math.sin(t) * x * x * math.cos(t)
+
+            print(True)
+          - |
+            import math
+
+            def z(t):
+                return math.cos(t) ** 2 * math.sin(t)
+
+            def dz_dt(t):
+                x, y = math.cos(t), math.sin(t)
+                return 2 * x * y * math.cos(t) + x * x * -math.sin(t)
+
+            print(True)
+        explanation: |
+          Time reaches $z$ by two routes, through $x$ and through $y$. The broken version followed only the first. The second contributes $\dfrac{\partial z}{\partial y}\dfrac{dy}{dt} = x^2\cos t$, and the two are added, not multiplied. At $t = 0$ the point is at $(1, 0)$ moving straight up: $x$ is momentarily not changing at all, so the whole of the rate, 1, comes from the route that was left out. Count the arrows into the output on the diagram. There must be one term for each.
+    - question:
+        id: work-polar
+        type: numeric
+        system: s2
+        prompt: |
+          $f(x, y) = x^2 - y^2$, with $x = r\cos\theta$ and $y = r\sin\theta$. Use the chain rule to find $\partial f / \partial r$ at $r = 2$, $\theta = 0$.
+        answer: "4"
+        explanation: |
+          $\dfrac{\partial f}{\partial r} = \dfrac{\partial f}{\partial x}\cos\theta + \dfrac{\partial f}{\partial y}\sin\theta = 2x\cos\theta - 2y\sin\theta$. At $r = 2$, $\theta = 0$ the point is $(2, 0)$, so this is $4 \times 1 - 0 = 4$. Moving outwards along the positive $x$-axis, the saddle climbs like $x^2$, whose slope at 2 is 4. In general $f = r^2\cos 2\theta$ and $\partial f / \partial r = 2r\cos 2\theta$, which agrees.
+    - question:
+        id: work-shared
+        type: choice
+        system: s2
+        prompt: |
+          In a model, one weight $w$ is used in two places: $u = wx_1$ and $v = wx_2$, and the loss is $L(u, v)$. Someone computes $\dfrac{\partial L}{\partial w}$ as $\dfrac{\partial L}{\partial u}\,x_1$. What is wrong?
+        options:
+          - 'Nothing. The weight is one number, so it has one term.'
+          - 'The weight reaches the loss by two routes, through $u$ and through $v$. Each contributes a product of rates, and the contributions add: $\dfrac{\partial L}{\partial w} = \dfrac{\partial L}{\partial u}\,x_1 + \dfrac{\partial L}{\partial v}\,x_2$.'
+          - 'The two rates should be multiplied together: $\dfrac{\partial L}{\partial u}\,x_1 \cdot \dfrac{\partial L}{\partial v}\,x_2$.'
+          - 'A weight used twice has no derivative.'
+        answer: 1
+        explanation: |
+          Nudge $w$ and both $u$ and $v$ move. The loss responds to each. The total response is the sum, by the linear approximation: effects of separate small changes add. This is the pattern in every model that shares weights: a convolution uses each of its weights at every position of the image, and a recurrent network uses the same weights at every step of the sequence. The gradient with respect to a shared weight is the sum of the gradients from each of its uses. You have met one case already: the neuron, where $w$ was used once for each data point.
+    - question:
+        id: work-total-partial
+        type: numeric
+        system: s2
+        prompt: |
+          The cost of running a machine is $C(s, T) = s^2 + 3T$, where $s$ is its speed and $T$ its temperature. Running faster heats it: $T = 20 + 2s$. At $s = 5$, what is the total rate of change of cost with speed, $dC/ds$?
+        answer: "16"
+        explanation: |
+          The direct route gives $\dfrac{\partial C}{\partial s} = 2s = 10$. The route through temperature gives $\dfrac{\partial C}{\partial T}\dfrac{dT}{ds} = 3 \times 2 = 6$. Together 16. The partial derivative, 10, is the answer to a different question: what would speed cost if the temperature could somehow be held fixed. An engineer who used it to decide how fast to run the machine would underestimate the cost of speed by more than a third.
+    - question:
+        id: work-matrix
+        type: choice
+        system: s2
+        prompt: |
+          A network is a composition of three layers, $\mathbf{f}_3 \circ \mathbf{f}_2 \circ \mathbf{f}_1$. In what sense does the chain rule say its derivative is "the product of the derivatives of the layers"?
+        options:
+          - 'The derivative of the whole is the product of three numbers, one slope for each layer.'
+          - 'Near the input each layer is approximately a linear map, given by a matrix of partial derivatives taken at the value that layer actually receives. The composition of the three approximations is the product of the three matrices, in the order last layer on the left, and that product is the linear approximation of the whole network.'
+          - 'The three matrices are added.'
+          - 'Only the last layer has a derivative.'
+        answer: 1
+        explanation: |
+          Each layer's derivative is a matrix: outputs of the layer by inputs of the layer. The chain rule multiplies them, $D\mathbf{f}_3\,D\mathbf{f}_2\,D\mathbf{f}_1$, each evaluated at the point where its layer operates during the forward pass. The shapes chain as they must for a matrix product. Since matrix multiplication is associative, the product can be worked out starting from either end. Starting from the output end, when the final output is a single number, every intermediate result is a single row, which is cheap. That choice of order is the reason backpropagation is efficient, and it is taken up in the cluster on automatic differentiation.
+  connections:
+    - text: |
+        The plate was constant in time and the ant felt the temperature change at $6\sin t\cos t$: the plate's gradient, $(2x, 8y)$, dotted with the ant's velocity, $(-\sin t, \cos t)$. Where the velocity was square to the gradient, the ant was walking along a contour and felt nothing.
+
+        The **chain rule** in several variables: to differentiate an output with respect to an input, find every route from one to the other through the intermediate quantities, **multiply the rates along each route, and add the routes**. Along a path this is $\nabla f \cdot \mathbf{x}'(t)$. It proves that gradients are normal to level sets. It contains the product rule. A partial derivative counts the direct route only, and a total derivative counts them all.
+
+        Said once for all cases: the derivative of a composition is the **product of the matrices** of the two linear approximations, $D(\mathbf{f} \circ \mathbf{g}) = D\mathbf{f}\,D\mathbf{g}$, because composing linear maps is multiplying matrices.
+
+        For a neuron, working backwards from the loss gave $\partial L / \partial w$ and $\partial L / \partial b$ from one shared rate. A program that keeps the diagram of a computation and passes rates backwards through it differentiates anything, and building one begins at [[e6.scalar-computational-graph]].
+
+        The matrix form used an object that has not yet been looked at for its own sake: the matrix of all the partial derivatives of a function with several outputs. It has a name, its own geometry, and a determinant that will matter. That is the next lesson, [[m12.jacobian]].

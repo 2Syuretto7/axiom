@@ -1,0 +1,557 @@
+concept: m12.total-derivative-as-best-linear-approximation
+minutes: 85
+claim: You can state what it means for a function of several variables to be differentiable at a point, as having a linear approximation whose error shrinks faster than the step, write that approximation from the partial derivatives, find the tangent plane to a surface, use the approximation to estimate how errors in several measurements combine, and say why continuous partial derivatives guarantee it while bare partial derivatives do not.
+recalls: [m12.partial-derivatives]
+uses: [m12.functions-of-several-variables, m10.derivative-as-slope-and-rate, m10.taylor-approximation, m10.limits-and-continuity, m10.differentiation-rules, m5.matrices-as-linear-maps, m5.matrix-vector-product, m4.dot-product, m4.norms-and-distance, m4.lines-planes-and-hyperplanes, m4.vector-addition-and-scaling, e5.numerical-error-analysis-in-practice, e5.arrays-dtype-and-shape, e5.vectorisation, e5.linear-algebra-routines, e5.axis-operations-and-reductions, m0.decimals-and-percentages, e0.functions, e0.loops]
+leads: [m12.gradient, m12.jacobian, m12.multivariable-chain-rule, m12.multivariable-taylor-expansion]
+starter: |
+  # Scratch space. From the line w = 2, b = 1, step both knobs at once,
+  # by t times (-0.2, -0.1), and compare the true change in the loss
+  # with the sum of the two separate effects, 10 per unit of w and 4 per unit of b.
+  import numpy as np
+
+  xs = np.array([0.0, 1.0, 2.0, 3.0])
+  ys = np.array([1.0, 3.0, 4.0, 6.0])
+
+  def loss(w, b):
+      return ((w * xs + b - ys) ** 2).sum()
+
+  for t in [1.0, 0.1, 0.01, 0.001]:
+      dw, db = -0.2 * t, -0.1 * t
+      true = loss(2.0 + dw, 1.0 + db) - loss(2.0, 1.0)
+      guess = 10 * dw + 4 * db
+      print(t, round(true, 8), round(guess, 8), round(true - guess, 8))
+parts:
+  recall:
+    - text: |
+        [[m12.partial-derivatives]] measured how a function responds when one input moves and the rest are frozen. It ended with a rectangle whose two sides both grew, where adding the two separate effects gave the change in area almost exactly. Today that "almost" is made precise. Three quick pulls first.
+  puzzle:
+    - text: |
+        At the line $w = 2$, $b = 1$ the loss has partial derivatives 10 and 4. Each is a promise about one knob turned alone: nudge $w$ by a small $dw$ and the loss changes by about $10\,dw$. Nudge $b$ by a small $db$ and it changes by about $4\,db$.
+
+        Nobody trains a model by turning one knob at a time. Every weight is changed at every step. So turn both. It is tempting to guess that the two effects simply add:
+
+        $$\text{change in } L \approx 10\,dw + 4\,db.$$
+
+        The starter tests the guess with steps in the direction $(-0.2, -0.1)$, of shrinking size.
+
+        Run it. With the full step the true change is $-1.56$ and the guess says $-2.4$: not close. With a tenth of the step, $-0.2316$ against $-0.24$. With a hundredth, $-0.023916$ against $-0.024$. With a thousandth, $-0.00239916$ against $-0.0024$.
+
+        Look at the last column, the error of the guess: 0.84, then 0.0084, then 0.000084. **Each time the step is made ten times smaller, the error becomes a hundred times smaller.**
+
+        **Why should the effects of two knobs add at all? Why is the guess not exact? And what is it about the error, falling a hundred-fold for each ten-fold, that deserves to be called the definition of a derivative?**
+  intuition:
+    - text: |
+        Go back to one variable and look again at what a derivative was. You learnt it as a slope. But in the lesson on the Taylor approximation it took a second form, and it is the second form that survives the move to several variables:
+
+        $$f(a + h) \approx f(a) + f'(a)\,h.$$
+
+        Near $a$, the function is nearly a straight line. The derivative is the coefficient that makes this approximation as good as it can be. "As good as it can be" has an exact meaning: the error is not merely small when $h$ is small. Any line through the point $(a, f(a))$ manages that much. **The error is small even compared with $h$.** Divide the error by $h$ and the result still goes to zero. Only one line does that, the tangent.
+
+        Zoom in on a smooth curve and it straightens. That is what differentiable means. Zoom in on a corner, such as the one in $|x|$ at 0, and it stays a corner at every magnification.
+
+        Now two variables. Zoom in on a smooth surface. **It flattens into a plane.** The earth is a sphere, and the piece of it you can see from where you stand is flat for every practical purpose. A plane is the graph of a function of the form
+
+        $$\text{constant} + p\,(\text{step in } x) + q\,(\text{step in } y).$$
+
+        So a function of two variables is differentiable at a point if, near that point, it is such a function to within an error that shrinks faster than the size of the step. The plane is the **tangent plane**, and it does for a surface what the tangent line does for a curve.
+
+        Which plane? There is no choice. Step in the $x$ direction only, and the plane's rule gives a change of $p$ times the step. But the function's change in that direction is governed by its partial derivative. So $p$ must be $\partial f / \partial x$, and likewise $q$ must be $\partial f / \partial y$.
+
+        That explains the guess in the puzzle. **The effects of the knobs add because a plane is linear, and near a point a differentiable function is its tangent plane.** A plane's rise over a step is the rise from the part of the step along $x$ plus the rise from the part along $y$. The guess $10\,dw + 4\,db$ is the tangent plane's answer.
+
+        And it explains the error. The loss is not a plane. It is a bowl, curving up and away from its tangent plane. The gap between a curved surface and its tangent plane grows like the **square** of the distance from the point of contact, just as the gap between a parabola and its tangent line does. Ten times nearer, a hundred times closer. An error that behaves like the square of the step certainly shrinks faster than the step.
+    - text: |
+        **The partial derivatives are not enough by themselves.** The last lesson ended with a function that has both partial derivatives at the origin and is not continuous there. It has no tangent plane at the origin: zoom in as far as you like and it never flattens. So "differentiable" cannot be defined as "has partial derivatives". It has to be defined by the thing that matters, the existence of a good linear approximation, and the partial derivatives then come out as its coefficients.
+  derivation:
+    - text: |
+        **Definition.** Let $f : \mathbb{R}^n \to \mathbb{R}$ and let $\mathbf{a}$ be a point. Then $f$ is **differentiable at $\mathbf{a}$** if there is a linear map $T : \mathbb{R}^n \to \mathbb{R}$ such that
+
+        $$f(\mathbf{a} + \mathbf{h}) = f(\mathbf{a}) + T(\mathbf{h}) + E(\mathbf{h}), \qquad\text{with}\qquad \lim_{\mathbf{h} \to \mathbf{0}} \frac{|E(\mathbf{h})|}{\lVert \mathbf{h} \rVert} = 0.$$
+
+        The linear map $T$ is the **total derivative** of $f$ at $\mathbf{a}$, written $Df(\mathbf{a})$. The word "total" sets it against "partial": it accounts for a step in any direction, with every input moving.
+
+        Read the three terms. $f(\mathbf{a})$ is where you are. $T(\mathbf{h})$ is the linear response to the step $\mathbf{h}$. $E(\mathbf{h})$ is everything else, and the condition says it is negligible beside the step itself when the step is small.
+
+        **What $T$ must be.** A linear map from $\mathbb{R}^n$ to $\mathbb{R}$ is a matrix with one row, so $T(\mathbf{h}) = c_1 h_1 + \dots + c_n h_n$ for some numbers $c_i$. To find $c_i$, take the step $\mathbf{h} = t\,\mathbf{e}_i$, along one axis. Then $T(\mathbf{h}) = c_i t$, and the definition says
+
+        $$\frac{f(\mathbf{a} + t\mathbf{e}_i) - f(\mathbf{a})}{t} = c_i + \frac{E(t\mathbf{e}_i)}{t} \longrightarrow c_i \quad\text{as } t \to 0.$$
+
+        The left side tends to the partial derivative. So $c_i = \dfrac{\partial f}{\partial x_i}(\mathbf{a})$. **If $f$ is differentiable, its total derivative is the row of its partial derivatives, and nothing else is possible:**
+
+        $$f(\mathbf{a} + \mathbf{h}) \approx f(\mathbf{a}) + \frac{\partial f}{\partial x_1}(\mathbf{a})\,h_1 + \dots + \frac{\partial f}{\partial x_n}(\mathbf{a})\,h_n.$$
+
+        The right-hand side, as a function of the new point $\mathbf{x} = \mathbf{a} + \mathbf{h}$, is the **linearisation** of $f$ at $\mathbf{a}$. For two variables its graph is the tangent plane:
+
+        $$z = f(a, b) + f_x(a, b)\,(x - a) + f_y(a, b)\,(y - b).$$
+
+        **The puzzle.** For a quadratic the error can be found exactly. With $\mathbf{h} = (dw, db)$, expanding $L(2 + dw, 1 + db)$ gives
+
+        $$L = 2 + \underbrace{10\,dw + 4\,db}_{T(\mathbf{h})} + \underbrace{14\,dw^2 + 12\,dw\,db + 4\,db^2}_{E(\mathbf{h})}.$$
+
+        Every term of $E$ has two small factors. With $\mathbf{h} = t\,(-0.2, -0.1)$ it is $0.84\,t^2$, the numbers in the starter's last column. Divided by $\lVert \mathbf{h} \rVert$, which is proportional to $t$, it is proportional to $t$ and goes to zero. So $L$ is differentiable at the point, and its total derivative there is the map $(dw, db) \mapsto 10\,dw + 4\,db$.
+
+        **Differentials.** The linear part is often written with $df$ for the change in the approximation and $dx_i$ for the steps:
+
+        $$df = \frac{\partial f}{\partial x_1}\,dx_1 + \dots + \frac{\partial f}{\partial x_n}\,dx_n.$$
+
+        This is the **total differential**. It is the same statement, in a notation that is convenient for calculating.
+    - question:
+        id: derivation-why-add
+        type: choice
+        system: s2
+        prompt: |
+          At a point where $f$ is differentiable, $\partial f / \partial x = 3$ and $\partial f / \partial y = -2$. A step of $(0.01, 0.02)$ is taken. Why is the change in $f$ close to $3 \times 0.01 + (-2) \times 0.02 = -0.01$?
+        options:
+          - 'Because the two partial derivatives are measured at right angles to each other.'
+          - 'Because differentiable means that near the point $f$ differs from a linear function of the step by an error that is small even beside the step. A linear function of a step is the sum of its values on the part along $x$ and the part along $y$, and those are fixed by the partial derivatives.'
+          - 'Because the change in any function is the sum of the changes due to each variable, exactly.'
+          - 'Because $0.01$ and $0.02$ happen to be small enough that all functions are constant over them.'
+        answer: 1
+        explanation: |
+          Additivity is a property of linear maps: $T(\mathbf{u} + \mathbf{v}) = T(\mathbf{u}) + T(\mathbf{v})$. A general function has no such property, and the change over a combined step is not in general the sum of the changes over the parts. What differentiability supplies is that the function is linear to first order, so the sum is right up to an error of smaller order. For a function with partial derivatives and no total derivative, such as $\dfrac{xy}{x^2 + y^2}$ at the origin, the sum of the separate effects is 0 and the true change along the diagonal is $\tfrac12$.
+    - text: |
+        **Three consequences.**
+
+        *Differentiable implies continuous.* As $\mathbf{h} \to \mathbf{0}$, both $T(\mathbf{h})$ and $E(\mathbf{h})$ tend to 0, so $f(\mathbf{a} + \mathbf{h}) \to f(\mathbf{a})$. This is the property that bare partial derivatives lacked.
+
+        *When it holds.* Checking the definition directly is work. Fortunately there is a test that settles nearly every case you will meet. **If the partial derivatives of $f$ exist near $\mathbf{a}$ and are continuous at $\mathbf{a}$, then $f$ is differentiable at $\mathbf{a}$.** Such a function is called **continuously differentiable**, or $C^1$. The idea of the proof, in two variables, is to go from $(a, b)$ to $(a + h, b + k)$ in two legs, first along $x$ and then along $y$. On each leg only one variable moves, so the mean value theorem of single-variable calculus applies and gives the change as a partial derivative, at some point on the leg, times the length of the leg. Continuity of the partial derivatives says those are nearly the partial derivatives at $(a, b)$ itself, and the discrepancy is the error $E$.
+
+        Polynomials, exponentials, sines, and logarithms and quotients away from their bad points all have continuous partial derivatives, and so do their sums, products and compositions. So every loss you will write down is differentiable wherever its formula is smooth. The exceptions are of a recognisable kind: a kink, as in $|x|$ or in the function $\max(0, x)$ used in networks, and a division by zero.
+
+        *More than one output.* For $\mathbf{f} : \mathbb{R}^n \to \mathbb{R}^m$ the definition is word for word the same, with $T$ a linear map from $\mathbb{R}^n$ to $\mathbb{R}^m$, that is, a matrix with $m$ rows and $n$ columns. **The derivative of a function between spaces is the linear map that best approximates it.** That one sentence is the modern meaning of "derivative". A slope is the special case of a 1 by 1 matrix.
+
+        **Propagating errors.** The linearisation says how small errors in several measured inputs combine into an error in a computed result. A cylinder of radius $r$ and height $h$ has volume $V = \pi r^2 h$. Then
+
+        $$dV = 2\pi r h\,dr + \pi r^2\,dh, \qquad\text{and dividing by } V: \qquad \frac{dV}{V} = 2\,\frac{dr}{r} + \frac{dh}{h}.$$
+
+        A 1% error in the radius costs 2% in the volume, and a 1% error in the height costs 1%. The radius matters twice as much because it is squared. In general a power $x^k$ in a product multiplies the relative error of $x$ by $k$.
+    - question:
+        id: order-tangent
+        type: order
+        system: s2
+        prompt: Put in order the steps for finding the tangent plane to $z = x^2 + y^2$ at the point where $x = 1$ and $y = 2$.
+        steps:
+          - 'Find the height at the point: $f(1, 2) = 1 + 4 = 5$.'
+          - 'Find the partial derivatives as functions: $f_x = 2x$ and $f_y = 2y$.'
+          - 'Evaluate them at the point: $f_x(1, 2) = 2$ and $f_y(1, 2) = 4$.'
+          - 'Write the plane: $z = 5 + 2(x - 1) + 4(y - 2)$.'
+          - 'Simplify: $z = 2x + 4y - 5$.'
+        explanation: The plane must pass through the point of contact, which fixes its height there, and must have the same slope as the surface along each axis, which fixes its two coefficients. The steps are measured from the point of contact, so they appear as x less 1 and y less 2. Evaluate the partial derivatives at the point before writing the plane. A tangent plane has constant coefficients.
+  formal:
+    - text: |
+        **Differentiability.** $\mathbf{f} : D \to \mathbb{R}^m$, with $D \subseteq \mathbb{R}^n$, is differentiable at a point $\mathbf{a}$ inside $D$ if there is a linear map $T : \mathbb{R}^n \to \mathbb{R}^m$ with
+
+        $$\lim_{\mathbf{h} \to \mathbf{0}} \frac{\lVert \mathbf{f}(\mathbf{a} + \mathbf{h}) - \mathbf{f}(\mathbf{a}) - T(\mathbf{h}) \rVert}{\lVert \mathbf{h} \rVert} = 0.$$
+
+        Such a $T$ is unique. It is the total derivative $D\mathbf{f}(\mathbf{a})$.
+
+        **Its matrix.** For scalar-valued $f$, $Df(\mathbf{a})\,\mathbf{h} = \sum_i \dfrac{\partial f}{\partial x_i}(\mathbf{a})\,h_i$.
+
+        **Linearisation.** $\ell(\mathbf{x}) = f(\mathbf{a}) + Df(\mathbf{a})(\mathbf{x} - \mathbf{a})$.
+
+        **Theorem.** If $f$ is differentiable at $\mathbf{a}$ then $f$ is continuous at $\mathbf{a}$ and all its partial derivatives exist there.
+
+        **Theorem.** If all partial derivatives of $f$ exist in a neighbourhood of $\mathbf{a}$ and are continuous at $\mathbf{a}$, then $f$ is differentiable at $\mathbf{a}$.
+
+        Neither theorem has a true converse: partial derivatives may exist without differentiability, and a function may be differentiable with discontinuous partial derivatives.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-estimate
+        type: numeric
+        system: s1
+        prompt: |
+          At a point, $f_x = 3$ and $f_y = -2$. Estimate the change in $f$ for a step of $(0.1, 0.1)$.
+        answer: "0.1"
+        tolerance: "0.0001"
+        explanation: Three tenths less two tenths.
+    - question:
+        id: drill-estimate-2
+        type: numeric
+        system: s1
+        prompt: |
+          At a point, $f = 10$, $f_x = 2$ and $f_y = 5$. Estimate $f$ after a step of $(0.5, -0.2)$.
+        answer: "10"
+        tolerance: "0.0001"
+        explanation: The step adds 2 times 0.5 and takes away 5 times 0.2, which cancel.
+    - question:
+        id: drill-shape
+        type: choice
+        system: s1
+        prompt: |
+          Zoom in far enough on the graph of a differentiable function of two variables. What does it look like?
+        options: ['A plane', 'A sphere', 'A saddle', 'A staircase']
+        answer: 0
+        explanation: Differentiable means well approximated by a linear function near the point.
+    - question:
+        id: drill-error-order
+        type: choice
+        system: s1
+        prompt: |
+          For a smooth function, the step is made 10 times smaller. By about what factor does the error of the linear approximation shrink?
+        options: ['10', '100', '2', 'It does not shrink']
+        answer: 1
+        explanation: The gap between a surface and its tangent plane grows as the square of the distance.
+    - question:
+        id: drill-matrix-shape
+        type: choice
+        system: s1
+        prompt: |
+          The total derivative of $f : \mathbb{R}^4 \to \mathbb{R}$ at a point is a matrix of what shape?
+        options: ['1 by 4', '4 by 1', '4 by 4', '1 by 1']
+        answer: 0
+        explanation: It takes a step with four entries to one number.
+    - question:
+        id: drill-matrix-shape-2
+        type: choice
+        system: s1
+        prompt: |
+          The total derivative of $\mathbf{f} : \mathbb{R}^3 \to \mathbb{R}^2$ at a point is a matrix of what shape?
+        options: ['3 by 2', '2 by 3', '3 by 3', '2 by 2']
+        answer: 1
+        explanation: It takes a step with three entries to a change with two entries.
+    - question:
+        id: drill-implies
+        type: choice
+        system: s1
+        prompt: |
+          Which of these guarantees that $f$ is differentiable at a point?
+        options: ['Its partial derivatives exist at the point', 'Its partial derivatives exist nearby and are continuous at the point', 'It is continuous at the point', 'It is defined at the point']
+        answer: 1
+        explanation: Continuity of the partial derivatives is the practical test.
+    - question:
+        id: drill-relative
+        type: numeric
+        system: s1
+        prompt: |
+          $V = \pi r^2 h$. The radius is measured 1% too large and the height exactly. By about what percentage is $V$ too large?
+        answer: "2"
+        unit: "%"
+        explanation: The radius is squared, so its relative error counts twice.
+    - question:
+        id: drill-plane-coeff
+        type: numeric
+        system: s1
+        prompt: |
+          The tangent plane to $z = x^2 + y^2$ at $(1, 2)$ is $z = 5 + 2(x - 1) + q\,(y - 2)$. What is $q$?
+        answer: "4"
+        explanation: It is the partial derivative 2y at y equal to 2.
+    - question:
+        id: drill-kink
+        type: choice
+        system: s1
+        prompt: |
+          Which of these is **not** differentiable at the origin?
+        options: ['$x^2 + y^2$', '$3x - 2y$', '$\lvert x \rvert + y$', '$xy$']
+        answer: 2
+        explanation: Its slice along the x-axis has a corner at 0.
+    - question:
+        id: drill-differential
+        type: choice
+        system: s1
+        prompt: |
+          $f(x, y) = xy$. What is the total differential $df$?
+        options: ['$y\,dx + x\,dy$', '$x\,dx + y\,dy$', '$dx\,dy$', '$dx + dy$']
+        answer: 0
+        explanation: Each step is multiplied by the partial derivative with respect to its own variable.
+    - question:
+        id: predict-linear
+        type: predict
+        system: s1
+        prompt: A function and its linearisation at the point (1, 2). What does this show?
+        code: |
+          def f(x, y):
+              return x * x + y * y
+
+          def plane(x, y):
+              return 5 + 2 * (x - 1) + 4 * (y - 2)
+
+          print(f(1, 2), plane(1, 2))
+          print(f(2, 3), plane(2, 3))
+          print(round(f(1.1, 2.1) - plane(1.1, 2.1), 4))
+        output: |
+          5 5
+          13 11
+          0.02
+        explanation: At the point of contact the surface and the plane agree. A whole step of 1 each way away, the surface is at 13 and the plane at 11, a gap of 2, which is the squared length of the step. A tenth of that step away the gap is a hundredth of 2.
+    - question:
+        id: predict-ratio
+        type: predict
+        system: s1
+        prompt: The error of the linear approximation, divided by the size of the step. What does this show?
+        code: |
+          import numpy as np
+
+          a = np.array([1.0, 2.0])
+          row = np.array([2.0, 4.0])
+          d = np.array([3.0, 4.0])
+          for t in [0.1, 0.01]:
+              h = t * d
+              err = ((a + h) ** 2).sum() - (a ** 2).sum() - row @ h
+              print(round(float(err), 6), round(float(err / np.linalg.norm(h)), 6))
+        output: |
+          0.25 0.5
+          0.0025 0.05
+        explanation: The function is the squared length, and its error at a step h is exactly the squared length of h. The step d has length 5, so the error is 25 times t squared, and divided by the length of the step, 5t, it is 5t. The ratio shrinks with the step, which is what the definition asks.
+  work:
+    - text: Slower now. In each question, separate the three parts of the approximation - where you are, the linear response, and the error.
+    - question:
+        id: write-linearise
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `linearise(value, row, a)`. `value` is $f(\mathbf{a})$, `row` is the array of partial derivatives of $f$ at $\mathbf{a}$, and `a` is the point, an array. Return a **function** which takes an array `x` and returns the linearisation of $f$ at `x`, as a float.
+        starter: |
+          import numpy as np
+
+          def linearise(value, row, a):
+              # Replace the next two lines with your own.
+              def plane(x):
+                  return value
+              return plane
+
+          plane = linearise(5.0, np.array([2.0, 4.0]), np.array([1.0, 2.0]))
+          print(plane(np.array([1.1, 2.1])))
+        solution: |
+          import numpy as np
+
+          def linearise(value, row, a):
+              def plane(x):
+                  return float(value + row @ (x - a))
+              return plane
+
+          plane = linearise(5.0, np.array([2.0, 4.0]), np.array([1.0, 2.0]))
+          print(plane(np.array([1.1, 2.1])))
+        tests: |
+          import numpy as _np
+          _p = linearise(5.0, _np.array([2.0, 4.0]), _np.array([1.0, 2.0]))
+          assert callable(_p), "Return a function"
+          assert abs(_p(_np.array([1.0, 2.0])) - 5.0) < 1e-12, "At the point itself the linearisation equals the value there"
+          assert abs(_p(_np.array([1.1, 2.1])) - 5.6) < 1e-9, "At (1.1, 2.1) it is 5 + 0.2 + 0.4"
+          assert abs(_p(_np.array([2.0, 2.0])) - 7.0) < 1e-9, "A step of 1 along x adds the first partial derivative"
+          assert abs(_p(_np.array([1.0, 3.0])) - 9.0) < 1e-9, "A step of 1 along y adds the second partial derivative"
+          assert abs(_p(_np.array([0.0, 0.0])) + 5.0) < 1e-9, "At the origin it is 5 - 2 - 8"
+          _q = linearise(-1.0, _np.array([1.0, 0.0, -3.0]), _np.array([2.0, 2.0, 2.0]))
+          assert abs(_q(_np.array([3.0, 9.0, 1.0])) - 3.0) < 1e-9, "It should work for three variables too"
+          assert abs(float(output.strip()) - 5.6) < 1e-9, "The program should print 5.6"
+        wrong:
+          - |
+            import numpy as np
+
+            def linearise(value, row, a):
+                def plane(x):
+                    return float(value + row @ x)
+                return plane
+
+            print(5.6)
+          - |
+            import numpy as np
+
+            def linearise(value, row, a):
+                def plane(x):
+                    return float(value + row @ (a - x))
+                return plane
+
+            print(5.6)
+          - |
+            import numpy as np
+
+            def linearise(value, row, a):
+                def plane(x):
+                    return float(value + (x - a).sum())
+                return plane
+
+            print(5.6)
+          - |
+            import numpy as np
+
+            def linearise(value, row, a):
+                def plane(x):
+                    return float(row @ (x - a))
+                return plane
+
+            print(5.6)
+        explanation: |
+          The linearisation is the value at the point plus the row of partial derivatives applied to the **step**, $\mathbf{x} - \mathbf{a}$. A one-row matrix times a vector is a dot product, so `row @ (x - a)` does it. Applying the row to `x` itself measures the step from the origin and not from the point of contact, which gives a plane with the right tilt at the wrong height. The function returned remembers `value`, `row` and `a` from the call that made it.
+    - question:
+        id: write-error-ratio
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `error_ratio(f, row, a, h)`. `f` takes an array and returns a number, `row` is a claimed array of partial derivatives of `f` at the array `a`, and `h` is a step, an array that is not zero. Return, as a float,
+
+          $$\frac{|f(\mathbf{a} + \mathbf{h}) - f(\mathbf{a}) - \text{row} \cdot \mathbf{h}|}{\lVert \mathbf{h} \rVert}.$$
+
+          If `row` really is the derivative, this shrinks in proportion to the step. If it is not, it does not shrink.
+        starter: |
+          import numpy as np
+
+          def error_ratio(f, row, a, h):
+              # Replace the next line with your own.
+              return 0.0
+
+          f = lambda v: (v ** 2).sum()
+          print(round(error_ratio(f, np.array([2.0, 4.0]), np.array([1.0, 2.0]), np.array([0.03, 0.04])), 6))
+        solution: |
+          import numpy as np
+
+          def error_ratio(f, row, a, h):
+              error = f(a + h) - f(a) - row @ h
+              return float(abs(error) / np.linalg.norm(h))
+
+          f = lambda v: (v ** 2).sum()
+          print(round(error_ratio(f, np.array([2.0, 4.0]), np.array([1.0, 2.0]), np.array([0.03, 0.04])), 6))
+        tests: |
+          import numpy as _np
+          _f = lambda v: (v ** 2).sum()
+          _a = _np.array([1.0, 2.0])
+          _row = _np.array([2.0, 4.0])
+          assert abs(error_ratio(_f, _row, _a, _np.array([0.03, 0.04])) - 0.05) < 1e-9, "For the squared length the ratio is the length of the step, here 0.05"
+          assert abs(error_ratio(_f, _row, _a, _np.array([0.3, 0.4])) - 0.5) < 1e-9, "With a step of length 0.5 the ratio is 0.5"
+          assert abs(error_ratio(lambda v: -(v ** 2).sum(), -_row, _a, _np.array([0.03, 0.04])) - 0.05) < 1e-9, "The ratio is never negative, even when the function lies below its linearisation"
+          _bad = _np.array([2.0, 3.0])
+          assert abs(error_ratio(_f, _bad, _a, _np.array([0.0, 0.001])) - 1.001) < 1e-6, "With a wrong second partial derivative the ratio stays near 1 for a small step along y"
+          _g = lambda v: 3 * v[0] - v[1] + 7
+          assert error_ratio(_g, _np.array([3.0, -1.0]), _np.array([5.0, 5.0]), _np.array([2.0, 1.0])) < 1e-9, "A linear function is its own linearisation, so the ratio is 0"
+          assert abs(float(output.strip()) - 0.05) < 1e-9, "The program should print 0.05"
+        wrong:
+          - |
+            import numpy as np
+
+            def error_ratio(f, row, a, h):
+                error = f(a + h) - f(a) - row @ h
+                return float(abs(error))
+
+            print(0.05)
+          - |
+            import numpy as np
+
+            def error_ratio(f, row, a, h):
+                error = f(a + h) - f(a) - row @ h
+                return float(error / np.linalg.norm(h))
+
+            print(0.05)
+          - |
+            import numpy as np
+
+            def error_ratio(f, row, a, h):
+                error = f(a + h) - row @ h
+                return float(abs(error) / np.linalg.norm(h))
+
+            print(0.05)
+          - |
+            import numpy as np
+
+            def error_ratio(f, row, a, h):
+                error = f(a + h) - f(a) - row @ h
+                return float(abs(error) / (h ** 2).sum())
+
+            print(0.05)
+        explanation: |
+          This is the definition of differentiability turned into a measurement. Compute the error of the linear approximation and divide by the length of the step. With the correct row, the ratio for a smooth function is about a constant times the length of the step, so halving the step halves it. With a wrong row, the error itself is proportional to the step, the ratio settles at a number that is not zero, and no amount of shrinking the step helps. Watching this ratio as the step shrinks is how a derivative formula is tested when you do not trust it.
+    - question:
+        id: fix-tangent
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `tangent_height(x, y)` should give the height at $(x, y)$ of the tangent plane to the surface $z = x^2 y$ at the point of contact $(2, 3)$, where the height is 12. Near the point of contact it should be close to the surface. At $(2.1, 3.1)$ the surface is at 13.671 and the function gives a number nowhere near. Fix it.
+        starter: |
+          def tangent_height(x, y):
+              fx = 2 * x * y
+              fy = x * x
+              return 12 + fx * (x - 2) + fy * (y - 3)
+
+          print(round(tangent_height(2.1, 3.1), 4), round(tangent_height(3.0, 3.0), 4))
+        solution: |
+          def tangent_height(x, y):
+              fx = 2 * 2 * 3
+              fy = 2 * 2
+              return 12 + fx * (x - 2) + fy * (y - 3)
+
+          print(round(tangent_height(2.1, 3.1), 4), round(tangent_height(3.0, 3.0), 4))
+        tests: |
+          assert abs(tangent_height(2, 3) - 12) < 1e-9, "At the point of contact the plane is at height 12"
+          assert abs(tangent_height(2.1, 3.1) - 13.6) < 1e-9, "At (2.1, 3.1) the plane is at 12 + 1.2 + 0.4"
+          assert abs(tangent_height(3.0, 3.0) - 24.0) < 1e-9, "A step of 1 along x raises the plane by 12"
+          assert abs(tangent_height(2.0, 4.0) - 16.0) < 1e-9, "A step of 1 along y raises the plane by 4"
+          assert abs(tangent_height(0.0, 0.0) + 24.0) < 1e-9, "At the origin the plane is at 12 - 24 - 12"
+          assert abs((tangent_height(5.0, 7.0) - tangent_height(4.0, 7.0)) - (tangent_height(1.0, 0.0) - tangent_height(0.0, 0.0))) < 1e-9, "A plane rises by the same amount for each step of 1 along x, wherever the step is taken"
+          assert output.strip() == "13.6 24.0", "The program should print 13.6 24.0"
+        wrong:
+          - |
+            def tangent_height(x, y):
+                fx = 2 * x * y
+                fy = x * x
+                return 12 + fx * (x - 2) + fy * (y - 3)
+
+            print("13.6 24.0")
+          - |
+            def tangent_height(x, y):
+                fx = 2 * 2 * 3
+                fy = 2 * 2
+                return 12 + fx * x + fy * y
+
+            print("13.6 24.0")
+          - |
+            def tangent_height(x, y):
+                fx = 2 * 3
+                fy = 2 * 2
+                return 12 + fx * (x - 2) + fy * (y - 3)
+
+            print("13.6 24.0")
+        explanation: |
+          The coefficients of a tangent plane are the partial derivatives **at the point of contact**: here $2xy = 12$ and $x^2 = 4$ at $(2, 3)$. They are two fixed numbers. The broken version recomputed them at whatever point was passed in, so its "plane" had a different tilt at every point and was not a plane at all. The last test catches exactly that: a plane rises by the same amount over equal steps everywhere. Differentiate with the letters, then substitute the point, then write the plane.
+    - question:
+        id: work-cylinder
+        type: numeric
+        system: s2
+        prompt: |
+          The volume of a cylinder is $V = \pi r^2 h$. The radius is measured with a relative error of at most 0.5% and the height with a relative error of at most 1%. Using the linear approximation, what is the largest relative error in $V$, as a percentage?
+        answer: "2"
+        unit: "%"
+        explanation: |
+          $\dfrac{dV}{V} = 2\,\dfrac{dr}{r} + \dfrac{dh}{h}$. In the worst case both errors push the same way: $2 \times 0.5\% + 1\% = 2\%$. The half-per-cent error in the radius does as much damage as the one-per-cent error in the height. If the measurement had to be improved, there would be no point in buying a better ruler for the height alone.
+    - question:
+        id: work-no-plane
+        type: choice
+        system: s2
+        prompt: |
+          $g(x, y) = \dfrac{xy}{x^2 + y^2}$ away from the origin, with $g(0, 0) = 0$, has both partial derivatives equal to 0 at the origin. If $g$ were differentiable there, what would its linear approximation predict for $g(t, t)$ with $t$ small, and what is the truth?
+        options:
+          - 'It would predict about $\tfrac12$, which is right.'
+          - 'It would predict $0 + 0 \cdot t + 0 \cdot t = 0$, with an error small beside $t$. The true value is $\tfrac12$ for every $t \ne 0$, an error that does not shrink at all. So no linear approximation works, and $g$ is not differentiable at the origin.'
+          - 'It would predict $2t$, which is close to the truth for small $t$.'
+          - 'Nothing can be predicted, since the partial derivatives do not exist.'
+        answer: 1
+        explanation: |
+          If a total derivative exists, it must be the row of partial derivatives, here the zero row. So the only candidate for the tangent plane is the flat plane at height 0. Along the diagonal the function sits at $\tfrac12$, and the error of the candidate is $\tfrac12$ however small the step: divided by the length of the step it grows without bound. The only candidate fails, so there is none. This is the precise sense in which partial derivatives can exist without the function being differentiable, and it is consistent with the test in the lesson, since the partial derivatives of $g$ away from the origin do not settle down to 0 as the origin is approached.
+    - question:
+        id: work-relu
+        type: choice
+        system: s2
+        prompt: |
+          Networks use the function $\text{relu}(x) = \max(0, x)$. Consider $f(x, y) = \max(0, x) + y$. Where is $f$ differentiable?
+        options:
+          - 'Everywhere.'
+          - 'Nowhere.'
+          - 'At every point with $x \ne 0$. On the line $x = 0$ the slice along $x$ has a corner, with slope 0 on one side and 1 on the other, so $\partial f / \partial x$ does not exist there and no tangent plane can.'
+          - 'Only at the origin.'
+        answer: 2
+        explanation: |
+          For $x > 0$ the function is $x + y$ and for $x < 0$ it is $y$: a plane on each side, and so differentiable on each side. Along the line $x = 0$ the two planes meet in a crease, like a folded sheet of paper. Zooming in on a crease never flattens it. Differentiability requires the partial derivatives to exist, and the one with respect to $x$ has different limits from the left and from the right. In practice the crease is met with probability zero, and software picks one of the two slopes there. It is worth knowing that this is a convention and not a derivative.
+  connections:
+    - text: |
+        Stepping both knobs at once from $w = 2$, $b = 1$, the change in the loss was close to $10\,dw + 4\,db$, the sum of the two separate effects, and the error fell a hundred-fold whenever the step shrank ten-fold.
+
+        A function is **differentiable** at a point if near that point it is a linear function of the step, up to an error that is small even beside the step. The linear function is the **total derivative**. If it exists it can only be the row of partial derivatives, and its graph, for two variables, is the **tangent plane**. Effects add because linear maps add. The approximation is inexact because the surface curves away from its tangent plane, by an amount of the order of the square of the step.
+
+        Differentiable functions are continuous. Functions whose partial derivatives are continuous are differentiable, which covers every smooth formula. A kink or a crease, as in $\max(0, x)$, is where it fails. And the same definition, with a matrix in place of a row, gives the derivative of a function with several outputs.
+
+        The linear approximation also says how errors combine: $dV / V = 2\,dr / r + dh / h$ for a cylinder.
+
+        Look at the form the linear part took: $\dfrac{\partial f}{\partial x_1} h_1 + \dots + \dfrac{\partial f}{\partial x_n} h_n$. That is a dot product, of the step $\mathbf{h}$ with a vector made of the partial derivatives. A dot product has geometry. It is largest when the two vectors point the same way and zero when they are at right angles. So the vector of partial derivatives must be pointing somewhere meaningful. Where it points is the next lesson, [[m12.gradient]].
