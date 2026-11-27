@@ -1,0 +1,718 @@
+concept: m6.linear-maps-kernel-and-image
+minutes: 85
+claim: You can say what makes a map between vector spaces linear and test a given map against the definition, recognise differentiation, evaluation and transposition as linear maps, show that a linear map is fixed by what it does to a basis, define the kernel and the image and prove that they are subspaces, prove that a linear map is injective exactly when its kernel is zero, and say what it means for two vector spaces to be isomorphic.
+recalls: [m6.subspaces-sums-and-direct-sums]
+uses: [m6.fields-and-the-vector-space-axioms, m5.matrices-as-linear-maps, m5.matrix-vector-product, m5.column-space-and-null-space, m5.basis-and-dimension, m5.identity-and-inverse, m4.linear-combinations-and-span, m3.direct-proof, m3.cases-and-counterexamples, m2.functions-as-machines, m2.composition-and-inverses, m2.injective-surjective-and-bijective-maps, m10.differentiation-rules, m10.integral-as-accumulation, m1.polynomials, m1.logarithms, e5.arrays-dtype-and-shape, e0.functions, e0.loops, e0.lists-and-tuples]
+leads: [m6.rank-nullity-theorem, m6.matrix-of-a-linear-map-and-similarity, m6.dual-spaces-and-the-transpose, m6.adjoints-orthogonal-and-unitary-maps, m8.eigenvalues-and-eigenvectors]
+starter: |
+  # Scratch space. Differentiation, acting on a polynomial stored as its
+  # coefficients of 1, x, x^2, x^3.
+  def D(p):
+      return [k * p[k] for k in range(1, len(p))]
+
+
+  p, q = [1.0, 0.0, 2.0, 5.0], [0.0, 3.0, -2.0, 1.0]
+  print(D(p), D(q))
+  print(D([a + b for a, b in zip(p, q)]))
+  print(D([7.0, 0.0, 0.0, 0.0]))
+parts:
+  recall:
+    - text: |
+        [[m6.subspaces-sums-and-direct-sums]] ended by noticing that subspaces arise as what a rule produces, or as what it sends to zero, and that the rules were all of one kind. Today studies that kind of rule. Three quick pulls first.
+  puzzle:
+    - text: |
+        The starter differentiates polynomials of degree at most 3, held as lists of four coefficients. The derivative of $1 + 2x^2 + 5x^3$ is $4x + 15x^2$.
+
+        ```
+        [0.0, 4.0, 15.0] [3.0, -4.0, 3.0]
+        [3.0, 0.0, 18.0]
+        [0.0, 0.0, 0.0]
+        ```
+
+        The second line differentiates the **sum** of the two polynomials, and it equals the sum of the two derivatives on the first line. The third differentiates the constant 7 and gets the zero polynomial.
+
+        This rule takes vectors in one space, $P_3$, of dimension 4, and returns vectors in another, $P_2$, of dimension 3. It respects addition. No matrix was written down anywhere. And yet two questions from the matrices cluster make perfect sense for it. Which inputs does it send to zero? Which outputs can it produce?
+
+        For a matrix those were the null space and the column space, found by elimination. Here there is nothing to eliminate.
+
+        **What is a "matrix" when there are no rows and columns: what property did matrices have that differentiation shares? And what can be said about what such a rule kills and what it reaches, from that property alone?**
+  intuition:
+    - text: |
+        A matrix $A$ acts on vectors, and the action has two properties used in every argument of the last two clusters: $A(\mathbf{u} + \mathbf{v}) = A\mathbf{u} + A\mathbf{v}$, and $A(c\mathbf{v}) = c\,A\mathbf{v}$. Add first and then apply, or apply first and then add: the same. Likewise for scaling.
+
+        Differentiation has exactly these properties. $(p + q)' = p' + q'$ and $(cp)' = c\,p'$ are the first two differentiation rules you learned. So does evaluation at a point: $(p + q)(2) = p(2) + q(2)$. So does transposing a matrix, taking a definite integral, or shifting a sequence one place along.
+
+        A map between vector spaces with these two properties is called **linear**. It is the kind of map that fits the structure: a vector space is a set with an addition and a scaling, and a linear map is one that respects both. Whatever is true of a combination of inputs is carried to the same combination of outputs:
+
+        $$T(a\mathbf{u} + b\mathbf{v}) = a\,T(\mathbf{u}) + b\,T(\mathbf{v}).$$
+
+        This one fact has a strong consequence. If you know what $T$ does to each vector of a basis, you know what it does to everything, because everything is a combination of the basis. For differentiation on $P_3$: knowing $1 \mapsto 0$, $x \mapsto 1$, $x^2 \mapsto 2x$ and $x^3 \mapsto 3x^2$ is knowing the whole map. A linear map on a space of dimension $n$ is $n$ vectors' worth of information.
+
+        And the two questions of the puzzle have names that do not mention matrices. What $T$ sends to zero is its **kernel**. What $T$ can produce is its **image**.
+  derivation:
+    - text: |
+        **Definition.** Let $V$ and $W$ be vector spaces over the same field. A map $T: V \to W$ is **linear** if, for all $\mathbf{u}, \mathbf{v} \in V$ and all scalars $a$,
+
+        $$T(\mathbf{u} + \mathbf{v}) = T(\mathbf{u}) + T(\mathbf{v}), \qquad T(a\mathbf{v}) = a\,T(\mathbf{v}).$$
+
+        A first consequence: $T(\mathbf{0}) = T(0\mathbf{v}) = 0\,T(\mathbf{v}) = \mathbf{0}$. A linear map sends zero to zero. That gives a quick test for **non**-linearity: the map $x \mapsto x + 1$ on the real line sends 0 to 1, so it is not linear, even though its graph is a straight line. In linear algebra "linear" means through the origin.
+
+        **Examples.**
+
+        - $\mathbf{x} \mapsto A\mathbf{x}$ from $F^n$ to $F^m$, for any $m \times n$ matrix.
+        - Differentiation $D: P_n \to P_{n-1}$.
+        - Evaluation at a point, $p \mapsto p(t)$, from $P_n$ to the scalars.
+        - $A \mapsto A^\top$ on matrices, and $A \mapsto \operatorname{tr}A$ from square matrices to the scalars.
+        - $p \mapsto x\,p(x)$, multiplication by $x$, from $P_n$ to $P_{n+1}$.
+        - The logarithm, from the strange space of positive numbers (where adding is multiplying and scaling is taking powers) to the real line: $\log(xy) = \log x + \log y$ and $\log(x^a) = a\log x$ say precisely that it is linear.
+
+        **Not linear.** $p \mapsto p^2$, since $(2p)^2 = 4p^2$. The length of a vector, since $\lVert -\mathbf{v}\rVert \ne -\lVert\mathbf{v}\rVert$. The determinant, since $\det(2A) = 2^n\det A$.
+
+        **Fixed by a basis.** Let $\mathbf{b}_1, \dots, \mathbf{b}_n$ be a basis of $V$. Choose any vectors $\mathbf{w}_1, \dots, \mathbf{w}_n$ in $W$. There is exactly one linear map with $T(\mathbf{b}_i) = \mathbf{w}_i$ for every $i$, namely
+
+        $$T(c_1\mathbf{b}_1 + \dots + c_n\mathbf{b}_n) = c_1\mathbf{w}_1 + \dots + c_n\mathbf{w}_n.$$
+
+        Linearity forces the formula, and the formula defines a linear map. The choices are free: a basis has no relations among its members that the images would have to respect.
+
+        **Kernel and image.** For a linear map $T: V \to W$,
+
+        $$\ker T = \{\mathbf{v} \in V : T(\mathbf{v}) = \mathbf{0}\}, \qquad \operatorname{im}T = \{T(\mathbf{v}) : \mathbf{v} \in V\}.$$
+
+        The kernel is a subspace of $V$: if $T(\mathbf{u}) = \mathbf{0}$ and $T(\mathbf{v}) = \mathbf{0}$ then $T(\mathbf{u} + \mathbf{v}) = \mathbf{0} + \mathbf{0}$ and $T(a\mathbf{u}) = a\mathbf{0}$. The image is a subspace of $W$: $T(\mathbf{u}) + T(\mathbf{v}) = T(\mathbf{u} + \mathbf{v})$ is again an output, and so is $a\,T(\mathbf{u}) = T(a\mathbf{u})$. For a matrix they are the null space and the column space.
+
+        *Differentiation on $P_3$.* $p' = 0$ exactly for constants, so $\ker D$ is the constants, of dimension 1. Every polynomial of degree at most 2 is the derivative of something, so $\operatorname{im}D = P_2$, of dimension 3.
+
+        *Evaluation at 1 on $P_2$.* The kernel is the polynomials with $p(1) = 0$, the subspace with basis $x - 1$, $x^2 - 1$ from the last lesson. The image is all scalars.
+    - question:
+        id: derivation-kernel
+        type: numeric
+        system: s2
+        prompt: |
+          Let $T: P_3 \to P_1$ be the second derivative, $T(p) = p''$. What is the dimension of its kernel?
+        answer: "2"
+        explanation: |
+          $p'' = 0$ exactly when $p$ has degree at most 1, so the kernel is $P_1$, with basis $1, x$ and dimension 2. The image is all of $P_1$, of dimension 2, since $a + bx$ is the second derivative of $\tfrac{a}{2}x^2 + \tfrac{b}{6}x^3$. Kernel and image dimensions add to 4, the dimension of $P_3$. The same happened for the first derivative, with $1 + 3$. That is not an accident, and it is the subject of the next lesson.
+    - text: |
+        **Injective means zero kernel.**
+
+        *Theorem.* A linear map $T$ is injective if and only if $\ker T = \{\mathbf{0}\}$.
+
+        *Proof.* If $T$ is injective, only one vector can be sent to $\mathbf{0}$, and $\mathbf{0}$ is. Conversely, suppose $\ker T = \{\mathbf{0}\}$ and $T(\mathbf{u}) = T(\mathbf{v})$. Then $T(\mathbf{u} - \mathbf{v}) = T(\mathbf{u}) - T(\mathbf{v}) = \mathbf{0}$, so $\mathbf{u} - \mathbf{v}$ is in the kernel and is zero. $\blacksquare$
+
+        For a general function, checking injectivity means comparing all pairs of inputs. For a linear map it is enough to look at what goes to zero. More: if $T(\mathbf{u}) = \mathbf{w}$, then the full set of solutions of $T(\mathbf{x}) = \mathbf{w}$ is $\mathbf{u} + \ker T$, one particular solution plus the kernel. For differentiation this is the "$+\,C$" of integration: all antiderivatives of a function differ by a constant, because the constants are the kernel of $D$.
+
+        **Compositions and inverses.** If $S$ and $T$ are linear, so is $S \circ T$, when it is defined. If a linear map is a bijection, its inverse is linear as well.
+
+        **Isomorphism.** A linear bijection $T: V \to W$ is an **isomorphism**, and $V$ and $W$ are then **isomorphic**. Everything that can be said using only addition and scaling is true in one exactly when it is true in the other: independence, span, dimension, subspaces. As vector spaces they are the same space with different names for the vectors.
+
+        The map sending $a_0 + a_1x + \dots + a_nx^n$ to the list $(a_0, a_1, \dots, a_n)$ is an isomorphism from $P_n$ to $F^{n+1}$. That is why storing polynomials as lists worked. The logarithm is an isomorphism from the strange space of positive numbers to the real line, which is why that space obeyed all eight axioms. And choosing a basis of any $n$-dimensional space $V$ gives an isomorphism to $F^n$, by sending a vector to its coordinates. **Every finite-dimensional vector space is $F^n$ in disguise**, and the disguise is removed by choosing a basis. The choice is not unique, and much of what follows is about what does not depend on it.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the steps of the proof that a linear map T with kernel zero is injective.
+        steps:
+          - 'Suppose $T(\mathbf{u}) = T(\mathbf{v})$.'
+          - 'Then $T(\mathbf{u}) - T(\mathbf{v}) = \mathbf{0}$.'
+          - 'By linearity, $T(\mathbf{u} - \mathbf{v}) = \mathbf{0}$.'
+          - 'So $\mathbf{u} - \mathbf{v}$ lies in the kernel, which contains only the zero vector.'
+          - 'Therefore $\mathbf{u} = \mathbf{v}$.'
+        explanation: Linearity converts a statement about two inputs with the same output into a statement about one input with output zero. That conversion is what makes the kernel so informative.
+  formal:
+    - text: |
+        Let $V, W$ be vector spaces over $F$.
+
+        **Linear map.** $T: V \to W$ with $T(a\mathbf{u} + b\mathbf{v}) = a\,T(\mathbf{u}) + b\,T(\mathbf{v})$ for all $\mathbf{u}, \mathbf{v} \in V$, $a, b \in F$. Then $T(\mathbf{0}) = \mathbf{0}$ and $T(\sum a_i\mathbf{v}_i) = \sum a_i T(\mathbf{v}_i)$.
+
+        **Determination by a basis.** If $\mathbf{b}_1, \dots, \mathbf{b}_n$ is a basis of $V$ and $\mathbf{w}_1, \dots, \mathbf{w}_n \in W$ are arbitrary, there is a unique linear $T$ with $T(\mathbf{b}_i) = \mathbf{w}_i$.
+
+        **Kernel and image.** $\ker T = T^{-1}(\{\mathbf{0}\})$ is a subspace of $V$. $\operatorname{im}T = T(V)$ is a subspace of $W$. The image is spanned by the images of any spanning set of $V$.
+
+        **Injectivity.** $T$ is injective $\iff \ker T = \{\mathbf{0}\}$ $\iff$ $T$ sends every independent list to an independent list.
+
+        **Fibres.** If $T(\mathbf{u}) = \mathbf{w}$, then $\{\mathbf{x} : T(\mathbf{x}) = \mathbf{w}\} = \mathbf{u} + \ker T$.
+
+        **Algebra of maps.** Sums, scalar multiples and compositions of linear maps are linear. The linear maps from $V$ to $W$ form a vector space, $\mathcal{L}(V, W)$.
+
+        **Isomorphism.** A bijective linear map. Its inverse is linear. $V \cong W$ if an isomorphism exists. Finite-dimensional $V$ and $W$ are isomorphic if and only if $\dim V = \dim W$. In particular $V \cong F^n$ when $\dim V = n$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-definition
+        type: choice
+        system: s1
+        prompt: |
+          A map $T$ is linear when
+        options: ['its graph is a straight line', '$T(\mathbf{u} + \mathbf{v}) = T(\mathbf{u}) + T(\mathbf{v})$ and $T(a\mathbf{v}) = a\,T(\mathbf{v})$', '$T(\mathbf{v}) \ne \mathbf{0}$ for all $\mathbf{v}$', 'it is given by a formula']
+        answer: 1
+        explanation: It respects addition and scaling.
+    - question:
+        id: drill-zero
+        type: choice
+        system: s1
+        prompt: |
+          What does every linear map do to the zero vector?
+        options: ['Sends it to any vector', 'Sends it to the zero vector', 'Leaves it undefined', 'Sends it to 1']
+        answer: 1
+        explanation: $T(\mathbf{0}) = T(0\mathbf{v}) = 0\,T(\mathbf{v})$.
+    - question:
+        id: drill-shift
+        type: choice
+        system: s1
+        prompt: |
+          Is $x \mapsto x + 1$ on the real line a linear map?
+        options: ['Yes', 'No, it sends 0 to 1', 'Yes, its graph is a line', 'Only for positive $x$']
+        answer: 1
+        explanation: Linear maps fix zero.
+    - question:
+        id: drill-derivative
+        type: choice
+        system: s1
+        prompt: |
+          Which rule says that differentiation respects addition?
+        options: ['The product rule', '$(p + q)'' = p'' + q''$', 'The chain rule', '$(pq)'' = p''q''$']
+        answer: 1
+        explanation: The sum rule. The last option is false.
+    - question:
+        id: drill-square
+        type: choice
+        system: s1
+        prompt: |
+          Is $p \mapsto p^2$ on polynomials linear?
+        options: ['Yes', 'No, $(2p)^2 = 4p^2$', 'Yes, squares are polynomials', 'Only on constants']
+        answer: 1
+        explanation: Scaling the input by 2 scales the output by 4.
+    - question:
+        id: drill-kernel
+        type: choice
+        system: s1
+        prompt: |
+          The kernel of $T: V \to W$ is
+        options: ['the set of outputs', 'the set of inputs sent to zero', 'the zero vector of $W$', 'the set of inputs sent to themselves']
+        answer: 1
+        explanation: A subspace of $V$.
+    - question:
+        id: drill-image
+        type: choice
+        system: s1
+        prompt: |
+          The image of $T: V \to W$ is a subspace of
+        options: ['$V$', '$W$', 'the scalars', 'neither']
+        answer: 1
+        explanation: It is the set of outputs.
+    - question:
+        id: drill-kernel-d
+        type: choice
+        system: s1
+        prompt: |
+          What is the kernel of differentiation on $P_3$?
+        options: ['The zero polynomial only', 'The constants', 'The polynomials of degree 3', 'All of $P_3$']
+        answer: 1
+        explanation: Exactly the constants have derivative zero.
+    - question:
+        id: drill-matrix
+        type: choice
+        system: s1
+        prompt: |
+          For the map $\mathbf{x} \mapsto A\mathbf{x}$, the image is
+        options: ['the null space of $A$', 'the column space of $A$', 'the row space of $A$', 'the rows of $A$']
+        answer: 1
+        explanation: $A\mathbf{x}$ is a combination of the columns.
+    - question:
+        id: drill-injective
+        type: choice
+        system: s1
+        prompt: |
+          A linear map is injective exactly when its kernel is
+        options: ['the whole space', 'the zero vector alone', 'empty', 'one-dimensional']
+        answer: 1
+        explanation: The kernel always contains zero, and for an injective map nothing else.
+    - question:
+        id: drill-basis
+        type: numeric
+        system: s1
+        prompt: |
+          A linear map on $P_3$ is completely determined by its values on how many suitably chosen polynomials?
+        answer: "4"
+        explanation: A basis of $P_3$ has four members.
+    - question:
+        id: drill-eval
+        type: numeric
+        system: s1
+        prompt: |
+          $T$ is linear with $T(1) = 2$, $T(x) = 5$ and $T(x^2) = -1$. What is $T(3 + 2x + x^2)$?
+        answer: "15"
+        explanation: $3 \cdot 2 + 2 \cdot 5 + 1 \cdot (-1)$.
+    - question:
+        id: drill-isomorphic
+        type: choice
+        system: s1
+        prompt: |
+          $P_2$ is isomorphic to
+        options: ['$\mathbb{R}^2$', '$\mathbb{R}^3$', '$\mathbb{R}^4$', 'no $\mathbb{R}^n$']
+        answer: 1
+        explanation: Same dimension, 3.
+    - question:
+        id: predict-not-linear
+        type: predict
+        system: s1
+        prompt: Two maps on the plane, each applied to a sum and to the two pieces. What does this show?
+        code: |
+          import numpy as np
+
+
+          def shift(x):
+              return x + 1.0
+
+
+          def double(x):
+              return 2.0 * x
+
+
+          u, v = np.array([1.0, 2.0]), np.array([3.0, -1.0])
+          print(shift(u + v).tolist(), (shift(u) + shift(v)).tolist())
+          print(double(u + v).tolist(), (double(u) + double(v)).tolist())
+        output: |
+          [5.0, 2.0] [6.0, 3.0]
+          [8.0, 2.0] [8.0, 2.0]
+        explanation: Adding 1 to every entry does not respect addition, since the 1 is added once on the left and twice on the right. Doubling does. One failing pair is a proof that a map is not linear. One passing pair proves nothing, but is consistent with linearity.
+    - question:
+        id: predict-log
+        type: predict
+        system: s1
+        prompt: The logarithm, tested against the two operations of the space of positive numbers. What does this show?
+        code: |
+          import numpy as np
+
+          x, y, a = 2.0, 8.0, 3.0
+          print(round(float(np.log(x * y)), 6), round(float(np.log(x) + np.log(y)), 6))
+          print(round(float(np.log(x ** a)), 6), round(float(a * np.log(x)), 6))
+        output: |
+          2.772589 2.772589
+          2.079442 2.079442
+        explanation: In the space of positive numbers the sum of 2 and 8 is their product and 3 times 2 is 2 cubed. The logarithm carries that sum to an ordinary sum and that scaling to an ordinary scaling. It is a linear map, and since it has an inverse, the exponential, it is an isomorphism onto the real line.
+  work:
+    - text: Slower now. A linear map with no matrix is still something a program can hold, apply and test.
+    - question:
+        id: write-derivative
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Polynomials are lists of coefficients, lowest power first. Write `derivative(p)`, returning the coefficient list of the derivative, one entry shorter than `p` (and the empty list for a constant or for the empty list). Write `antiderivative(p)`, returning the list for the antiderivative with constant term 0.0, one entry longer than `p`.
+
+          The program applies them in both orders.
+        starter: |
+          def derivative(p):
+              return []
+
+
+          def antiderivative(p):
+              return [0.0]
+
+
+          p = [7.0, 4.0, 3.0]
+          print(derivative(antiderivative(p)))
+          print(antiderivative(derivative(p)))
+        solution: |
+          def derivative(p):
+              return [k * p[k] for k in range(1, len(p))]
+
+
+          def antiderivative(p):
+              return [0.0] + [p[k] / (k + 1) for k in range(len(p))]
+
+
+          p = [7.0, 4.0, 3.0]
+          print(derivative(antiderivative(p)))
+          print(antiderivative(derivative(p)))
+        tests: |
+          _p = [1.0, 0.0, 2.0, 5.0]
+          _d = derivative(_p)
+          assert _p == [1.0, 0.0, 2.0, 5.0], "p should be left as it was"
+          assert _d == [0.0, 4.0, 15.0], "The derivative of 1 + 2x^2 + 5x^3 is 4x + 15x^2: the coefficient of x^k becomes k times itself, one place down"
+          assert derivative([7.0]) == [] and derivative([]) == [], "The derivative of a constant has no coefficients left"
+          assert derivative([0.0, 1.0]) == [1.0], "The derivative of x is 1"
+          _a = antiderivative([7.0, 4.0, 3.0])
+          assert len(_a) == 4, "The antiderivative has one more coefficient than p"
+          assert _a == [0.0, 7.0, 2.0, 1.0], "The antiderivative of 7 + 4x + 3x^2 with constant term 0 is 7x + 2x^2 + x^3"
+          assert antiderivative([]) == [0.0], "The antiderivative of the zero polynomial with constant term 0 is the constant 0"
+          _q, _r = [2.0, -1.0, 0.5, 4.0], [1.0, 1.0, 0.0, -2.0]
+          _s = [a + b for a, b in zip(_q, _r)]
+          assert derivative(_s) == [a + b for a, b in zip(derivative(_q), derivative(_r))], "The derivative of a sum should be the sum of the derivatives"
+          assert derivative([3.0 * c for c in _q]) == [3.0 * c for c in derivative(_q)], "The derivative of 3p should be 3 times the derivative of p"
+          assert derivative(antiderivative(_q)) == _q, "Differentiating an antiderivative should give back the polynomial"
+          assert antiderivative(derivative(_q)) == [0.0, -1.0, 0.5, 4.0], "Integrating the derivative gives back the polynomial with its constant term replaced by 0"
+          assert output.strip() == "[7.0, 4.0, 3.0]\n[0.0, 4.0, 3.0]", "The program should print [7.0, 4.0, 3.0] and then [0.0, 4.0, 3.0]"
+        wrong:
+          - |
+            def derivative(p):
+                return [k * p[k] for k in range(len(p))]
+
+
+            def antiderivative(p):
+                return [0.0] + [p[k] / (k + 1) for k in range(len(p))]
+
+
+            print("[7.0, 4.0, 3.0]\n[0.0, 4.0, 3.0]")
+          - |
+            def derivative(p):
+                return [p[k] for k in range(1, len(p))]
+
+
+            def antiderivative(p):
+                return [0.0] + [p[k] / (k + 1) for k in range(len(p))]
+
+
+            print("[7.0, 4.0, 3.0]\n[0.0, 4.0, 3.0]")
+          - |
+            def derivative(p):
+                return [k * p[k] for k in range(1, len(p))]
+
+
+            def antiderivative(p):
+                return [p[k] / (k + 1) for k in range(len(p))]
+
+
+            print("[7.0, 4.0, 3.0]\n[0.0, 4.0, 3.0]")
+          - |
+            def derivative(p):
+                return [k * p[k] for k in range(1, len(p))]
+
+
+            def antiderivative(p):
+                return [0.0] + [p[k] / k for k in range(1, len(p))]
+
+
+            print("[7.0, 4.0, 3.0]\n[0.0, 4.0, 3.0]")
+        explanation: |
+          Each function is fixed by what it does to the basis $1, x, x^2, \dots$: the derivative sends $x^k$ to $kx^{k-1}$, and the antiderivative sends $x^k$ to $x^{k+1}/(k+1)$. The code applies that to each coefficient and moves it one place.
+
+          The two printed lines differ. Differentiating after integrating returns the polynomial: $D \circ I$ is the identity. Integrating after differentiating returns $4x + 3x^2$: the constant 7 is gone, and cannot be recovered, because $D$ sent it to zero. $D$ is surjective and not injective, with the constants as its kernel. $I$ is injective and not surjective, since its image contains only polynomials with constant term 0. A one-sided inverse, as with the pseudo-inverse of a rectangular matrix.
+    - question:
+        id: write-looks-linear
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `looks_linear(T, u, v, a)`. `T` is a function taking a NumPy array and returning one, `u` and `v` are arrays and `a` is a float. Return `True` if `T` passes both conditions of linearity for these inputs, `T(u + v)` close to `T(u) + T(v)` and `T(a * u)` close to `a * T(u)`, and `False` otherwise. Compare with `np.allclose`.
+        starter: |
+          import numpy as np
+
+
+          def looks_linear(T, u, v, a):
+              return True
+
+
+          def double(x):
+              return 2.0 * x
+
+
+          def shift(x):
+              return x + 1.0
+
+
+          def square(x):
+              return x * x
+
+
+          u, v = np.array([1.0, 2.0]), np.array([3.0, -1.0])
+          print(looks_linear(double, u, v, 3.0), looks_linear(shift, u, v, 3.0), looks_linear(square, u, v, 3.0))
+        solution: |
+          import numpy as np
+
+
+          def looks_linear(T, u, v, a):
+              if not np.allclose(T(u + v), T(u) + T(v)):
+                  return False
+              if not np.allclose(T(a * u), a * T(u)):
+                  return False
+              return True
+
+
+          def double(x):
+              return 2.0 * x
+
+
+          def shift(x):
+              return x + 1.0
+
+
+          def square(x):
+              return x * x
+
+
+          u, v = np.array([1.0, 2.0]), np.array([3.0, -1.0])
+          print(looks_linear(double, u, v, 3.0), looks_linear(shift, u, v, 3.0), looks_linear(square, u, v, 3.0))
+        tests: |
+          import numpy as _np
+          _u, _v = _np.array([1.0, 2.0]), _np.array([3.0, -1.0])
+          _A = _np.array([[1.0, 2.0], [0.0, -1.0], [4.0, 4.0]])
+          assert looks_linear(lambda x: _A @ x, _u, _v, 3.0) == True, "Multiplication by a matrix passes both conditions"
+          assert looks_linear(lambda x: 2.0 * x, _u, _v, 3.0) == True, "Doubling passes both conditions"
+          assert looks_linear(lambda x: x[::-1] * 1.0, _u, _v, -2.0) == True, "Reversing the entries passes both conditions"
+          assert looks_linear(lambda x: x * 0.0, _u, _v, 3.0) == True, "The zero map is linear"
+          assert looks_linear(lambda x: x + 1.0, _u, _v, 3.0) == False, "Adding 1 to every entry fails: the 1 is added once to u + v and twice to T(u) + T(v)"
+          assert looks_linear(lambda x: x * x, _u, _v, 3.0) == False, "Squaring every entry fails both conditions"
+          assert looks_linear(lambda x: _np.sort(x), _u, _v, 3.0) == False, "Sorting the entries respects scaling by 3 but not the sum of (1, 2) and (3, -1): both conditions must be checked"
+          assert looks_linear(lambda x: _np.abs(x), _np.array([1.0, 2.0]), _np.array([3.0, 1.0]), -1.0) == False, "The absolute value respects the sum of two vectors with positive entries, but not scaling by -1: both conditions must be checked"
+          assert looks_linear(lambda x: _np.array([x[0] * x[1], 0.0]), _np.array([1.0, 0.0]), _np.array([2.0, 0.0]), 3.0) == True, "For these particular inputs the product of the entries passes: the function reports on the inputs it is given"
+          assert looks_linear(lambda x: _np.array([x[0] * x[1], 0.0]), _np.array([1.0, 1.0]), _np.array([2.0, 0.0]), 3.0) == False, "For these inputs the product of the entries fails"
+          assert output.strip() == "True False False", "The program should print True False False"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def looks_linear(T, u, v, a):
+                if not np.allclose(T(u + v), T(u) + T(v)):
+                    return False
+                return True
+
+
+            def double(x):
+                return 2.0 * x
+
+
+            def shift(x):
+                return x + 1.0
+
+
+            def square(x):
+                return x * x
+
+
+            print("True False False")
+          - |
+            import numpy as np
+
+
+            def looks_linear(T, u, v, a):
+                if not np.allclose(T(a * u), a * T(u)):
+                    return False
+                return True
+
+
+            def double(x):
+                return 2.0 * x
+
+
+            def shift(x):
+                return x + 1.0
+
+
+            def square(x):
+                return x * x
+
+
+            print("True False False")
+          - |
+            import numpy as np
+
+
+            def looks_linear(T, u, v, a):
+                return np.allclose(T(u * 0.0), T(u) * 0.0)
+
+
+            def double(x):
+                return 2.0 * x
+
+
+            def shift(x):
+                return x + 1.0
+
+
+            def square(x):
+                return x * x
+
+
+            print("True False False")
+          - |
+            import numpy as np
+
+
+            def looks_linear(T, u, v, a):
+                if not np.allclose(T(u + v), T(u) + T(v)):
+                    return False
+                if not np.allclose(T(a * u), a * T(v)):
+                    return False
+                return True
+
+
+            def double(x):
+                return 2.0 * x
+
+
+            def shift(x):
+                return x + 1.0
+
+
+            def square(x):
+                return x * x
+
+
+            print("True False False")
+        explanation: |
+          The function is the definition, run on one pair of vectors and one scalar. Both conditions are needed. The absolute value respects the sum of two vectors with positive entries and fails for the scalar $-1$. A map that only checks $T(\mathbf{0}) = \mathbf{0}$ passes squaring, which fixes zero and is far from linear.
+
+          The name says "looks". A `True` is evidence about three inputs, not a proof about all of them: the product of the two entries passes whenever both vectors lie on the same axis. A `False` is a proof, since one counterexample refutes a statement that begins "for all". To **prove** a map linear you argue from its formula, as with the sum rule for derivatives. Random testing of this kind is still worth having in a test suite for anything that is supposed to be linear, such as a layer of a network with its non-linearity removed.
+    - question:
+        id: fix-extend
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          A linear map from $\mathbb{R}^n$ is fixed by the images of the standard basis vectors. `apply(images, v)` receives those images as a list of arrays, `images[i]` being $T(\mathbf{e}_i)$, and should return $T(\mathbf{v})$. For the rotation of the plane by a quarter turn, with $T(\mathbf{e}_1) = (0, 1)$ and $T(\mathbf{e}_2) = (-1, 0)$, it should send $(3, 2)$ to $(-2, 3)$. It returns $(-1, 1)$ whatever `v` is. Fix it. One line needs to change.
+        starter: |
+          import numpy as np
+
+
+          def apply(images, v):
+              total = images[0] * 0.0
+              for i in range(len(v)):
+                  total = total + images[i]
+              return total
+
+
+          quarter_turn = [np.array([0.0, 1.0]), np.array([-1.0, 0.0])]
+          print(apply(quarter_turn, np.array([3.0, 2.0])).tolist())
+        solution: |
+          import numpy as np
+
+
+          def apply(images, v):
+              total = images[0] * 0.0
+              for i in range(len(v)):
+                  total = total + v[i] * images[i]
+              return total
+
+
+          quarter_turn = [np.array([0.0, 1.0]), np.array([-1.0, 0.0])]
+          print(apply(quarter_turn, np.array([3.0, 2.0])).tolist())
+        tests: |
+          import numpy as _np
+          _q = [_np.array([0.0, 1.0]), _np.array([-1.0, 0.0])]
+          _keep = [_w.copy() for _w in _q]
+          _r = apply(_q, _np.array([3.0, 2.0]))
+          assert all(_np.array_equal(_a, _b) for _a, _b in zip(_q, _keep)), "The images should be left as they were"
+          assert _np.allclose(_r, [-2.0, 3.0]), "The quarter turn sends (3, 2) to (-2, 3): 3 times the image of e1 plus 2 times the image of e2"
+          assert _np.allclose(apply(_q, _np.array([1.0, 0.0])), [0.0, 1.0]), "A basis vector should be sent to its given image"
+          assert _np.allclose(apply(_q, _np.array([0.0, 0.0])), [0.0, 0.0]), "The zero vector should be sent to zero"
+          _im = [_np.array([1.0, 0.0, 2.0]), _np.array([0.0, 1.0, -1.0])]
+          assert _np.allclose(apply(_im, _np.array([2.0, 5.0])), [2.0, 5.0, -1.0]), "For a map from the plane to space with images (1, 0, 2) and (0, 1, -1), the vector (2, 5) goes to (2, 5, -1)"
+          _A = _np.random.default_rng(0).normal(size=(3, 4))
+          _x = _np.random.default_rng(1).normal(size=4)
+          assert _np.allclose(apply([_A[:, _j] for _j in range(4)], _x), _A @ _x), "With the columns of a matrix as the images, the result should be the matrix times the vector"
+          assert output.strip() == "[-2.0, 3.0]", "The program should print [-2.0, 3.0]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def apply(images, v):
+                total = images[0] * 0.0
+                for i in range(len(v)):
+                    total = total + images[i]
+                return total
+
+
+            print("[-2.0, 3.0]")
+          - |
+            import numpy as np
+
+
+            def apply(images, v):
+                total = images[0] * 0.0
+                for i in range(len(v)):
+                    total = total + v[i] * images[0]
+                return total
+
+
+            print("[-2.0, 3.0]")
+          - |
+            import numpy as np
+
+
+            def apply(images, v):
+                total = images[0] * 0.0
+                for i in range(len(v)):
+                    total = v[i] * images[i]
+                return total
+
+
+            print("[-2.0, 3.0]")
+          - |
+            import numpy as np
+
+
+            def apply(images, v):
+                total = images[0] * 0.0
+                for i in range(len(v)):
+                    total = total + v[i] + images[i]
+                return total
+
+
+            print("[-2.0, 3.0]")
+        explanation: |
+          $\mathbf{v} = v_1\mathbf{e}_1 + \dots + v_n\mathbf{e}_n$, so by linearity $T(\mathbf{v}) = v_1T(\mathbf{e}_1) + \dots + v_nT(\mathbf{e}_n)$. The loop added up the images and left out the coefficients, which computes $T(1, 1, \dots, 1)$ for every input.
+
+          The last test is the point of the exercise. Put the images side by side as columns and the formula is the matrix-vector product: a matrix **is** the list of images of the basis vectors, and multiplying by it is extending by linearity. For a map between spaces that are not made of lists, the same recipe needs a choice of basis on each side first. What matrix results, and how it changes with the choice, comes two lessons from now.
+    - question:
+        id: work-which
+        type: choice
+        system: s2
+        prompt: |
+          Which of these maps from $P_2$ to $P_2$ is linear?
+        options:
+          - '$p \mapsto p + 1$'
+          - '$p \mapsto x\,p''$, the derivative multiplied by $x$'
+          - '$p \mapsto p \cdot p''$'
+          - '$p \mapsto p(0)^2$, as a constant polynomial'
+        answer: 1
+        explanation: |
+          $x(p + q)' = xp' + xq'$ and $x(ap)' = a\,xp'$, so the second is linear. It sends $1 \mapsto 0$, $x \mapsto x$, $x^2 \mapsto 2x^2$: each basis polynomial is multiplied by its own degree. Adding 1 does not send zero to zero. The third and fourth multiply two things that both depend on $p$, so doubling $p$ quadruples the output. A composition of linear maps, here differentiation followed by multiplication by $x$, is linear.
+    - question:
+        id: work-plus-c
+        type: choice
+        system: s2
+        prompt: |
+          All antiderivatives of a function differ by a constant. Which statement about linear maps is this an instance of?
+        options:
+          - 'A linear map sends zero to zero.'
+          - 'If $T(\mathbf{u}) = \mathbf{w}$, the solutions of $T(\mathbf{x}) = \mathbf{w}$ are exactly $\mathbf{u} + \ker T$. Here $T$ is differentiation, whose kernel is the constants.'
+          - 'The image of a linear map is a subspace.'
+          - 'Every linear map has an inverse.'
+        answer: 1
+        explanation: |
+          If $D(\mathbf{x}) = D(\mathbf{u})$ then $D(\mathbf{x} - \mathbf{u}) = 0$, so $\mathbf{x} - \mathbf{u}$ is in the kernel. The same statement, for a matrix, says that the general solution of $A\mathbf{x} = \mathbf{b}$ is a particular solution plus the null space, and for the pseudo-inverse lesson, that all solutions share their row space part. "Particular solution plus anything from the kernel" is one fact about linear maps, met three times under different names.
+    - question:
+        id: work-kernel-eval
+        type: numeric
+        system: s2
+        prompt: |
+          Let $T: P_3 \to \mathbb{R}^2$ send a polynomial to the pair of its values at 0 and at 1: $T(p) = (p(0), p(1))$. The image is all of $\mathbb{R}^2$. Given that the dimensions of kernel and image add up to the dimension of $P_3$, what is the dimension of the kernel?
+        answer: "2"
+        explanation: |
+          $\dim P_3 = 4$ and the image has dimension 2, so the kernel has dimension 2. It consists of the polynomials of degree at most 3 that vanish at both 0 and 1, which are the multiples of $x(x - 1)$ by a polynomial of degree at most 1. A basis is $x(x - 1)$ and $x^2(x - 1)$. Each independent linear condition removes one dimension.
+    - question:
+        id: work-isomorphic
+        type: choice
+        system: s2
+        prompt: |
+          The 2 by 2 real matrices and the polynomials of degree at most 3 are both real vector spaces of dimension 4. What follows?
+        options:
+          - 'Nothing. Matrices and polynomials are different kinds of thing.'
+          - 'They are isomorphic: send the basis $1, x, x^2, x^3$ to the four matrices with a single entry 1, and extend by linearity. Any statement about addition and scaling, such as "these five vectors are dependent", holds in one exactly when it holds in the other. Statements using more than that, such as matrix multiplication or evaluation at a point, are not transported.'
+          - 'They are the same set.'
+          - 'Every linear map between them is an isomorphism.'
+        answer: 1
+        explanation: |
+          A linear map sending a basis to a basis is a bijection, and its inverse is linear. An isomorphism preserves precisely the vector space structure and nothing more. Matrices can be multiplied and polynomials can be evaluated, and those extra operations are not part of what "vector space" means, so the isomorphism has no duty to respect them. Knowing which structure a statement uses tells you which identifications it survives.
+  connections:
+    - text: |
+        Differentiation took polynomials to polynomials, respected sums and multiples, and had no matrix in sight. A map between vector spaces that respects the two operations is **linear**. It sends zero to zero, and it is fixed completely by its values on a basis. What it sends to zero is its **kernel**, what it produces is its **image**, and both are subspaces. It is injective exactly when the kernel is zero, and the solutions of $T(\mathbf{x}) = \mathbf{w}$ are one solution plus the kernel, which is the "$+\,C$" of integration.
+
+        A linear bijection is an **isomorphism**. Polynomials of degree at most $n$ are $F^{n+1}$ under another name, and so is every space of dimension $n + 1$.
+
+        Twice today the dimensions of a kernel and an image were counted, and twice they added up to the dimension of the space the map started from: $1 + 3 = 4$ for the derivative on $P_3$, and $2 + 2 = 4$ for the second derivative. Whatever a linear map destroys and whatever it preserves together account for everything it was given. That is a theorem, perhaps the most used one in the subject: [[m6.rank-nullity-theorem]].
