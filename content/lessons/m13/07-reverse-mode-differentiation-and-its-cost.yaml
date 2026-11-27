@@ -1,0 +1,706 @@
+concept: m13.reverse-mode-differentiation-and-its-cost
+minutes: 90
+claim: You can describe reverse-mode differentiation as a forward sweep that records values followed by a backward sweep that accumulates adjoints, state and justify that the whole gradient of a scalar function costs a small constant multiple of one evaluation whatever the number of inputs, compare this with finite differences and with forward mode, explain why the price is memory proportional to the length of the calculation, name the remedies, and predict from the norms of the layer Jacobians whether a backward signal will vanish or explode.
+recalls: [m13.computational-graphs]
+uses: [m13.jacobian-vector-and-vector-jacobian-products, m13.derivatives-with-respect-to-matrices, m13.the-method-of-differentials, m8.operator-and-frobenius-norms, m8.singular-value-decomposition, m12.gradient, e6.reverse-mode-on-scalars, e6.topological-ordering-of-the-graph, e6.tensor-valued-autograd, e6.memory-planning-and-in-place-operations, e6.gradient-checking, e1.complexity-and-big-o, e3.dynamic-programming, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e0.functions, e0.loops]
+leads: [m13.forward-mode-and-dual-numbers, m13.hessian-vector-products, m13.gradients-of-common-neural-network-layers]
+starter: |
+  # Scratch space. f(x) = x1 * x2 * ... * xn. Count the multiplications needed for
+  # all n partial derivatives, done one at a time and done by one backward sweep.
+  def one_at_a_time(n):
+      count = 0
+      for i in range(n):
+          count += n - 2          # the product of the other n - 1 numbers
+      return count
+
+
+  def one_sweep(n):
+      count = n - 1               # forward: the running products
+      for i in range(n):
+          count += 2              # backward: two multiplications per input
+      return count
+
+
+  for n in [10, 100, 1000]:
+      print(n, one_at_a_time(n), one_sweep(n))
+parts:
+  recall:
+    - text: |
+        [[m13.computational-graphs]] turned the sum over all paths into a recursion that uses each arrow once, and left open what the backward recursion really costs. Today that cost is counted, in time and in memory. Three quick pulls first.
+  puzzle:
+    - text: |
+        Let $f(x_1, \dots, x_n) = x_1x_2\cdots x_n$, the product of $n$ numbers. One evaluation costs $n - 1$ multiplications.
+
+        The partial derivative with respect to $x_i$ is the product of all the **other** numbers. Computing each of these separately costs $n - 2$ multiplications, and there are $n$ of them: about $n^2$ in all. Dividing the full product by $x_i$ would be quicker, but fails as soon as one of the numbers is zero.
+
+        The starter counts multiplications for that method, and for a single backward sweep over the graph of the calculation.
+
+        ```
+        10 80 29
+        100 9800 299
+        1000 998000 2999
+        ```
+
+        The backward sweep gets all $n$ partial derivatives with about $3n$ multiplications: three times the cost of evaluating the function once. For a thousand inputs that is 300 times less work than computing them one at a time, with no division.
+
+        **Is it a peculiarity of this function that the whole gradient costs only about three evaluations? If it is general, what is the catch?**
+  intuition:
+    - text: |
+        It is general, and it is one of the most consequential facts in computing.
+
+        Think of the calculation as a list of elementary steps, each an addition, a multiplication, or a simple function, with one or two arguments. The backward sweep visits each step once. For a step with two arguments it does two things: multiply the step's adjoint by each local slope, and add each result to an argument's adjoint. That is a fixed, small amount of work per step, comparable to the step itself.
+
+        So the backward sweep costs a few times as much as the forward calculation. The number of inputs appears nowhere in that count. The inputs are just the nodes where the sweep stops, and their adjoints are complete when it gets there. A gradient with respect to a million inputs is a by-product of one pass.
+
+        Compare the alternatives. Finite differences need one extra evaluation of the function for each input. So does the forward recursion: one pass per input. For a loss with a million parameters, that is the difference between a few evaluations and a million.
+
+        For the product, the sweep works like this. Going forward, the running products $x_1,\ x_1x_2,\ x_1x_2x_3, \dots$ are computed and kept. Going backward, the adjoint arriving at step $i$ is the product of everything **after** $x_i$, and the stored running product is everything **before** it. One multiplication joins them into the partial derivative. Nobody had to think of that scheme. It is what the adjoint recursion does to this graph.
+
+        **The catch** is in the words "and kept". The backward sweep needs the values from the forward calculation, in reverse order. They must all be stored until it gets back to them. The function could be evaluated with a single running number in memory. Its gradient needs $n$ of them. Reverse mode trades memory for time.
+  derivation:
+    - text: |
+        **The algorithm.** For a scalar function given as a trace $v_i = \phi_i(v_{\operatorname{pa}(i)})$:
+
+        1. *Forward sweep.* Evaluate the steps in order. Record, for each step, what its local slopes will need.
+        2. *Seed.* Set $\bar v_N = 1$ and every other adjoint to 0.
+        3. *Backward sweep.* For $i = N, N - 1, \dots$: for each parent $j$ of $i$, add $\bar v_i\,\partial\phi_i/\partial v_j$ to $\bar v_j$.
+        4. The adjoints of the inputs are the gradient.
+
+        **Theorem (cheap gradient principle).** If $f: \mathbb{R}^n \to \mathbb{R}$ is evaluated by a trace of elementary operations, then its gradient can be computed with at most a small constant multiple of the operations of $f$, typically between 3 and 5. The constant does not depend on $n$.
+
+        *Why.* Take an operation with at most two arguments. In the backward sweep it costs at most two multiplications and two additions, plus the evaluation of its local slopes, which for the usual operations is at most as costly as the operation itself: for a product they are the two operands, already at hand. Summing over the operations bounds the backward sweep by a constant times the forward one. $\blacksquare$
+
+        **In comparison,** for $f: \mathbb{R}^n \to \mathbb{R}^m$, in units of one evaluation of $f$:
+
+        | Method | Gradient ($m = 1$) | Full Jacobian |
+        |---|---|---|
+        | Finite differences | $n + 1$, inexact | $n + 1$, inexact |
+        | Forward mode | about $n$ | about $n$ |
+        | Reverse mode | about 3 to 5 | about $m$ times that |
+
+        Reverse mode wins whenever there are many inputs and few outputs, which is the situation of every training loss.
+
+        **Memory.** The backward sweep reads the forward values in reverse order, so they must be kept. The memory needed is proportional to the **number of operations** of $f$, whereas $f$ alone may need very little. For a loop of $T$ steps acting on a state of size $s$: the forward calculation needs memory $s$, and reverse mode needs about $Ts$.
+
+        What exactly must be kept depends on the operation. A sum needs nothing. A product needs both operands. $\tanh$ needs only its own output, and a rectifier only the signs of its input.
+    - question:
+        id: derivation-memory
+        type: numeric
+        system: s2
+        prompt: |
+          A simulation advances a state of 1 megabyte through 10 000 time steps, overwriting the state each time. Reverse mode must keep every state. About how many gigabytes is that? Take 1000 megabytes to the gigabyte.
+        answer: "10"
+        explanation: |
+          $10\,000 \times 1$ MB $= 10\,000$ MB $= 10$ GB, for a calculation that by itself needs 1 MB. The time cost is still only a few evaluations. This is the usual shape of the trade: a network of 100 layers must hold the activations of all 100 layers for the batch until the backward pass has used them, and it is these stored activations, not the weights, that usually fill the memory during training.
+    - text: |
+        **Reducing the memory.**
+
+        - *Checkpointing.* Keep only some of the states, say every $\sqrt T$-th. In the backward sweep, recompute each stretch from its checkpoint when it is needed. Memory falls from $T$ states to about $2\sqrt T$, for roughly one extra forward calculation. Choosing checkpoints recursively brings the memory down to about $\log T$ states for a factor $\log T$ in time.
+        - *Reversible steps.* If each step can be undone exactly, the previous state can be recomputed from the next, and nothing need be kept.
+        - *Truncation.* Sweep back only through the last $k$ steps. This is cheaper and no longer exact.
+
+        **Several outputs.** One backward sweep handles one seed. For $m$ outputs, $m$ sweeps give the Jacobian, each reusing the same stored forward values.
+
+        **The size of the signal.** For a chain of layers the backward sweep computes $\bar{\mathbf{u}}_0 = J_1^\top J_2^\top\cdots J_k^\top\bar{\mathbf{u}}_k$. By the product inequality for the spectral norm,
+
+        $$\|\bar{\mathbf{u}}_0\| \le \|J_1\|_2\,\|J_2\|_2\cdots\|J_k\|_2\ \|\bar{\mathbf{u}}_k\|.$$
+
+        If every layer Jacobian has norm at most $0.8$, then after 50 layers the gradient has shrunk by at least $0.8^{50} \approx 10^{-5}$: a **vanishing gradient**. If the layers stretch the signal by $1.25$ each, it grows by $1.25^{50} \approx 70\,000$: an **exploding gradient**. Reverse mode computes the gradient exactly in both cases. It is the gradient itself that is tiny or huge. Keeping the singular values of the layer Jacobians near 1, by initialisation, normalisation and skip connections, is what makes deep networks trainable.
+
+        **Rounding.** Unlike finite differences, reverse mode involves no small step and no subtraction of nearly equal numbers. Its result is accurate to about the same relative precision as the function value.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the argument that the gradient costs a constant multiple of the function, whatever the number of inputs.
+        steps:
+          - 'Write the calculation as a list of elementary operations, each with at most two arguments.'
+          - 'The backward sweep visits each operation exactly once.'
+          - 'At each visit it does at most two multiplications and two additions, plus the local slopes, which cost no more than the operation.'
+          - 'So the backward sweep costs at most a fixed multiple of the forward calculation.'
+          - 'The inputs are merely where the sweep ends, so their number does not enter the count.'
+        explanation: A bounded amount of work for each elementary operation, and nothing for each input.
+  formal:
+    - text: |
+        **Complexity (Baur-Strassen; Griewank).** Let $\operatorname{ops}(f)$ be the number of elementary operations in a trace of $f: \mathbb{R}^n \to \mathbb{R}$. Then $\operatorname{ops}(f, \nabla f) \le \omega\operatorname{ops}(f)$ with a constant $\omega \le 5$ depending only on the set of elementary operations and on how memory access is counted. For $F: \mathbb{R}^n \to \mathbb{R}^m$: $\operatorname{ops}(F, \mathbf{u}^\top J_F) \le \omega\operatorname{ops}(F)$ for any $\mathbf{u}$.
+
+        **Forward mode.** $\operatorname{ops}(F, J_F\mathbf{v}) \le \omega'\operatorname{ops}(F)$ with $\omega' \le 3$, and memory at most twice that of $F$.
+
+        **Memory.** $\operatorname{mem}(f, \nabla f) = O(\operatorname{ops}(f))$ without checkpointing.
+
+        **Checkpointing.** For a chain of $T$ steps with $c$ checkpoints and at most $r$ recomputations of any step, the longest reversible chain has length $\binom{c + r}{c}$ (binomial, or revolve, schedule). With $c = r = \log_2T$: memory and time overhead both $O(\log T)$.
+
+        **Adjoint of a recurrence.** For $\mathbf{h}_t = F(\mathbf{h}_{t-1}, \boldsymbol\theta)$, $t = 1..T$, and loss $L(\mathbf{h}_T)$:
+
+        $$\bar{\mathbf{h}}_T = \nabla L, \qquad \bar{\mathbf{h}}_{t-1} = \Big(\frac{\partial F}{\partial\mathbf{h}}\Big)^{\!\top}\bar{\mathbf{h}}_t, \qquad \bar{\boldsymbol\theta} = \sum_{t=1}^T\Big(\frac{\partial F}{\partial\boldsymbol\theta}\Big)^{\!\top}\bar{\mathbf{h}}_t,$$
+
+        with every Jacobian evaluated at $(\mathbf{h}_{t-1}, \boldsymbol\theta)$.
+
+        **Norm of the backward signal.** $\prod_t\sigma_{\min}(J_t)\,\|\bar{\mathbf{h}}_T\| \le \|\bar{\mathbf{h}}_0\| \le \prod_t\sigma_{\max}(J_t)\,\|\bar{\mathbf{h}}_T\|$. For orthogonal $J_t$ the norm is preserved exactly.
+
+        **Optimal accumulation.** Forward and reverse are the two extreme orders of multiplying out $J_k\cdots J_1$. Finding the cheapest order for a general graph (optimal Jacobian accumulation) is NP-hard.
+
+        **What must be stored.**
+
+        | Operation | Needed by its backward step |
+        |---|---|
+        | $a + b$ | nothing |
+        | $a \cdot b$, $AB$ | both operands |
+        | $\tanh(a)$, $e^a$, $\sigma(a)$ | the output |
+        | $\max(0, a)$ | the sign of $a$ |
+        | $a^2$, $\log a$, $1/a$ | the input, or the output for $1/a$ |
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-two-sweeps
+        type: choice
+        system: s1
+        prompt: |
+          Reverse-mode differentiation consists of
+        options: ['a backward sweep only', 'a forward sweep that records values, then a backward sweep that accumulates adjoints', 'one forward sweep per input', 'two forward sweeps']
+        answer: 1
+        explanation: Values first, adjoints after.
+    - question:
+        id: drill-seed
+        type: numeric
+        system: s1
+        prompt: |
+          With what value is the adjoint of the scalar output seeded?
+        answer: "1"
+        explanation: The derivative of the output with respect to itself.
+    - question:
+        id: drill-cost
+        type: choice
+        system: s1
+        prompt: |
+          The gradient of a scalar function with $n$ inputs, by reverse mode, costs about
+        options: ['$n$ evaluations of the function', 'a small constant number of evaluations, whatever $n$ is', '$n^2$ evaluations', 'one evaluation per output and per input']
+        answer: 1
+        explanation: The cheap gradient principle.
+    - question:
+        id: drill-fd
+        type: numeric
+        system: s1
+        prompt: |
+          A function has 1000 inputs. How many evaluations does a gradient by one-sided finite differences need, counting the evaluation at the point itself?
+        answer: "1001"
+        explanation: One at the point and one for each nudged input.
+    - question:
+        id: drill-forward
+        type: numeric
+        system: s1
+        prompt: |
+          A scalar function has 1000 inputs. How many forward-mode passes give its whole gradient?
+        answer: "1000"
+        explanation: One per input.
+    - question:
+        id: drill-outputs
+        type: numeric
+        system: s1
+        prompt: |
+          A function has 1000 inputs and 3 outputs. How many backward sweeps give its full Jacobian?
+        answer: "3"
+        explanation: One per output.
+    - question:
+        id: drill-memory
+        type: choice
+        system: s1
+        prompt: |
+          The memory needed by reverse mode grows with
+        options: ['the number of inputs only', 'the number of operations of the calculation', 'the number of outputs only', 'nothing: it is constant']
+        answer: 1
+        explanation: The forward values must be kept for the backward sweep.
+    - question:
+        id: drill-product-needs
+        type: choice
+        system: s1
+        prompt: |
+          For its backward step, a product $a \cdot b$ must have kept
+        options: ['nothing', 'both operands', 'only its result', 'only the sign of $a$']
+        answer: 1
+        explanation: Each operand is the slope with respect to the other.
+    - question:
+        id: drill-sum-needs
+        type: choice
+        system: s1
+        prompt: |
+          For its backward step, a sum $a + b$ must have kept
+        options: ['nothing', 'both operands', 'its result', 'the larger operand']
+        answer: 0
+        explanation: Both slopes are 1.
+    - question:
+        id: drill-checkpoint
+        type: choice
+        system: s1
+        prompt: |
+          Checkpointing reduces the memory of reverse mode by
+        options: ['using lower precision', 'storing only some states and recomputing the rest when needed', 'skipping the backward sweep', 'dropping small gradients']
+        answer: 1
+        explanation: Memory is exchanged for repeated forward work.
+    - question:
+        id: drill-vanish
+        type: choice
+        system: s1
+        prompt: |
+          Each of 50 layers has a Jacobian of spectral norm at most $0.8$. The gradient at the first layer is, compared with that at the last,
+        options: ['about the same size', 'smaller by a factor of at least $0.8^{50}$', 'larger by a factor of $50$', 'exactly zero']
+        answer: 1
+        explanation: The norms multiply along the backward sweep.
+    - question:
+        id: drill-exact
+        type: choice
+        system: s1
+        prompt: |
+          Compared with finite differences, the result of reverse mode is
+        options: ['less accurate', 'accurate to rounding, with no step size to choose', 'accurate only for linear functions', 'random']
+        answer: 1
+        explanation: No small step and no cancelling subtraction.
+    - question:
+        id: drill-when
+        type: choice
+        system: s1
+        prompt: |
+          Reverse mode is the method of choice when a function has
+        options: ['few inputs and many outputs', 'many inputs and few outputs', 'one input and one output', 'no inputs']
+        answer: 1
+        explanation: A training loss is the standard case.
+    - question:
+        id: predict-product
+        type: predict
+        system: s1
+        prompt: The gradient of a product of four numbers by one forward and one backward sweep. What does this show?
+        code: |
+          x = [2.0, 3.0, 0.5, 4.0]
+          before = [1.0]
+          for i in range(3):
+              before.append(before[-1] * x[i])
+          after = 1.0
+          grad = [0.0, 0.0, 0.0, 0.0]
+          for i in [3, 2, 1, 0]:
+              grad[i] = before[i] * after
+              after = after * x[i]
+          print(before)
+          print(grad)
+        output: |
+          [1.0, 2.0, 6.0, 3.0]
+          [6.0, 4.0, 24.0, 3.0]
+        explanation: The forward sweep keeps the product of everything before each number. The backward sweep carries the product of everything after it, and joins the two with one multiplication. Each partial derivative is the product of the other three numbers, and no division was used.
+    - question:
+        id: predict-signal
+        type: predict
+        system: s1
+        prompt: A backward signal passed through 50 layers whose Jacobians are 0.8 times, and then 1.25 times, an orthogonal matrix. What does this show?
+        code: |
+          import numpy as np
+
+          Q = np.linalg.qr(np.random.default_rng(0).normal(size=(4, 4)))[0]
+          for scale in [0.8, 1.25]:
+              u = np.ones(4) / 2
+              for layer in range(50):
+                  u = (scale * Q).T @ u
+              print(scale, round(float(np.log10(np.linalg.norm(u))), 2))
+        output: |
+          0.8 -4.85
+          1.25 4.85
+        explanation: The signal starts with length 1. With every singular value 0.8 it shrinks by 0.8 at each layer, to about ten to the power minus 4.85. With 1.25 it grows by the same factor. The gradient is computed exactly in both cases, and is simply that small or that large.
+  work:
+    - text: Slower now. The first task is the puzzle's sweep.
+    - question:
+        id: write-product
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `grad_product(x)` returning the list of partial derivatives of $x_1x_2\cdots x_n$ for a list `x` of at least two floats. Use one forward sweep and one backward sweep, with a number of multiplications proportional to `n`, and no division.
+        starter: |
+          def grad_product(x):
+              return [0.0 for value in x]
+
+
+          print(grad_product([2.0, 3.0, 0.5, 4.0]))
+          print(grad_product([2.0, 0.0, 5.0]))
+        solution: |
+          def grad_product(x):
+              n = len(x)
+              before = [1.0]
+              for i in range(n - 1):
+                  before.append(before[-1] * x[i])
+              after = 1.0
+              grad = [0.0 for value in x]
+              for i in range(n - 1, -1, -1):
+                  grad[i] = before[i] * after
+                  after = after * x[i]
+              return grad
+
+
+          print(grad_product([2.0, 3.0, 0.5, 4.0]))
+          print(grad_product([2.0, 0.0, 5.0]))
+        tests: |
+          assert "/" not in source, "Do not divide: the method must work when an entry is zero"
+          assert grad_product([2.0, 3.0, 0.5, 4.0]) == [6.0, 4.0, 24.0, 3.0], "For (2, 3, 0.5, 4) each partial derivative is the product of the other three: 6, 4, 24, 3"
+          assert grad_product([2.0, 0.0, 5.0]) == [0.0, 10.0, 0.0], "For (2, 0, 5) the partial derivatives are 0, 10, 0. Only the derivative with respect to the zero entry is nonzero"
+          assert grad_product([3.0, 7.0]) == [7.0, 3.0], "For two numbers each partial derivative is the other number"
+          assert grad_product([0.0, 0.0, 4.0]) == [0.0, 0.0, 0.0], "With two zero entries every partial derivative is zero"
+          _calls = []
+          class _Num:
+              def __init__(self, v):
+                  self.v = v
+              def __mul__(self, other):
+                  _calls.append(1)
+                  return _Num(self.v * (other.v if isinstance(other, _Num) else other))
+              def __rmul__(self, other):
+                  _calls.append(1)
+                  return _Num(self.v * other)
+          _out = grad_product([_Num(float(i + 1)) for i in range(200)])
+          assert len(_calls) <= 4 * 200, "For 200 numbers use at most a few hundred multiplications, not tens of thousands. Keep the running products from the forward sweep"
+          assert output.strip() == "[6.0, 4.0, 24.0, 3.0]\n[0.0, 10.0, 0.0]", "The program should print [6.0, 4.0, 24.0, 3.0] and then [0.0, 10.0, 0.0]"
+        wrong:
+          - |
+            def grad_product(x):
+                n = len(x)
+                grad = []
+                for i in range(n):
+                    p = 1.0
+                    for j in range(n):
+                        if j != i:
+                            p = p * x[j]
+                    grad.append(p)
+                return grad
+
+            print("[6.0, 4.0, 24.0, 3.0]\n[0.0, 10.0, 0.0]")
+          - |
+            def grad_product(x):
+                n = len(x)
+                before = [1.0]
+                for i in range(n - 1):
+                    before.append(before[-1] * x[i])
+                after = 1.0
+                grad = [0.0 for value in x]
+                for i in range(n - 1, -1, -1):
+                    after = after * x[i]
+                    grad[i] = before[i] * after
+                return grad
+
+            print("[6.0, 4.0, 24.0, 3.0]\n[0.0, 10.0, 0.0]")
+          - |
+            def grad_product(x):
+                n = len(x)
+                before = [1.0]
+                for i in range(n - 1):
+                    before.append(before[-1] * x[i])
+                return before
+
+            print("[6.0, 4.0, 24.0, 3.0]\n[0.0, 10.0, 0.0]")
+        explanation: |
+          `before[i]` is the product of the entries before position `i`, kept from the forward sweep. `after` is the product of the entries behind it, built up during the backward sweep. Their product is the partial derivative. The order of the two lines in the backward loop matters: the derivative is formed **before** `after` absorbs `x[i]`.
+
+          This is exactly what the adjoint recursion does on the chain $p_i = p_{i-1}x_i$. The adjoint of $p_i$ is the product of the later entries, and the local slope of $p_i$ with respect to $x_i$ is $p_{i-1}$, a stored forward value.
+
+          The first wrong version is correct and takes about $n^2$ multiplications. The test counts them, using numbers that record each multiplication. For 200 entries it uses 39 600 where 600 suffice.
+    - question:
+        id: write-chain
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          A network applies $\mathbf{h}_i = \tanh(W_i\mathbf{h}_{i-1})$ for each matrix in the list `Ws`, starting from $\mathbf{h}_0 = \mathbf{x}$, and its loss is $\tfrac12\|\mathbf{h}_k\|^2$. Write `grad_input(Ws, x)` returning the gradient of the loss with respect to `x`. Keep the outputs of the layers on the way forward and use them on the way back.
+        starter: |
+          import numpy as np
+
+
+          def grad_input(Ws, x):
+              return x * 0.0
+
+
+          W1 = np.array([[1.0, -1.0], [0.5, 1.0], [2.0, 0.0]])
+          W2 = np.array([[1.0, 0.0, -1.0], [0.5, 0.5, 0.5]])
+          print([round(float(v), 4) for v in grad_input([W1, W2], np.array([0.3, -0.2]))])
+        solution: |
+          import numpy as np
+
+
+          def grad_input(Ws, x):
+              outputs = []
+              h = x
+              for W in Ws:
+                  h = np.tanh(W @ h)
+                  outputs.append(h)
+              u = h
+              for i in range(len(Ws) - 1, -1, -1):
+                  u = Ws[i].T @ ((1 - outputs[i] ** 2) * u)
+              return u
+
+
+          W1 = np.array([[1.0, -1.0], [0.5, 1.0], [2.0, 0.0]])
+          W2 = np.array([[1.0, 0.0, -1.0], [0.5, 0.5, 0.5]])
+          print([round(float(v), 4) for v in grad_input([W1, W2], np.array([0.3, -0.2]))])
+        tests: |
+          import numpy as _np
+          def _loss(Ws, x):
+              h = x
+              for W in Ws:
+                  h = _np.tanh(W @ h)
+              return 0.5 * float(h @ h)
+          def _num(Ws, x):
+              return _np.array([(_loss(Ws, x + 1e-6 * e) - _loss(Ws, x - 1e-6 * e)) / 2e-6 for e in _np.eye(len(x))])
+          _W1 = _np.array([[1.0, -1.0], [0.5, 1.0], [2.0, 0.0]])
+          _W2 = _np.array([[1.0, 0.0, -1.0], [0.5, 0.5, 0.5]])
+          _x = _np.array([0.3, -0.2])
+          _g = grad_input([_W1, _W2], _x)
+          assert _np.shape(_g) == (2,), "The gradient has the shape of x"
+          assert _np.allclose(_g, _num([_W1, _W2], _x), atol=1e-6), "For the two layers of the program the gradient should agree with central differences, about (0.5289, 0.0960)"
+          assert _np.allclose(grad_input([_W1], _x), _num([_W1], _x), atol=1e-6), "For a single layer the gradient should agree with central differences"
+          _rng = _np.random.default_rng(0)
+          _Ws = [_rng.normal(size=(3, 3)) * 0.7 for _k in range(4)]
+          _y = _rng.normal(size=3)
+          assert _np.allclose(grad_input(_Ws, _y), _num(_Ws, _y), atol=1e-6), "For four square layers the gradient should agree with central differences. Each layer's slope is taken at that layer's own output, and the layers are visited last to first"
+          assert output.strip() == "[0.5289, 0.096]", "The program should print [0.5289, 0.096]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def grad_input(Ws, x):
+                h = x
+                for W in Ws:
+                    h = np.tanh(W @ h)
+                u = h
+                for i in range(len(Ws) - 1, -1, -1):
+                    u = Ws[i].T @ ((1 - h ** 2) * u) if Ws[i].shape[0] == len(h) else Ws[i].T @ u
+                return u
+
+
+            print("[0.5289, 0.096]")
+          - |
+            import numpy as np
+
+
+            def grad_input(Ws, x):
+                outputs = []
+                h = x
+                for W in Ws:
+                    h = np.tanh(W @ h)
+                    outputs.append(h)
+                u = h
+                for i in range(len(Ws) - 1, -1, -1):
+                    u = Ws[i].T @ u
+                return u
+
+
+            print("[0.5289, 0.096]")
+          - |
+            import numpy as np
+
+
+            def grad_input(Ws, x):
+                outputs = []
+                h = x
+                for W in Ws:
+                    h = np.tanh(W @ h)
+                    outputs.append(h)
+                u = np.ones(len(h))
+                for i in range(len(Ws) - 1, -1, -1):
+                    u = Ws[i].T @ ((1 - outputs[i] ** 2) * u)
+                return u
+
+
+            print("[0.5289, 0.096]")
+        explanation: |
+          The forward loop is the network, with one addition: every layer's output is appended to a list. That list is the tape. The backward loop starts from the gradient of the loss with respect to the last output, which for $\tfrac12\|\mathbf{h}\|^2$ is $\mathbf{h}$ itself, and applies one VJP per layer, last to first: the slope of $\tanh$, then $W_i^\top$.
+
+          The slope of $\tanh$ is $1 - \tanh^2$, and $\tanh$ of the layer's input is the layer's **output**. So the output is all that has to be kept, and the inputs to $\tanh$ can be discarded.
+
+          The first wrong version keeps no tape and uses the final output for every layer. With one layer it is correct. This is the memory cost made concrete: to go back through four layers, four vectors must have been kept. For a network of 100 layers and a batch of images, these stored outputs are most of what fills a graphics card.
+    - question:
+        id: fix-tape
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          This version keeps a tape that starts with the input, so `tape[i]` is the **input** of layer `i` and `tape[i + 1]` its output. `grad_input` should return the gradient of $\tfrac12\|\mathbf{h}_k\|^2$ with respect to `x`. The program prints the largest difference from central differences, which should be `0.0`. Fix `grad_input`.
+        starter: |
+          import numpy as np
+
+
+          def loss(Ws, x):
+              h = x
+              for W in Ws:
+                  h = np.tanh(W @ h)
+              return 0.5 * float(h @ h)
+
+
+          def grad_input(Ws, x):
+              tape = [x]
+              for W in Ws:
+                  tape.append(np.tanh(W @ tape[-1]))
+              u = tape[-1]
+              for i in range(len(Ws) - 1, -1, -1):
+                  u = Ws[i].T @ ((1 - tape[i] ** 2) * u)
+              return u
+
+
+          Ws = [np.array([[1.0, -1.0], [0.5, 1.0]]), np.array([[1.0, 2.0], [0.0, -1.0]])]
+          x = np.array([0.3, -0.2])
+          h = 1e-6
+          measured = np.array([(loss(Ws, x + h * e) - loss(Ws, x - h * e)) / (2 * h) for e in np.eye(2)])
+          print(round(float(np.abs(grad_input(Ws, x) - measured).max()), 4))
+        solution: |
+          import numpy as np
+
+
+          def loss(Ws, x):
+              h = x
+              for W in Ws:
+                  h = np.tanh(W @ h)
+              return 0.5 * float(h @ h)
+
+
+          def grad_input(Ws, x):
+              tape = [x]
+              for W in Ws:
+                  tape.append(np.tanh(W @ tape[-1]))
+              u = tape[-1]
+              for i in range(len(Ws) - 1, -1, -1):
+                  u = Ws[i].T @ ((1 - tape[i + 1] ** 2) * u)
+              return u
+
+
+          Ws = [np.array([[1.0, -1.0], [0.5, 1.0]]), np.array([[1.0, 2.0], [0.0, -1.0]])]
+          x = np.array([0.3, -0.2])
+          h = 1e-6
+          measured = np.array([(loss(Ws, x + h * e) - loss(Ws, x - h * e)) / (2 * h) for e in np.eye(2)])
+          print(round(float(np.abs(grad_input(Ws, x) - measured).max()), 4))
+        tests: |
+          import numpy as _np
+          def _loss(Ws, x):
+              h = x
+              for W in Ws:
+                  h = _np.tanh(W @ h)
+              return 0.5 * float(h @ h)
+          def _num(Ws, x):
+              return _np.array([(_loss(Ws, x + 1e-6 * e) - _loss(Ws, x - 1e-6 * e)) / 2e-6 for e in _np.eye(len(x))])
+          _Ws = [_np.array([[1.0, -1.0], [0.5, 1.0]]), _np.array([[1.0, 2.0], [0.0, -1.0]])]
+          _x = _np.array([0.3, -0.2])
+          assert _np.allclose(grad_input(_Ws, _x), _num(_Ws, _x), atol=1e-6), "For the two square layers of the program the gradient should agree with central differences. The slope of tanh at layer i is 1 minus the square of that layer's output, tape[i + 1]"
+          _A = [_np.array([[1.0, 0.0, 2.0], [0.0, 1.0, -1.0]]), _np.array([[1.0, 1.0], [2.0, 0.0], [0.0, -1.0], [1.0, -1.0]])]
+          _y = _np.array([0.1, 0.2, -0.3])
+          assert _np.shape(grad_input(_A, _y)) == (3,) and _np.allclose(grad_input(_A, _y), _num(_A, _y), atol=1e-6), "For layers of shapes 2 by 3 and 4 by 2 the gradient has 3 entries and should agree with central differences"
+          assert output.strip() == "0.0", "The program should print 0.0"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def loss(Ws, x):
+                h = x
+                for W in Ws:
+                    h = np.tanh(W @ h)
+                return 0.5 * float(h @ h)
+
+
+            def grad_input(Ws, x):
+                tape = [x]
+                for W in Ws:
+                    tape.append(np.tanh(W @ tape[-1]))
+                u = tape[-1]
+                for i in range(len(Ws) - 1, -1, -1):
+                    u = Ws[i].T @ ((1 - tape[i] ** 2) * u)
+                return u
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def loss(Ws, x):
+                h = x
+                for W in Ws:
+                    h = np.tanh(W @ h)
+                return 0.5 * float(h @ h)
+
+
+            def grad_input(Ws, x):
+                tape = [x]
+                for W in Ws:
+                    tape.append(np.tanh(W @ tape[-1]))
+                u = tape[-1]
+                for i in range(len(Ws) - 1, -1, -1):
+                    u = Ws[i].T @ ((1 - tape[-1] ** 2) * u)
+                return u
+
+
+            print("0.0")
+          - |
+            import numpy as np
+
+
+            def loss(Ws, x):
+                h = x
+                for W in Ws:
+                    h = np.tanh(W @ h)
+                return 0.5 * float(h @ h)
+
+
+            def grad_input(Ws, x):
+                tape = [x]
+                for W in Ws:
+                    tape.append(np.tanh(W @ tape[-1]))
+                u = tape[-1]
+                for i in range(len(Ws)):
+                    u = Ws[i].T @ ((1 - tape[i + 1] ** 2) * u)
+                return u
+
+
+            print("0.0")
+        explanation: |
+          The tape had one more entry than there are layers, because it began with the input. So the output of layer `i` is `tape[i + 1]`, and the code read `tape[i]`, the layer's input. It took the slope of each $\tanh$ at the wrong value: one position too early.
+
+          With square layers every vector on the tape has the same length, so nothing complained. With layers of different widths the entry-by-entry product would have had mismatched lengths and failed at once.
+
+          An index that is off by one position on the tape is the characteristic bug of hand-written backward passes. The forward sweep and the backward sweep must agree, for every step, on which stored value belongs to it. Libraries avoid the problem by having each operation store what it needs on its own node of the graph, at the moment it runs.
+    - question:
+        id: work-independent-of-n
+        type: choice
+        system: s2
+        prompt: |
+          Doubling the number of parameters of a model roughly doubles the cost of evaluating its loss. What happens to the cost of the gradient **relative to** the cost of the loss, for reverse mode and for finite differences?
+        options:
+          - 'Both ratios stay the same.'
+          - 'For reverse mode the ratio stays the same, a small constant. For finite differences it doubles, since one more evaluation is needed for every added parameter.'
+          - 'Both ratios double.'
+          - 'For reverse mode the ratio doubles, and for finite differences it stays the same.'
+        answer: 1
+        explanation: |
+          Reverse mode costs a constant multiple of the calculation, whatever the calculation is. Finite differences cost $n + 1$ evaluations, so their ratio is $n + 1$ and grows with the model. Put together: with reverse mode the gradient of a model twice as large costs twice as much, and with finite differences four times as much. At $10^9$ parameters the ratio between the two methods is $10^9$. No other single algorithmic fact matters more to machine learning.
+    - question:
+        id: work-checkpoint
+        type: numeric
+        system: s2
+        prompt: |
+          A recurrence of 10 000 steps is differentiated in reverse with a checkpoint kept every 100 steps, and each stretch of 100 steps recomputed and stored only while the backward sweep is inside it. About how many states are held in memory at the worst moment?
+        answer: "200"
+        explanation: |
+          There are 100 checkpoints, and while one stretch is being reversed its 100 states are held as well: about 200 in all, against 10 000 without checkpointing. The price is that every stretch is run forward twice, once in the original pass and once when it is recomputed, so the forward work roughly doubles. With $T$ steps and a checkpoint every $\sqrt T$, memory is about $2\sqrt T$ states. This is the general pattern of the remedies: reverse mode's memory can be reduced a great deal for a modest factor in time.
+    - question:
+        id: work-explode
+        type: choice
+        system: s2
+        prompt: |
+          A recurrent network applies the same matrix $W$ at each of 200 steps, with no nonlinearity. The largest singular value of $W$ is $1.05$ and its other singular values are below 1. What happens to a gradient passed back through all 200 steps?
+        options:
+          - 'It keeps its size, since $1.05$ is close to 1.'
+          - 'Its component along the top singular direction can grow by up to $1.05^{200} \approx 17\,000$ while the other components shrink, so the gradient is dominated by one direction and is very large. Clipping the norm of the gradient, or keeping $W$ close to orthogonal, controls it.'
+          - 'It vanishes, since most singular values are below 1.'
+          - 'It becomes exactly zero after 200 steps.'
+        answer: 1
+        explanation: |
+          The backward signal is $(W^\top)^{200}\bar{\mathbf{u}}$, and its size is bounded by $\sigma_1^{200}$. What the powers really do is governed by the eigenvalues, but for a matrix that is close to normal the two agree, and a factor only 5% above 1 compounds to four orders of magnitude over 200 steps. A factor 5% below 1 would compound to $0.95^{200} \approx 0.00004$. The window in which a long product of Jacobians neither explodes nor vanishes is narrow, which is why long recurrences are hard to train and why architectures add paths along which the Jacobian is close to the identity.
+  connections:
+    - text: |
+        The product of $n$ numbers has a gradient that costs three evaluations, and that is the rule, not an exception. **Reverse mode** runs the calculation forward, keeping its values, and then sweeps backward once, doing a bounded amount of work per elementary operation. The whole gradient of a scalar function costs a small constant multiple of the function, **whatever the number of inputs**. Finite differences and forward mode both cost one pass per input.
+
+        The price is memory: every value the backward sweep will need must be kept, so memory grows with the length of the calculation. Checkpointing recovers most of it for a modest factor in time. And the gradient that comes back is a product of transposed Jacobians, whose size is governed by their singular values, so it can vanish or explode with depth.
+
+        Reverse mode is the right tool for many inputs and one output. The mirror case, few inputs and many outputs, calls for the forward recursion, which needs no stored values at all. There is a remarkably neat way to implement it, by extending the number system itself so that every number carries its own derivative along: [[m13.forward-mode-and-dual-numbers]].
