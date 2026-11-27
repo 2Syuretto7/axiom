@@ -1,0 +1,655 @@
+concept: m6.cauchy-schwarz-and-the-triangle-inequality
+minutes: 80
+claim: You can state the Cauchy-Schwarz inequality for any inner product, prove it by projecting one vector onto the other, say exactly when equality holds, derive the triangle inequality from it, read off concrete inequalities for sums, integrals and correlations, and use the parallelogram law to tell whether a given norm comes from an inner product.
+recalls: [m6.inner-product-spaces]
+uses: [m6.dual-spaces-and-the-transpose, m6.fields-and-the-vector-space-axioms, m4.dot-product, m4.norms-and-distance, m4.angle-and-cosine-similarity, m4.projection-onto-a-vector, m7.orthonormal-bases, m3.reading-and-writing-epsilon-style-arguments, e5.linear-algebra-routines, e5.vectorisation, e5.axis-operations-and-reductions, e0.functions, e0.loops]
+leads: [m6.adjoints-orthogonal-and-unitary-maps, m8.operator-and-frobenius-norms]
+starter: |
+  # Scratch space. A thousand random pairs of vectors. For each pair, the
+  # size of the dot product divided by the product of the lengths.
+  # How large does that ratio ever get?
+  import numpy as np
+
+  rng = np.random.default_rng(0)
+  largest = 0.0
+  for _ in range(1000):
+      u = rng.normal(size=5)
+      v = rng.normal(size=5)
+      largest = max(largest, abs(float(u @ v)) / float(np.linalg.norm(u) * np.linalg.norm(v)))
+  print(round(largest, 4))
+parts:
+  recall:
+    - text: |
+        [[m6.inner-product-spaces]] rebuilt length and perpendicularity from three axioms, and left one debt: the angle between two vectors needs a fraction to stay between $-1$ and $1$, and nothing proved so far says it does. Today pays that debt. Three quick pulls first.
+  puzzle:
+    - text: |
+        The starter draws a thousand random pairs of vectors and, for each pair, divides the size of the dot product by the product of the two lengths. It prints the largest ratio seen.
+
+        ```
+        0.9468
+        ```
+
+        Change the seed, the dimension, or the number of pairs, and the answer moves about, but it never passes 1. Replace the dot product by a weighted one, or the vectors by polynomials with the integral inner product, and the same holds.
+
+        A statistician knows this fact as "a correlation coefficient lies between $-1$ and $1$". A geometer knows it as "a cosine lies between $-1$ and $1$". Neither picture is available for polynomials or matrices, and yet the bound does not fail there either.
+
+        **Why can an inner product never exceed the product of the lengths, in any inner product space whatever?**
+  intuition:
+    - text: |
+        Take two vectors $\mathbf{u}$ and $\mathbf{v}$ and drop a perpendicular from $\mathbf{u}$ onto the line through $\mathbf{v}$. This splits $\mathbf{u}$ into two parts at right angles: its shadow along $\mathbf{v}$, and the remainder.
+
+        By Pythagoras, the shadow cannot be longer than $\mathbf{u}$ itself. A leg of a right triangle is never longer than the hypotenuse.
+
+        That one sentence is the whole proof. The length of the shadow is $\dfrac{|\langle \mathbf{u}, \mathbf{v} \rangle|}{\|\mathbf{v}\|}$. Saying that it is at most $\|\mathbf{u}\|$ gives
+
+        $$|\langle \mathbf{u}, \mathbf{v} \rangle| \le \|\mathbf{u}\|\,\|\mathbf{v}\|,$$
+
+        the **Cauchy-Schwarz inequality**. The shadow is as long as $\mathbf{u}$ only when there is no remainder, which is when $\mathbf{u}$ lies along $\mathbf{v}$.
+
+        Projection and Pythagoras were both derived last lesson from the axioms alone. So the inequality holds wherever the axioms do, with no picture needed. One consequence is that the direct route is the shortest, $\|\mathbf{u} + \mathbf{v}\| \le \|\mathbf{u}\| + \|\mathbf{v}\|$, which is what entitles $\|\cdot\|$ to be called a length.
+  derivation:
+    - text: |
+        **Theorem (Cauchy-Schwarz).** In any inner product space,
+
+        $$|\langle \mathbf{u}, \mathbf{v} \rangle| \le \|\mathbf{u}\|\,\|\mathbf{v}\|,$$
+
+        with equality if and only if $\mathbf{u}$ and $\mathbf{v}$ are linearly dependent.
+
+        *Proof (real case).* If $\mathbf{v} = \mathbf{0}$ both sides are 0. Otherwise let
+
+        $$c = \frac{\langle \mathbf{u}, \mathbf{v} \rangle}{\langle \mathbf{v}, \mathbf{v} \rangle}, \qquad \mathbf{w} = \mathbf{u} - c\mathbf{v}.$$
+
+        Then $\langle \mathbf{w}, \mathbf{v} \rangle = \langle \mathbf{u}, \mathbf{v} \rangle - c\langle \mathbf{v}, \mathbf{v} \rangle = 0$. So $\mathbf{u} = c\mathbf{v} + \mathbf{w}$ is a sum of two orthogonal vectors, and by Pythagoras
+
+        $$\|\mathbf{u}\|^2 = c^2\|\mathbf{v}\|^2 + \|\mathbf{w}\|^2 \ge c^2\|\mathbf{v}\|^2 = \frac{\langle \mathbf{u}, \mathbf{v} \rangle^2}{\|\mathbf{v}\|^2}.$$
+
+        Multiply by $\|\mathbf{v}\|^2$ and take square roots. Equality holds exactly when $\|\mathbf{w}\| = 0$, that is $\mathbf{u} = c\mathbf{v}$. $\blacksquare$
+
+        The complex case is the same with $|c|^2$ and $|\langle \mathbf{u}, \mathbf{v} \rangle|^2$.
+
+        **What it says in each space.**
+
+        - *Lists of numbers:* $(a_1b_1 + \dots + a_nb_n)^2 \le (a_1^2 + \dots + a_n^2)(b_1^2 + \dots + b_n^2)$.
+        - *Functions:* $\left(\int fg\right)^2 \le \int f^2 \int g^2$.
+        - *Random quantities with mean zero:* $\mathbb{E}[XY]^2 \le \mathbb{E}[X^2]\,\mathbb{E}[Y^2]$. Dividing, the correlation lies in $[-1, 1]$, and it is $\pm1$ only when one quantity is a multiple of the other.
+        - *Matrices:* $|\operatorname{tr}(A^\top B)| \le \|A\|_F\|B\|_F$.
+
+        Four inequalities that look unrelated are one inequality in four spaces.
+
+        **Angles.** Since $-1 \le \dfrac{\langle \mathbf{u}, \mathbf{v} \rangle}{\|\mathbf{u}\|\|\mathbf{v}\|} \le 1$ in a real inner product space, there is exactly one angle $\theta$ in $[0, \pi]$ with that cosine. Cosine similarity is defined in every inner product space.
+
+        **A useful special case.** Take $\mathbf{v} = (1, 1, \dots, 1)$ in $\mathbb{R}^n$:
+
+        $$(x_1 + \dots + x_n)^2 \le n\,(x_1^2 + \dots + x_n^2).$$
+
+        Divide by $n^2$: the square of the mean is at most the mean of the squares. The gap between them is the variance, which is why a variance is never negative. Equality needs $\mathbf{x}$ parallel to the vector of ones, that is, all entries equal.
+    - question:
+        id: derivation-min
+        type: numeric
+        system: s2
+        prompt: |
+          Four real numbers add up to 10. What is the smallest possible value of the sum of their squares?
+        answer: "25"
+        explanation: |
+          Cauchy-Schwarz with the vector of ones gives $10^2 \le 4\,(x_1^2 + \dots + x_4^2)$, so the sum of squares is at least 25. Equality holds when $\mathbf{x}$ is parallel to $(1, 1, 1, 1)$, that is all four numbers equal $2.5$, and then the sum of squares is $4 \times 6.25 = 25$. The inequality gave the bound, and its equality case said where the bound is reached. Spreading a fixed total evenly minimises the sum of squares, a fact behind weight decay preferring many small weights to a few large ones.
+    - text: |
+        **Theorem (triangle inequality).** $\|\mathbf{u} + \mathbf{v}\| \le \|\mathbf{u}\| + \|\mathbf{v}\|$.
+
+        *Proof (real case).*
+
+        $$\|\mathbf{u} + \mathbf{v}\|^2 = \|\mathbf{u}\|^2 + 2\langle \mathbf{u}, \mathbf{v} \rangle + \|\mathbf{v}\|^2 \le \|\mathbf{u}\|^2 + 2\|\mathbf{u}\|\|\mathbf{v}\| + \|\mathbf{v}\|^2 = (\|\mathbf{u}\| + \|\mathbf{v}\|)^2.$$
+
+        The middle step is Cauchy-Schwarz. Take square roots. $\blacksquare$
+
+        Equality needs $\langle \mathbf{u}, \mathbf{v} \rangle = \|\mathbf{u}\|\|\mathbf{v}\|$: the vectors point the same way.
+
+        **Norms in general.** A **norm** on a vector space is any function $\|\cdot\|$ with
+
+        1. $\|\mathbf{v}\| \ge 0$, and $\|\mathbf{v}\| = 0$ only for $\mathbf{v} = \mathbf{0}$,
+        2. $\|c\mathbf{v}\| = |c|\,\|\mathbf{v}\|$,
+        3. $\|\mathbf{u} + \mathbf{v}\| \le \|\mathbf{u}\| + \|\mathbf{v}\|$.
+
+        Every inner product gives a norm: the first two properties are immediate and the third was just proved. A norm gives a distance $d(\mathbf{u}, \mathbf{v}) = \|\mathbf{u} - \mathbf{v}\|$, and the triangle inequality becomes $d(\mathbf{u}, \mathbf{w}) \le d(\mathbf{u}, \mathbf{v}) + d(\mathbf{v}, \mathbf{w})$. That is the property the epsilon arguments of analysis lean on at every step.
+
+        **Not every norm comes from an inner product.** The sum of absolute values $\|\mathbf{x}\|_1$ and the largest absolute value $\|\mathbf{x}\|_\infty$ are norms. Is there some inner product behind them? Expand, for a norm that does come from an inner product:
+
+        $$\|\mathbf{u} + \mathbf{v}\|^2 + \|\mathbf{u} - \mathbf{v}\|^2 = 2\|\mathbf{u}\|^2 + 2\|\mathbf{v}\|^2.$$
+
+        The cross terms cancel. This is the **parallelogram law**: the squares of the two diagonals add up to the squares of the four sides. Test $\|\cdot\|_1$ with $\mathbf{u} = (1, 0)$ and $\mathbf{v} = (0, 1)$: the left side is $4 + 4 = 8$, the right side $2 + 2 = 4$. So no inner product gives the 1-norm, and there are no angles in that geometry.
+
+        Subtracting instead of adding recovers the inner product from its norm:
+
+        $$\langle \mathbf{u}, \mathbf{v} \rangle = \tfrac14\left(\|\mathbf{u} + \mathbf{v}\|^2 - \|\mathbf{u} - \mathbf{v}\|^2\right).$$
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the proof of the Cauchy-Schwarz inequality for a nonzero vector v.
+        steps:
+          - 'Let $c\mathbf{v}$ be the projection of $\mathbf{u}$ onto $\mathbf{v}$, with $c = \langle \mathbf{u}, \mathbf{v} \rangle / \langle \mathbf{v}, \mathbf{v} \rangle$.'
+          - 'The remainder $\mathbf{w} = \mathbf{u} - c\mathbf{v}$ is orthogonal to $\mathbf{v}$.'
+          - 'By Pythagoras, $\|\mathbf{u}\|^2 = c^2\|\mathbf{v}\|^2 + \|\mathbf{w}\|^2$.'
+          - 'Drop $\|\mathbf{w}\|^2 \ge 0$ to get $\|\mathbf{u}\|^2 \ge \langle \mathbf{u}, \mathbf{v} \rangle^2 / \|\mathbf{v}\|^2$.'
+          - 'Multiply by $\|\mathbf{v}\|^2$ and take square roots.'
+        explanation: Split, apply Pythagoras, and throw away the remainder. Equality holds exactly when the remainder thrown away was zero.
+  formal:
+    - text: |
+        Let $V$ be an inner product space over $\mathbb{R}$ or $\mathbb{C}$, with $\|\mathbf{v}\| = \sqrt{\langle \mathbf{v}, \mathbf{v} \rangle}$.
+
+        **Cauchy-Schwarz.** $|\langle \mathbf{u}, \mathbf{v} \rangle| \le \|\mathbf{u}\|\|\mathbf{v}\|$ for all $\mathbf{u}, \mathbf{v}$, with equality if and only if $\mathbf{u}, \mathbf{v}$ are linearly dependent.
+
+        **Triangle inequality.** $\|\mathbf{u} + \mathbf{v}\| \le \|\mathbf{u}\| + \|\mathbf{v}\|$, with equality if and only if one vector is a non-negative multiple of the other. Consequently $\big|\|\mathbf{u}\| - \|\mathbf{v}\|\big| \le \|\mathbf{u} - \mathbf{v}\|$.
+
+        **Norm.** A function $\|\cdot\|: V \to \mathbb{R}$ that is positive definite, absolutely homogeneous and satisfies the triangle inequality. The norm of an inner product is a norm. Each norm defines a metric $d(\mathbf{u}, \mathbf{v}) = \|\mathbf{u} - \mathbf{v}\|$.
+
+        **Angle.** In a real inner product space, for nonzero $\mathbf{u}, \mathbf{v}$, $\theta = \arccos\dfrac{\langle \mathbf{u}, \mathbf{v} \rangle}{\|\mathbf{u}\|\|\mathbf{v}\|} \in [0, \pi]$ is well defined.
+
+        **Parallelogram law.** $\|\mathbf{u} + \mathbf{v}\|^2 + \|\mathbf{u} - \mathbf{v}\|^2 = 2\|\mathbf{u}\|^2 + 2\|\mathbf{v}\|^2$. A norm comes from an inner product if and only if it satisfies this law (Jordan and von Neumann).
+
+        **Polarisation.** Over $\mathbb{R}$, $\langle \mathbf{u}, \mathbf{v} \rangle = \tfrac14(\|\mathbf{u} + \mathbf{v}\|^2 - \|\mathbf{u} - \mathbf{v}\|^2)$. So a linear map that preserves norms preserves inner products.
+
+        **Bessel's inequality.** For orthonormal $\mathbf{e}_1, \dots, \mathbf{e}_k$, $\sum_i |\langle \mathbf{v}, \mathbf{e}_i \rangle|^2 \le \|\mathbf{v}\|^2$. Cauchy-Schwarz is the case $k = 1$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-statement
+        type: choice
+        system: s1
+        prompt: |
+          The Cauchy-Schwarz inequality says
+        options: ['$\langle \mathbf{u}, \mathbf{v} \rangle \ge \|\mathbf{u}\|\|\mathbf{v}\|$', '$|\langle \mathbf{u}, \mathbf{v} \rangle| \le \|\mathbf{u}\|\|\mathbf{v}\|$', '$|\langle \mathbf{u}, \mathbf{v} \rangle| \le \|\mathbf{u}\| + \|\mathbf{v}\|$', '$\langle \mathbf{u}, \mathbf{v} \rangle = \|\mathbf{u}\|\|\mathbf{v}\|$']
+        answer: 1
+        explanation: The inner product is at most the product of the lengths.
+    - question:
+        id: drill-bound
+        type: numeric
+        system: s1
+        prompt: |
+          $\|\mathbf{u}\| = 3$ and $\|\mathbf{v}\| = 5$. What is the largest value $\langle \mathbf{u}, \mathbf{v} \rangle$ can have?
+        answer: "15"
+        explanation: The product of the norms, reached when the vectors point the same way.
+    - question:
+        id: drill-lower
+        type: numeric
+        system: s1
+        prompt: |
+          With the same norms, what is the smallest value $\langle \mathbf{u}, \mathbf{v} \rangle$ can have?
+        answer: "-15"
+        explanation: Reached when they point in opposite directions.
+    - question:
+        id: drill-equality
+        type: choice
+        system: s1
+        prompt: |
+          Equality holds in Cauchy-Schwarz exactly when the two vectors are
+        options: ['orthogonal', 'linearly dependent', 'of equal length', 'unit vectors']
+        answer: 1
+        explanation: One is a multiple of the other, so the projection has no remainder.
+    - question:
+        id: drill-orthogonal
+        type: choice
+        system: s1
+        prompt: |
+          For nonzero orthogonal vectors, Cauchy-Schwarz reads
+        options: ['$0 \le \|\mathbf{u}\|\|\mathbf{v}\|$, a strict inequality', 'an equality', 'a contradiction', '$1 \le 0$']
+        answer: 0
+        explanation: The left side is 0 and the right side is positive.
+    - question:
+        id: drill-triangle
+        type: numeric
+        system: s1
+        prompt: |
+          $\|\mathbf{u}\| = 3$ and $\|\mathbf{v}\| = 5$. What is the largest $\|\mathbf{u} + \mathbf{v}\|$ can be?
+        answer: "8"
+        explanation: The triangle inequality, with equality when they point the same way.
+    - question:
+        id: drill-reverse
+        type: numeric
+        system: s1
+        prompt: |
+          With the same norms, what is the smallest $\|\mathbf{u} + \mathbf{v}\|$ can be?
+        answer: "2"
+        explanation: $|5 - 3|$, when they point in opposite directions.
+    - question:
+        id: drill-proof-step
+        type: choice
+        system: s1
+        prompt: |
+          The proof of Cauchy-Schwarz splits $\mathbf{u}$ into its projection on $\mathbf{v}$ and a remainder, and then uses
+        options: ['the rank-nullity theorem', 'Pythagoras', 'the determinant', 'induction']
+        answer: 1
+        explanation: The two pieces are orthogonal, so squared lengths add.
+    - question:
+        id: drill-correlation
+        type: choice
+        system: s1
+        prompt: |
+          A correlation coefficient lies between $-1$ and $1$ because
+        options: ['data are always bounded', 'it is an inner product divided by a product of norms', 'of the central limit theorem', 'it is a probability']
+        answer: 1
+        explanation: Cauchy-Schwarz for centred data vectors.
+    - question:
+        id: drill-mean
+        type: choice
+        system: s1
+        prompt: |
+          For any real numbers, the square of their mean is
+        options: ['at least the mean of their squares', 'at most the mean of their squares', 'equal to the mean of their squares', 'unrelated to it']
+        answer: 1
+        explanation: Cauchy-Schwarz with the vector of ones. The gap is the variance.
+    - question:
+        id: drill-parallelogram
+        type: choice
+        system: s1
+        prompt: |
+          The parallelogram law says $\|\mathbf{u} + \mathbf{v}\|^2 + \|\mathbf{u} - \mathbf{v}\|^2$ equals
+        options: ['$\|\mathbf{u}\|^2 + \|\mathbf{v}\|^2$', '$2\|\mathbf{u}\|^2 + 2\|\mathbf{v}\|^2$', '$4\langle \mathbf{u}, \mathbf{v} \rangle$', '$(\|\mathbf{u}\| + \|\mathbf{v}\|)^2$']
+        answer: 1
+        explanation: Expand both squares and the cross terms cancel.
+    - question:
+        id: drill-one-norm
+        type: choice
+        system: s1
+        prompt: |
+          The 1-norm, the sum of absolute values,
+        options: ['comes from the dot product', 'is a norm that comes from no inner product', 'is not a norm', 'violates the triangle inequality']
+        answer: 1
+        explanation: It fails the parallelogram law.
+    - question:
+        id: drill-polarise
+        type: numeric
+        system: s1
+        prompt: |
+          $\|\mathbf{u} + \mathbf{v}\|^2 = 10$ and $\|\mathbf{u} - \mathbf{v}\|^2 = 2$ in a real inner product space. What is $\langle \mathbf{u}, \mathbf{v} \rangle$?
+        answer: "2"
+        explanation: A quarter of the difference, $(10 - 2)/4$.
+    - question:
+        id: predict-ratio
+        type: predict
+        system: s1
+        prompt: The Cauchy-Schwarz ratio for three pairs. What does this show?
+        code: |
+          import numpy as np
+
+
+          def ratio(u, v):
+              return round(abs(float(u @ v)) / float(np.linalg.norm(u) * np.linalg.norm(v)), 4)
+
+
+          u = np.array([3.0, 4.0])
+          print(ratio(u, np.array([4.0, -3.0])), ratio(u, np.array([1.0, 0.0])), ratio(u, np.array([-6.0, -8.0])))
+        output: |
+          0.0 0.6 1.0
+        explanation: Orthogonal vectors give 0. A general pair gives something strictly between 0 and 1. The last pair is parallel, pointing opposite ways, and reaches 1, the equality case.
+    - question:
+        id: predict-parallelogram
+        type: predict
+        system: s1
+        prompt: Both sides of the parallelogram law for two norms. What does this show?
+        code: |
+          import numpy as np
+
+          u = np.array([1.0, 0.0])
+          v = np.array([0.0, 1.0])
+          two = lambda x: float(np.sqrt((x * x).sum()))
+          one = lambda x: float(np.abs(x).sum())
+          for norm in (two, one):
+              left = norm(u + v) ** 2 + norm(u - v) ** 2
+              right = 2 * norm(u) ** 2 + 2 * norm(v) ** 2
+              print(round(left, 4), round(right, 4))
+        output: |
+          4.0 4.0
+          8.0 4.0
+        explanation: The usual length satisfies the law. The sum of absolute values does not, so no inner product produces it.
+  work:
+    - text: Slower now. Each task uses the inequality or its equality case.
+    - question:
+        id: write-correlation
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `correlation(x, y)` for two arrays of the same length: subtract from each its mean, and return the inner product of the centred arrays divided by the product of their norms. Return 0.0 if either centred array has norm zero.
+        starter: |
+          import numpy as np
+
+
+          def correlation(x, y):
+              return 0.0
+
+
+          x = np.array([1.0, 2.0, 3.0, 4.0])
+          print(round(correlation(x, np.array([2.0, 4.0, 6.0, 9.0])), 4))
+          print(round(correlation(x, 10.0 - 3.0 * x), 4))
+        solution: |
+          import numpy as np
+
+
+          def correlation(x, y):
+              a = x - x.mean()
+              b = y - y.mean()
+              size = float(np.linalg.norm(a) * np.linalg.norm(b))
+              if size == 0.0:
+                  return 0.0
+              return float(a @ b) / size
+
+
+          x = np.array([1.0, 2.0, 3.0, 4.0])
+          print(round(correlation(x, np.array([2.0, 4.0, 6.0, 9.0])), 4))
+          print(round(correlation(x, 10.0 - 3.0 * x), 4))
+        tests: |
+          import numpy as _np
+          _x = _np.array([1.0, 2.0, 3.0, 4.0])
+          assert abs(correlation(_x, 5.0 + 2.0 * _x) - 1.0) < 1e-9, "y = 5 + 2x is an increasing straight-line function of x, so the correlation is 1. Subtract the means first"
+          assert abs(correlation(_x, 10.0 - 3.0 * _x) + 1.0) < 1e-9, "y = 10 - 3x is a decreasing straight-line function of x, so the correlation is -1"
+          assert abs(correlation(_x, _np.array([2.0, 4.0, 6.0, 9.0])) - 0.9943767126843688) < 1e-9, "For x = 1, 2, 3, 4 and y = 2, 4, 6, 9 the correlation is about 0.9944"
+          assert abs(correlation(_np.array([1.0, -1.0, 1.0, -1.0]), _np.array([1.0, 1.0, -1.0, -1.0]))) < 1e-9, "These centred vectors are orthogonal, so the correlation is 0"
+          assert correlation(_x, _np.array([7.0, 7.0, 7.0, 7.0])) == 0.0, "A constant array has centred norm zero, and the function should return 0.0"
+          _r = _np.random.default_rng(0)
+          assert all(abs(correlation(_r.normal(size=6), _r.normal(size=6))) <= 1.0 + 1e-12 for _ in range(200)), "By Cauchy-Schwarz a correlation is never outside [-1, 1]"
+          assert abs(correlation(_x + 100.0, 3.0 * _np.array([2.0, 4.0, 6.0, 9.0])) - 0.9943767126843688) < 1e-9, "Shifting x and rescaling y by a positive number should not change the correlation"
+          assert output.strip() == "0.9944\n-1.0", "The program should print 0.9944 and then -1.0"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def correlation(x, y):
+                size = float(np.linalg.norm(x) * np.linalg.norm(y))
+                if size == 0.0:
+                    return 0.0
+                return float(x @ y) / size
+
+
+            print("0.9944\n-1.0")
+          - |
+            import numpy as np
+
+
+            def correlation(x, y):
+                a = x - x.mean()
+                b = y - y.mean()
+                size = float(np.linalg.norm(a) * np.linalg.norm(b))
+                if size == 0.0:
+                    return 0.0
+                return abs(float(a @ b)) / size
+
+
+            print("0.9944\n-1.0")
+          - |
+            import numpy as np
+
+
+            def correlation(x, y):
+                a = x - x.mean()
+                b = y - y.mean()
+                size = float(np.linalg.norm(a) + np.linalg.norm(b))
+                if size == 0.0:
+                    return 0.0
+                return float(a @ b) / size
+
+
+            print("0.9944\n-1.0")
+          - |
+            import numpy as np
+
+
+            def correlation(x, y):
+                a = x - x.mean()
+                b = y - y.mean()
+                return float(a @ b) / len(x)
+
+
+            print("0.9944\n-1.0")
+        explanation: |
+          Centring turns each list of data into a vector orthogonal to the vector of ones, and the correlation is the cosine of the angle between the two centred vectors. Cauchy-Schwarz confines it to $[-1, 1]$, and the equality case says when the ends are reached: the centred vectors are parallel, which means $y$ is exactly a straight-line function of $x$.
+
+          Skipping the centring gives cosine similarity of the raw data, which is a different and also useful quantity. The last wrong version is the covariance. It has the right sign but no fixed scale, and dividing by the two norms is what makes correlations comparable between pairs of quantities measured in different units.
+    - question:
+        id: write-polarise
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          `norm` is a function that takes an array and returns a number. Write `defect(norm, u, v)`: the left side of the parallelogram law minus the right side,
+
+          $$\|\mathbf{u} + \mathbf{v}\|^2 + \|\mathbf{u} - \mathbf{v}\|^2 - 2\|\mathbf{u}\|^2 - 2\|\mathbf{v}\|^2.$$
+
+          Then write `recover(norm, u, v)`: the inner product of `u` and `v` rebuilt from the norm by polarisation, $\tfrac14(\|\mathbf{u} + \mathbf{v}\|^2 - \|\mathbf{u} - \mathbf{v}\|^2)$.
+        starter: |
+          import numpy as np
+
+
+          def defect(norm, u, v):
+              return 0.0
+
+
+          def recover(norm, u, v):
+              return 0.0
+
+
+          weighted = lambda x: float(np.sqrt(x[0] ** 2 + 4.0 * x[1] ** 2))
+          one = lambda x: float(np.abs(x).sum())
+          u = np.array([1.0, 2.0])
+          v = np.array([3.0, 1.0])
+          print(round(defect(weighted, u, v), 4) + 0.0, round(recover(weighted, u, v), 4))
+          print(round(defect(one, u, v), 4))
+        solution: |
+          import numpy as np
+
+
+          def defect(norm, u, v):
+              return norm(u + v) ** 2 + norm(u - v) ** 2 - 2 * norm(u) ** 2 - 2 * norm(v) ** 2
+
+
+          def recover(norm, u, v):
+              return (norm(u + v) ** 2 - norm(u - v) ** 2) / 4
+
+
+          weighted = lambda x: float(np.sqrt(x[0] ** 2 + 4.0 * x[1] ** 2))
+          one = lambda x: float(np.abs(x).sum())
+          u = np.array([1.0, 2.0])
+          v = np.array([3.0, 1.0])
+          print(round(defect(weighted, u, v), 4) + 0.0, round(recover(weighted, u, v), 4))
+          print(round(defect(one, u, v), 4))
+        tests: |
+          import numpy as _np
+          _two = lambda x: float(_np.sqrt((x * x).sum()))
+          _one = lambda x: float(_np.abs(x).sum())
+          _w = lambda x: float(_np.sqrt(x[0] ** 2 + 4.0 * x[1] ** 2))
+          _u = _np.array([1.0, 2.0]); _v = _np.array([3.0, 1.0])
+          assert abs(defect(_two, _u, _v)) < 1e-9, "The usual length satisfies the parallelogram law, so the defect is 0"
+          assert abs(defect(_w, _u, _v)) < 1e-9, "The weighted norm comes from an inner product, so its defect is 0"
+          assert abs(defect(_one, _np.array([1.0, 0.0]), _np.array([0.0, 1.0])) - 4.0) < 1e-9, "For the 1-norm with u = (1, 0), v = (0, 1) the left side is 8 and the right side 4, a defect of 4"
+          assert abs(defect(_one, _u, _v) - 8.0) < 1e-9, "For the 1-norm with u = (1, 2), v = (3, 1): u + v = (4, 3) has norm 7 and u - v = (-2, 1) has norm 3, so the defect is 49 + 9 - 18 - 32 = 8"
+          assert abs(recover(_two, _u, _v) - 5.0) < 1e-9, "From the usual length, the recovered inner product of (1, 2) and (3, 1) is their dot product, 5"
+          assert abs(recover(_w, _u, _v) - 11.0) < 1e-9, "From the weighted norm the recovered inner product is 1*3 + 4*2*1 = 11"
+          _r = _np.random.default_rng(0)
+          _a = _r.normal(size=5); _b = _r.normal(size=5)
+          assert abs(recover(_two, _a, _b) - float(_a @ _b)) < 1e-9, "Polarisation of the usual length should give back the dot product"
+          assert output.strip() == "0.0 11.0\n8.0", "The program should print 0.0 11.0 and then 8.0"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def defect(norm, u, v):
+                return norm(u + v) ** 2 + norm(u - v) ** 2 - norm(u) ** 2 - norm(v) ** 2
+
+
+            def recover(norm, u, v):
+                return (norm(u + v) ** 2 - norm(u - v) ** 2) / 4
+
+
+            print("0.0 11.0\n8.0")
+          - |
+            import numpy as np
+
+
+            def defect(norm, u, v):
+                return norm(u + v) + norm(u - v) - 2 * norm(u) - 2 * norm(v)
+
+
+            def recover(norm, u, v):
+                return (norm(u + v) ** 2 - norm(u - v) ** 2) / 4
+
+
+            print("0.0 11.0\n8.0")
+          - |
+            import numpy as np
+
+
+            def defect(norm, u, v):
+                return norm(u + v) ** 2 + norm(u - v) ** 2 - 2 * norm(u) ** 2 - 2 * norm(v) ** 2
+
+
+            def recover(norm, u, v):
+                return (norm(u + v) ** 2 - norm(u - v) ** 2) / 2
+
+
+            print("0.0 11.0\n8.0")
+          - |
+            import numpy as np
+
+
+            def defect(norm, u, v):
+                return norm(u + v) ** 2 + norm(u - v) ** 2 - 2 * norm(u) ** 2 - 2 * norm(v) ** 2
+
+
+            def recover(norm, u, v):
+                return (norm(u + v) ** 2 - norm(u) ** 2 - norm(v) ** 2)
+
+
+            print("0.0 11.0\n8.0")
+        explanation: |
+          Both functions come from expanding $\|\mathbf{u} \pm \mathbf{v}\|^2 = \|\mathbf{u}\|^2 \pm 2\langle \mathbf{u}, \mathbf{v} \rangle + \|\mathbf{v}\|^2$. Adding the two cancels the inner product and leaves the parallelogram law. Subtracting cancels the norms and leaves four times the inner product.
+
+          So a norm that comes from an inner product remembers it completely: lengths alone determine all angles. For the weighted norm the function recovers $x_1y_1 + 4x_2y_2$ without being told the weights. For the 1-norm the defect is not zero, and what `recover` returns for it is not linear in $\mathbf{u}$, so it is not an inner product of anything.
+    - question:
+        id: fix-parallel
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `parallel(u, v)` uses the equality case of Cauchy-Schwarz to decide whether two nonzero vectors are linearly dependent. It should say `True` for $(1, 2)$ and $(-2, -4)$. It says `False`. Fix it.
+        starter: |
+          import numpy as np
+
+
+          def parallel(u, v):
+              size = float(np.linalg.norm(u) * np.linalg.norm(v))
+              return abs(float(u @ v) - size) <= 1e-9 * size
+
+
+          u = np.array([1.0, 2.0])
+          print(parallel(u, np.array([3.0, 6.0])), parallel(u, np.array([-2.0, -4.0])), parallel(u, np.array([2.0, 1.0])))
+        solution: |
+          import numpy as np
+
+
+          def parallel(u, v):
+              size = float(np.linalg.norm(u) * np.linalg.norm(v))
+              return abs(abs(float(u @ v)) - size) <= 1e-9 * size
+
+
+          u = np.array([1.0, 2.0])
+          print(parallel(u, np.array([3.0, 6.0])), parallel(u, np.array([-2.0, -4.0])), parallel(u, np.array([2.0, 1.0])))
+        tests: |
+          import numpy as _np
+          _u = _np.array([1.0, 2.0])
+          assert parallel(_u, _np.array([3.0, 6.0])) is True, "(3, 6) is 3 times (1, 2)"
+          assert parallel(_u, _np.array([-2.0, -4.0])) is True, "(-2, -4) is -2 times (1, 2). Equality in Cauchy-Schwarz is about the absolute value of the inner product"
+          assert parallel(_u, _np.array([2.0, 1.0])) is False, "(2, 1) is not a multiple of (1, 2)"
+          assert parallel(_u, _np.array([-2.0, 1.0])) is False, "Orthogonal vectors are not parallel"
+          assert parallel(_np.array([1.0, 0.0, -1.0]), _np.array([-0.5, 0.0, 0.5])) is True, "(-0.5, 0, 0.5) is -0.5 times (1, 0, -1)"
+          assert parallel(_np.array([1.0, 1.0, 0.0]), _np.array([1.0, 1.0, 0.1])) is False, "These vectors are close to parallel but not parallel"
+          assert output.strip() == "True True False", "The program should print True True False"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def parallel(u, v):
+                size = float(np.linalg.norm(u) * np.linalg.norm(v))
+                return abs(float(u @ v) - size) <= 1e-9 * size
+
+
+            print("True True False")
+          - |
+            import numpy as np
+
+
+            def parallel(u, v):
+                return abs(float(u @ v)) <= float(np.linalg.norm(u) * np.linalg.norm(v)) + 1e-9
+
+
+            print("True True False")
+          - |
+            import numpy as np
+
+
+            def parallel(u, v):
+                size = float(np.linalg.norm(u) + np.linalg.norm(v))
+                return abs(abs(float(u @ v)) - size) <= 1e-9 * size
+
+
+            print("True True False")
+          - |
+            import numpy as np
+
+
+            def parallel(u, v):
+                size = float(np.linalg.norm(u) + np.linalg.norm(v))
+                return abs(float(np.linalg.norm(u + v)) - size) <= 1e-9 * size
+
+
+            print("True True False")
+        explanation: |
+          The theorem is about $|\langle \mathbf{u}, \mathbf{v} \rangle|$. Without the absolute value the test detects only vectors that point the same way, where the inner product equals $+\|\mathbf{u}\|\|\mathbf{v}\|$. Vectors that point opposite ways give $-\|\mathbf{u}\|\|\mathbf{v}\|$ and are just as dependent.
+
+          The second wrong version checks the inequality instead of the equality, and the inequality is true for every pair. The last one uses equality in the triangle inequality, which again holds only for vectors pointing the same way. The comparison allows a tiny relative tolerance because rounding can leave the two sides a hair apart even for exactly parallel vectors.
+    - question:
+        id: work-integral
+        type: choice
+        system: s2
+        prompt: |
+          $f$ is continuous on $[0, 1]$ with $\int_0^1 f(x)^2\,dx = 9$. What can be said about $\int_0^1 f(x)\,dx$?
+        options:
+          - 'Nothing. The integral can be arbitrarily large.'
+          - 'It lies between $-3$ and $3$. Apply Cauchy-Schwarz to $f$ and the constant function 1: $\left|\int f \cdot 1\right| \le \sqrt{\int f^2}\sqrt{\int 1^2} = 3 \cdot 1$.'
+          - 'It equals 3.'
+          - 'It lies between 0 and 9.'
+        answer: 1
+        explanation: |
+          With $\langle f, g \rangle = \int_0^1 fg$, the integral of $f$ is $\langle f, 1 \rangle$, the norm of $f$ is 3 and the norm of the constant 1 is 1. Equality holds when $f$ is a multiple of 1, that is $f = 3$ or $f = -3$ throughout. This is the functional version of "the square of the mean is at most the mean of the squares", and it is how a bound on a mean squared error becomes a bound on a mean error.
+    - question:
+        id: work-triangle-data
+        type: numeric
+        system: s2
+        prompt: |
+          A model's prediction $\mathbf{p}$ is at distance 2 from the noisy labels $\mathbf{y}$, and the noisy labels are at distance 0.5 from the true values $\mathbf{t}$. What is the largest possible distance from $\mathbf{p}$ to $\mathbf{t}$?
+        answer: "2.5"
+        explanation: |
+          $\|\mathbf{p} - \mathbf{t}\| = \|(\mathbf{p} - \mathbf{y}) + (\mathbf{y} - \mathbf{t})\| \le 2 + 0.5$. The reverse form gives a floor as well: the distance is at least $2 - 0.5 = 1.5$. Inserting an intermediate point and bounding each leg separately is the standard move in error analysis. Total error at most approximation error plus estimation error is a triangle inequality.
+    - question:
+        id: work-which-norm
+        type: choice
+        system: s2
+        prompt: |
+          For the max-norm $\|\mathbf{x}\|_\infty = \max_k |x_k|$ on the plane, take $\mathbf{u} = (1, 0)$ and $\mathbf{v} = (0, 1)$. What does the parallelogram law show?
+        options:
+          - 'Left side $1 + 1 = 2$, right side $2 + 2 = 4$. The law fails, so the max-norm comes from no inner product.'
+          - 'Both sides are 4, so the max-norm comes from an inner product.'
+          - 'The max-norm is not a norm.'
+          - 'Left side 8, right side 4.'
+        answer: 0
+        explanation: |
+          $\mathbf{u} + \mathbf{v} = (1, 1)$ and $\mathbf{u} - \mathbf{v} = (1, -1)$ both have max-norm 1, so the left side is 2, and each of $\mathbf{u}, \mathbf{v}$ has max-norm 1, so the right side is 4. One failing pair is enough. The 1-norm failed on the same pair in the other direction, with 8 against 4. Among the $p$-norms only $p = 2$ passes. That is why least **squares** has projections, normal equations and a closed form, while least absolute deviations and minimax fitting do not: they live in geometries without right angles.
+  connections:
+    - text: |
+        A thousand random pairs never pushed the ratio past 1 because the projection of $\mathbf{u}$ onto $\mathbf{v}$ is one leg of a right triangle whose hypotenuse is $\mathbf{u}$. That is the **Cauchy-Schwarz inequality**, $|\langle \mathbf{u}, \mathbf{v} \rangle| \le \|\mathbf{u}\|\|\mathbf{v}\|$, with equality exactly for dependent vectors. It holds in every inner product space, and it is what makes angles and correlations meaningful there.
+
+        The **triangle inequality** follows, so the length that an inner product defines is a **norm**. Not every norm arises so: the **parallelogram law** is the test, and the 1-norm and the max-norm fail it. A norm that passes determines its inner product by polarisation.
+
+        Inner products measure vectors. The cluster began with maps, and the two have not yet met. Given a linear map on an inner product space, one can ask what it does to lengths and angles, and which map undoes its effect inside an inner product. The answer gives the transpose its final meaning, and singles out the maps that preserve all the geometry: [[m6.adjoints-orthogonal-and-unitary-maps]].
