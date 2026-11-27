@@ -1,0 +1,627 @@
+concept: m8.courant-fischer-min-max-theorem
+minutes: 85
+claim: You can state the Courant-Fischer theorem that describes every eigenvalue of a symmetric matrix as a maximum over subspaces of a minimum of the Rayleigh quotient, explain the dimension count behind it, and use it to derive that eigenvalues of symmetric matrices move by no more than the size of a symmetric perturbation, that they grow when a positive semidefinite matrix is added, and that the eigenvalues of a principal submatrix interlace those of the whole matrix.
+recalls: [m8.quadratic-forms-and-the-rayleigh-quotient]
+uses: [m8.spectral-theorem, m8.positive-definite-matrices-and-cholesky, m8.eigenvalues-and-eigenvectors, m8.diagonalisation, m6.subspaces-sums-and-direct-sums, m6.rank-nullity-theorem, m7.orthonormal-bases, m7.conditioning, m7.gram-schmidt-and-qr, e5.linear-algebra-routines, e5.indexing-and-slicing, e0.functions]
+leads: [m8.singular-value-decomposition, m8.eckart-young-theorem, m8.pca-as-svd, m8.operator-and-frobenius-norms]
+starter: |
+  # Scratch space. Change one entry of a matrix by 0.0001.
+  # How far do its eigenvalues move? Once for a matrix that is not
+  # symmetric, and once for a symmetric one (changing two mirrored entries).
+  import numpy as np
+
+  pairs = [
+      (np.array([[0.0, 1.0], [0.0, 0.0]]), np.array([[0.0, 1.0], [0.0001, 0.0]])),
+      (np.array([[0.0, 1.0], [1.0, 0.0]]), np.array([[0.0, 1.0001], [1.0001, 0.0]])),
+  ]
+  for before, after in pairs:
+      a = np.sort(np.linalg.eigvals(before).real)
+      b = np.sort(np.linalg.eigvals(after).real)
+      print(round(float(np.abs(b - a).max()), 6))
+parts:
+  recall:
+    - text: |
+        [[m8.quadratic-forms-and-the-rayleigh-quotient]] showed that the largest eigenvalue of a symmetric matrix is the maximum of the Rayleigh quotient, and the smallest its minimum. Today finds the same kind of description for the eigenvalues in between, and puts it to work. Three quick pulls first.
+  puzzle:
+    - text: |
+        The starter changes a matrix by one ten-thousandth and reports how far the eigenvalues move.
+
+        ```
+        0.01
+        0.0001
+        ```
+
+        For $\begin{pmatrix} 0 & 1 \\ 0 & 0 \end{pmatrix}$, a change of $0.0001$ in one entry moves the eigenvalues by $0.01$: a hundred times the cause. Make the change $10^{-10}$ and they move by $10^{-5}$, a hundred thousand times the cause.
+
+        For the symmetric matrix $\begin{pmatrix} 0 & 1 \\ 1 & 0 \end{pmatrix}$, a change of $0.0001$ moves the eigenvalues by $0.0001$. No amplification.
+
+        Every measured matrix carries errors, and every computed one carries rounding. If eigenvalues could jump about as in the first case, they would be useless for data.
+
+        **Why can the eigenvalues of a symmetric matrix never move further than the perturbation itself? And what can be said about each eigenvalue separately, not just the largest?**
+  intuition:
+    - text: |
+        The largest eigenvalue is a maximum: $\lambda_1 = \max R(\mathbf{x})$. A maximum is a steady thing. If the function being maximised changes by at most $\varepsilon$ everywhere, its maximum changes by at most $\varepsilon$. So $\lambda_1$ cannot jump. To get the same steadiness for $\lambda_2, \lambda_3, \dots$, each of them must be written as an optimum too.
+
+        Order the eigenvalues $\lambda_1 \ge \lambda_2 \ge \dots \ge \lambda_n$, with orthonormal eigenvectors $\mathbf{q}_1, \dots, \mathbf{q}_n$. One description of $\lambda_2$ is immediate: it is the maximum of the Rayleigh quotient over vectors **orthogonal to $\mathbf{q}_1$**. But this description mentions $\mathbf{q}_1$, and if the matrix is perturbed, $\mathbf{q}_1$ moves. A description that survives perturbation must not mention eigenvectors at all.
+
+        Here is one. Take any **plane** through the origin, and look for the **worst** direction in it, where the Rayleigh quotient is smallest. Different planes have different worst values. The claim is that the best of these worst values is exactly $\lambda_2$:
+
+        $$\lambda_2 = \max_{\text{planes } S}\ \min_{\mathbf{x} \in S} R(\mathbf{x}).$$
+
+        Why can no plane do better than $\lambda_2$? Every plane, however cleverly chosen, must cross the subspace spanned by $\mathbf{q}_2, \dots, \mathbf{q}_n$, simply because a 2-dimensional and an $(n - 1)$-dimensional subspace of an $n$-dimensional space cannot avoid each other. And on that subspace the quotient is at most $\lambda_2$. So every plane contains a direction with $R \le \lambda_2$. The plane spanned by $\mathbf{q}_1, \mathbf{q}_2$ has nothing worse than that. A dimension count from the last cluster is the whole proof.
+  derivation:
+    - text: |
+        Let $A$ be real symmetric with eigenvalues $\lambda_1 \ge \lambda_2 \ge \dots \ge \lambda_n$ and orthonormal eigenvectors $\mathbf{q}_1, \dots, \mathbf{q}_n$, and $R(\mathbf{x}) = \dfrac{\mathbf{x}^\top A\mathbf{x}}{\mathbf{x}^\top\mathbf{x}}$. (NumPy's `eigh` lists them the other way round, smallest first.)
+
+        **Theorem (Courant-Fischer).** For each $k$,
+
+        $$\lambda_k = \max_{\dim S = k}\ \min_{\mathbf{x} \in S,\ \mathbf{x} \ne \mathbf{0}} R(\mathbf{x}) = \min_{\dim S = n - k + 1}\ \max_{\mathbf{x} \in S,\ \mathbf{x} \ne \mathbf{0}} R(\mathbf{x}).$$
+
+        *Proof of the first equality.* Let $S$ be any subspace of dimension $k$, and $T = \operatorname{span}(\mathbf{q}_k, \dots, \mathbf{q}_n)$, of dimension $n - k + 1$. By the dimension formula,
+
+        $$\dim(S \cap T) = \dim S + \dim T - \dim(S + T) \ge k + (n - k + 1) - n = 1.$$
+
+        So there is a nonzero $\mathbf{x} \in S \cap T$. Being in $T$, it is a combination of $\mathbf{q}_k, \dots, \mathbf{q}_n$, and its Rayleigh quotient is a weighted average of $\lambda_k, \dots, \lambda_n$, hence at most $\lambda_k$. So $\min_{S} R \le \lambda_k$ for **every** $S$ of dimension $k$.
+
+        For $S_0 = \operatorname{span}(\mathbf{q}_1, \dots, \mathbf{q}_k)$ every quotient is an average of $\lambda_1, \dots, \lambda_k$, hence at least $\lambda_k$, with equality at $\mathbf{q}_k$. So the maximum over $S$ is attained, and equals $\lambda_k$. $\blacksquare$
+
+        The second equality is the first one applied to $-A$.
+
+        For $k = 1$ this is $\lambda_1 = \max R$, and for $k = n$ the second form is $\lambda_n = \min R$: the Rayleigh-Ritz theorem of the last lesson.
+
+        **Restricting to a subspace.** Let the columns of $U$ be an orthonormal basis of a subspace $S$. For $\mathbf{x} = U\mathbf{c}$, $R_A(\mathbf{x}) = \dfrac{\mathbf{c}^\top(U^\top AU)\mathbf{c}}{\mathbf{c}^\top\mathbf{c}}$. So the largest and smallest values of the quotient **on $S$** are the largest and smallest eigenvalues of the small symmetric matrix $U^\top AU$.
+    - question:
+        id: derivation-second
+        type: numeric
+        system: s2
+        prompt: |
+          A symmetric matrix has eigenvalues $9, 5, 2$ with orthonormal eigenvectors $\mathbf{q}_1, \mathbf{q}_2, \mathbf{q}_3$. On the plane spanned by $\mathbf{q}_1$ and $\mathbf{q}_3$, what is the smallest value of the Rayleigh quotient?
+        answer: "2"
+        explanation: |
+          On that plane the quotient is a weighted average of 9 and 2, so it ranges from 2 to 9, and its minimum is 2. The theorem says no plane has a minimum above $\lambda_2 = 5$, and this plane, with minimum 2, is far from the best. The best plane is the one spanned by $\mathbf{q}_1$ and $\mathbf{q}_2$, with minimum exactly 5. A plane that contains $\mathbf{q}_1$ is not automatically good. What counts is its worst direction.
+    - text: |
+        **Consequence 1: adding a matrix (Weyl).** Let $A$ and $E$ be symmetric. For every $\mathbf{x}$, $R_{A+E}(\mathbf{x}) = R_A(\mathbf{x}) + R_E(\mathbf{x})$, and $\lambda_{\min}(E) \le R_E(\mathbf{x}) \le \lambda_{\max}(E)$. Put this inside the max-min: for each $k$,
+
+        $$\lambda_k(A) + \lambda_{\min}(E) \le \lambda_k(A + E) \le \lambda_k(A) + \lambda_{\max}(E).$$
+
+        In particular
+
+        $$|\lambda_k(A + E) - \lambda_k(A)| \le \max_i|\lambda_i(E)| = \|E\|_2.$$
+
+        **Each eigenvalue of a symmetric matrix moves by at most the size of the perturbation.** That is the puzzle: the eigenvalue problem for symmetric matrices is perfectly conditioned. The non-symmetric matrix of the starter is defective, and near a defective matrix eigenvalues can move like the square root of the perturbation.
+
+        **Consequence 2: monotonicity.** If $E$ is positive semidefinite then $\lambda_{\min}(E) \ge 0$, so $\lambda_k(A + E) \ge \lambda_k(A)$ for every $k$. Adding a positive semidefinite matrix can only raise eigenvalues. Adding $\mu I$ raises each by exactly $\mu$.
+
+        **Consequence 3: interlacing (Cauchy).** Delete the last row and column of $A$ to get the $(n-1) \times (n-1)$ matrix $B$, with eigenvalues $\mu_1 \ge \dots \ge \mu_{n-1}$. The quadratic form of $B$ is the form of $A$ restricted to the vectors whose last coordinate is zero, a subspace of dimension $n - 1$. Feeding that restriction into the max-min and the min-max gives
+
+        $$\lambda_1 \ge \mu_1 \ge \lambda_2 \ge \mu_2 \ge \dots \ge \mu_{n-1} \ge \lambda_n.$$
+
+        The eigenvalues of the smaller matrix sit in the gaps between those of the larger one. The same holds for $U^\top AU$ with any $n - 1$ orthonormal columns.
+
+        *Example.* $A = \begin{pmatrix} 2 & 1 & 0 \\ 1 & 3 & 1 \\ 0 & 1 & 2 \end{pmatrix}$ has eigenvalues $4, 2, 1$. Its top-left $2 \times 2$ corner has eigenvalues $3.618$ and $1.382$, and $4 \ge 3.618 \ge 2 \ge 1.382 \ge 1$.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the argument that every subspace S of dimension k contains a nonzero vector whose Rayleigh quotient is at most the k-th largest eigenvalue.
+        steps:
+          - 'Let $T$ be the span of the eigenvectors $\mathbf{q}_k, \dots, \mathbf{q}_n$, of dimension $n - k + 1$.'
+          - 'The dimensions of $S$ and $T$ add up to $n + 1$, more than the dimension of the whole space.'
+          - 'By the dimension formula, $S \cap T$ contains a nonzero vector $\mathbf{x}$.'
+          - 'As a vector of $T$, $\mathbf{x}$ has a Rayleigh quotient that is a weighted average of $\lambda_k, \dots, \lambda_n$.'
+          - 'Such an average is at most $\lambda_k$.'
+        explanation: Two subspaces whose dimensions add up to more than n must share a line, and on that line the quotient is under control.
+  formal:
+    - text: |
+        Let $A, B$ be real symmetric (or Hermitian) $n \times n$, eigenvalues in decreasing order $\lambda_1(\cdot) \ge \dots \ge \lambda_n(\cdot)$.
+
+        **Courant-Fischer.** $\lambda_k(A) = \max\limits_{\dim S = k}\ \min\limits_{\mathbf{0} \ne \mathbf{x} \in S} R_A(\mathbf{x}) = \min\limits_{\dim S = n-k+1}\ \max\limits_{\mathbf{0} \ne \mathbf{x} \in S} R_A(\mathbf{x})$.
+
+        **Equivalent form.** $\lambda_k(A) = \min\limits_{\mathbf{w}_1, \dots, \mathbf{w}_{k-1}}\ \max\limits_{\mathbf{x} \perp \mathbf{w}_1, \dots, \mathbf{w}_{k-1}} R_A(\mathbf{x})$, the minimum being attained at $\mathbf{w}_i = \mathbf{q}_i$.
+
+        **Weyl's inequalities.** $\lambda_{i+j-1}(A + B) \le \lambda_i(A) + \lambda_j(B)$. In particular $\lambda_k(A) + \lambda_n(B) \le \lambda_k(A + B) \le \lambda_k(A) + \lambda_1(B)$, and $|\lambda_k(A + B) - \lambda_k(A)| \le \|B\|_2$.
+
+        **Monotonicity.** If $B \succeq 0$ then $\lambda_k(A + B) \ge \lambda_k(A)$ for all $k$. If $A \preceq B$ then $\lambda_k(A) \le \lambda_k(B)$ for all $k$.
+
+        **Cauchy interlacing.** If $U$ is $n \times m$ with orthonormal columns and $M = U^\top AU$, then $\lambda_k(A) \ge \lambda_k(M) \ge \lambda_{k+n-m}(A)$ for $k = 1, \dots, m$. For a principal submatrix of size $n - 1$: $\lambda_k(A) \ge \mu_k \ge \lambda_{k+1}(A)$.
+
+        **Rank-one update.** For $\mathbf{v} \in \mathbb{R}^n$: $\lambda_k(A) \le \lambda_k(A + \mathbf{v}\mathbf{v}^\top) \le \lambda_{k-1}(A)$.
+
+        **Sums of eigenvalues (Ky Fan).** $\lambda_1 + \dots + \lambda_k = \max \operatorname{tr}(U^\top AU)$ over $n \times k$ matrices $U$ with orthonormal columns.
+
+        **Eigenvectors.** No such bound holds for eigenvectors: when two eigenvalues are close, their eigenvectors can turn by a large angle under a small perturbation.
+  drill:
+    - text: |
+        Seconds each. Eigenvalues are numbered from the largest, $\lambda_1 \ge \lambda_2 \ge \dots$
+    - question:
+        id: drill-first
+        type: choice
+        system: s1
+        prompt: |
+          For $k = 1$ the Courant-Fischer theorem says that $\lambda_1$ is
+        options: ['the minimum of the Rayleigh quotient', 'the maximum of the Rayleigh quotient', 'the trace', 'the average of the eigenvalues']
+        answer: 1
+        explanation: The best line is the top eigenvector.
+    - question:
+        id: drill-statement
+        type: choice
+        system: s1
+        prompt: |
+          $\lambda_2$ is the largest possible value, over all planes $S$, of
+        options: ['the maximum of the Rayleigh quotient on $S$', 'the minimum of the Rayleigh quotient on $S$', 'the dimension of $S$', 'the trace of $A$ on $S$']
+        answer: 1
+        explanation: Best plane, worst direction in it.
+    - question:
+        id: drill-best-plane
+        type: choice
+        system: s1
+        prompt: |
+          The plane that attains the max-min for $\lambda_2$ is spanned by
+        options: ['$\mathbf{q}_2$ and $\mathbf{q}_3$', '$\mathbf{q}_1$ and $\mathbf{q}_2$', '$\mathbf{q}_1$ and $\mathbf{q}_n$', 'any two eigenvectors']
+        answer: 1
+        explanation: The two top eigenvectors. Its worst direction is $\mathbf{q}_2$.
+    - question:
+        id: drill-orthogonal
+        type: numeric
+        system: s1
+        prompt: |
+          A symmetric matrix has eigenvalues $8, 6, 1$. What is the maximum of its Rayleigh quotient over vectors orthogonal to the top eigenvector?
+        answer: "6"
+        explanation: The next eigenvalue.
+    - question:
+        id: drill-intersect
+        type: choice
+        system: s1
+        prompt: |
+          In $\mathbb{R}^5$, a subspace of dimension 2 and a subspace of dimension 4
+        options: ['may meet only in the zero vector', 'must share at least a line', 'must be orthogonal', 'must be equal']
+        answer: 1
+        explanation: $2 + 4 - 5 = 1$.
+    - question:
+        id: drill-restrict
+        type: choice
+        system: s1
+        prompt: |
+          The columns of $U$ are an orthonormal basis of $S$. The largest Rayleigh quotient of $A$ on $S$ is the largest eigenvalue of
+        options: ['$A$', '$U^\top AU$', '$UAU^\top$', '$U^\top U$']
+        answer: 1
+        explanation: The form of $A$ written in coordinates on $S$.
+    - question:
+        id: drill-weyl
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ is symmetric with largest eigenvalue 7. $E$ is symmetric with all eigenvalues between $-0.2$ and $0.2$. What is the largest that $\lambda_1(A + E)$ can be?
+        answer: "7.2"
+        explanation: An eigenvalue moves by at most the size of the perturbation.
+    - question:
+        id: drill-weyl-low
+        type: numeric
+        system: s1
+        prompt: |
+          With the same $A$ and $E$, what is the smallest that $\lambda_1(A + E)$ can be?
+        answer: "6.8"
+        explanation: $7 - 0.2$.
+    - question:
+        id: drill-shift
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has eigenvalues $4, 1$. What is the smaller eigenvalue of $A + 3I$?
+        answer: "4"
+        explanation: Adding $3I$ raises every eigenvalue by 3.
+    - question:
+        id: drill-monotone
+        type: choice
+        system: s1
+        prompt: |
+          Adding a positive semidefinite matrix to a symmetric matrix
+        options: ['can lower some eigenvalues', 'lowers no eigenvalue', 'leaves all eigenvalues unchanged', 'makes it singular']
+        answer: 1
+        explanation: Every $\lambda_k$ stays or rises.
+    - question:
+        id: drill-interlace
+        type: choice
+        system: s1
+        prompt: |
+          A symmetric $3 \times 3$ matrix has eigenvalues $9, 5, 2$. The eigenvalues $\mu_1 \ge \mu_2$ of its top-left $2 \times 2$ corner satisfy
+        options: ['$\mu_1 \ge 9$', '$9 \ge \mu_1 \ge 5 \ge \mu_2 \ge 2$', '$\mu_1 = 9$ and $\mu_2 = 5$', '$\mu_2 \le 2$']
+        answer: 1
+        explanation: They interlace.
+    - question:
+        id: drill-possible
+        type: choice
+        system: s1
+        prompt: |
+          With the same eigenvalues $9, 5, 2$, which pair could be the eigenvalues of a $2 \times 2$ principal submatrix?
+        options: ['$10$ and $3$', '$7$ and $4$', '$6$ and $5.5$', '$4$ and $1$']
+        answer: 1
+        explanation: One must lie between 5 and 9 and the other between 2 and 5.
+    - question:
+        id: drill-stable
+        type: choice
+        system: s1
+        prompt: |
+          Compared with a general matrix, the eigenvalues of a symmetric matrix under a small symmetric perturbation are
+        options: ['more sensitive', 'perfectly conditioned: they move no further than the perturbation', 'unchanged', 'undefined']
+        answer: 1
+        explanation: Weyl's inequality.
+    - question:
+        id: predict-interlace
+        type: predict
+        system: s1
+        prompt: A symmetric matrix and its top-left corner. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          print([round(float(v), 3) for v in np.linalg.eigvalsh(A)])
+          print([round(float(v), 3) for v in np.linalg.eigvalsh(A[:2, :2])])
+        output: |
+          [1.0, 2.0, 4.0]
+          [1.382, 3.618]
+        explanation: The eigenvalues of the corner, 1.382 and 3.618, fall in the gaps between 1, 2 and 4. Deleting a row and the matching column cannot push an eigenvalue past its neighbours.
+    - question:
+        id: predict-weyl
+        type: predict
+        system: s1
+        prompt: A symmetric matrix, a symmetric perturbation, and how far each eigenvalue moved. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          E = np.array([[0.2, 0.1, 0.0], [0.1, -0.3, 0.0], [0.0, 0.0, 0.1]])
+          moved = np.linalg.eigvalsh(A + E) - np.linalg.eigvalsh(A)
+          print([round(float(v), 4) for v in moved])
+          print(round(float(np.abs(np.linalg.eigvalsh(E)).max()), 4))
+        output: |
+          [-0.0852, 0.1459, -0.0607]
+          0.3193
+        explanation: Each eigenvalue moved by less than 0.3193, the largest absolute eigenvalue of the perturbation. Some went up and some down, and none further than the bound allows.
+  work:
+    - text: Slower now. Each task restricts or perturbs a symmetric matrix.
+    - question:
+        id: write-range
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `range_on(A, V)`. `A` is symmetric and the columns of `V` are independent vectors spanning a subspace $S$. They need not be orthonormal. Return the pair `(smallest, largest)` of values of the Rayleigh quotient of `A` on $S$. Use `np.linalg.qr` to get an orthonormal basis `U` of $S$, then the eigenvalues of `U.T @ A @ U`.
+        starter: |
+          import numpy as np
+
+
+          def range_on(A, V):
+              return 0.0, 0.0
+
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          V = np.array([[1.0, 1.0], [1.0, -1.0], [1.0, 0.0]])
+          print([round(v, 4) for v in range_on(A, V)])
+        solution: |
+          import numpy as np
+
+
+          def range_on(A, V):
+              U = np.linalg.qr(V)[0]
+              values = np.linalg.eigvalsh(U.T @ A @ U)
+              return float(values[0]), float(values[-1])
+
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          V = np.array([[1.0, 1.0], [1.0, -1.0], [1.0, 0.0]])
+          print([round(v, 4) for v in range_on(A, V)])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          _lo, _hi = range_on(_A, _np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]]))
+          assert abs(_lo - (5 - 5 ** 0.5) / 2) < 1e-9 and abs(_hi - (5 + 5 ** 0.5) / 2) < 1e-9, "On the plane of the first two coordinates the quotient ranges over the eigenvalues of the top-left corner, about 1.382 and 3.618"
+          _lo, _hi = range_on(_A, _np.array([[1.0, 1.0], [1.0, -1.0], [1.0, 0.0]]))
+          assert abs(_lo - 1.2268) < 1e-3 and abs(_hi - 3.9399) < 1e-3, "On the plane spanned by (1, 1, 1) and (1, -1, 0) the range is about 1.2268 to 3.9399. The columns are not orthonormal, so orthonormalise them first"
+          _lo, _hi = range_on(_A, _np.array([[1.0, 1.0], [2.0, 0.0], [1.0, -1.0]]))
+          assert abs(_lo - 2.0) < 1e-9 and abs(_hi - 4.0) < 1e-9, "The plane spanned by the eigenvectors (1, 2, 1) and (1, 0, -1) gives exactly the two largest eigenvalues, 2 and 4"
+          _lo, _hi = range_on(_A, _np.array([[3.0], [6.0], [3.0]]))
+          assert abs(_lo - 4.0) < 1e-9 and abs(_hi - 4.0) < 1e-9, "On the line of the eigenvector (1, 2, 1) the quotient is 4 everywhere"
+          _r = _np.random.default_rng(0)
+          assert all(range_on(_A, _r.normal(size=(3, 2)))[0] <= 2.0 + 1e-9 for _ in range(200)), "By Courant-Fischer no plane has a minimum above the second largest eigenvalue, 2"
+          _r = _np.random.default_rng(1)
+          assert all(range_on(_A, _r.normal(size=(3, 2)))[1] >= 2.0 - 1e-9 for _ in range(200)), "And no plane has a maximum below the second largest eigenvalue"
+          assert output.strip() == "[1.2268, 3.9399]", "The program should print [1.2268, 3.9399]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def range_on(A, V):
+                values = np.linalg.eigvalsh(V.T @ A @ V)
+                return float(values[0]), float(values[-1])
+
+
+            print("[1.2268, 3.9399]")
+          - |
+            import numpy as np
+
+
+            def range_on(A, V):
+                U = np.linalg.qr(V)[0]
+                values = np.linalg.eigvalsh(U @ U.T @ A)
+                return float(values[0]), float(values[-1])
+
+
+            print("[1.2268, 3.9399]")
+          - |
+            import numpy as np
+
+
+            def range_on(A, V):
+                values = np.linalg.eigvalsh(A)
+                return float(values[0]), float(values[-1])
+
+
+            print("[1.2268, 3.9399]")
+          - |
+            import numpy as np
+
+
+            def range_on(A, V):
+                U = np.linalg.qr(V)[0]
+                values = np.linalg.eigvalsh(U.T @ A @ U)
+                return float(values[-1]), float(values[0])
+
+
+            print("[1.2268, 3.9399]")
+        explanation: |
+          $U^\top AU$ is the matrix of the quadratic form of $A$ in orthonormal coordinates on the subspace, so its eigenvalues are the extreme values of the Rayleigh quotient there.
+
+          Skipping the orthonormalisation, the first wrong version, computes $V^\top AV$, which is the form in skewed coordinates. Its eigenvalues are not values of the Rayleigh quotient, because $\mathbf{c}^\top\mathbf{c}$ is no longer the squared length of $V\mathbf{c}$.
+
+          The last two tests are the theorem in action. Two hundred random planes, and in every one the smallest value is at most 2 and the largest at least 2. Only the plane of the two top eigenvectors reaches a minimum of exactly 2.
+
+          This is also how large eigenvalue problems are solved. One builds a subspace of modest dimension that is likely to contain the wanted eigenvectors, compresses the matrix to $U^\top AU$, and takes the eigenvalues of the small matrix as approximations. Interlacing guarantees they never overshoot.
+    - question:
+        id: write-weyl
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `moved(A, E)` for symmetric `A` and `E`: the array of differences between the eigenvalues of `A + E` and those of `A`, both in increasing order. Then write `bound(E)`: the largest absolute value of an eigenvalue of `E`, as a float.
+        starter: |
+          import numpy as np
+
+
+          def moved(A, E):
+              return np.zeros(len(A))
+
+
+          def bound(E):
+              return 0.0
+
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          E = np.array([[0.2, 0.1, 0.0], [0.1, -0.3, 0.0], [0.0, 0.0, 0.1]])
+          print([round(float(v), 4) for v in moved(A, E)], round(bound(E), 4))
+          print([round(float(v), 4) for v in moved(A, 0.5 * np.eye(3))], round(bound(0.5 * np.eye(3)), 4))
+        solution: |
+          import numpy as np
+
+
+          def moved(A, E):
+              return np.linalg.eigvalsh(A + E) - np.linalg.eigvalsh(A)
+
+
+          def bound(E):
+              return float(np.abs(np.linalg.eigvalsh(E)).max())
+
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          E = np.array([[0.2, 0.1, 0.0], [0.1, -0.3, 0.0], [0.0, 0.0, 0.1]])
+          print([round(float(v), 4) for v in moved(A, E)], round(bound(E), 4))
+          print([round(float(v), 4) for v in moved(A, 0.5 * np.eye(3))], round(bound(0.5 * np.eye(3)), 4))
+        tests: |
+          import numpy as _np
+          _A = _np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          _E = _np.array([[0.2, 0.1, 0.0], [0.1, -0.3, 0.0], [0.0, 0.0, 0.1]])
+          _m = moved(_A, _E)
+          assert _np.shape(_m) == (3,), "There is one difference for each eigenvalue"
+          assert _np.allclose(_m, [-0.0852, 0.1459, -0.0607], atol=1e-4), "For this A and E the three eigenvalues move by about -0.0852, 0.1459 and -0.0607"
+          assert abs(bound(_E) - 0.3193) < 1e-4, "The largest absolute eigenvalue of E is about 0.3193"
+          assert _np.allclose(moved(_A, 0.5 * _np.eye(3)), [0.5, 0.5, 0.5]), "Adding 0.5 times the identity raises every eigenvalue by exactly 0.5"
+          assert abs(bound(_np.diag([0.1, -0.7])) - 0.7) < 1e-9, "The bound for diag(0.1, -0.7) is 0.7: the largest absolute value, not the largest value"
+          _r = _np.random.default_rng(0)
+          for _ in range(100):
+              _M = _r.normal(size=(5, 5)); _S = _M + _M.T
+              _N = _r.normal(size=(5, 5)); _P = 0.1 * (_N + _N.T)
+              assert float(_np.abs(moved(_S, _P)).max()) <= bound(_P) + 1e-9, "By Weyl's inequality no eigenvalue of a symmetric matrix moves further than the bound"
+          _v = _r.normal(size=5)
+          assert float(moved(_S, _np.outer(_v, _v)).min()) >= -1e-9, "Adding a positive semidefinite matrix should lower no eigenvalue"
+          assert output.strip() == "[-0.0852, 0.1459, -0.0607] 0.3193\n[0.5, 0.5, 0.5] 0.5", "The program should print the movements and the bound for both perturbations"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def moved(A, E):
+                return np.linalg.eigvalsh(A + E) - np.linalg.eigvalsh(A)
+
+
+            def bound(E):
+                return float(np.linalg.eigvalsh(E).max())
+
+
+            print("[-0.0852, 0.1459, -0.0607] 0.3193\n[0.5, 0.5, 0.5] 0.5")
+          - |
+            import numpy as np
+
+
+            def moved(A, E):
+                return np.linalg.eigvalsh(A + E) - np.linalg.eigvalsh(A)
+
+
+            def bound(E):
+                return float(np.abs(E).max())
+
+
+            print("[-0.0852, 0.1459, -0.0607] 0.3193\n[0.5, 0.5, 0.5] 0.5")
+          - |
+            import numpy as np
+
+
+            def moved(A, E):
+                return np.linalg.eigvalsh(E)
+
+
+            def bound(E):
+                return float(np.abs(np.linalg.eigvalsh(E)).max())
+
+
+            print("[-0.0852, 0.1459, -0.0607] 0.3193\n[0.5, 0.5, 0.5] 0.5")
+          - |
+            import numpy as np
+
+
+            def moved(A, E):
+                return np.linalg.eigvalsh(A + E) - np.linalg.eigvalsh(A)[::-1]
+
+
+            def bound(E):
+                return float(np.abs(np.linalg.eigvalsh(E)).max())
+
+
+            print("[-0.0852, 0.1459, -0.0607] 0.3193\n[0.5, 0.5, 0.5] 0.5")
+        explanation: |
+          Sorted eigenvalues are compared with sorted eigenvalues: the smallest of $A + E$ with the smallest of $A$, and so on. Weyl's inequality bounds each difference by the largest $|\lambda_i(E)|$, which is the factor by which $E$ can stretch a vector at most.
+
+          The eigenvalues of $A + E$ are **not** the eigenvalues of $A$ plus those of $E$, the third wrong version. That holds only when the two matrices share their eigenvectors, as with $E = 0.5\,I$. In general the eigenvectors of $A$ and $E$ are unrelated, and the inequality is all that can be said.
+
+          The largest entry of $E$ is not the right measure either. The matrix of all entries $0.1$ in size $100 \times 100$ has largest entry $0.1$ and an eigenvalue equal to 10.
+    - question:
+        id: fix-submatrix
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `interlaces(A)` should check Cauchy's theorem for a symmetric matrix: with $\lambda$ the eigenvalues of `A` in increasing order and $\mu$ those of `A` with its last row and column removed, it should hold that $\lambda_i \le \mu_i \le \lambda_{i+1}$ for every $i$. The theorem is true, and the function prints `False`. Fix it.
+        starter: |
+          import numpy as np
+
+
+          def interlaces(A):
+              lam = np.linalg.eigvalsh(A)
+              mu = np.linalg.eigvalsh(A[1:, :-1])
+              return all(lam[i] - 1e-9 <= mu[i] <= lam[i + 1] + 1e-9 for i in range(len(mu)))
+
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          print(interlaces(A))
+        solution: |
+          import numpy as np
+
+
+          def interlaces(A):
+              lam = np.linalg.eigvalsh(A)
+              mu = np.linalg.eigvalsh(A[:-1, :-1])
+              return all(lam[i] - 1e-9 <= mu[i] <= lam[i + 1] + 1e-9 for i in range(len(mu)))
+
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          print(interlaces(A))
+        tests: |
+          import numpy as _np
+          _A = _np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          assert interlaces(_A) == True, "The corner of this matrix has eigenvalues 1.382 and 3.618, which interlace 1, 2, 4: remove the last row and the last column, A[:-1, :-1]"
+          _r = _np.random.default_rng(0)
+          for _ in range(50):
+              _M = _r.normal(size=(5, 5))
+              assert interlaces(_M + _M.T) == True, "Interlacing holds for every symmetric matrix, so the function should return True for random ones"
+          assert interlaces(_np.diag([5.0, 1.0, 3.0])) == True, "For diag(5, 1, 3) the corner has eigenvalues 1 and 5, and 1 <= 1 <= 3 <= 5 <= 5"
+          assert interlaces(_np.array([[0.0, 2.0], [2.0, 0.0]])) == True, "For [[0, 2], [2, 0]] the corner is the 1 by 1 matrix 0, between -2 and 2"
+          assert output.strip() == "True", "The program should print True"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def interlaces(A):
+                lam = np.linalg.eigvalsh(A)
+                mu = np.linalg.eigvalsh(A[1:, :-1])
+                return all(lam[i] - 1e-9 <= mu[i] <= lam[i + 1] + 1e-9 for i in range(len(mu)))
+
+
+            print("True")
+          - |
+            import numpy as np
+
+
+            def interlaces(A):
+                lam = np.linalg.eigvalsh(A)
+                mu = np.linalg.eigvalsh(A[:-1, :-1])
+                return all(lam[i + 1] - 1e-9 <= mu[i] for i in range(len(mu)))
+
+
+            print("True")
+          - |
+            import numpy as np
+
+
+            def interlaces(A):
+                lam = np.linalg.eigvalsh(A)
+                mu = np.linalg.eigvalsh(A[:-1, :-1])
+                return all(lam[i] + 1e-9 < mu[i] < lam[i + 1] - 1e-9 for i in range(len(mu)))
+
+
+            print("True")
+        explanation: |
+          `A[1:, :-1]` drops the **first** row and the **last** column. What remains is not a principal submatrix: it is not symmetric, and it is not the matrix of the quadratic form on any coordinate subspace. `eigvalsh` did not complain, because it reads only the lower triangle and assumes the rest.
+
+          A principal submatrix deletes rows and columns with the **same** indices. `A[:-1, :-1]` deletes the last of each. `A[1:, 1:]` would also do, and interlacing holds for it too.
+
+          The inequalities are not strict, as the diagonal example shows, so the last wrong version is too demanding. In data terms: remove one feature from a data set, and the variances along the principal directions of what remains interlace the original ones. The largest cannot increase, and it cannot drop below the original second largest.
+    - question:
+        id: work-count
+        type: choice
+        system: s2
+        prompt: |
+          In $\mathbb{R}^6$, why must every 3-dimensional subspace $S$ contain a nonzero vector whose Rayleigh quotient is at most $\lambda_3$?
+        options:
+          - 'Because $S$ contains the eigenvector $\mathbf{q}_3$.'
+          - 'The span of $\mathbf{q}_3, \mathbf{q}_4, \mathbf{q}_5, \mathbf{q}_6$ has dimension 4, and $3 + 4 > 6$, so it meets $S$ in at least a line. On that span the quotient is an average of $\lambda_3, \dots, \lambda_6$, so at most $\lambda_3$.'
+          - 'Because the quotient is at most $\lambda_3$ everywhere.'
+          - 'It need not. Some 3-dimensional subspaces avoid it.'
+        answer: 1
+        explanation: |
+          $S$ need not contain any eigenvector at all. The argument never looks for one. It only counts: a 3-dimensional and a 4-dimensional subspace of a 6-dimensional space overlap in dimension at least $3 + 4 - 6 = 1$. That is the dimension formula for sums from the lesson on subspaces, and it is the entire engine of the Courant-Fischer theorem.
+    - question:
+        id: work-rank-one
+        type: choice
+        system: s2
+        prompt: |
+          A covariance matrix $C$ has eigenvalues $10, 4, 1$. One more data point is added, which changes $C$ to $C + \mathbf{v}\mathbf{v}^\top$ for some vector $\mathbf{v}$. What can be said about the new second eigenvalue?
+        options:
+          - 'Nothing. It can be anything.'
+          - 'It lies between 4 and 10. Adding the positive semidefinite $\mathbf{v}\mathbf{v}^\top$ lowers no eigenvalue, and since that matrix has rank 1, the new eigenvalues interlace the old: $\lambda_2(C) \le \lambda_2(C + \mathbf{v}\mathbf{v}^\top) \le \lambda_1(C)$.'
+          - 'It is exactly 4.'
+          - 'It is at least 10.'
+        answer: 1
+        explanation: |
+          Monotonicity gives the lower bound. The upper bound comes from the max-min with a clever choice: the vectors orthogonal to $\mathbf{v}$ form a subspace of dimension $n - 1$ on which the two quadratic forms agree, and interlacing for that restriction does the rest. So a rank-one update pushes each eigenvalue up, but not past the old position of the next one above. Only the top eigenvalue is free to move far, by up to $\|\mathbf{v}\|^2$. Online algorithms that update a decomposition one data point at a time rely on this.
+    - question:
+        id: work-eigenvectors
+        type: choice
+        system: s2
+        prompt: |
+          $A = \begin{pmatrix} 1 & 0 \\ 0 & 1.0001 \end{pmatrix}$ is perturbed to $\begin{pmatrix} 1.00005 & 0.0001 \\ 0.0001 & 1.00005 \end{pmatrix}$. The eigenvalues barely move. What happens to the eigenvectors?
+        options:
+          - 'They barely move either, by Weyl.'
+          - 'They turn by $45°$, from the coordinate axes to $(1, 1)$ and $(1, -1)$. Weyl bounds eigenvalues, not eigenvectors. When two eigenvalues are closer together than the size of the perturbation, their eigenvectors are almost arbitrary within the plane they span.'
+          - 'They disappear.'
+          - 'They become complex.'
+        answer: 1
+        explanation: |
+          The perturbed matrix is $1.00005\,I$ plus $0.0001$ times $\begin{pmatrix} 0 & 1 \\ 1 & 0 \end{pmatrix}$, whose eigenvectors are the diagonals. The eigenvalues become $1.00015$ and $0.99995$, within $0.0001$ of the old ones as promised. For eigenvectors the relevant quantity is the perturbation divided by the **gap** between eigenvalues, and here the gap was as small as the perturbation. A principal direction is trustworthy only when its eigenvalue is well separated from its neighbours. The plane spanned by the two, in contrast, has hardly moved.
+  connections:
+    - text: |
+        A change of $0.0001$ moved the eigenvalues of a symmetric matrix by $0.0001$, and those of a defective matrix a hundred times as far. The difference is that each eigenvalue of a symmetric matrix is an optimum. The **Courant-Fischer theorem** says $\lambda_k$ is the best, over subspaces of dimension $k$, of the worst Rayleigh quotient in the subspace, and the proof is a count of dimensions.
+
+        From it: eigenvalues of $A + E$ differ from those of $A$ by at most the largest $|\lambda(E)|$ (**Weyl**), adding a positive semidefinite matrix lowers none of them, and the eigenvalues of a principal submatrix **interlace** those of the whole. Eigenvectors enjoy no such stability when eigenvalues are close.
+
+        Everything since the spectral theorem has been about symmetric matrices. Most matrices that arise are not symmetric, and most are not even square: a data matrix with a row for each example and a column for each feature has no eigenvalues at all. Yet $A^\top A$ is always symmetric and positive semidefinite, and the largest stretch of $A$ was the square root of its largest eigenvalue. Carrying that idea through for every direction at once gives a factorisation of **any** matrix into a rotation, a scaling along axes and another rotation. It is the most useful factorisation in applied mathematics: [[m8.singular-value-decomposition]].

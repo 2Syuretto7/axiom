@@ -1,0 +1,594 @@
+concept: m8.diagonalisation
+minutes: 85
+claim: You can say when a matrix is diagonalisable, write the factorisation A = P D P inverse from its eigenvalues and eigenvectors and read it as a change of basis, use it to compute powers and other functions of a matrix, decide diagonalisability by comparing geometric and algebraic multiplicities, and give examples of matrices that are not diagonalisable, or only over the complex numbers.
+recalls: [m8.characteristic-polynomial]
+uses: [m8.eigenvalues-and-eigenvectors, m6.matrix-of-a-linear-map-and-similarity, m6.subspaces-sums-and-direct-sums, m5.change-of-basis, m5.identity-and-inverse, m5.rank, m1.complex-numbers, e5.linear-algebra-routines, e5.einsum, e0.functions, e0.loops]
+leads: [m8.spectral-theorem, m8.jordan-form-and-the-matrix-exponential, m8.perron-frobenius-and-power-iteration, m8.singular-value-decomposition]
+starter: |
+  # Scratch space. The migration matrix, raised to the hundredth power
+  # without a hundred multiplications.
+  import numpy as np
+
+  A = np.array([[0.9, 0.2], [0.1, 0.8]])
+  values, P = np.linalg.eig(A)
+  D100 = np.diag(values ** 100)
+  A100 = (P @ D100 @ np.linalg.inv(P)).real
+  print([[round(float(c), 4) for c in row] for row in A100])
+parts:
+  recall:
+    - text: |
+        [[m8.characteristic-polynomial]] counted eigenvalues, and warned that a repeated eigenvalue may have too few eigenvectors. Today is about the good case, in which the eigenvectors fill out a basis. Three quick pulls first.
+  puzzle:
+    - text: |
+        The starter computes the hundredth power of the migration matrix $A = \begin{pmatrix} 0.9 & 0.2 \\ 0.1 & 0.8 \end{pmatrix}$ with three matrix products and no loop.
+
+        ```
+        [[0.6667, 0.6667], [0.3333, 0.3333]]
+        ```
+
+        Both columns are the steady state $(\tfrac23, \tfrac13)$. That makes sense: column $j$ of $A^{100}$ is where the $j$th starting point ends up after a hundred years, and every start ends up there.
+
+        But look at how it was computed. The code took the eigenvalues, raised **those** to the hundredth power, and wrapped the result between a matrix `P` and its inverse.
+
+        **Why is the hundredth power of a matrix the hundredth power of its eigenvalues, wrapped in the same two matrices? And does this work for every matrix?**
+  intuition:
+    - text: |
+        In the lesson on similarity, a reflection became $\operatorname{diag}(1, -1)$ in a well-chosen basis, and a map described in a basis whose columns are in $P$ has the matrix $P^{-1}AP$.
+
+        Choose the basis to consist of eigenvectors. The map sends the first basis vector to $\lambda_1$ times itself, so the first column of the new matrix is $(\lambda_1, 0, \dots, 0)$. Likewise for the others. The new matrix is diagonal, with the eigenvalues on the diagonal:
+
+        $$P^{-1}AP = D, \qquad\text{that is}\qquad A = PDP^{-1}.$$
+
+        Read $A = PDP^{-1}$ from right to left. $P^{-1}$ translates a vector into eigenvector coordinates. $D$ scales each coordinate by its eigenvalue. $P$ translates back. Every diagonalisable map is a scaling along some axes, which need not be perpendicular. All the complication of the matrix $A$ lives in the choice of axes.
+
+        Apply $A$ twice: $PDP^{-1}PDP^{-1} = PD^2P^{-1}$. The inner $P^{-1}P$ cancels. A hundred times: $PD^{100}P^{-1}$, and a power of a diagonal matrix is the powers of its entries.
+
+        It works exactly when there **is** a basis of eigenvectors. A shear does not have one. So not every matrix can be diagonalised, and the question of the lesson is which ones can.
+  derivation:
+    - text: |
+        **Definition.** A square matrix $A$ is **diagonalisable** if it is similar to a diagonal matrix: $A = PDP^{-1}$ with $P$ invertible and $D$ diagonal.
+
+        **Theorem.** $A$ is diagonalisable if and only if there is a basis consisting of eigenvectors of $A$. In that case the columns of $P$ are those eigenvectors and the diagonal entries of $D$ are their eigenvalues, in the same order.
+
+        *Proof.* $A = PDP^{-1}$ is the same as $AP = PD$ with $P$ invertible. Column $j$ of $AP$ is $A\mathbf{p}_j$. Column $j$ of $PD$ is $d_j\mathbf{p}_j$. So $AP = PD$ says precisely that each column of $P$ is an eigenvector with eigenvalue $d_j$, and $P$ is invertible exactly when its columns form a basis. $\blacksquare$
+
+        *Example.* $A = \begin{pmatrix} 4 & 1 \\ 2 & 3 \end{pmatrix}$ has eigenvalues 2 and 5, with eigenvectors $(1, -2)$ and $(1, 1)$.
+
+        $$P = \begin{pmatrix} 1 & 1 \\ -2 & 1 \end{pmatrix}, \qquad D = \begin{pmatrix} 2 & 0 \\ 0 & 5 \end{pmatrix}, \qquad P^{-1} = \tfrac13\begin{pmatrix} 1 & -1 \\ 2 & 1 \end{pmatrix}.$$
+
+        The factorisation is not unique. The eigenvectors can be rescaled, and they can be listed in another order, provided $D$ is reordered to match.
+
+        **When is there a basis of eigenvectors?**
+
+        1. *If the $n$ eigenvalues are all different.* Eigenvectors for different eigenvalues are independent, so $n$ of them form a basis. This is sufficient and not necessary: the identity has one eigenvalue and is already diagonal.
+        2. *In general:* exactly when the geometric multiplicities add up to $n$. Since each is at most the algebraic multiplicity, and those add up to $n$ over $\mathbb{C}$, this means **every eigenvalue has geometric multiplicity equal to its algebraic multiplicity**.
+
+        *Not diagonalisable:* $J = \begin{pmatrix} 3 & 1 \\ 0 & 3 \end{pmatrix}$. The eigenvalue 3 has algebraic multiplicity 2 and a one-dimensional eigenspace. Such matrices are called **defective**.
+
+        *Diagonalisable over $\mathbb{C}$ only:* the quarter turn $\begin{pmatrix} 0 & -1 \\ 1 & 0 \end{pmatrix}$ has the distinct eigenvalues $\pm i$, so it is diagonalisable with complex $P$ and $D$, and has no real eigenvector at all.
+    - question:
+        id: derivation-trace-power
+        type: numeric
+        system: s2
+        prompt: |
+          A $2 \times 2$ matrix $A$ is diagonalisable with eigenvalues 2 and $-1$. What is the trace of $A^5$?
+        answer: "31"
+        explanation: |
+          $A^5 = PD^5P^{-1}$ is similar to $D^5 = \operatorname{diag}(32, -1)$, and similar matrices have the same trace: $32 - 1 = 31$. No entry of $A$ was needed. In the same way $\det(A^5) = 32 \cdot (-1) = -32$. Whatever is invariant under similarity can be computed on the diagonal matrix.
+    - text: |
+        **Powers and functions.** For diagonalisable $A = PDP^{-1}$,
+
+        $$A^k = PD^kP^{-1}, \qquad A^{-1} = PD^{-1}P^{-1} \text{ (if no eigenvalue is 0)},$$
+
+        and for any polynomial $q$, $q(A) = P\,q(D)\,P^{-1}$, where $q(D)$ applies $q$ to each diagonal entry. This suggests a definition for other functions $f$:
+
+        $$f(A) = P\begin{pmatrix} f(\lambda_1) & & \\ & \ddots & \\ & & f(\lambda_n) \end{pmatrix}P^{-1}.$$
+
+        With $f(x) = \sqrt{x}$ this gives a matrix whose square is $A$. With $f(x) = e^x$ it gives the matrix exponential, which solves systems of linear differential equations.
+
+        **Long-run behaviour.** $A^k = PD^kP^{-1}$ shows at a glance what powers do.
+
+        - If every $|\lambda_i| < 1$, then $D^k \to 0$ and so $A^k \to 0$.
+        - If some $|\lambda_i| > 1$, the powers grow without bound in that eigen-direction.
+        - If one eigenvalue is 1 and the rest are smaller in absolute value, $D^k \to \operatorname{diag}(1, 0, \dots, 0)$ and $A^k$ tends to a matrix of rank 1. That is the puzzle.
+
+        The largest $|\lambda_i|$ is called the **spectral radius** of $A$. It decides whether iterating $\mathbf{x} \mapsto A\mathbf{x}$ is stable.
+
+        **Decoupling.** Put $\mathbf{y} = P^{-1}\mathbf{x}$. The system $\mathbf{x}_{k+1} = A\mathbf{x}_k$ becomes $\mathbf{y}_{k+1} = D\mathbf{y}_k$: $n$ separate one-dimensional recurrences, each solved by $y_i(k) = \lambda_i^k y_i(0)$. Coordinates that were tangled in the original basis do not interact in the eigenvector basis.
+
+        **How common is the bad case?** A matrix with $n$ distinct eigenvalues is diagonalisable over $\mathbb{C}$, and a repeated root of the characteristic polynomial is a coincidence that the slightest change of an entry destroys. So almost every matrix is diagonalisable over $\mathbb{C}$. But matrices that are close to defective behave badly in computation: their $P$ is close to singular, with a large condition number, and $PD^kP^{-1}$ then loses accuracy.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the proof that A = P D P inverse, with P invertible and D diagonal, means the columns of P are a basis of eigenvectors.
+        steps:
+          - 'Multiply $A = PDP^{-1}$ on the right by $P$ to get $AP = PD$.'
+          - 'Column $j$ of $AP$ is $A$ applied to column $j$ of $P$.'
+          - 'Column $j$ of $PD$ is column $j$ of $P$ multiplied by the $j$th diagonal entry of $D$.'
+          - 'So each column of $P$ is an eigenvector, with that diagonal entry as its eigenvalue.'
+          - '$P$ is invertible, so its $n$ columns are independent and form a basis.'
+        explanation: The equation AP = PD, read one column at a time, is n copies of the eigenvector equation.
+  formal:
+    - text: |
+        Let $A$ be an $n \times n$ matrix over $F$ ($\mathbb{R}$ or $\mathbb{C}$).
+
+        **Diagonalisable.** $A = PDP^{-1}$ for some invertible $P$ and diagonal $D$ over $F$. Equivalently: $F^n$ has a basis of eigenvectors of $A$; equivalently: $F^n = E_{\lambda_1} \oplus \dots \oplus E_{\lambda_r}$ for the distinct eigenvalues $\lambda_i$.
+
+        **Criterion.** $A$ is diagonalisable over $F$ if and only if $p_A$ splits into linear factors over $F$ and $g(\lambda) = a(\lambda)$ for every eigenvalue.
+
+        **Sufficient condition.** $n$ distinct eigenvalues in $F$.
+
+        **Functional calculus.** For diagonalisable $A = PDP^{-1}$ and a function $f$ defined on the eigenvalues, $f(A) = P f(D) P^{-1}$ does not depend on the choice of $P$. It satisfies $(fg)(A) = f(A)g(A)$, and agrees with the usual meaning when $f$ is a polynomial or $f(x) = 1/x$.
+
+        **Spectral radius.** $\rho(A) = \max_i |\lambda_i|$. $A^k \to 0$ if and only if $\rho(A) < 1$. (True for all square matrices, not only diagonalisable ones.)
+
+        **Left eigenvectors.** The rows of $P^{-1}$ satisfy $\mathbf{r}_i A = \lambda_i\mathbf{r}_i$. They are the dual basis of the eigenvector basis, and $A = \sum_i \lambda_i\,\mathbf{p}_i\mathbf{r}_i$.
+
+        **Commuting matrices.** Two diagonalisable matrices can be diagonalised by the same $P$ if and only if they commute.
+
+        **Density.** Over $\mathbb{C}$, every matrix is a limit of diagonalisable matrices.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-definition
+        type: choice
+        system: s1
+        prompt: |
+          A matrix is diagonalisable when it is
+        options: ['diagonal', 'similar to a diagonal matrix', 'invertible', 'symmetric']
+        answer: 1
+        explanation: Diagonal in some basis.
+    - question:
+        id: drill-columns
+        type: choice
+        system: s1
+        prompt: |
+          In $A = PDP^{-1}$ the columns of $P$ are
+        options: ['the eigenvalues', 'eigenvectors of $A$', 'the rows of $A$', 'orthonormal']
+        answer: 1
+        explanation: A basis of eigenvectors.
+    - question:
+        id: drill-diagonal
+        type: choice
+        system: s1
+        prompt: |
+          In $A = PDP^{-1}$ the diagonal entries of $D$ are
+        options: ['the eigenvalues of $A$', 'the diagonal entries of $A$', 'all equal to 1', 'the pivots of $A$']
+        answer: 0
+        explanation: In the order of the columns of $P$.
+    - question:
+        id: drill-equation
+        type: choice
+        system: s1
+        prompt: |
+          $A = PDP^{-1}$ is equivalent to
+        options: ['$PA = DP$', '$AP = PD$', '$AD = PD$', '$AP = DP$']
+        answer: 1
+        explanation: Multiply on the right by $P$.
+    - question:
+        id: drill-power
+        type: choice
+        system: s1
+        prompt: |
+          For $A = PDP^{-1}$, the matrix $A^{10}$ equals
+        options: ['$P^{10}D^{10}P^{-10}$', '$PD^{10}P^{-1}$', '$10\,PDP^{-1}$', '$PDP^{-10}$']
+        answer: 1
+        explanation: The inner factors $P^{-1}P$ cancel.
+    - question:
+        id: drill-distinct
+        type: choice
+        system: s1
+        prompt: |
+          A $4 \times 4$ matrix with four different eigenvalues is
+        options: ['never diagonalisable', 'always diagonalisable', 'diagonalisable only if symmetric', 'singular']
+        answer: 1
+        explanation: Four independent eigenvectors form a basis.
+    - question:
+        id: drill-shear
+        type: choice
+        system: s1
+        prompt: |
+          $\begin{pmatrix} 1 & 1 \\ 0 & 1 \end{pmatrix}$ is
+        options: ['diagonalisable with $D = I$', 'not diagonalisable', 'diagonalisable with eigenvalues 1 and 0', 'diagonalisable over the complex numbers only']
+        answer: 1
+        explanation: Its only eigenspace is a line. If it were similar to $I$ it would be $I$.
+    - question:
+        id: drill-identity
+        type: choice
+        system: s1
+        prompt: |
+          The $3 \times 3$ identity matrix has one eigenvalue only. Is it diagonalisable?
+        options: ['No, because the eigenvalue is repeated', 'Yes, it is already diagonal', 'Only over the complex numbers', 'Only after a change of basis']
+        answer: 1
+        explanation: Distinct eigenvalues are sufficient, not necessary.
+    - question:
+        id: drill-criterion
+        type: choice
+        system: s1
+        prompt: |
+          A matrix is diagonalisable over $\mathbb{C}$ exactly when, for every eigenvalue,
+        options: ['the geometric multiplicity is 1', 'the geometric multiplicity equals the algebraic multiplicity', 'the algebraic multiplicity is 1', 'the eigenvalue is real']
+        answer: 1
+        explanation: Then the eigenspaces together have dimension $n$.
+    - question:
+        id: drill-rotation
+        type: choice
+        system: s1
+        prompt: |
+          A rotation of the plane by a quarter turn is
+        options: ['diagonalisable over the reals', 'diagonalisable over the complex numbers but not over the reals', 'not diagonalisable at all', 'the identity']
+        answer: 1
+        explanation: Its eigenvalues $\pm i$ are distinct and not real.
+    - question:
+        id: drill-limit
+        type: choice
+        system: s1
+        prompt: |
+          A diagonalisable matrix has eigenvalues $0.9$ and $-0.5$. As $k$ grows, $A^k$
+        options: ['grows without bound', 'tends to the zero matrix', 'tends to the identity', 'oscillates for ever']
+        answer: 1
+        explanation: Both eigenvalues are smaller than 1 in absolute value.
+    - question:
+        id: drill-det
+        type: numeric
+        system: s1
+        prompt: |
+          $A = PDP^{-1}$ with $D = \operatorname{diag}(2, 3, -1)$. What is $\det A$?
+        answer: "-6"
+        explanation: Similar matrices have the same determinant, the product of the diagonal of $D$.
+    - question:
+        id: drill-inverse
+        type: choice
+        system: s1
+        prompt: |
+          $A = PDP^{-1}$ with $D = \operatorname{diag}(2, 4)$. Then $A^{-1}$ is
+        options: ['$P\operatorname{diag}(-2, -4)P^{-1}$', '$P\operatorname{diag}(0.5, 0.25)P^{-1}$', '$P^{-1}DP$', '$\operatorname{diag}(0.5, 0.25)$']
+        answer: 1
+        explanation: Invert the eigenvalues and keep the eigenvectors.
+    - question:
+        id: predict-rebuild
+        type: predict
+        system: s1
+        prompt: Eigenvectors in the columns of P, eigenvalues on the diagonal of D. What does this show?
+        code: |
+          import numpy as np
+
+          P = np.array([[1.0, 1.0], [-2.0, 1.0]])
+          D = np.diag([2.0, 5.0])
+          A = P @ D @ np.linalg.inv(P)
+          print([[round(float(c), 4) + 0.0 for c in row] for row in A])
+          print([[round(float(c), 4) + 0.0 for c in row] for row in P @ D @ D @ np.linalg.inv(P) - A @ A])
+        output: |
+          [[4.0, 1.0], [2.0, 3.0]]
+          [[0.0, 0.0], [0.0, 0.0]]
+        explanation: The product rebuilds the matrix with eigenvalues 2 and 5 and eigenvectors (1, -2) and (1, 1). Squaring D between the same P and its inverse gives the square of A.
+    - question:
+        id: predict-root
+        type: predict
+        system: s1
+        prompt: The square roots of the eigenvalues, between the same P and its inverse. What does this show?
+        code: |
+          import numpy as np
+
+          P = np.array([[1.0, 1.0], [1.0, -1.0]])
+          A = P @ np.diag([9.0, 1.0]) @ np.linalg.inv(P)
+          R = P @ np.diag([3.0, 1.0]) @ np.linalg.inv(P)
+          print([[round(float(c), 4) for c in row] for row in A])
+          print([[round(float(c), 4) for c in row] for row in R])
+          print(np.allclose(R @ R, A))
+        output: |
+          [[5.0, 4.0], [4.0, 5.0]]
+          [[2.0, 1.0], [1.0, 2.0]]
+          True
+        explanation: Taking the square root of each eigenvalue and keeping the eigenvectors gives a matrix whose square is the original. A function of a diagonalisable matrix is the function applied to its eigenvalues.
+  work:
+    - text: Slower now. Each task is the sentence "translate, scale, translate back".
+    - question:
+        id: write-apply
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `apply(A, f)` for a diagonalisable matrix `A` and a function `f` that acts on an array of numbers entry by entry. Return $f(A) = P\,f(D)\,P^{-1}$ using `np.linalg.eig`. Return the `.real` part.
+        starter: |
+          import numpy as np
+
+
+          def apply(A, f):
+              return A * 1.0
+
+
+          A = np.array([[5.0, 4.0], [4.0, 5.0]])
+          print([[round(float(c), 4) for c in row] for row in apply(A, np.sqrt)])
+          print([[round(float(c), 4) for c in row] for row in apply(A, lambda x: 1.0 / x) * 9.0])
+        solution: |
+          import numpy as np
+
+
+          def apply(A, f):
+              values, P = np.linalg.eig(A)
+              return (P @ np.diag(f(values)) @ np.linalg.inv(P)).real
+
+
+          A = np.array([[5.0, 4.0], [4.0, 5.0]])
+          print([[round(float(c), 4) for c in row] for row in apply(A, np.sqrt)])
+          print([[round(float(c), 4) for c in row] for row in apply(A, lambda x: 1.0 / x) * 9.0])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[5.0, 4.0], [4.0, 5.0]])
+          _R = apply(_A, _np.sqrt)
+          assert _np.shape(_R) == (2, 2), "The result has the shape of A"
+          assert _np.allclose(_R, [[2.0, 1.0], [1.0, 2.0]]), "The square root of [[5, 4], [4, 5]] built from its eigenvalues 9 and 1 is [[2, 1], [1, 2]]"
+          assert _np.allclose(apply(_A, lambda x: 1.0 / x), _np.linalg.inv(_A)), "With f(x) = 1/x the result should be the inverse of A"
+          assert _np.allclose(apply(_A, lambda x: x ** 3), _A @ _A @ _A), "With f(x) = x^3 the result should be A @ A @ A"
+          assert _np.allclose(apply(_A, lambda x: x), _A), "With f(x) = x the result should be A itself"
+          _B = _np.array([[4.0, 1.0], [2.0, 3.0]])
+          assert _np.allclose(apply(_B, lambda x: x * x - 7 * x + 10), _np.zeros((2, 2))), "[[4, 1], [2, 3]] has eigenvalues 2 and 5, which are the roots of x^2 - 7x + 10, so that polynomial of the matrix is zero"
+          _C = _np.array([[0.9, 0.2], [0.1, 0.8]])
+          assert _np.allclose(apply(_C, lambda x: x ** 200), [[2 / 3, 2 / 3], [1 / 3, 1 / 3]]), "The 200th power of the migration matrix has the steady state in both columns"
+          assert output.strip() == "[[2.0, 1.0], [1.0, 2.0]]\n[[5.0, -4.0], [-4.0, 5.0]]", "The program should print the square root and then nine times the inverse"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def apply(A, f):
+                return f(A)
+
+
+            print("[[2.0, 1.0], [1.0, 2.0]]\n[[5.0, -4.0], [-4.0, 5.0]]")
+          - |
+            import numpy as np
+
+
+            def apply(A, f):
+                values, P = np.linalg.eig(A)
+                return (np.linalg.inv(P) @ np.diag(f(values)) @ P).real
+
+
+            print("[[2.0, 1.0], [1.0, 2.0]]\n[[5.0, -4.0], [-4.0, 5.0]]")
+          - |
+            import numpy as np
+
+
+            def apply(A, f):
+                values, P = np.linalg.eig(A)
+                return (P @ f(np.diag(values)) @ np.linalg.inv(P)).real
+
+
+            print("[[2.0, 1.0], [1.0, 2.0]]\n[[5.0, -4.0], [-4.0, 5.0]]")
+          - |
+            import numpy as np
+
+
+            def apply(A, f):
+                values, P = np.linalg.eig(A)
+                return (P @ np.diag(f(values)) @ P.T).real
+
+
+            print("[[2.0, 1.0], [1.0, 2.0]]\n[[5.0, -4.0], [-4.0, 5.0]]")
+        explanation: |
+          One line holds the lesson: eigenvalues through $f$, eigenvectors unchanged.
+
+          `f(A)` on the array applies the function to each **entry**. The entrywise square root of this matrix is $\begin{pmatrix} 2.24 & 2 \\ 2 & 2.24 \end{pmatrix}$, whose square is not $A$. A function of a matrix and a function of its entries are different things, and deep learning code uses both, so it pays to know which is meant.
+
+          The third wrong version applies $f$ to the whole diagonal matrix, zeros included. For the square root that happens to work. For $1/x$ it divides by zero off the diagonal.
+
+          The fourth uses $P^\top$ for $P^{-1}$. For this particular matrix, which is symmetric, the eigenvectors NumPy returns are orthonormal and the transpose **is** the inverse, so the tests need the non-symmetric matrix to catch it. Why symmetric matrices are special in this way is the next lesson.
+    - question:
+        id: write-enough
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `diagonalisable(A, eigenvalues)`. `eigenvalues` is the list of the **distinct** eigenvalues of the square matrix `A`. Return `True` if the dimensions of the eigenspaces add up to the size of the matrix, and `False` otherwise. The eigenspace of $\lambda$ has dimension $n - \operatorname{rank}(A - \lambda I)$.
+        starter: |
+          import numpy as np
+
+
+          def diagonalisable(A, eigenvalues):
+              return True
+
+
+          print(diagonalisable(np.array([[3.0, 1.0], [0.0, 3.0]]), [3.0]))
+          print(diagonalisable(np.array([[4.0, 1.0], [2.0, 3.0]]), [2.0, 5.0]))
+        solution: |
+          import numpy as np
+
+
+          def diagonalisable(A, eigenvalues):
+              n = len(A)
+              total = 0
+              for lam in eigenvalues:
+                  total += n - int(np.linalg.matrix_rank(A - lam * np.eye(n)))
+              return total == n
+
+
+          print(diagonalisable(np.array([[3.0, 1.0], [0.0, 3.0]]), [3.0]))
+          print(diagonalisable(np.array([[4.0, 1.0], [2.0, 3.0]]), [2.0, 5.0]))
+        tests: |
+          import numpy as _np
+          assert diagonalisable(_np.array([[3.0, 1.0], [0.0, 3.0]]), [3.0]) == False, "[[3, 1], [0, 3]] has a single eigenvalue with a one-dimensional eigenspace, which is not enough for a basis of the plane"
+          assert diagonalisable(_np.array([[4.0, 1.0], [2.0, 3.0]]), [2.0, 5.0]) == True, "Two different eigenvalues of a 2 by 2 matrix give a basis of eigenvectors"
+          assert diagonalisable(3.0 * _np.eye(3), [3.0]) == True, "3I has one eigenvalue whose eigenspace is everything"
+          assert diagonalisable(_np.array([[2.0, 0.0, 0.0], [0.0, 2.0, 1.0], [0.0, 0.0, 5.0]]), [2.0, 5.0]) == True, "Here the eigenvalue 2 has a two-dimensional eigenspace and 5 a line, three dimensions in all"
+          assert diagonalisable(_np.array([[2.0, 1.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 5.0]]), [2.0, 5.0]) == False, "Here the eigenvalue 2 is repeated and has only a line of eigenvectors, two dimensions in all"
+          assert diagonalisable(_np.ones((3, 3)), [0.0, 3.0]) == True, "The all-ones matrix has a plane of eigenvectors for 0 and a line for 3"
+          assert diagonalisable(_np.array([[0.0, 1.0], [0.0, 0.0]]), [0.0]) == False, "[[0, 1], [0, 0]] has only the eigenvalue 0 with a one-dimensional kernel"
+          assert output.strip() == "False\nTrue", "The program should print False and then True"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def diagonalisable(A, eigenvalues):
+                return len(eigenvalues) == len(A)
+
+
+            print("False\nTrue")
+          - |
+            import numpy as np
+
+
+            def diagonalisable(A, eigenvalues):
+                n = len(A)
+                total = 0
+                for lam in eigenvalues:
+                    total += int(np.linalg.matrix_rank(A - lam * np.eye(n)))
+                return total == n
+
+
+            print("False\nTrue")
+          - |
+            import numpy as np
+
+
+            def diagonalisable(A, eigenvalues):
+                n = len(A)
+                return abs(float(np.linalg.det(A))) > 1e-12
+
+
+            print("False\nTrue")
+          - |
+            import numpy as np
+
+
+            def diagonalisable(A, eigenvalues):
+                n = len(A)
+                total = 0
+                for lam in eigenvalues:
+                    total += n - int(np.linalg.matrix_rank(A - lam))
+                return total == n
+
+
+            print("False\nTrue")
+        explanation: |
+          The eigenspaces of different eigenvalues are independent of each other, so their dimensions simply add. A basis of eigenvectors exists exactly when the total reaches $n$.
+
+          The first wrong version requires $n$ different eigenvalues, which rejects the identity and the all-ones matrix. The third confuses diagonalisable with invertible. The two properties are unrelated: the all-ones matrix is singular and diagonalisable, and the shear is invertible and not.
+
+          In exact arithmetic this test is clear-cut. In floating point it is delicate, because a defective matrix and a diagonalisable one can differ in the sixteenth digit, and the computed rank depends on a tolerance. Practical code rarely asks whether a matrix is diagonalisable. It asks how well-conditioned the eigenvector matrix is.
+    - question:
+        id: fix-order
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `power(A, k)` should return $A^k$ for a diagonalisable matrix. The author wanted the eigenvalues listed in the opposite order and reversed them. Now the first power is no longer `A`. Fix it. One line needs to change.
+        starter: |
+          import numpy as np
+
+
+          def power(A, k):
+              values, P = np.linalg.eig(A)
+              values = values[::-1]
+              return (P @ np.diag(values ** k) @ np.linalg.inv(P)).real
+
+
+          A = np.array([[4.0, 1.0], [2.0, 3.0]])
+          print([[round(float(c), 4) + 0.0 for c in row] for row in power(A, 1)])
+        solution: |
+          import numpy as np
+
+
+          def power(A, k):
+              values, P = np.linalg.eig(A)
+              values, P = values[::-1], P[:, ::-1]
+              return (P @ np.diag(values ** k) @ np.linalg.inv(P)).real
+
+
+          A = np.array([[4.0, 1.0], [2.0, 3.0]])
+          print([[round(float(c), 4) + 0.0 for c in row] for row in power(A, 1)])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[4.0, 1.0], [2.0, 3.0]])
+          assert _np.allclose(power(_A, 1), _A), "The first power should be A itself: each eigenvalue must stay with its own eigenvector"
+          assert _np.allclose(power(_A, 3), _A @ _A @ _A), "The third power should equal A @ A @ A"
+          assert _np.allclose(power(_A, 0), _np.eye(2)), "The zeroth power is the identity"
+          _B = _np.array([[1.0, 2.0, 0.0], [0.0, 3.0, 0.0], [1.0, 0.0, 2.0]])
+          assert _np.allclose(power(_B, 4), _B @ _B @ _B @ _B), "The fourth power of a 3 by 3 matrix with eigenvalues 1, 2, 3 should match repeated multiplication"
+          assert _np.allclose(power(_np.array([[0.9, 0.2], [0.1, 0.8]]), 300), [[2 / 3, 2 / 3], [1 / 3, 1 / 3]]), "A high power of the migration matrix has the steady state in both columns"
+          assert output.strip() == "[[4.0, 1.0], [2.0, 3.0]]", "The program should print [[4.0, 1.0], [2.0, 3.0]]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def power(A, k):
+                values, P = np.linalg.eig(A)
+                values = values[::-1]
+                return (P @ np.diag(values ** k) @ np.linalg.inv(P)).real
+
+
+            print("[[4.0, 1.0], [2.0, 3.0]]")
+          - |
+            import numpy as np
+
+
+            def power(A, k):
+                values, P = np.linalg.eig(A)
+                values, P = values[::-1], P[::-1]
+                return (P @ np.diag(values ** k) @ np.linalg.inv(P)).real
+
+
+            print("[[4.0, 1.0], [2.0, 3.0]]")
+          - |
+            import numpy as np
+
+
+            def power(A, k):
+                values, P = np.linalg.eig(A)
+                return (P @ np.diag(values * k) @ np.linalg.inv(P)).real
+
+
+            print("[[4.0, 1.0], [2.0, 3.0]]")
+        explanation: |
+          The factorisation $A = PDP^{-1}$ pairs column $j$ of $P$ with entry $j$ of the diagonal. Reordering the eigenvalues alone attaches each scale factor to the wrong direction. The result is still a diagonalisable matrix with the same eigenvalues and the same eigenvectors, and it is a different matrix: here it stretches $(1, -2)$ by 5 and $(1, 1)$ by 2, the reverse of $A$.
+
+          Either remove the reordering or reorder the **columns** of `P` in the same way, with `P[:, ::-1]`. `P[::-1]` reverses the rows, which scrambles every eigenvector. The same care is needed whenever eigenvalues are sorted: the eigenvectors must be permuted by the same permutation.
+    - question:
+        id: work-shear
+        type: choice
+        system: s2
+        prompt: |
+          For the shear $J = \begin{pmatrix} 1 & 1 \\ 0 & 1 \end{pmatrix}$, direct multiplication gives $J^k = \begin{pmatrix} 1 & k \\ 0 & 1 \end{pmatrix}$. How does this confirm that $J$ is not diagonalisable?
+        options:
+          - 'It does not. Every matrix is diagonalisable.'
+          - 'If $J = PDP^{-1}$, then $D = I$, because the only eigenvalue is 1, and so $J = PIP^{-1} = I$, which is false. Consistently, the entries of $PD^kP^{-1}$ are combinations of $k$th powers of eigenvalues, here constants, and could never produce the entry $k$ that grows linearly.'
+          - 'Because $J^k$ is not symmetric.'
+          - 'Because $\det J^k = 1$.'
+        answer: 1
+        explanation: |
+          For a diagonalisable matrix every entry of $A^k$ is a fixed combination of $\lambda_1^k, \dots, \lambda_n^k$. Growth like $k$ times $\lambda^k$ is the signature of a defective matrix, with all eigenvalues equal to 1 here. This matters in practice: a recurrent system whose matrix has spectral radius exactly 1 can still drift without bound if the matrix is defective. What replaces the diagonal form for such matrices comes near the end of the cluster.
+    - question:
+        id: work-decouple
+        type: choice
+        system: s2
+        prompt: |
+          A linear recurrent layer updates its hidden state by $\mathbf{h}_{t+1} = W\mathbf{h}_t$, with $W = PDP^{-1}$ diagonalisable. What does the change of variables $\mathbf{z} = P^{-1}\mathbf{h}$ achieve?
+        options:
+          - 'Nothing, since the dynamics are the same.'
+          - '$\mathbf{z}_{t+1} = D\mathbf{z}_t$: each coordinate of $\mathbf{z}$ evolves on its own as $z_i(t) = \lambda_i^t z_i(0)$. Coordinates with $|\lambda_i| < 1$ fade, which is forgetting, and those with $|\lambda_i| > 1$ blow up. The state can carry information over long times only along eigen-directions with $|\lambda_i|$ close to 1.'
+          - 'It makes $W$ symmetric.'
+          - 'It makes the state shorter.'
+        answer: 1
+        explanation: |
+          The hidden coordinates interact in the original basis and are independent in the eigenvector basis. Signals passed through $t$ steps are scaled by $\lambda_i^t$, and so are the gradients passed back, since backpropagation multiplies by the transpose, which has the same eigenvalues. Vanishing and exploding gradients in recurrent networks are this geometric growth and decay. It is the reason for initialising recurrent weights with eigenvalues near the unit circle.
+    - question:
+        id: work-spectral-radius
+        type: numeric
+        system: s2
+        prompt: |
+          The iteration $\mathbf{x}_{k+1} = A\mathbf{x}_k$ uses a diagonalisable $A$ with eigenvalues $0.5$, $-0.8$ and $0.2$. Starting from a typical $\mathbf{x}_0$, by roughly what factor does $\|\mathbf{x}_k\|$ shrink at each step once $k$ is large?
+        answer: "0.8"
+        explanation: |
+          In eigenvector coordinates the three components are multiplied by $0.5$, $-0.8$ and $0.2$ each step. The one with the largest absolute value, $0.8$, fades most slowly and eventually dominates, so the length shrinks by about $0.8$ a step, with the sign of that component alternating. The spectral radius $0.8$ is the long-run rate. A start with no component along that eigenvector would shrink faster, which is why the question said "typical".
+  connections:
+    - text: |
+        The hundredth power of the migration matrix was computed from the hundredth powers of its eigenvalues because $A = PDP^{-1}$: translate into the basis of eigenvectors, scale each coordinate, translate back. A matrix is **diagonalisable** exactly when it has a basis of eigenvectors, which happens when every eigenvalue has as many independent eigenvectors as its multiplicity as a root. Distinct eigenvalues guarantee it. A shear fails it.
+
+        For diagonalisable matrices, powers, inverses and other functions are computed on the eigenvalues, the long-run behaviour of $A^k$ is read from the largest $|\lambda|$, and linear recurrences decouple into independent ones.
+
+        Two things are still unsatisfactory. Deciding whether a given matrix is diagonalisable takes work, and the basis of eigenvectors may be badly skewed, with $P$ nearly singular. There is one large class of matrices for which neither problem can arise: the eigenvalues are always real, there is always a basis of eigenvectors, and the basis can be chosen orthonormal, so that $P^{-1}$ is just $P^\top$. It is the class of self-adjoint maps from the end of the last cluster, the symmetric matrices, and the theorem about them is the most important in this one: [[m8.spectral-theorem]].

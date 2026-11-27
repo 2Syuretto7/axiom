@@ -1,0 +1,645 @@
+concept: m8.jordan-form-and-the-matrix-exponential
+minutes: 95
+claim: You can recognise a matrix that cannot be diagonalised, describe its Jordan form as an eigenvalue plus a nilpotent shift, find a generalised eigenvector for a two by two example, compute powers of a Jordan block and explain the polynomial factor that makes them grow before they decay, define the matrix exponential by its series, compute it for diagonalisable matrices and for Jordan blocks, use it to solve a linear system of differential equations, and say why the Jordan form is a tool for proofs and never for floating-point computation.
+recalls: [m8.operator-and-frobenius-norms]
+uses: [m8.diagonalisation, m8.characteristic-polynomial, m8.eigenvalues-and-eigenvectors, m8.spectral-theorem, m8.singular-value-decomposition, m6.matrix-of-a-linear-map-and-similarity, m10.taylor-approximation, m10.derivatives-of-exp-log-and-trig, m2.the-exponential-and-e, m5.identity-and-inverse, m5.matrix-multiplication-as-composition, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e0.functions, e0.loops]
+leads: [m8.perron-frobenius-and-power-iteration]
+starter: |
+  # Scratch space. Two matrices, both with the eigenvalue 0.9 twice.
+  # How big are their powers?
+  import numpy as np
+
+  S = np.array([[0.9, 0.0], [0.0, 0.9]])
+  J = np.array([[0.9, 1.0], [0.0, 0.9]])
+  for k in [1, 5, 10, 20, 50, 100]:
+      Sk, Jk = np.eye(2), np.eye(2)
+      for step in range(k):
+          Sk, Jk = Sk @ S, Jk @ J
+      print(k, round(float(np.linalg.norm(Sk, 2)), 4), round(float(np.linalg.norm(Jk, 2)), 4))
+parts:
+  recall:
+    - text: |
+        [[m8.operator-and-frobenius-norms]] ended with a matrix whose eigenvalues promised decay and whose norm said otherwise, and which could not be diagonalised. Today that case is taken apart. Three quick pulls first.
+  puzzle:
+    - text: |
+        Two matrices, each with the eigenvalue $0.9$ twice and nothing else.
+
+        $$S = \begin{pmatrix} 0.9 & 0 \\ 0 & 0.9 \end{pmatrix}, \qquad J = \begin{pmatrix} 0.9 & 1 \\ 0 & 0.9 \end{pmatrix}$$
+
+        Since $0.9 < 1$, the powers of both must die away. The starter prints the spectral norm of the $k$th power of each.
+
+        ```
+        1 0.9 1.5296
+        5 0.5905 3.3836
+        10 0.3487 3.9053
+        20 0.1216 2.7072
+        50 0.0052 0.2864
+        100 0.0 0.003
+        ```
+
+        The powers of $S$ shrink by $0.9$ each step, as expected. The powers of $J$ **grow** for the first ten steps, to almost four times the starting size, and only then begin to fall. At step 50 they are still fifty times larger than those of $S$.
+
+        The eigenvalues are identical. Diagonalisation, $A^k = PD^kP^{-1}$, would predict pure decay like $0.9^k$.
+
+        **What is $J^k$ exactly? Where does the hump come from, and why does diagonalisation not see it?**
+  intuition:
+    - text: |
+        Diagonalisation does not see it because $J$ cannot be diagonalised. $J - 0.9I = \begin{pmatrix} 0 & 1 \\ 0 & 0 \end{pmatrix}$ has a null space of dimension 1, so there is only one direction of eigenvectors, along $(1, 0)$. Two are needed for a basis.
+
+        Split $J$ into the part that is understood and the part that is new:
+
+        $$J = 0.9I + N, \qquad N = \begin{pmatrix} 0 & 1 \\ 0 & 0 \end{pmatrix}.$$
+
+        $N$ is a **shift**: it moves the second coordinate into the first place and discards the first. Doing that twice discards everything, so $N^2 = 0$.
+
+        Now expand $(0.9I + N)^k$ like an ordinary binomial, which is allowed because $I$ commutes with everything. Every term with $N^2$ or higher vanishes, and two terms survive:
+
+        $$J^k = 0.9^kI + k\,0.9^{k-1}N = \begin{pmatrix} 0.9^k & k\,0.9^{k-1} \\ 0 & 0.9^k \end{pmatrix}.$$
+
+        There is the hump. The corner entry is $k \times 0.9^{k-1}$: a factor that decays, multiplied by a factor $k$ that grows. Early on the $k$ wins, and the entry climbs to about $3.87$ at $k = 9$ and $10$. In the long run the exponential wins, as it always does against a polynomial.
+
+        Each step, $J$ shrinks both coordinates by $0.9$ and also feeds the second coordinate into the first. The first coordinate keeps receiving top-ups from the second while the second is still large.
+
+        That is the general picture for every square matrix. When there are too few eigenvectors, the matrix can still be brought to a form that is diagonal **plus shifts**, and the shifts contribute powers of $k$.
+  derivation:
+    - text: |
+        **Defective matrices.** An eigenvalue has an **algebraic multiplicity**, its multiplicity as a root of the characteristic polynomial, and a **geometric multiplicity**, the dimension of its eigenspace. The second is at most the first. If it is smaller for some eigenvalue, the matrix is **defective** and cannot be diagonalised.
+
+        **Jordan blocks.** The Jordan block of size $m$ for $\lambda$ is
+
+        $$J_m(\lambda) = \lambda I + N = \begin{pmatrix} \lambda & 1 & & \\ & \lambda & \ddots & \\ & & \ddots & 1 \\ & & & \lambda \end{pmatrix},$$
+
+        with $\lambda$ on the diagonal and 1 just above it. $N$ is the shift, and $N^m = 0$. A block of size 1 is just the number $\lambda$.
+
+        **Theorem (Jordan form).** Every square complex matrix is similar to a block diagonal matrix of Jordan blocks: $A = PJP^{-1}$. The blocks are unique up to their order. For each eigenvalue, the number of blocks is its geometric multiplicity, and the sizes of its blocks add up to its algebraic multiplicity. $A$ is diagonalisable exactly when every block has size 1.
+
+        **Generalised eigenvectors.** The columns of $P$ for one block form a **chain**. The first is an eigenvector, $(A - \lambda I)\mathbf{v}_1 = \mathbf{0}$. The next satisfies $(A - \lambda I)\mathbf{v}_2 = \mathbf{v}_1$, and so on. So $A\mathbf{v}_2 = \lambda\mathbf{v}_2 + \mathbf{v}_1$: scaled, plus a push along the previous vector.
+
+        *Example.* $A = \begin{pmatrix} 3 & 1 \\ -1 & 1 \end{pmatrix}$ has trace 4 and determinant 4, so $\lambda = 2$ twice. $A - 2I = \begin{pmatrix} 1 & 1 \\ -1 & -1 \end{pmatrix}$ has rank 1, so there is one eigenvector direction, $\mathbf{v}_1 = (1, -1)$. Solving $(A - 2I)\mathbf{v}_2 = \mathbf{v}_1$ gives $\mathbf{v}_2 = (1, 0)$. With $P = \begin{pmatrix} 1 & 1 \\ -1 & 0 \end{pmatrix}$,
+
+        $$A = P\begin{pmatrix} 2 & 1 \\ 0 & 2 \end{pmatrix}P^{-1}.$$
+
+        **Powers.** $A^k = PJ^kP^{-1}$, and each block is raised separately. By the binomial theorem,
+
+        $$J_m(\lambda)^k = \sum_{j=0}^{m-1}\binom{k}{j}\lambda^{k-j}N^j.$$
+
+        The entries are $\lambda^k$ times polynomials in $k$ of degree up to $m - 1$. Three consequences:
+
+        - If $|\lambda| < 1$ for every eigenvalue, $A^k \to 0$, possibly after a hump.
+        - If some $|\lambda| > 1$, the powers blow up.
+        - If $|\lambda| = 1$, a block of size 1 stays bounded, and a larger block grows like $k^{m-1}$. $\begin{pmatrix} 1 & 1 \\ 0 & 1 \end{pmatrix}^k = \begin{pmatrix} 1 & k \\ 0 & 1 \end{pmatrix}$.
+    - question:
+        id: derivation-power
+        type: numeric
+        system: s2
+        prompt: |
+          What is the top-right entry of $\begin{pmatrix} 2 & 1 \\ 0 & 2 \end{pmatrix}^5$?
+        answer: "80"
+        explanation: |
+          $J^k = \lambda^kI + k\lambda^{k-1}N$, so the corner is $5 \times 2^4 = 80$, and the diagonal entries are $2^5 = 32$. A diagonalisable matrix with eigenvalue 2 would have entries growing like $2^k$ only. The extra factor $k$ is the signature of a Jordan block. It is also the derivative of $\lambda^k$ with respect to $\lambda$, which is no accident: a Jordan block is what two eigenvalues become when they merge, and the difference quotient between them becomes a derivative.
+    - text: |
+        **The matrix exponential.** For a number, $e^a = 1 + a + a^2/2! + \dots$ For a square matrix the same series defines
+
+        $$e^A = I + A + \frac{A^2}{2!} + \frac{A^3}{3!} + \dots$$
+
+        It converges for every $A$, since $\|A^k\|/k! \le \|A\|^k/k!$ by the product inequality, and the series for $e^{\|A\|}$ converges.
+
+        **Why it matters.** Differentiating $e^{tA}$ term by term gives $\frac{d}{dt}e^{tA} = Ae^{tA}$. So the system of differential equations
+
+        $$\mathbf{x}'(t) = A\mathbf{x}(t), \qquad \mathbf{x}(0) = \mathbf{x}_0$$
+
+        has the solution $\mathbf{x}(t) = e^{tA}\mathbf{x}_0$. Powers $A^k$ describe a process in steps. The exponential $e^{tA}$ describes the same kind of process in continuous time.
+
+        **Computing it.**
+
+        - *Diagonal.* $e^{\operatorname{diag}(d_i)} = \operatorname{diag}(e^{d_i})$.
+        - *Diagonalisable.* $A = PDP^{-1}$ gives $A^k = PD^kP^{-1}$, so $e^{tA} = Pe^{tD}P^{-1}$. For symmetric $A$: $e^{tA} = Qe^{t\Lambda}Q^\top$.
+        - *Jordan block.* $tJ = t\lambda I + tN$ and the two parts commute, so $e^{tJ} = e^{t\lambda}e^{tN}$, and the series for $e^{tN}$ stops: $e^{tN} = I + tN + \dots + \frac{t^{m-1}}{(m-1)!}N^{m-1}$. For size 2, $e^{tJ} = e^{\lambda t}\begin{pmatrix} 1 & t \\ 0 & 1 \end{pmatrix}$. This is where solutions like $te^{\lambda t}$ come from.
+
+        **Rules.** $e^{0} = I$. $(e^A)^{-1} = e^{-A}$, so $e^A$ is always invertible. $\det e^A = e^{\operatorname{tr}A}$. The eigenvalues of $e^A$ are $e^{\lambda_i}$. And one rule that fails: $e^{A + B} = e^Ae^B$ holds when $AB = BA$, and in general **not** otherwise. The exponential is **not** taken entry by entry.
+
+        **Stability.** $e^{tA} \to 0$ as $t \to \infty$ exactly when every eigenvalue has negative real part, since $|e^{\lambda t}| = e^{\operatorname{Re}(\lambda)t}$. Jordan blocks add polynomial factors in $t$, and so a hump, but do not change the verdict.
+
+        **A warning about computing.** The Jordan form is not continuous in the entries of the matrix. Changing the zero in the corner of $J$ to $10^{-20}$ gives two distinct eigenvalues, a diagonalisable matrix, and a completely different $P$, which is very ill-conditioned. In floating point the question "is this matrix defective" has no reliable answer. So the Jordan form is used to prove things and to understand behaviour, and never as a numerical method. Libraries compute $e^A$ by scaling the matrix down, using a rational approximation, and squaring back up.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the steps that bring a two by two matrix with a repeated eigenvalue and only one eigenvector direction to Jordan form.
+        steps:
+          - 'Find the repeated eigenvalue $\lambda$ from the characteristic polynomial.'
+          - 'Find an eigenvector $\mathbf{v}_1$ by solving $(A - \lambda I)\mathbf{v}_1 = \mathbf{0}$.'
+          - 'Find a generalised eigenvector $\mathbf{v}_2$ by solving $(A - \lambda I)\mathbf{v}_2 = \mathbf{v}_1$.'
+          - 'Put $\mathbf{v}_1$ and $\mathbf{v}_2$ as the columns of $P$.'
+          - 'Then $P^{-1}AP$ is the Jordan block with $\lambda$ on the diagonal and 1 above it.'
+        explanation: The chain starts at an eigenvector, and each later vector is sent by A minus lambda I to the one before.
+  formal:
+    - text: |
+        **Multiplicities.** For an eigenvalue $\lambda$ of $A \in \mathbb{C}^{n \times n}$: algebraic multiplicity $a_\lambda$, geometric multiplicity $g_\lambda = \dim\ker(A - \lambda I)$, $1 \le g_\lambda \le a_\lambda$. $A$ is diagonalisable iff $g_\lambda = a_\lambda$ for all $\lambda$.
+
+        **Jordan form.** $A = PJP^{-1}$, $J = \operatorname{diag}(J_{m_1}(\lambda_1), \dots, J_{m_s}(\lambda_s))$, unique up to the order of the blocks. Number of blocks for $\lambda$: $g_\lambda$. Number of blocks for $\lambda$ of size at least $j$: $\dim\ker(A - \lambda I)^j - \dim\ker(A - \lambda I)^{j-1}$.
+
+        **Generalised eigenspace.** $\ker(A - \lambda I)^{a_\lambda}$, of dimension $a_\lambda$. $\mathbb{C}^n$ is the direct sum of these.
+
+        **Functions of a block.** For $f$ analytic near $\lambda$:
+
+        $$f(J_m(\lambda)) = \sum_{j=0}^{m-1}\frac{f^{(j)}(\lambda)}{j!}N^j.$$
+
+        With $f(x) = x^k$ this is the power formula, with $f(x) = e^{tx}$ the exponential.
+
+        **Matrix exponential.** $e^A = \sum_{k \ge 0}A^k/k!$, absolutely convergent, $\|e^A\| \le e^{\|A\|}$.
+
+        - $\frac{d}{dt}e^{tA} = Ae^{tA} = e^{tA}A$.
+        - $e^{(s + t)A} = e^{sA}e^{tA}$. $(e^A)^{-1} = e^{-A}$.
+        - $AB = BA \Rightarrow e^{A + B} = e^Ae^B$.
+        - $e^{PAP^{-1}} = Pe^AP^{-1}$. $\det e^A = e^{\operatorname{tr}A}$.
+        - $A^\top = -A \Rightarrow e^A$ orthogonal. $A^\top = A \Rightarrow e^A$ symmetric positive definite.
+
+        **Asymptotics.** $A^k \to 0 \iff \rho(A) < 1$. $e^{tA} \to 0 \iff \max_i\operatorname{Re}\lambda_i < 0$. $\sup_k\|A^k\| < \infty \iff \rho(A) \le 1$ and every eigenvalue with $|\lambda| = 1$ has only blocks of size 1.
+
+        **Density.** Diagonalisable matrices are dense in $\mathbb{C}^{n \times n}$: every matrix is a limit of matrices with distinct eigenvalues.
+
+        **Limit of steps.** $e^{A} = \lim_{n \to \infty}\big(I + A/n\big)^n$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-defective
+        type: choice
+        system: s1
+        prompt: |
+          A matrix is defective when
+        options: ['its determinant is zero', 'some eigenvalue has fewer independent eigenvectors than its multiplicity as a root', 'it is not symmetric', 'it has a complex eigenvalue']
+        answer: 1
+        explanation: Too few eigenvectors for a basis.
+    - question:
+        id: drill-block
+        type: choice
+        system: s1
+        prompt: |
+          A Jordan block has
+        options: ['$\lambda$ on the diagonal and 1 just above it', '1 on the diagonal and $\lambda$ above it', '$\lambda$ in every entry', 'distinct numbers on the diagonal']
+        answer: 0
+        explanation: An eigenvalue plus a shift.
+    - question:
+        id: drill-diagonalisable
+        type: choice
+        system: s1
+        prompt: |
+          A matrix is diagonalisable exactly when all its Jordan blocks
+        options: ['are equal', 'have size 1', 'have size 2', 'have eigenvalue 0']
+        answer: 1
+        explanation: A Jordan form with blocks of size 1 is a diagonal matrix.
+    - question:
+        id: drill-count
+        type: numeric
+        system: s1
+        prompt: |
+          The eigenvalue 5 is a triple root of the characteristic polynomial and its eigenspace has dimension 2. How many Jordan blocks does it have?
+        answer: "2"
+        explanation: One block per independent eigenvector. Their sizes are 2 and 1.
+    - question:
+        id: drill-nilpotent
+        type: numeric
+        system: s1
+        prompt: |
+          $N = \begin{pmatrix} 0 & 1 \\ 0 & 0 \end{pmatrix}$. What is the sum of all entries of $N^2$?
+        answer: "0"
+        explanation: Shifting twice in two dimensions discards everything.
+    - question:
+        id: drill-shear
+        type: numeric
+        system: s1
+        prompt: |
+          What is the top-right entry of $\begin{pmatrix} 1 & 1 \\ 0 & 1 \end{pmatrix}^7$?
+        answer: "7"
+        explanation: $k\lambda^{k-1}$ with $\lambda = 1$.
+    - question:
+        id: drill-series
+        type: choice
+        system: s1
+        prompt: |
+          The matrix exponential $e^A$ is defined as
+        options: ['the matrix of $e^{a_{ij}}$', '$I + A + A^2/2! + A^3/3! + \dots$', '$A^e$', '$I + A$']
+        answer: 1
+        explanation: The exponential series with matrix powers.
+    - question:
+        id: drill-zero
+        type: numeric
+        system: s1
+        prompt: |
+          What is the trace of $e^{0}$, where $0$ is the $3 \times 3$ zero matrix?
+        answer: "3"
+        explanation: $e^0 = I$.
+    - question:
+        id: drill-diag
+        type: choice
+        system: s1
+        prompt: |
+          $e^{\operatorname{diag}(a, b)}$ equals
+        options: ['$\operatorname{diag}(e^a, e^b)$', '$\operatorname{diag}(a, b)$', '$e^{a + b}I$', '$\operatorname{diag}(ea, eb)$']
+        answer: 0
+        explanation: Powers of a diagonal matrix act entry by entry on the diagonal.
+    - question:
+        id: drill-det
+        type: numeric
+        system: s1
+        prompt: |
+          A matrix has trace 0. What is the determinant of its exponential?
+        answer: "1"
+        explanation: $\det e^A = e^{\operatorname{tr}A}$.
+    - question:
+        id: drill-ode
+        type: choice
+        system: s1
+        prompt: |
+          The solution of $\mathbf{x}' = A\mathbf{x}$ with $\mathbf{x}(0) = \mathbf{x}_0$ is
+        options: ['$A^t\mathbf{x}_0$', '$e^{tA}\mathbf{x}_0$', '$tA\mathbf{x}_0$', '$\mathbf{x}_0 + tA$']
+        answer: 1
+        explanation: The derivative of $e^{tA}$ is $Ae^{tA}$.
+    - question:
+        id: drill-commute
+        type: choice
+        system: s1
+        prompt: |
+          $e^{A + B} = e^Ae^B$ is guaranteed when
+        options: ['always', '$AB = BA$', '$A$ and $B$ are square', 'never']
+        answer: 1
+        explanation: The binomial expansion needs the two matrices to commute.
+    - question:
+        id: drill-stable
+        type: choice
+        system: s1
+        prompt: |
+          $e^{tA} \to 0$ as $t \to \infty$ exactly when
+        options: ['every eigenvalue has absolute value below 1', 'every eigenvalue has negative real part', '$A$ is symmetric', 'the trace of $A$ is negative']
+        answer: 1
+        explanation: $|e^{\lambda t}| = e^{\operatorname{Re}(\lambda)t}$.
+    - question:
+        id: predict-corner
+        type: predict
+        system: s1
+        prompt: The corner entry of the powers of the puzzle's matrix, against the formula. What does this show?
+        code: |
+          import numpy as np
+
+          J = np.array([[0.9, 1.0], [0.0, 0.9]])
+          P = np.eye(2)
+          for k in range(1, 11):
+              P = P @ J
+              if k in [1, 5, 9, 10]:
+                  print(k, round(float(P[0, 1]), 4), round(k * 0.9 ** (k - 1), 4))
+        output: |
+          1 1.0 1.0
+          5 3.2805 3.2805
+          9 3.8742 3.8742
+          10 3.8742 3.8742
+        explanation: The corner of the kth power is k times 0.9 to the power k - 1. It rises until k is 9 or 10, where the growth of k and the decay of the power balance, and falls after that.
+    - question:
+        id: predict-rotation
+        type: predict
+        system: s1
+        prompt: The exponential series, summed to 30 terms, for a matrix with zero diagonal. What does this show?
+        code: |
+          import numpy as np
+
+          t = np.pi / 2
+          A = np.array([[0.0, -t], [t, 0.0]])
+          total, term = np.eye(2), np.eye(2)
+          for k in range(1, 30):
+              term = term @ A / k
+              total = total + term
+          print([[round(float(v), 4) + 0.0 for v in row] for row in total])
+          print([[round(float(v), 4) for v in row] for row in np.exp(A)])
+        output: |
+          [[0.0, -1.0], [1.0, 0.0]]
+          [[1.0, 0.2079], [4.8105, 1.0]]
+        explanation: The exponential of this matrix is the rotation by a quarter turn. In general the exponential of a skew-symmetric matrix is a rotation. The second line is np.exp, which exponentiates each entry separately and is a different thing altogether.
+  work:
+    - text: Slower now. The first task is the definition, as code.
+    - question:
+        id: write-expm
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `expm(A, terms)` returning the sum of the first `terms` terms of the exponential series, $I + A + A^2/2! + \dots$, so `terms = 1` gives the identity. Build each term from the one before it, without computing any factorial.
+        starter: |
+          import numpy as np
+
+
+          def expm(A, terms):
+              return np.eye(len(A))
+
+
+          print([[round(float(v), 4) for v in row] for row in expm(np.array([[0.0, 1.0], [0.0, 0.0]]), 30)])
+          print(round(float(expm(np.array([[1.0, 0.0], [0.0, 2.0]]), 30)[1, 1]), 4))
+        solution: |
+          import numpy as np
+
+
+          def expm(A, terms):
+              total = np.eye(len(A))
+              term = np.eye(len(A))
+              for k in range(1, terms):
+                  term = term @ A / k
+                  total = total + term
+              return total
+
+
+          print([[round(float(v), 4) for v in row] for row in expm(np.array([[0.0, 1.0], [0.0, 0.0]]), 30)])
+          print(round(float(expm(np.array([[1.0, 0.0], [0.0, 2.0]]), 30)[1, 1]), 4))
+        tests: |
+          import numpy as _np
+          assert _np.allclose(expm(_np.zeros((3, 3)), 10), _np.eye(3)), "The exponential of the zero matrix is the identity"
+          assert _np.allclose(expm(_np.array([[5.0, 1.0], [2.0, 3.0]]), 1), _np.eye(2)), "With terms = 1 only the identity is summed"
+          assert _np.allclose(expm(_np.array([[5.0, 1.0], [2.0, 3.0]]), 2), [[6.0, 1.0], [2.0, 4.0]]), "With terms = 2 the sum is I + A"
+          assert _np.allclose(expm(_np.array([[0.0, 1.0], [0.0, 0.0]]), 30), [[1.0, 1.0], [0.0, 1.0]]), "For N = [[0, 1], [0, 0]] the series stops after two terms, and e^N = I + N"
+          assert _np.allclose(expm(_np.array([[1.0, 0.0], [0.0, 2.0]]), 40), [[_np.e, 0.0], [0.0, _np.e ** 2]]), "For diag(1, 2) the exponential is diag(e, e squared). Each term is the previous one times A divided by k"
+          _t = 0.7
+          assert _np.allclose(expm(_np.array([[0.0, -_t], [_t, 0.0]]), 40), [[_np.cos(_t), -_np.sin(_t)], [_np.sin(_t), _np.cos(_t)]]), "For [[0, -t], [t, 0]] the exponential is the rotation by t"
+          _H = _np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          _w, _Q = _np.linalg.eigh(_H)
+          assert _np.allclose(expm(_H, 60), _Q @ _np.diag(_np.exp(_w)) @ _Q.T), "For a symmetric matrix the series should agree with Q exp(Lambda) Q transpose"
+          assert output.strip() == "[[1.0, 1.0], [0.0, 1.0]]\n7.3891", "The program should print [[1.0, 1.0], [0.0, 1.0]] and then 7.3891"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def expm(A, terms):
+                total = np.eye(len(A))
+                term = np.eye(len(A))
+                for k in range(1, terms):
+                    term = term @ A
+                    total = total + term
+                return total
+
+
+            print("[[1.0, 1.0], [0.0, 1.0]]\n7.3891")
+          - |
+            import numpy as np
+
+
+            def expm(A, terms):
+                return np.exp(A)
+
+
+            print("[[1.0, 1.0], [0.0, 1.0]]\n7.3891")
+          - |
+            import numpy as np
+
+
+            def expm(A, terms):
+                total = np.eye(len(A))
+                term = np.eye(len(A))
+                for k in range(1, terms):
+                    term = term * A / k
+                    total = total + term
+                return total
+
+
+            print("[[1.0, 1.0], [0.0, 1.0]]\n7.3891")
+          - |
+            import numpy as np
+
+
+            def expm(A, terms):
+                total = np.eye(len(A))
+                term = np.eye(len(A))
+                for k in range(1, terms + 1):
+                    term = term @ A / k
+                    total = total + term
+                return total
+
+
+            print("[[1.0, 1.0], [0.0, 1.0]]\n7.3891")
+        explanation: |
+          The term $A^k/k!$ is the previous term times $A$, divided by $k$. Keeping a running term avoids both large powers and large factorials, which would overflow separately long before their quotient becomes small.
+
+          `np.exp(A)` is the classic mistake. It gives $e^{a_{ij}}$ in each entry, so the zero matrix would be sent to a matrix full of ones and not to the identity.
+
+          The series is the definition, and for matrices of small norm it is a perfectly good method. For a matrix of large norm the terms first grow enormous, with alternating signs if the eigenvalues are negative, and cancellation destroys the answer. Library routines first divide the matrix by a power of 2, exponentiate the small matrix, and square the result repeatedly, using $e^A = (e^{A/2^s})^{2^s}$.
+    - question:
+        id: write-flow
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Gradient descent with a vanishingly small step on $f(\mathbf{x}) = \frac12\mathbf{x}^\top H\mathbf{x}$, with $H$ symmetric, follows $\mathbf{x}'(t) = -H\mathbf{x}(t)$. Write `gradient_flow(H, x0, t)` returning $\mathbf{x}(t) = e^{-tH}\mathbf{x}_0$, computed from `np.linalg.eigh(H)` and not from a series.
+        starter: |
+          import numpy as np
+
+
+          def gradient_flow(H, x0, t):
+              return x0 * 1.0
+
+
+          H = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          print([round(float(v), 4) for v in gradient_flow(H, np.array([1.0, 0.0, 0.0]), 1.0)])
+          print([round(float(v), 4) for v in gradient_flow(H, np.array([1.0, -1.0, 1.0]), 1.0)])
+        solution: |
+          import numpy as np
+
+
+          def gradient_flow(H, x0, t):
+              values, Q = np.linalg.eigh(H)
+              return Q @ (np.exp(-t * values) * (Q.T @ x0))
+
+
+          H = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          print([round(float(v), 4) for v in gradient_flow(H, np.array([1.0, 0.0, 0.0]), 1.0)])
+          print([round(float(v), 4) for v in gradient_flow(H, np.array([1.0, -1.0, 1.0]), 1.0)])
+        tests: |
+          import numpy as _np
+          _H = _np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          _x = _np.array([1.0, 0.0, 0.0])
+          assert _np.shape(gradient_flow(_H, _x, 1.0)) == (3,), "The result is a vector of the same length as x0"
+          assert _np.allclose(gradient_flow(_H, _x, 0.0), _x), "At time 0 the solution is the starting point"
+          assert _np.allclose(gradient_flow(_H, _x, 1.0), [0.19334673, -0.11652127, 0.05801145]), "From (1, 0, 0) the point at time 1 is about (0.1933, -0.1165, 0.0580)"
+          _v = _np.array([1.0, -1.0, 1.0])
+          assert _np.allclose(gradient_flow(_H, _v, 2.0), _np.exp(-2.0) * _v), "(1, -1, 1) is an eigenvector of H with eigenvalue 1, so it simply decays by the factor e^(-t)"
+          _D = _np.diag([1.0, 3.0])
+          assert _np.allclose(gradient_flow(_D, _np.array([2.0, 2.0]), 0.5), [2.0 * _np.exp(-0.5), 2.0 * _np.exp(-1.5)]), "For H = diag(1, 3) each coordinate decays at its own rate"
+          _a = gradient_flow(_H, gradient_flow(_H, _x, 0.3), 0.4)
+          assert _np.allclose(_a, gradient_flow(_H, _x, 0.7)), "Flowing for 0.3 and then for 0.4 should be the same as flowing for 0.7"
+          assert output.strip() == "[0.1933, -0.1165, 0.058]\n[0.3679, -0.3679, 0.3679]", "The program should print [0.1933, -0.1165, 0.058] and then [0.3679, -0.3679, 0.3679]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def gradient_flow(H, x0, t):
+                return np.exp(-t * H) @ x0
+
+
+            print("[0.1933, -0.1165, 0.058]\n[0.3679, -0.3679, 0.3679]")
+          - |
+            import numpy as np
+
+
+            def gradient_flow(H, x0, t):
+                values, Q = np.linalg.eigh(H)
+                return Q @ (np.exp(t * values) * (Q.T @ x0))
+
+
+            print("[0.1933, -0.1165, 0.058]\n[0.3679, -0.3679, 0.3679]")
+          - |
+            import numpy as np
+
+
+            def gradient_flow(H, x0, t):
+                values, Q = np.linalg.eigh(H)
+                return Q.T @ (np.exp(-t * values) * (Q @ x0))
+
+
+            print("[0.1933, -0.1165, 0.058]\n[0.3679, -0.3679, 0.3679]")
+          - |
+            import numpy as np
+
+
+            def gradient_flow(H, x0, t):
+                values, Q = np.linalg.eigh(H)
+                return Q @ ((1.0 - t * values) * (Q.T @ x0))
+
+
+            print("[0.1933, -0.1165, 0.058]\n[0.3679, -0.3679, 0.3679]")
+        explanation: |
+          Three steps, read from the right. `Q.T @ x0` gives the coordinates of the starting point in the eigenbasis of $H$. Each coordinate then decays independently, by the factor $e^{-t\lambda_i}$. `Q @` returns to the original coordinates. This is $Qe^{-t\Lambda}Q^\top\mathbf{x}_0$, without ever forming the matrix.
+
+          The picture is the content. Along an eigenvector of $H$ with eigenvalue $\lambda$, gradient flow decays like $e^{-\lambda t}$. Directions of high curvature are settled quickly and directions of low curvature slowly. The second printed line starts on the eigenvector for $\lambda = 1$, the slowest direction, and after one unit of time has decayed only to $e^{-1} = 0.3679$.
+
+          The last wrong version uses $1 - t\lambda$ in place of $e^{-t\lambda}$. That is one step of ordinary gradient descent with step size $t$. With $t = 1$ and $\lambda = 4$ the factor is $-3$, and the iteration diverges, while the continuous flow never can. Gradient descent is the Euler approximation of this flow, and its step size limit $2/\lambda_{\max}$ is the price of the approximation.
+    - question:
+        id: fix-inverse
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `expm_eig(A)` should compute $e^A$ for a diagonalisable matrix from its eigenvalues and eigenvectors. For this triangular matrix the top-right entry should be $e^3 - e \approx 17.3673$ and the bottom-left entry `0.0`. The program prints something else. Fix it.
+        starter: |
+          import numpy as np
+
+
+          def expm_eig(A):
+              values, P = np.linalg.eig(A)
+              return (P @ np.diag(np.exp(values)) @ P.T).real
+
+
+          E = expm_eig(np.array([[1.0, 2.0], [0.0, 3.0]]))
+          print(round(float(E[0, 1]), 4), round(float(E[1, 0]), 4) + 0.0)
+        solution: |
+          import numpy as np
+
+
+          def expm_eig(A):
+              values, P = np.linalg.eig(A)
+              return (P @ np.diag(np.exp(values)) @ np.linalg.inv(P)).real
+
+
+          E = expm_eig(np.array([[1.0, 2.0], [0.0, 3.0]]))
+          print(round(float(E[0, 1]), 4), round(float(E[1, 0]), 4) + 0.0)
+        tests: |
+          import numpy as _np
+          _E = expm_eig(_np.array([[1.0, 2.0], [0.0, 3.0]]))
+          assert _np.allclose(_E, [[_np.e, _np.e ** 3 - _np.e], [0.0, _np.e ** 3]]), "For [[1, 2], [0, 3]] the exponential is [[e, e^3 - e], [0, e^3]]. The eigenvector matrix of a matrix that is not symmetric is not orthogonal, so its inverse is not its transpose"
+          _B = _np.array([[4.0, -2.0], [1.0, 1.0]])
+          _T, _term = _np.eye(2), _np.eye(2)
+          for _k in range(1, 60):
+              _term = _term @ _B / _k
+              _T = _T + _term
+          assert _np.allclose(expm_eig(_B), _T), "For [[4, -2], [1, 1]], with eigenvalues 2 and 3, the result should agree with the series"
+          assert _np.allclose(expm_eig(_np.array([[0.0, -1.0], [1.0, 0.0]])), [[_np.cos(1.0), -_np.sin(1.0)], [_np.sin(1.0), _np.cos(1.0)]]), "For [[0, -1], [1, 0]], whose eigenvalues are complex, the result should be the rotation by 1 radian"
+          assert _np.allclose(expm_eig(_np.diag([0.0, 1.0])), _np.diag([1.0, _np.e])), "For diag(0, 1) the exponential is diag(1, e)"
+          assert output.strip() == "17.3673 0.0", "The program should print 17.3673 0.0"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def expm_eig(A):
+                values, P = np.linalg.eig(A)
+                return (P @ np.diag(np.exp(values)) @ P.T).real
+
+
+            print("17.3673 0.0")
+          - |
+            import numpy as np
+
+
+            def expm_eig(A):
+                values, P = np.linalg.eig(A)
+                return (np.linalg.inv(P) @ np.diag(np.exp(values)) @ P).real
+
+
+            print("17.3673 0.0")
+          - |
+            import numpy as np
+
+
+            def expm_eig(A):
+                values, P = np.linalg.eig(A)
+                return (P @ np.exp(np.diag(values)) @ np.linalg.inv(P)).real
+
+
+            print("17.3673 0.0")
+          - |
+            import numpy as np
+
+
+            def expm_eig(A):
+                values, P = np.linalg.eig(A)
+                return (P @ np.diag(values) @ np.linalg.inv(P)).real
+
+
+            print("17.3673 0.0")
+        explanation: |
+          $A = PDP^{-1}$, and $P^{-1} = P^\top$ only when $P$ is orthogonal, which the spectral theorem guarantees for symmetric matrices and nothing guarantees otherwise. This matrix is triangular, its eigenvectors $(1, 0)$ and $(1, 1)/\sqrt2$ are not perpendicular, and the transpose gives a symmetric matrix that has nothing to do with $e^A$.
+
+          The third wrong version exponentiates the diagonal **matrix** entry by entry. The off-diagonal zeros become $e^0 = 1$, so the middle factor is no longer diagonal. `np.diag(np.exp(values))` exponentiates the eigenvalues first and then places them on a diagonal.
+
+          The final `.real` is needed because a real matrix can have complex eigenvalues, as the rotation in the tests does. The product is then real up to rounding, with a zero imaginary part. And the method fails for a defective matrix, where `P` is singular or nearly so. Near a defective matrix `P` is very ill-conditioned and the result loses accuracy, which is why libraries do not compute $e^A$ this way.
+    - question:
+        id: work-transient
+        type: choice
+        system: s2
+        prompt: |
+          A recurrent network repeatedly applies a weight matrix $W$ to its state. All eigenvalues of $W$ have absolute value $0.95$, and $W$ is far from symmetric. Over 100 steps, what can happen to the size of the state?
+        options:
+          - 'It shrinks by exactly $0.95$ every step.'
+          - 'It can grow substantially for many steps before the eventual decay, because $W^k$ can have entries like $k\,0.95^{k-1}$ or worse. The eigenvalues decide only the eventual rate.'
+          - 'It stays constant.'
+          - 'It grows for ever.'
+        answer: 1
+        explanation: |
+          This is the puzzle's hump. For an exactly defective matrix the powers carry polynomial factors in $k$. For a matrix that is merely close to defective, with nearly parallel eigenvectors, $\|W^k\| \le \kappa(P)\rho^k$ and $\kappa(P)$ can be huge, so the effect is the same over any practical number of steps. Only for normal matrices, such as symmetric or orthogonal ones, is $\|W^k\| = \rho^k$ exactly. This transient growth is one of the reasons the gradients of recurrent networks are hard to control, and why orthogonal initialisation is popular: an orthogonal matrix has no hump at all.
+    - question:
+        id: work-det
+        type: numeric
+        system: s2
+        prompt: |
+          $A = \begin{pmatrix} 2 & 7 \\ 0 & -2 \end{pmatrix}$. What is the determinant of $e^{tA}$ at $t = 5$?
+        answer: "1"
+        explanation: |
+          $\det e^{tA} = e^{t\operatorname{tr}A} = e^{5 \times 0} = 1$. The eigenvalues of $e^{tA}$ are $e^{2t}$ and $e^{-2t}$, whose product is 1. The determinant is the factor by which the flow of $\mathbf{x}' = A\mathbf{x}$ scales volumes, so a matrix of zero trace gives a flow that preserves volume, however much it stretches in one direction and squeezes in another. Flows built to have a known determinant in this way are used in models that must keep track of how a probability density changes.
+    - question:
+        id: work-numerics
+        type: choice
+        system: s2
+        prompt: |
+          Why do numerical libraries offer the eigendecomposition and the SVD, but no routine for the Jordan form?
+        options:
+          - 'Because the Jordan form does not exist for most matrices.'
+          - 'Because the Jordan form changes discontinuously: an arbitrarily small change of the entries can turn a block of size 2 into two blocks of size 1. Rounding errors are such changes, so the computed structure would be meaningless.'
+          - 'Because it would be too slow.'
+          - 'Because it applies only to symmetric matrices.'
+        answer: 1
+        explanation: |
+          Every matrix has a Jordan form, so existence is not the problem. The problem is that the sizes of the blocks depend on whether eigenvalues are **exactly** equal and on exact ranks, and neither question survives rounding. A stored matrix is already a perturbation of the intended one. Diagonalisable matrices are dense, so a computed matrix is, for practical purposes, always diagonalisable, only with a very ill-conditioned $P$ when it is near a defective one. Stable alternatives exist: the Schur form $A = QTQ^{\mathsf H}$, with $Q$ unitary and $T$ triangular, exists for every matrix and is computed by orthogonal operations. The Jordan form remains the right way to **think** about powers and exponentials.
+  connections:
+    - text: |
+        $J^k$ has the corner entry $k\,0.9^{k-1}$, which rises before it falls. $J$ is **defective**: it has too few eigenvectors to be diagonalised. Every square matrix can still be brought to **Jordan form**, eigenvalues on the diagonal with shifts above them, and the shifts put polynomial factors in $k$ in front of $\lambda^k$. The eigenvalues decide the long run, and the Jordan structure and the norm decide what happens on the way.
+
+        The **matrix exponential** $e^{tA} = \sum(tA)^k/k!$ does for continuous time what powers do for steps: it solves $\mathbf{x}' = A\mathbf{x}$. For a symmetric matrix it is $Qe^{t\Lambda}Q^\top$, each eigen-direction decaying or growing at its own rate, and gradient flow on a quadratic is the leading example.
+
+        In both settings, after a long time, one term dominates: the one with the largest eigenvalue. Everything else has decayed relative to it. That observation is itself an algorithm for finding the largest eigenvalue and its eigenvector, by doing nothing but multiplying. And for one important class of matrices, those with positive entries, there is a theorem saying exactly what that dominant eigenvector looks like: [[m8.perron-frobenius-and-power-iteration]].

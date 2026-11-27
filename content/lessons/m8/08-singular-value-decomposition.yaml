@@ -1,0 +1,628 @@
+concept: m8.singular-value-decomposition
+minutes: 95
+claim: You can state the singular value decomposition of any real matrix, construct it from the eigenvectors of A transpose A, read it as a rotation followed by a scaling along axes followed by another rotation, write the matrix as a sum of rank-one pieces, read off rank, the four fundamental subspaces, the largest stretch, the condition number and the pseudo-inverse from it, and use NumPy's routine without confusing V with its transpose.
+recalls: [m8.courant-fischer-min-max-theorem]
+uses: [m8.spectral-theorem, m8.positive-definite-matrices-and-cholesky, m8.quadratic-forms-and-the-rayleigh-quotient, m8.eigenvalues-and-eigenvectors, m8.diagonalisation, m6.adjoints-orthogonal-and-unitary-maps, m6.rank-nullity-theorem, m7.orthonormal-bases, m7.orthogonal-subspaces, m7.pseudo-inverse, m7.conditioning, m5.rank, m5.column-space-and-null-space, m5.transpose, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e0.functions]
+leads: [m8.eckart-young-theorem, m8.pca-as-svd, m8.operator-and-frobenius-norms]
+starter: |
+  # Scratch space. Send every point of the unit circle through A.
+  # How long is the longest image, and the shortest?
+  import numpy as np
+
+  A = np.array([[3.0, 0.0], [4.0, 5.0]])
+  t = np.linspace(0.0, 2.0 * np.pi, 3601)
+  X = np.stack([np.cos(t), np.sin(t)])
+  lengths = np.sqrt(((A @ X) ** 2).sum(axis=0))
+  print(round(float(lengths.max()), 4), round(float(lengths.min()), 4))
+  print([round(float(v), 4) for v in np.sort(np.linalg.eigvals(A).real)])
+parts:
+  recall:
+    - text: |
+        [[m8.courant-fischer-min-max-theorem]] closed the study of symmetric matrices, and pointed out that most matrices are neither symmetric nor square. Today's factorisation exists for every matrix, and it is built from the symmetric theory. Three quick pulls first.
+  puzzle:
+    - text: |
+        The matrix $A = \begin{pmatrix} 3 & 0 \\ 4 & 5 \end{pmatrix}$ is triangular, so its eigenvalues are on the diagonal: 3 and 5. The starter sends the whole unit circle through $A$ and measures the longest and the shortest image.
+
+        ```
+        6.7082 2.2361
+        [3.0, 5.0]
+        ```
+
+        Some unit vector is stretched to length $6.7$, well beyond the largest eigenvalue. Another is squeezed to $2.2$, below the smallest. The eigenvalues say how $A$ scales the two directions it does not turn. They say nothing about how much it can stretch.
+
+        Notice that $6.7082 \times 2.2361 = 15 = 3 \times 5$, the determinant. So these two numbers are tied to the matrix in some exact way.
+
+        **What are these two numbers, which directions achieve them, and do such numbers exist for every matrix, even one that is not square?**
+  intuition:
+    - text: |
+        Eigenvectors ask for too much: an input direction that comes out as **the same** direction. For a matrix that is not symmetric they may be skewed or complex, and for a matrix that is not square the question makes no sense, since input and output live in different spaces.
+
+        Ask for less. Look for a set of **perpendicular input directions** that come out as **perpendicular output directions**. The output directions may be different from the input ones. This can always be done.
+
+        The input directions are the eigenvectors $\mathbf{v}_1, \dots, \mathbf{v}_n$ of $A^\top A$, which is symmetric, so they are orthonormal. Their images $A\mathbf{v}_i$ are perpendicular to each other, because
+
+        $$(A\mathbf{v}_i) \cdot (A\mathbf{v}_j) = \mathbf{v}_i \cdot (A^\top A\mathbf{v}_j) = \lambda_j\,\mathbf{v}_i \cdot \mathbf{v}_j = 0 \quad (i \ne j).$$
+
+        The length of $A\mathbf{v}_i$ is $\sigma_i = \sqrt{\lambda_i}$, the $i$th **singular value**. Writing $\mathbf{u}_i$ for the unit vector along $A\mathbf{v}_i$,
+
+        $$A\mathbf{v}_i = \sigma_i\mathbf{u}_i.$$
+
+        So every matrix does this: it takes a certain orthonormal frame in the input space, and sends it to an orthonormal frame in the output space, scaling the $i$th axis by $\sigma_i$. Rotate, scale, rotate. The unit circle goes to an ellipse with semi-axes $\sigma_1$ and $\sigma_2$. For the puzzle these are $6.7082$ and $2.2361$.
+  derivation:
+    - text: |
+        Let $A$ be a real $m \times n$ matrix of rank $r$.
+
+        **Step 1.** $A^\top A$ is symmetric positive semidefinite, $n \times n$. By the spectral theorem it has orthonormal eigenvectors $\mathbf{v}_1, \dots, \mathbf{v}_n$ with eigenvalues $\lambda_1 \ge \dots \ge \lambda_n \ge 0$. Define the **singular values** $\sigma_i = \sqrt{\lambda_i}$. Since $\|A\mathbf{v}_i\|^2 = \mathbf{v}_i^\top A^\top A\mathbf{v}_i = \lambda_i$, we have $\|A\mathbf{v}_i\| = \sigma_i$. Exactly $r$ of them are positive, because $A^\top A$ and $A$ have the same kernel and hence the same rank.
+
+        **Step 2.** For $i \le r$ put $\mathbf{u}_i = A\mathbf{v}_i/\sigma_i$. By the computation in the intuition these are orthonormal vectors in $\mathbb{R}^m$. If $r < m$, extend them to an orthonormal basis $\mathbf{u}_1, \dots, \mathbf{u}_m$.
+
+        **Step 3.** Then $A\mathbf{v}_i = \sigma_i\mathbf{u}_i$ for $i \le r$ and $A\mathbf{v}_i = \mathbf{0}$ for $i > r$. In matrix form $AV = U\Sigma$, where $U$ and $V$ are orthogonal with those columns and $\Sigma$ is the $m \times n$ matrix with $\sigma_1, \dots, \sigma_r$ on its diagonal and zeros elsewhere. Multiplying by $V^\top$:
+
+        $$A = U\Sigma V^\top.$$
+
+        This is the **singular value decomposition**, SVD. The $\mathbf{v}_i$ are the **right singular vectors** and the $\mathbf{u}_i$ the **left singular vectors**.
+
+        **Reading it.** $A\mathbf{x} = U\Sigma V^\top\mathbf{x}$: first $V^\top$ gives the coordinates of $\mathbf{x}$ in the frame $\mathbf{v}_i$, a rotation or reflection. Then $\Sigma$ scales coordinate $i$ by $\sigma_i$, and drops or adds dimensions. Then $U$ lays the result out along the frame $\mathbf{u}_i$.
+
+        **As a sum.** Column by column,
+
+        $$A = \sigma_1\mathbf{u}_1\mathbf{v}_1^\top + \sigma_2\mathbf{u}_2\mathbf{v}_2^\top + \dots + \sigma_r\mathbf{u}_r\mathbf{v}_r^\top.$$
+
+        Each term is a matrix of rank 1: "measure the component of the input along $\mathbf{v}_i$, and output that much of $\mathbf{u}_i$, scaled by $\sigma_i$". Only the $r$ nonzero terms are needed. Keeping only those columns gives the **reduced** SVD, with $U$ of size $m \times r$ and $V$ of size $n \times r$.
+
+        *The puzzle.* $A^\top A = \begin{pmatrix} 25 & 20 \\ 20 & 25 \end{pmatrix}$ has eigenvalues 45 and 5, with eigenvectors $(1, 1)/\sqrt2$ and $(1, -1)/\sqrt2$. So $\sigma_1 = \sqrt{45} \approx 6.708$ and $\sigma_2 = \sqrt5 \approx 2.236$. The most stretched input direction is the diagonal $(1, 1)$, and its image points along $A(1, 1) = (3, 9)$.
+    - question:
+        id: derivation-nilpotent
+        type: numeric
+        system: s2
+        prompt: |
+          $A = \begin{pmatrix} 0 & 2 \\ 0 & 0 \end{pmatrix}$ has both eigenvalues equal to 0. What is its largest singular value?
+        answer: "2"
+        explanation: |
+          $A^\top A = \begin{pmatrix} 0 & 0 \\ 0 & 4 \end{pmatrix}$ has eigenvalues 4 and 0, so the singular values are 2 and 0. The matrix sends $(0, 1)$ to $(2, 0)$, a stretch by 2, and kills $(1, 0)$. Its eigenvalues, both zero, would suggest a matrix that does nothing. The singular values report what it does to lengths: rank 1, with stretch 2. Here $\mathbf{v}_1 = (0, 1)$ and $\mathbf{u}_1 = (1, 0)$ are different directions, which is why no eigenvector could see it.
+    - text: |
+        **What can be read off.**
+
+        - *Rank.* The number of nonzero singular values.
+        - *The four subspaces.* $\mathbf{u}_1, \dots, \mathbf{u}_r$ are an orthonormal basis of the column space, and $\mathbf{u}_{r+1}, \dots, \mathbf{u}_m$ of the left null space. $\mathbf{v}_1, \dots, \mathbf{v}_r$ are an orthonormal basis of the row space, and $\mathbf{v}_{r+1}, \dots, \mathbf{v}_n$ of the null space. The SVD delivers orthonormal bases of all four at once.
+        - *Largest and smallest stretch.* $\max\|A\mathbf{x}\|/\|\mathbf{x}\| = \sigma_1$, attained at $\mathbf{v}_1$. For square invertible $A$ the smallest is $\sigma_n$, and the **condition number** is $\sigma_1/\sigma_n$.
+        - *Determinant.* For square $A$, $|\det A| = \sigma_1\sigma_2\cdots\sigma_n$, since the orthogonal factors have determinant $\pm1$.
+        - *The other Gram matrix.* $AA^\top = U\Sigma\Sigma^\top U^\top$: the $\mathbf{u}_i$ are eigenvectors of $AA^\top$ with the same nonzero eigenvalues $\sigma_i^2$.
+        - *Pseudo-inverse.* $A^+ = V\Sigma^+U^\top$, where $\Sigma^+$ inverts the nonzero $\sigma_i$ and transposes the shape. Undo each rotation and each scaling that can be undone.
+
+        **Singular values and eigenvalues.** They are different things. For a symmetric positive semidefinite matrix they coincide, and the SVD is the spectral decomposition. For a symmetric matrix in general, $\sigma_i = |\lambda_i|$. For other square matrices the only general relations are $|\det A| = \prod\sigma_i = \prod|\lambda_i|$ and $\sigma_n \le |\lambda| \le \sigma_1$ for every eigenvalue.
+
+        **Uniqueness.** The singular values are uniquely determined. The vectors are not: a pair $\mathbf{u}_i, \mathbf{v}_i$ can be replaced by $-\mathbf{u}_i, -\mathbf{v}_i$, and for repeated singular values there is more freedom.
+
+        **In NumPy.** `U, s, Vt = np.linalg.svd(A)` returns the singular values as a 1-D array `s` in decreasing order, and returns $V^\top$, not $V$. The right singular vectors are the **rows** of `Vt`. With `full_matrices=False` it returns the reduced shapes. The routine works on $A$ directly and never forms $A^\top A$, which would square the condition number.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the construction of the singular value decomposition of a matrix A.
+        steps:
+          - 'Form the symmetric positive semidefinite matrix $A^\top A$.'
+          - 'Take its orthonormal eigenvectors $\mathbf{v}_i$, with eigenvalues $\lambda_i \ge 0$ in decreasing order.'
+          - 'Define $\sigma_i = \sqrt{\lambda_i}$.'
+          - 'For each $\sigma_i > 0$ define $\mathbf{u}_i = A\mathbf{v}_i/\sigma_i$, and check that these are orthonormal.'
+          - 'Complete the $\mathbf{u}_i$ to an orthonormal basis and assemble $A = U\Sigma V^\top$.'
+        explanation: The right singular vectors come from the spectral theorem, the singular values are square roots, and the left singular vectors are the normalised images.
+  formal:
+    - text: |
+        **Theorem (SVD).** Every $A \in \mathbb{R}^{m \times n}$ can be written $A = U\Sigma V^\top$ with $U \in \mathbb{R}^{m \times m}$ and $V \in \mathbb{R}^{n \times n}$ orthogonal, and $\Sigma \in \mathbb{R}^{m \times n}$ zero except for diagonal entries $\sigma_1 \ge \sigma_2 \ge \dots \ge \sigma_{\min(m,n)} \ge 0$. For complex $A$: $A = U\Sigma V^{\mathsf H}$ with $U, V$ unitary.
+
+        **Singular values.** $\sigma_i(A) = \sqrt{\lambda_i(A^\top A)}$. They are unique. $\operatorname{rank}A$ is the number of positive ones.
+
+        **Singular vectors.** $A\mathbf{v}_i = \sigma_i\mathbf{u}_i$ and $A^\top\mathbf{u}_i = \sigma_i\mathbf{v}_i$. $A^\top A\mathbf{v}_i = \sigma_i^2\mathbf{v}_i$ and $AA^\top\mathbf{u}_i = \sigma_i^2\mathbf{u}_i$.
+
+        **Dyadic form.** $A = \sum_{i=1}^r \sigma_i\mathbf{u}_i\mathbf{v}_i^\top$, $r = \operatorname{rank}A$.
+
+        **Subspaces.** $\operatorname{im}A = \operatorname{span}(\mathbf{u}_1..\mathbf{u}_r)$, $\ker A^\top = \operatorname{span}(\mathbf{u}_{r+1}..\mathbf{u}_m)$, $\operatorname{im}A^\top = \operatorname{span}(\mathbf{v}_1..\mathbf{v}_r)$, $\ker A = \operatorname{span}(\mathbf{v}_{r+1}..\mathbf{v}_n)$.
+
+        **Variational description.** $\sigma_k(A) = \max\limits_{\dim S = k}\ \min\limits_{\mathbf{x} \in S, \|\mathbf{x}\| = 1}\|A\mathbf{x}\|$, by Courant-Fischer for $A^\top A$. Hence $|\sigma_k(A + E) - \sigma_k(A)| \le \sigma_1(E)$: singular values are perfectly conditioned.
+
+        **Pseudo-inverse.** $A^+ = \sum_{i=1}^r \sigma_i^{-1}\mathbf{v}_i\mathbf{u}_i^\top$.
+
+        **Polar decomposition.** For square $A$: $A = (UV^\top)(V\Sigma V^\top)$, an orthogonal matrix times a symmetric positive semidefinite one.
+
+        **Invariance.** $\sigma_i(QAP) = \sigma_i(A)$ for orthogonal $Q, P$, and $\sigma_i(A^\top) = \sigma_i(A)$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-form
+        type: choice
+        system: s1
+        prompt: |
+          The singular value decomposition writes a matrix as
+        options: ['$PDP^{-1}$', '$U\Sigma V^\top$ with $U, V$ orthogonal and $\Sigma$ diagonal', '$LL^\top$', '$QR$']
+        answer: 1
+        explanation: Rotate, scale, rotate.
+    - question:
+        id: drill-exists
+        type: choice
+        system: s1
+        prompt: |
+          Which matrices have a singular value decomposition?
+        options: ['Only square ones', 'Only symmetric ones', 'Every matrix', 'Only invertible ones']
+        answer: 2
+        explanation: Any shape, any rank.
+    - question:
+        id: drill-definition
+        type: choice
+        system: s1
+        prompt: |
+          The singular values of $A$ are
+        options: ['the eigenvalues of $A$', 'the square roots of the eigenvalues of $A^\top A$', 'the diagonal entries of $A$', 'the eigenvalues of $A^\top A$']
+        answer: 1
+        explanation: $\|A\mathbf{v}_i\|^2 = \lambda_i(A^\top A)$.
+    - question:
+        id: drill-compute
+        type: numeric
+        system: s1
+        prompt: |
+          $A^\top A$ has eigenvalues 49 and 4. What is the largest singular value of $A$?
+        answer: "7"
+        explanation: $\sqrt{49}$.
+    - question:
+        id: drill-sign
+        type: choice
+        system: s1
+        prompt: |
+          Singular values are always
+        options: ['positive or zero', 'integers', 'at most 1', 'distinct']
+        answer: 0
+        explanation: They are lengths.
+    - question:
+        id: drill-relation
+        type: choice
+        system: s1
+        prompt: |
+          The singular vectors satisfy
+        options: ['$A\mathbf{v}_i = \sigma_i\mathbf{v}_i$', '$A\mathbf{v}_i = \sigma_i\mathbf{u}_i$', '$A\mathbf{u}_i = \sigma_i\mathbf{v}_i$', '$A\mathbf{u}_i = \mathbf{v}_i$']
+        answer: 1
+        explanation: An input axis goes to an output axis, scaled.
+    - question:
+        id: drill-rank
+        type: numeric
+        system: s1
+        prompt: |
+          A $5 \times 4$ matrix has singular values $9, 3, 0, 0$. What is its rank?
+        answer: "2"
+        explanation: The number of nonzero singular values.
+    - question:
+        id: drill-diag
+        type: numeric
+        system: s1
+        prompt: |
+          What is the largest singular value of $\begin{pmatrix} 2 & 0 \\ 0 & -5 \end{pmatrix}$?
+        answer: "5"
+        explanation: For a symmetric matrix the singular values are the absolute values of the eigenvalues.
+    - question:
+        id: drill-stretch
+        type: choice
+        system: s1
+        prompt: |
+          The largest value of $\|A\mathbf{x}\|$ over unit vectors $\mathbf{x}$ is
+        options: ['the largest eigenvalue of $A$', '$\sigma_1$', 'the trace of $A$', '$\sigma_1^2$']
+        answer: 1
+        explanation: Attained at $\mathbf{x} = \mathbf{v}_1$.
+    - question:
+        id: drill-cond
+        type: numeric
+        system: s1
+        prompt: |
+          A square matrix has singular values $20, 5, 0.5$. What is its condition number?
+        answer: "40"
+        explanation: Largest over smallest.
+    - question:
+        id: drill-det
+        type: numeric
+        system: s1
+        prompt: |
+          A $2 \times 2$ matrix has singular values 6 and 2. What is the absolute value of its determinant?
+        answer: "12"
+        explanation: The product of the singular values.
+    - question:
+        id: drill-kernel
+        type: choice
+        system: s1
+        prompt: |
+          The right singular vectors $\mathbf{v}_i$ with $\sigma_i = 0$ span
+        options: ['the column space', 'the null space of $A$', 'the row space', 'the whole space']
+        answer: 1
+        explanation: $A\mathbf{v}_i = \mathbf{0}$ for those.
+    - question:
+        id: drill-numpy
+        type: choice
+        system: s1
+        prompt: |
+          After `U, s, Vt = np.linalg.svd(A)`, the first right singular vector is
+        options: ['`Vt[:, 0]`', '`Vt[0]`', '`U[0]`', '`s[0]`']
+        answer: 1
+        explanation: NumPy returns $V^\top$, whose rows are the right singular vectors.
+    - question:
+        id: predict-values
+        type: predict
+        system: s1
+        prompt: The singular values of the puzzle's matrix, and two checks. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[3.0, 0.0], [4.0, 5.0]])
+          s = np.linalg.svd(A, compute_uv=False)
+          print([round(float(v), 4) for v in s])
+          print(round(float(s[0] * s[1]), 4), round(abs(float(np.linalg.det(A))), 4))
+          print([round(float(v), 4) for v in np.sqrt(np.linalg.eigvalsh(A.T @ A))[::-1]])
+        output: |
+          [6.7082, 2.2361]
+          15.0 15.0
+          [6.7082, 2.2361]
+        explanation: The singular values are the semi-axes of the ellipse from the puzzle. Their product is the absolute value of the determinant, and they are the square roots of the eigenvalues of A transpose A.
+    - question:
+        id: predict-shapes
+        type: predict
+        system: s1
+        prompt: The shapes NumPy returns for a tall matrix of rank 1. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[1.0, 2.0], [2.0, 4.0], [3.0, 6.0]])
+          U, s, Vt = np.linalg.svd(A)
+          print(U.shape, s.shape, Vt.shape)
+          U2, s2, Vt2 = np.linalg.svd(A, full_matrices=False)
+          print(U2.shape, s2.shape, Vt2.shape)
+          print([round(float(v), 4) for v in s])
+        output: |
+          (3, 3) (2,) (2, 2)
+          (3, 2) (2,) (2, 2)
+          [8.3666, 0.0]
+        explanation: The full form has a square U. The reduced form keeps only as many columns of U as there are singular values. One singular value is zero because the second column is twice the first, so the rank is 1.
+  work:
+    - text: Slower now. The first task builds the decomposition from the spectral theorem.
+    - question:
+        id: write-svd
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `svd(A)` for a matrix with independent columns, **without** calling NumPy's `svd`. Use `np.linalg.eigh` on `A.T @ A`, reverse the order so that the largest comes first, take square roots for the singular values, and form `U = A @ V / s`. Return `(U, s, V)` with the singular vectors as columns of `U` and `V`.
+        starter: |
+          import numpy as np
+
+
+          def svd(A):
+              n = A.shape[1]
+              return A[:, :n] * 1.0, np.ones(n), np.eye(n)
+
+
+          A = np.array([[3.0, 0.0], [4.0, 5.0]])
+          U, s, V = svd(A)
+          print([round(float(v), 4) for v in s])
+          print(np.allclose(U @ np.diag(s) @ V.T, A), np.allclose(U.T @ U, np.eye(2)))
+        solution: |
+          import numpy as np
+
+
+          def svd(A):
+              values, V = np.linalg.eigh(A.T @ A)
+              values, V = values[::-1], V[:, ::-1]
+              s = np.sqrt(values)
+              return A @ V / s, s, V
+
+
+          A = np.array([[3.0, 0.0], [4.0, 5.0]])
+          U, s, V = svd(A)
+          print([round(float(v), 4) for v in s])
+          print(np.allclose(U @ np.diag(s) @ V.T, A), np.allclose(U.T @ U, np.eye(2)))
+        tests: |
+          import numpy as _np
+          _A = _np.array([[3.0, 0.0], [4.0, 5.0]])
+          _out = svd(_A)
+          assert isinstance(_out, tuple) and len(_out) == 3, "svd should return the triple (U, s, V)"
+          _U, _s, _V = _out
+          assert _np.allclose(_s, [45 ** 0.5, 5 ** 0.5]), "The singular values of [[3, 0], [4, 5]] are sqrt 45 and sqrt 5, largest first"
+          assert _np.allclose(_U @ _np.diag(_s) @ _V.T, _A), "U times diag(s) times V transpose should rebuild A"
+          assert _np.allclose(_U.T @ _U, _np.eye(2)) and _np.allclose(_V.T @ _V, _np.eye(2)), "The columns of U and of V should be orthonormal"
+          _B = _np.array([[1.0, 2.0], [0.0, 1.0], [2.0, 0.0], [1.0, 1.0]])
+          _U, _s, _V = svd(_B)
+          assert _np.shape(_U) == (4, 2) and _np.shape(_s) == (2,) and _np.shape(_V) == (2, 2), "For a 4 by 2 matrix U is 4 by 2, s has 2 entries and V is 2 by 2"
+          assert _np.allclose(_s, _np.linalg.svd(_B, compute_uv=False)), "The singular values should agree with NumPy's"
+          assert _np.allclose(_U @ _np.diag(_s) @ _V.T, _B) and _np.allclose(_U.T @ _U, _np.eye(2)), "For the tall matrix too, the product should rebuild it and U should have orthonormal columns"
+          assert _np.allclose(_B @ _V[:, 0], _s[0] * _U[:, 0]), "A v1 should equal sigma1 u1"
+          _C = _np.random.default_rng(0).normal(size=(6, 3))
+          _U, _s, _V = svd(_C)
+          assert _np.all(_s[:-1] >= _s[1:]) and _np.allclose(_U @ _np.diag(_s) @ _V.T, _C), "For a random 6 by 3 matrix the singular values should be decreasing and the product should rebuild it"
+          assert output.strip() == "[6.7082, 2.2361]\nTrue True", "The program should print [6.7082, 2.2361] and then True True"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def svd(A):
+                values, V = np.linalg.eigh(A.T @ A)
+                s = np.sqrt(values)
+                return A @ V / s, s, V
+
+
+            print("[6.7082, 2.2361]\nTrue True")
+          - |
+            import numpy as np
+
+
+            def svd(A):
+                values, V = np.linalg.eigh(A.T @ A)
+                values, V = values[::-1], V[:, ::-1]
+                return A @ V / values, values, V
+
+
+            print("[6.7082, 2.2361]\nTrue True")
+          - |
+            import numpy as np
+
+
+            def svd(A):
+                values, V = np.linalg.eigh(A.T @ A)
+                values = values[::-1]
+                s = np.sqrt(values)
+                return A @ V / s, s, V
+
+
+            print("[6.7082, 2.2361]\nTrue True")
+          - |
+            import numpy as np
+
+
+            def svd(A):
+                values, V = np.linalg.eigh(A.T @ A)
+                values, V = values[::-1], V[:, ::-1]
+                s = np.sqrt(values)
+                return A @ V, s, V
+
+
+            print("[6.7082, 2.2361]\nTrue True")
+        explanation: |
+          `A @ V` holds the images $A\mathbf{v}_i$ as columns, which are orthogonal with lengths $\sigma_i$. Dividing by `s` scales each column to length 1, by broadcasting along the columns. That is the whole construction.
+
+          `eigh` returns increasing eigenvalues and the convention for singular values is decreasing, so both the values and the **columns** of `V` must be reversed together. The third wrong version reverses only the values and attaches each singular value to the wrong vector.
+
+          This construction is how the theorem is proved, not how the decomposition is computed. Forming $A^\top A$ squares the condition number, so small singular values come out with only half the digits correct. And if a singular value is zero, the division fails. Library routines work on $A$ directly, by a sequence of orthogonal transformations.
+    - question:
+        id: write-rank-cond
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `rank_and_condition(A)` using `np.linalg.svd(A, compute_uv=False)`. Count as nonzero the singular values greater than `1e-10` times the largest. Return the pair `(rank, condition)`: the rank as an `int`, and the largest singular value divided by the smallest. If the matrix does not have full rank, meaning rank below the smaller of its two dimensions, the condition is `np.inf`.
+        starter: |
+          import numpy as np
+
+
+          def rank_and_condition(A):
+              return 0, 1.0
+
+
+          print(rank_and_condition(np.array([[2.0, 0.0], [0.0, 0.5]])))
+          print(rank_and_condition(np.array([[1.0, 2.0], [2.0, 4.0], [3.0, 6.0]])))
+        solution: |
+          import numpy as np
+
+
+          def rank_and_condition(A):
+              s = np.linalg.svd(A, compute_uv=False)
+              rank = int((s > 1e-10 * s[0]).sum())
+              if rank < len(s):
+                  return rank, np.inf
+              return rank, float(s[0] / s[-1])
+
+
+          print(rank_and_condition(np.array([[2.0, 0.0], [0.0, 0.5]])))
+          print(rank_and_condition(np.array([[1.0, 2.0], [2.0, 4.0], [3.0, 6.0]])))
+        tests: |
+          import numpy as _np
+          _r, _c = rank_and_condition(_np.array([[2.0, 0.0], [0.0, 0.5]]))
+          assert _r == 2 and abs(_c - 4.0) < 1e-9, "diag(2, 0.5) has rank 2 and condition number 2/0.5 = 4"
+          _r, _c = rank_and_condition(_np.array([[1.0, 2.0], [2.0, 4.0], [3.0, 6.0]]))
+          assert _r == 1 and _c == _np.inf, "The second column is twice the first, so the rank is 1 and the condition is infinite"
+          _r, _c = rank_and_condition(_np.array([[3.0, 0.0], [4.0, 5.0]]))
+          assert _r == 2 and abs(_c - 3.0) < 1e-9, "[[3, 0], [4, 5]] has singular values sqrt 45 and sqrt 5, whose ratio is 3"
+          _Q = _np.linalg.qr(_np.random.default_rng(0).normal(size=(4, 4)))[0]
+          _r, _c = rank_and_condition(_Q)
+          assert _r == 4 and abs(_c - 1.0) < 1e-9, "An orthogonal matrix has all singular values equal to 1, so its condition number is 1"
+          _r, _c = rank_and_condition(_np.array([[1.0, 0.0, 0.0], [0.0, 2.0, 0.0]]))
+          assert _r == 2 and abs(_c - 2.0) < 1e-9, "A 2 by 3 matrix of rank 2 has full rank, and its condition is the ratio of its two singular values"
+          _B = _np.random.default_rng(1).normal(size=(5, 5))
+          assert abs(rank_and_condition(_B)[1] - _np.linalg.cond(_B)) < 1e-6 * _np.linalg.cond(_B), "For a random square matrix the condition should agree with np.linalg.cond"
+          assert output.strip() == "(2, 4.0)\n(1, inf)", "The program should print (2, 4.0) and then (1, inf)"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def rank_and_condition(A):
+                s = np.linalg.svd(A, compute_uv=False)
+                rank = int((s > 0).sum())
+                if rank < len(s):
+                    return rank, np.inf
+                return rank, float(s[0] / s[-1])
+
+
+            print("(2, 4.0)\n(1, inf)")
+          - |
+            import numpy as np
+
+
+            def rank_and_condition(A):
+                s = np.linalg.svd(A, compute_uv=False)
+                rank = int((s > 1e-10 * s[0]).sum())
+                if rank < len(s):
+                    return rank, np.inf
+                return rank, float(s[-1] / s[0])
+
+
+            print("(2, 4.0)\n(1, inf)")
+          - |
+            import numpy as np
+
+
+            def rank_and_condition(A):
+                s = np.linalg.svd(A, compute_uv=False)
+                rank = len(s)
+                return rank, float(s[0] / s[-1])
+
+
+            print("(2, 4.0)\n(1, inf)")
+          - |
+            import numpy as np
+
+
+            def rank_and_condition(A):
+                s = np.abs(np.linalg.eigvals(A.T @ A).real)
+                rank = int((s > 1e-10 * s.max()).sum())
+                if rank < len(s):
+                    return rank, np.inf
+                return rank, float(s.max() / s.min())
+
+
+            print("(2, 4.0)\n(1, inf)")
+        explanation: |
+          In exact arithmetic the rank is the number of nonzero singular values. In floating point the second singular value of the rank-one matrix comes out as about $10^{-16}$, not zero. The first wrong version counts it and reports rank 2 with a condition number of $10^{16}$.
+
+          So numerical rank is always "the number of singular values above a tolerance", and the tolerance is a decision. `np.linalg.matrix_rank` makes it this way, with a tolerance tied to machine precision.
+
+          The last wrong version uses the eigenvalues of $A^\top A$ without the square root, and reports the square of the condition number: 16 where 4 is right. That squaring is the exact cost of solving least squares by the normal equations.
+    - question:
+        id: fix-vt
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `most_stretched(A)` should return the unit vector that `A` stretches most, the first right singular vector. The program prints the length of its image, which should be the largest singular value, about `8.2788`. It prints a smaller number. Fix it.
+        starter: |
+          import numpy as np
+
+
+          def most_stretched(A):
+              U, s, Vt = np.linalg.svd(A)
+              return Vt[:, 0]
+
+
+          A = np.array([[1.0, 2.0, 3.0], [0.0, 1.0, 4.0], [5.0, 6.0, 0.0]])
+          x = most_stretched(A)
+          print(round(float(np.linalg.norm(A @ x)), 4))
+        solution: |
+          import numpy as np
+
+
+          def most_stretched(A):
+              U, s, Vt = np.linalg.svd(A)
+              return Vt[0]
+
+
+          A = np.array([[1.0, 2.0, 3.0], [0.0, 1.0, 4.0], [5.0, 6.0, 0.0]])
+          x = most_stretched(A)
+          print(round(float(np.linalg.norm(A @ x)), 4))
+        tests: |
+          import numpy as _np
+          _A = _np.array([[1.0, 2.0, 3.0], [0.0, 1.0, 4.0], [5.0, 6.0, 0.0]])
+          _x = most_stretched(_A)
+          assert _np.shape(_x) == (3,), "The result is a vector in the input space, of length 3"
+          assert abs(float(_np.linalg.norm(_x)) - 1.0) < 1e-9, "The result should be a unit vector"
+          assert abs(float(_np.linalg.norm(_A @ _x)) - float(_np.linalg.svd(_A, compute_uv=False)[0])) < 1e-9, "The image of the most stretched vector has length sigma_1, about 8.2788. NumPy returns V transpose, so the right singular vectors are its rows"
+          _B = _np.array([[1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 7.0, 0.0]])
+          _y = most_stretched(_B)
+          assert _np.shape(_y) == (4,) and _np.allclose(_np.abs(_y), [0.0, 0.0, 1.0, 0.0]), "For this 2 by 4 matrix the most stretched input direction is the third coordinate axis"
+          _C = _np.random.default_rng(0).normal(size=(5, 3))
+          assert abs(float(_np.linalg.norm(_C @ most_stretched(_C))) - float(_np.linalg.svd(_C, compute_uv=False)[0])) < 1e-9, "For a random 5 by 3 matrix the image should have length sigma_1"
+          assert output.strip() == "8.2788", "The program should print 8.2788"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def most_stretched(A):
+                U, s, Vt = np.linalg.svd(A)
+                return Vt[:, 0]
+
+
+            print("8.2788")
+          - |
+            import numpy as np
+
+
+            def most_stretched(A):
+                U, s, Vt = np.linalg.svd(A)
+                return U[:, 0]
+
+
+            print("8.2788")
+          - |
+            import numpy as np
+
+
+            def most_stretched(A):
+                U, s, Vt = np.linalg.svd(A)
+                return Vt[-1]
+
+
+            print("8.2788")
+          - |
+            import numpy as np
+
+
+            def most_stretched(A):
+                U, s, Vt = np.linalg.svd(A)
+                return s[0] * Vt[0]
+
+
+            print("8.2788")
+        explanation: |
+          `np.linalg.svd` returns $U$, the singular values, and $V^\top$. The right singular vectors are the columns of $V$, so they are the **rows** of what NumPy returns. `Vt[0]` is $\mathbf{v}_1$. `Vt[:, 0]` collects the first entry of every right singular vector, which is still a unit vector, since $V$ is orthogonal, and so raises no suspicion.
+
+          The asymmetry is easy to forget: left singular vectors are columns of `U`, right singular vectors are rows of `Vt`. `U[:, 0]` is the direction of the **output** of the most stretched vector, and lives in the output space.
+
+          Checking $\|A\mathbf{x}\|$ against `s[0]`, as the program does, costs one line and catches all of these.
+    - question:
+        id: work-subspaces
+        type: choice
+        system: s2
+        prompt: |
+          A $4 \times 6$ matrix has singular values $5, 2, 0, 0$. Which right singular vectors give an orthonormal basis of its null space, and how many are there?
+        options:
+          - '$\mathbf{v}_1, \mathbf{v}_2$: two vectors.'
+          - '$\mathbf{v}_3, \mathbf{v}_4, \mathbf{v}_5, \mathbf{v}_6$: four vectors. The rank is 2, the input space has dimension 6, and the null space has dimension $6 - 2 = 4$. It is spanned by all right singular vectors beyond the second, including the two that have no singular value listed at all.'
+          - '$\mathbf{v}_3, \mathbf{v}_4$: two vectors.'
+          - '$\mathbf{u}_3, \mathbf{u}_4$: two vectors.'
+        answer: 1
+        explanation: |
+          A $4 \times 6$ matrix has only four singular values, but $V$ is $6 \times 6$. The last two columns of $V$ correspond to columns of $\Sigma$ that contain no diagonal entry, and they are sent to zero as well. Rank-nullity checks: $2 + 4 = 6$. The left singular vectors $\mathbf{u}_3, \mathbf{u}_4$ span the left null space, of dimension $4 - 2 = 2$. In code, with `full_matrices=True`, the null space is `Vt[2:]`, and with the reduced form those rows are simply absent.
+    - question:
+        id: work-pinv
+        type: numeric
+        system: s2
+        prompt: |
+          $A$ is $3 \times 2$ with singular values 4 and 0.5. What is the largest singular value of its pseudo-inverse $A^+$?
+        answer: "2"
+        explanation: |
+          $A^+ = V\Sigma^+U^\top$ has singular values $1/4$ and $1/0.5 = 2$, so the largest is 2. The direction that $A$ shrinks most is the one $A^+$ amplifies most. A least squares solution $\hat{\mathbf{x}} = A^+\mathbf{b}$ can therefore magnify an error in $\mathbf{b}$ by up to $1/\sigma_{\min}$. If $\sigma_{\min}$ is tiny, the solution is dominated by amplified noise, and the standard remedy is to leave out the terms with the smallest singular values, or to damp them, which is what ridge regression does: it replaces $1/\sigma_i$ by $\sigma_i/(\sigma_i^2 + \mu)$.
+    - question:
+        id: work-eigen-vs-singular
+        type: choice
+        system: s2
+        prompt: |
+          A square weight matrix $W$ has all eigenvalues of absolute value below 1, and largest singular value 3. What does each fact say about applying $W$?
+        options:
+          - 'They contradict each other, so one must be wrong.'
+          - 'The eigenvalues govern the long run: $W^k\mathbf{x} \to \mathbf{0}$ as $k$ grows. The singular value governs one step: some vector is made three times longer by a single application. A signal can grow at first and still decay eventually.'
+          - 'Both say that $W$ shrinks every vector.'
+          - 'The singular value governs the long run and the eigenvalues one step.'
+        answer: 1
+        explanation: |
+          $\begin{pmatrix} 0.5 & 3 \\ 0 & 0.5 \end{pmatrix}$ is such a matrix. Its eigenvalues are both $0.5$, and it sends $(0, 1)$ to a vector of length about 3. For symmetric matrices the two notions agree and there is no such transient. For non-symmetric ones the gap between spectral radius and largest singular value measures how misleading the eigenvalues are in the short run. Bounding the growth of a signal through one layer of a network needs the singular value, and the eigenvalues are the wrong tool.
+  connections:
+    - text: |
+        The matrix with eigenvalues 3 and 5 stretched a vector by $6.7$ because stretch is measured by **singular values**, the square roots of the eigenvalues of $A^\top A$. The orthonormal eigenvectors $\mathbf{v}_i$ of $A^\top A$ are sent by $A$ to orthogonal vectors $\sigma_i\mathbf{u}_i$, and that gives the **singular value decomposition** $A = U\Sigma V^\top$ of any matrix of any shape: a rotation, a scaling along axes, a rotation.
+
+        From it one reads the rank, orthonormal bases of the four fundamental subspaces, the largest stretch $\sigma_1$, the condition number $\sigma_1/\sigma_n$, and the pseudo-inverse. As a sum, $A = \sum_i \sigma_i\mathbf{u}_i\mathbf{v}_i^\top$.
+
+        That sum is ordered. The first term carries the largest singular value, the next the second largest, and the later ones may be tiny. It is natural to stop early and keep only the first few terms. The result is a matrix of low rank that is close to $A$, and the surprising fact is that it is not just a good approximation of that rank. It is the best one there is: [[m8.eckart-young-theorem]].

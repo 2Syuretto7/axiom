@@ -1,0 +1,676 @@
+concept: m8.characteristic-polynomial
+minutes: 85
+claim: You can form the characteristic polynomial of a square matrix, find the eigenvalues of a 2 by 2 matrix from its trace and determinant, explain why the eigenvalues add up to the trace and multiply to the determinant, tell the algebraic multiplicity of an eigenvalue from its geometric multiplicity, say why similar matrices share a characteristic polynomial, and say what the polynomial reveals about complex eigenvalues of real matrices.
+recalls: [m8.eigenvalues-and-eigenvectors]
+uses: [m5.determinant, m6.matrix-of-a-linear-map-and-similarity, m6.rank-nullity-theorem, m5.rank, m1.polynomials, m1.quadratics, m1.complex-numbers, e5.linear-algebra-routines, e5.einsum, e0.functions, e0.booleans-and-conditionals]
+leads: [m8.diagonalisation, m8.spectral-theorem, m8.jordan-form-and-the-matrix-exponential]
+starter: |
+  # Scratch space. Each step turns (a, b) into (a + b, a): the Fibonacci rule.
+  # After many steps, what is the ratio of the two entries?
+  import numpy as np
+
+  A = np.array([[1.0, 1.0], [1.0, 0.0]])
+  x = np.array([1.0, 1.0])
+  for _ in range(30):
+      x = A @ x
+  print(round(float(x[0] / x[1]), 6))
+parts:
+  recall:
+    - text: |
+        [[m8.eigenvalues-and-eigenvectors]] found eigenvectors once an eigenvalue was known, and said that $\lambda$ is an eigenvalue exactly when $A - \lambda I$ is not invertible. Today turns that sentence into an equation that can be solved. Three quick pulls first.
+  puzzle:
+    - text: |
+        The Fibonacci numbers $1, 1, 2, 3, 5, 8, 13, \dots$ are made by adding the last two. In matrix form, the pair (latest, previous) is multiplied each step by
+
+        $$A = \begin{pmatrix} 1 & 1 \\ 1 & 0 \end{pmatrix}.$$
+
+        The starter takes thirty steps and prints the ratio of the latest number to the one before.
+
+        ```
+        1.618034
+        ```
+
+        By the last lesson, after many steps the vector lines up with the eigenvector of the largest eigenvalue, and each further step multiplies it by that eigenvalue. So $1.618034$ should be an eigenvalue of $A$.
+
+        But $A$ contains only zeros and ones, and the number that came out is not even a fraction.
+
+        **How are the eigenvalues of a matrix determined by its entries, and where does $1.618034$ come from?**
+  intuition:
+    - text: |
+        $\lambda$ is an eigenvalue of $A$ when $A - \lambda I$ squashes some nonzero vector to zero. A matrix does that exactly when its determinant is zero. So the eigenvalues are the numbers $\lambda$ with
+
+        $$\det(A - \lambda I) = 0.$$
+
+        Write the determinant out, with $\lambda$ as an unknown. For the Fibonacci matrix,
+
+        $$\det\begin{pmatrix} 1 - \lambda & 1 \\ 1 & -\lambda \end{pmatrix} = (1 - \lambda)(-\lambda) - 1 = \lambda^2 - \lambda - 1.$$
+
+        It is a polynomial in $\lambda$, called the **characteristic polynomial**, and the eigenvalues are its roots. Here they are $\dfrac{1 \pm \sqrt5}{2}$, that is $1.618034\ldots$ and $-0.618034\ldots$. The first is the golden ratio. It is irrational because solving a quadratic takes a square root, even when every coefficient is a whole number.
+
+        For an $n \times n$ matrix the polynomial has degree $n$. That one fact explains a good deal: a matrix has at most $n$ eigenvalues, a real matrix may have none that are real, since real polynomials can lack real roots, and over the complex numbers it has exactly $n$, counted with multiplicity.
+
+        Two coefficients of the polynomial are already familiar. For a $2 \times 2$ matrix it is always $\lambda^2 - (\text{trace})\lambda + (\text{determinant})$.
+  derivation:
+    - text: |
+        **Definition.** The **characteristic polynomial** of an $n \times n$ matrix $A$ is
+
+        $$p_A(\lambda) = \det(\lambda I - A).$$
+
+        It has degree $n$ and leading coefficient 1. (Many books use $\det(A - \lambda I)$, which differs by the sign $(-1)^n$ and has the same roots.) Its roots are exactly the eigenvalues of $A$.
+
+        **The $2 \times 2$ case.** For $A = \begin{pmatrix} a & b \\ c & d \end{pmatrix}$,
+
+        $$p_A(\lambda) = (\lambda - a)(\lambda - d) - bc = \lambda^2 - (a + d)\lambda + (ad - bc) = \lambda^2 - \operatorname{tr}(A)\,\lambda + \det(A).$$
+
+        By the quadratic formula,
+
+        $$\lambda = \frac{\operatorname{tr}A \pm \sqrt{(\operatorname{tr}A)^2 - 4\det A}}{2}.$$
+
+        *Example.* $A = \begin{pmatrix} 4 & 1 \\ 2 & 3 \end{pmatrix}$ has trace 7 and determinant 10. $\lambda^2 - 7\lambda + 10 = (\lambda - 2)(\lambda - 5)$, so the eigenvalues are 2 and 5.
+
+        The sign of the discriminant sorts $2 \times 2$ real matrices into three kinds: two different real eigenvalues, one repeated real eigenvalue, or a pair of complex ones. The quarter turn has trace 0 and determinant 1: $\lambda^2 + 1$, with roots $\pm i$.
+
+        **Trace and determinant, in general.** Over $\mathbb{C}$ the polynomial factors completely:
+
+        $$p_A(\lambda) = (\lambda - \lambda_1)(\lambda - \lambda_2)\cdots(\lambda - \lambda_n).$$
+
+        Compare coefficients with $\det(\lambda I - A)$. Setting $\lambda = 0$ gives $\det(-A) = (-1)^n\det A$ on one side and $(-1)^n\lambda_1\cdots\lambda_n$ on the other. The coefficient of $\lambda^{n-1}$ is $-\operatorname{tr}A$ on one side (only the product of the diagonal entries $(\lambda - a_{ii})$ can contribute) and $-(\lambda_1 + \dots + \lambda_n)$ on the other. So
+
+        $$\lambda_1 + \dots + \lambda_n = \operatorname{tr}A, \qquad \lambda_1\lambda_2\cdots\lambda_n = \det A,$$
+
+        with each eigenvalue repeated according to its multiplicity as a root. In particular a matrix is singular exactly when 0 is an eigenvalue, which was known, and the determinant is the product of the stretch factors along the eigen-directions, which is why it measures volume.
+
+        **Similar matrices.** If $B = P^{-1}AP$ then $\lambda I - B = P^{-1}(\lambda I - A)P$, so the determinants agree: $p_B = p_A$. The whole polynomial is an invariant of the map. Trace and determinant, the two invariants found in the last cluster, are two of its coefficients.
+
+        **Triangular matrices.** $\lambda I - A$ is triangular with diagonal entries $\lambda - a_{ii}$, so $p_A(\lambda) = \prod(\lambda - a_{ii})$. The eigenvalues are on the diagonal.
+    - question:
+        id: derivation-larger
+        type: numeric
+        system: s2
+        prompt: |
+          $A = \begin{pmatrix} 2 & 2 \\ 1 & 3 \end{pmatrix}$. What is its larger eigenvalue?
+        answer: "4"
+        explanation: |
+          Trace 5, determinant $6 - 2 = 4$. The characteristic polynomial is $\lambda^2 - 5\lambda + 4 = (\lambda - 1)(\lambda - 4)$, so the eigenvalues are 1 and 4. Check: they add up to the trace and multiply to the determinant. An eigenvector for 4 solves $(A - 4I)\mathbf{v} = \mathbf{0}$, that is $-2x + 2y = 0$, giving $(1, 1)$. Both rows of $A$ add up to 4, which was another way to see it.
+    - text: |
+        **Two kinds of multiplicity.** A root can be repeated. The **algebraic multiplicity** of an eigenvalue is its multiplicity as a root of $p_A$. Its **geometric multiplicity** is the dimension of its eigenspace, $n - \operatorname{rank}(A - \lambda I)$.
+
+        Compare
+
+        $$3I = \begin{pmatrix} 3 & 0 \\ 0 & 3 \end{pmatrix} \qquad\text{and}\qquad J = \begin{pmatrix} 3 & 1 \\ 0 & 3 \end{pmatrix}.$$
+
+        Both have $p(\lambda) = (\lambda - 3)^2$: the eigenvalue 3 with algebraic multiplicity 2. For $3I$ the eigenspace is the whole plane, geometric multiplicity 2. For $J$, the matrix $J - 3I = \begin{pmatrix} 0 & 1 \\ 0 & 0 \end{pmatrix}$ has rank 1, so the eigenspace is a line, geometric multiplicity 1.
+
+        The characteristic polynomial cannot tell these two apart. In general
+
+        $$1 \le \text{geometric multiplicity} \le \text{algebraic multiplicity}.$$
+
+        When the two are equal for every eigenvalue there are enough eigenvectors for a basis. When one falls short, as for $J$, there are not. The next lesson is about exactly that.
+
+        **Real matrices, complex roots.** A polynomial with real coefficients has its non-real roots in conjugate pairs. So the non-real eigenvalues of a real matrix come in pairs $\lambda, \overline{\lambda}$, and their eigenvectors are conjugates too. A real matrix of **odd** size has a polynomial of odd degree, which must cross zero: it always has at least one real eigenvalue.
+
+        **A warning about computing.** For $n \ge 5$ there is no formula for the roots, and finding the roots of a polynomial from its coefficients is badly conditioned: a tiny change in a coefficient can move the roots a great deal. Numerical libraries never form the characteristic polynomial. `np.linalg.eig` works on the matrix directly, with orthogonal similarity transformations. The polynomial is a tool for reasoning and for small matrices done by hand.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the steps for finding the eigenvalues and eigenvectors of a small matrix by hand.
+        steps:
+          - 'Form the matrix $\lambda I - A$ with $\lambda$ as an unknown.'
+          - 'Take its determinant to get the characteristic polynomial.'
+          - 'Find the roots of the polynomial: these are the eigenvalues.'
+          - 'For each eigenvalue, solve $(A - \lambda I)\mathbf{v} = \mathbf{0}$.'
+          - 'The nonzero solutions are the eigenvectors for that eigenvalue.'
+        explanation: Eigenvalues first, from one polynomial equation, and then eigenvectors, from one linear system for each eigenvalue.
+  formal:
+    - text: |
+        Let $A$ be an $n \times n$ matrix over $F$.
+
+        **Characteristic polynomial.** $p_A(\lambda) = \det(\lambda I - A)$, monic of degree $n$:
+
+        $$p_A(\lambda) = \lambda^n - \operatorname{tr}(A)\lambda^{n-1} + \dots + (-1)^n\det(A).$$
+
+        $\lambda_0 \in F$ is an eigenvalue of $A$ if and only if $p_A(\lambda_0) = 0$.
+
+        **Invariance.** Similar matrices have the same characteristic polynomial, so $p_T$ is defined for a linear map $T$ on a finite-dimensional space. The converse fails: $3I$ and $\begin{pmatrix} 3 & 1 \\ 0 & 3 \end{pmatrix}$.
+
+        **Multiplicities.** The algebraic multiplicity $a(\lambda_0)$ is the multiplicity of $\lambda_0$ as a root of $p_A$. The geometric multiplicity is $g(\lambda_0) = \dim\ker(A - \lambda_0 I)$. Always $1 \le g(\lambda_0) \le a(\lambda_0)$.
+
+        **Over $\mathbb{C}$.** $p_A$ splits into linear factors, $\sum_\lambda a(\lambda) = n$, $\operatorname{tr}A = \sum_i \lambda_i$ and $\det A = \prod_i \lambda_i$, counting with algebraic multiplicity.
+
+        **Real matrices.** Non-real eigenvalues occur in conjugate pairs with equal multiplicities. If $n$ is odd there is a real eigenvalue.
+
+        **Further identities.** $p_{A^\top} = p_A$, so $A$ and $A^\top$ have the same eigenvalues. For square $A, B$ of the same size, $AB$ and $BA$ have the same characteristic polynomial.
+
+        **Cayley-Hamilton.** $p_A(A) = 0$: every matrix satisfies its own characteristic polynomial. For the Fibonacci matrix, $A^2 = A + I$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-roots
+        type: choice
+        system: s1
+        prompt: |
+          The roots of the characteristic polynomial of $A$ are
+        options: ['the diagonal entries of $A$', 'the eigenvalues of $A$', 'the eigenvectors of $A$', 'the pivots of $A$']
+        answer: 1
+        explanation: $\det(\lambda I - A) = 0$ exactly when $\lambda$ is an eigenvalue.
+    - question:
+        id: drill-degree
+        type: numeric
+        system: s1
+        prompt: |
+          What is the degree of the characteristic polynomial of a $6 \times 6$ matrix?
+        answer: "6"
+        explanation: The size of the matrix.
+    - question:
+        id: drill-two-by-two
+        type: choice
+        system: s1
+        prompt: |
+          For a $2 \times 2$ matrix with trace $t$ and determinant $d$, the characteristic polynomial is
+        options: ['$\lambda^2 + t\lambda + d$', '$\lambda^2 - t\lambda + d$', '$\lambda^2 - d\lambda + t$', '$\lambda^2 - t\lambda - d$']
+        answer: 1
+        explanation: Minus the trace, plus the determinant.
+    - question:
+        id: drill-sum
+        type: numeric
+        system: s1
+        prompt: |
+          A $3 \times 3$ matrix has diagonal entries $2, -1, 6$. What do its three eigenvalues add up to?
+        answer: "7"
+        explanation: The trace.
+    - question:
+        id: drill-product
+        type: numeric
+        system: s1
+        prompt: |
+          A matrix has eigenvalues $2, 3, 5$. What is its determinant?
+        answer: "30"
+        explanation: The product of the eigenvalues.
+    - question:
+        id: drill-third
+        type: numeric
+        system: s1
+        prompt: |
+          A $3 \times 3$ matrix has trace 10 and two of its eigenvalues are 1 and 4. What is the third?
+        answer: "5"
+        explanation: The three add up to the trace.
+    - question:
+        id: drill-triangular
+        type: choice
+        system: s1
+        prompt: |
+          The eigenvalues of $\begin{pmatrix} 2 & 7 & 1 \\ 0 & 5 & 3 \\ 0 & 0 & 9 \end{pmatrix}$ are
+        options: ['$7, 1, 3$', '$2, 5, 9$', '$0, 0, 0$', 'impossible to read off']
+        answer: 1
+        explanation: The diagonal entries of a triangular matrix.
+    - question:
+        id: drill-singular
+        type: choice
+        system: s1
+        prompt: |
+          A square matrix is singular exactly when
+        options: ['all its eigenvalues are 0', '0 is one of its eigenvalues', 'its trace is 0', 'it has a repeated eigenvalue']
+        answer: 1
+        explanation: The determinant is the product of the eigenvalues.
+    - question:
+        id: drill-similar
+        type: choice
+        system: s1
+        prompt: |
+          Similar matrices have
+        options: ['the same eigenvectors', 'the same characteristic polynomial', 'the same entries', 'the same first column']
+        answer: 1
+        explanation: The polynomial belongs to the map. The eigenvectors change coordinates with the basis.
+    - question:
+        id: drill-geometric
+        type: choice
+        system: s1
+        prompt: |
+          The geometric multiplicity of an eigenvalue is
+        options: ['how often it is a root of the polynomial', 'the dimension of its eigenspace', 'its absolute value', 'the size of the matrix']
+        answer: 1
+        explanation: The number of independent eigenvectors it has.
+    - question:
+        id: drill-inequality
+        type: choice
+        system: s1
+        prompt: |
+          For every eigenvalue, the geometric multiplicity is
+        options: ['at least the algebraic multiplicity', 'at most the algebraic multiplicity', 'equal to the algebraic multiplicity', 'unrelated to it']
+        answer: 1
+        explanation: And at least 1.
+    - question:
+        id: drill-conjugate
+        type: choice
+        system: s1
+        prompt: |
+          A real matrix has the eigenvalue $2 + 3i$. Then it also has the eigenvalue
+        options: ['$-2 - 3i$', '$2 - 3i$', '$3 + 2i$', 'no other is forced']
+        answer: 1
+        explanation: Non-real roots of a real polynomial come in conjugate pairs.
+    - question:
+        id: drill-odd
+        type: choice
+        system: s1
+        prompt: |
+          Every real $3 \times 3$ matrix has
+        options: ['three real eigenvalues', 'at least one real eigenvalue', 'no real eigenvalues', 'a repeated eigenvalue']
+        answer: 1
+        explanation: A real cubic has a real root.
+    - question:
+        id: predict-trace-det
+        type: predict
+        system: s1
+        prompt: A matrix, its eigenvalues, and two familiar numbers. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[4.0, 1.0], [2.0, 3.0]])
+          values = np.sort(np.linalg.eigvals(A).real)
+          print([round(float(v), 4) for v in values])
+          print(round(float(values.sum()), 4), round(float(np.trace(A)), 4))
+          print(round(float(values.prod()), 4), round(float(np.linalg.det(A)), 4))
+        output: |
+          [2.0, 5.0]
+          7.0 7.0
+          10.0 10.0
+        explanation: The eigenvalues 2 and 5 are the roots of lambda^2 - 7 lambda + 10. Their sum is the trace and their product is the determinant.
+    - question:
+        id: predict-multiplicity
+        type: predict
+        system: s1
+        prompt: Two matrices with the same characteristic polynomial. What does this show?
+        code: |
+          import numpy as np
+
+          for M in (np.array([[3.0, 0.0], [0.0, 3.0]]), np.array([[3.0, 1.0], [0.0, 3.0]])):
+              eigenspace = 2 - int(np.linalg.matrix_rank(M - 3.0 * np.eye(2)))
+              print(round(float(np.trace(M)), 4), round(float(np.linalg.det(M)), 4), eigenspace)
+        output: |
+          6.0 9.0 2
+          6.0 9.0 1
+        explanation: Both have trace 6 and determinant 9, so both have the polynomial (lambda - 3)^2. The first has a two-dimensional eigenspace and the second only a line. Algebraic multiplicity 2 in both cases, geometric multiplicity 2 and 1.
+  work:
+    - text: Slower now. The polynomial is a tool for small matrices and for reasoning.
+    - question:
+        id: write-two-by-two
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `eigenvalues(A)` for a real $2 \times 2$ array, using only its trace and determinant and the quadratic formula. Return a list of the real eigenvalues as floats in increasing order: two entries when the discriminant is not negative (the same number twice for a repeated root), and the empty list when the eigenvalues are not real.
+        starter: |
+          import numpy as np
+
+
+          def eigenvalues(A):
+              return []
+
+
+          print([round(v, 4) for v in eigenvalues(np.array([[1.0, 1.0], [1.0, 0.0]]))])
+          print(eigenvalues(np.array([[0.0, -1.0], [1.0, 0.0]])))
+        solution: |
+          import numpy as np
+
+
+          def eigenvalues(A):
+              t = float(A[0, 0] + A[1, 1])
+              d = float(A[0, 0] * A[1, 1] - A[0, 1] * A[1, 0])
+              disc = t * t - 4 * d
+              if disc < 0:
+                  return []
+              root = disc ** 0.5
+              return [(t - root) / 2, (t + root) / 2]
+
+
+          print([round(v, 4) for v in eigenvalues(np.array([[1.0, 1.0], [1.0, 0.0]]))])
+          print(eigenvalues(np.array([[0.0, -1.0], [1.0, 0.0]])))
+        tests: |
+          import numpy as _np
+          _e = eigenvalues(_np.array([[4.0, 1.0], [2.0, 3.0]]))
+          assert isinstance(_e, list) and len(_e) == 2, "A matrix with two real eigenvalues should give a list of two numbers"
+          assert _np.allclose(_e, [2.0, 5.0]), "[[4, 1], [2, 3]] has trace 7 and determinant 10, so the eigenvalues are 2 and 5, smaller first"
+          assert _np.allclose(eigenvalues(_np.array([[1.0, 1.0], [1.0, 0.0]])), [(1 - 5 ** 0.5) / 2, (1 + 5 ** 0.5) / 2]), "The Fibonacci matrix has eigenvalues (1 - sqrt 5)/2 and (1 + sqrt 5)/2"
+          assert eigenvalues(_np.array([[0.0, -1.0], [1.0, 0.0]])) == [], "A quarter turn has no real eigenvalues, so the list is empty"
+          assert _np.allclose(eigenvalues(_np.array([[3.0, 1.0], [0.0, 3.0]])), [3.0, 3.0]), "A repeated eigenvalue appears twice: [3.0, 3.0]"
+          assert _np.allclose(eigenvalues(_np.array([[0.0, 2.0], [3.0, 0.0]])), [-(6 ** 0.5), 6 ** 0.5]), "[[0, 2], [3, 0]] has trace 0 and determinant -6, so the eigenvalues are plus and minus sqrt 6"
+          assert _np.allclose(eigenvalues(_np.array([[-1.0, 0.0], [0.0, -4.0]])), [-4.0, -1.0]), "For diag(-1, -4) the list in increasing order is [-4.0, -1.0]"
+          assert output.strip() == "[-0.618, 1.618]\n[]", "The program should print [-0.618, 1.618] and then []"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def eigenvalues(A):
+                t = float(A[0, 0] + A[1, 1])
+                d = float(A[0, 0] * A[1, 1] - A[0, 1] * A[1, 0])
+                disc = t * t - 4 * d
+                if disc < 0:
+                    return []
+                root = disc ** 0.5
+                return [(t + root) / 2, (t - root) / 2]
+
+
+            print("[-0.618, 1.618]\n[]")
+          - |
+            import numpy as np
+
+
+            def eigenvalues(A):
+                t = float(A[0, 0] + A[1, 1])
+                d = float(A[0, 0] * A[1, 1] + A[0, 1] * A[1, 0])
+                disc = t * t - 4 * d
+                if disc < 0:
+                    return []
+                root = disc ** 0.5
+                return [(t - root) / 2, (t + root) / 2]
+
+
+            print("[-0.618, 1.618]\n[]")
+          - |
+            import numpy as np
+
+
+            def eigenvalues(A):
+                return sorted([float(A[0, 0]), float(A[1, 1])])
+
+
+            print("[-0.618, 1.618]\n[]")
+          - |
+            import numpy as np
+
+
+            def eigenvalues(A):
+                t = float(A[0, 0] + A[1, 1])
+                d = float(A[0, 0] * A[1, 1] - A[0, 1] * A[1, 0])
+                disc = t * t - 4 * d
+                if disc <= 0:
+                    return []
+                root = disc ** 0.5
+                return [(t - root) / 2, (t + root) / 2]
+
+
+            print("[-0.618, 1.618]\n[]")
+        explanation: |
+          For a $2 \times 2$ matrix the eigenvalues depend on the entries only through the trace and the determinant. The discriminant $t^2 - 4d$ decides the kind: positive for two real eigenvalues, zero for a repeated one, negative for a complex pair.
+
+          Reading the eigenvalues off the diagonal, the third wrong version, is right for triangular matrices only. The Fibonacci matrix has diagonal $1, 0$ and eigenvalues $1.618$ and $-0.618$.
+
+          The Fibonacci numbers themselves follow. With $\varphi = 1.618\ldots$ and $\psi = -0.618\ldots$, the $n$th number is $(\varphi^n - \psi^n)/\sqrt5$, by splitting the starting vector into the two eigenvectors. Since $|\psi| < 1$ its power dies away, and the ratio of consecutive numbers tends to $\varphi$.
+    - question:
+        id: write-coefficients
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          For a $3 \times 3$ matrix the characteristic polynomial is
+
+          $$\lambda^3 - t\,\lambda^2 + m\,\lambda - d, \qquad t = \operatorname{tr}A,\quad m = \tfrac12\left(t^2 - \operatorname{tr}(A^2)\right),\quad d = \det A.$$
+
+          Write `coefficients(A)` returning the list `[1.0, -t, m, -d]`, and `evaluate(coeffs, x)` returning the value of the polynomial with those coefficients, highest power first, at the number `x`.
+        starter: |
+          import numpy as np
+
+
+          def coefficients(A):
+              return [1.0, 0.0, 0.0, 0.0]
+
+
+          def evaluate(coeffs, x):
+              return 0.0
+
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          c = coefficients(A)
+          print([round(v, 4) + 0.0 for v in c])
+          print([round(evaluate(c, x), 4) + 0.0 for x in (1.0, 2.0, 4.0, 3.0)])
+        solution: |
+          import numpy as np
+
+
+          def coefficients(A):
+              t = float(np.trace(A))
+              m = 0.5 * (t * t - float(np.trace(A @ A)))
+              d = float(np.linalg.det(A))
+              return [1.0, -t, m, -d]
+
+
+          def evaluate(coeffs, x):
+              value = 0.0
+              for c in coeffs:
+                  value = value * x + c
+              return value
+
+
+          A = np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          c = coefficients(A)
+          print([round(v, 4) + 0.0 for v in c])
+          print([round(evaluate(c, x), 4) + 0.0 for x in (1.0, 2.0, 4.0, 3.0)])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]])
+          _c = coefficients(_A)
+          assert isinstance(_c, list) and len(_c) == 4, "There are four coefficients for a cubic"
+          assert _np.allclose(_c, [1.0, -7.0, 14.0, -8.0]), "For this matrix the polynomial is lambda^3 - 7 lambda^2 + 14 lambda - 8: trace 7, m = (49 - 21)/2 = 14, determinant 8"
+          assert _np.allclose(coefficients(_np.diag([1.0, 2.0, 3.0])), [1.0, -6.0, 11.0, -6.0]), "For diag(1, 2, 3) the polynomial is (x - 1)(x - 2)(x - 3) = x^3 - 6x^2 + 11x - 6"
+          assert abs(evaluate([1.0, -7.0, 14.0, -8.0], 3.0) + 2.0) < 1e-9, "x^3 - 7x^2 + 14x - 8 at x = 3 is 27 - 63 + 42 - 8 = -2"
+          assert abs(evaluate([2.0, 0.0, 1.0], 3.0) - 19.0) < 1e-9, "The coefficients are highest power first: [2, 0, 1] is 2x^2 + 1, which is 19 at x = 3"
+          assert all(abs(evaluate(_c, x)) < 1e-8 for x in (1.0, 2.0, 4.0)), "The eigenvalues 1, 2, 4 of the matrix should be roots of its characteristic polynomial"
+          _M = _np.random.default_rng(0).normal(size=(3, 3))
+          assert all(abs(evaluate(coefficients(_M), complex(z))) < 1e-8 for z in _np.linalg.eigvals(_M)), "For a random 3 by 3 matrix every eigenvalue, real or complex, should be a root"
+          assert output.strip() == "[1.0, -7.0, 14.0, -8.0]\n[0.0, 0.0, 0.0, -2.0]", "The program should print [1.0, -7.0, 14.0, -8.0] and then [0.0, 0.0, 0.0, -2.0]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def coefficients(A):
+                t = float(np.trace(A))
+                m = 0.5 * (t * t - float(np.trace(A @ A)))
+                d = float(np.linalg.det(A))
+                return [1.0, t, m, d]
+
+
+            def evaluate(coeffs, x):
+                value = 0.0
+                for c in coeffs:
+                    value = value * x + c
+                return value
+
+
+            print("[1.0, -7.0, 14.0, -8.0]\n[0.0, 0.0, 0.0, -2.0]")
+          - |
+            import numpy as np
+
+
+            def coefficients(A):
+                t = float(np.trace(A))
+                m = 0.5 * (t * t - float(np.trace(A * A)))
+                d = float(np.linalg.det(A))
+                return [1.0, -t, m, -d]
+
+
+            def evaluate(coeffs, x):
+                value = 0.0
+                for c in coeffs:
+                    value = value * x + c
+                return value
+
+
+            print("[1.0, -7.0, 14.0, -8.0]\n[0.0, 0.0, 0.0, -2.0]")
+          - |
+            import numpy as np
+
+
+            def coefficients(A):
+                t = float(np.trace(A))
+                m = 0.5 * (t * t - float(np.trace(A @ A)))
+                d = float(np.linalg.det(A))
+                return [1.0, -t, m, -d]
+
+
+            def evaluate(coeffs, x):
+                value = 0.0
+                for k in range(len(coeffs)):
+                    value = value + coeffs[k] * x ** k
+                return value
+
+
+            print("[1.0, -7.0, 14.0, -8.0]\n[0.0, 0.0, 0.0, -2.0]")
+          - |
+            import numpy as np
+
+
+            def coefficients(A):
+                t = float(np.trace(A))
+                m = 0.5 * (t * t - float(np.trace(A @ A)))
+                d = float(np.linalg.det(A))
+                return [1.0, -t, m, -d]
+
+
+            def evaluate(coeffs, x):
+                value = 0.0
+                for c in coeffs:
+                    value = value * x + c * x
+                return value
+
+
+            print("[1.0, -7.0, 14.0, -8.0]\n[0.0, 0.0, 0.0, -2.0]")
+        explanation: |
+          The polynomial is $\lambda^3 - 7\lambda^2 + 14\lambda - 8 = (\lambda - 1)(\lambda - 2)(\lambda - 4)$. The eigenvalues $1, 2, 4$ add up to the trace 7 and multiply to the determinant 8.
+
+          The middle coefficient is the sum of the products of the eigenvalues in pairs, $1 \cdot 2 + 1 \cdot 4 + 2 \cdot 4 = 14$. In terms of the matrix, $\operatorname{tr}(A^2) = \sum\lambda_i^2$, and $(\sum\lambda_i)^2 - \sum\lambda_i^2$ is twice the sum of the pairwise products. Every coefficient of the characteristic polynomial can be written with traces of powers in this way, which shows again that they are invariants.
+
+          `A * A` squares the entries one by one and is not the matrix square. `evaluate` uses Horner's rule, one multiplication for each coefficient.
+    - question:
+        id: fix-shift
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `geometric_multiplicity(A, lam)` should return the dimension of the eigenspace of `lam`, which is $n - \operatorname{rank}(A - \lambda I)$. For the matrix in the program and $\lambda = 2$ the eigenspace is a plane, so the answer is 2. It prints 0. Fix it.
+        starter: |
+          import numpy as np
+
+
+          def geometric_multiplicity(A, lam):
+              n = len(A)
+              return n - int(np.linalg.matrix_rank(A - lam))
+
+
+          A = np.array([[2.0, 0.0, 0.0], [0.0, 2.0, 1.0], [0.0, 0.0, 5.0]])
+          print(geometric_multiplicity(A, 2.0), geometric_multiplicity(A, 5.0), geometric_multiplicity(A, 3.0))
+        solution: |
+          import numpy as np
+
+
+          def geometric_multiplicity(A, lam):
+              n = len(A)
+              return n - int(np.linalg.matrix_rank(A - lam * np.eye(n)))
+
+
+          A = np.array([[2.0, 0.0, 0.0], [0.0, 2.0, 1.0], [0.0, 0.0, 5.0]])
+          print(geometric_multiplicity(A, 2.0), geometric_multiplicity(A, 5.0), geometric_multiplicity(A, 3.0))
+        tests: |
+          import numpy as _np
+          _A = _np.array([[2.0, 0.0, 0.0], [0.0, 2.0, 1.0], [0.0, 0.0, 5.0]])
+          assert geometric_multiplicity(_A, 2.0) == 2, "The eigenspace of 2 is a plane: subtract lam times the identity, which changes the diagonal only"
+          assert geometric_multiplicity(_A, 5.0) == 1, "The eigenspace of 5 is a line"
+          assert geometric_multiplicity(_A, 3.0) == 0, "3 is not an eigenvalue, so A - 3I is invertible and the kernel has dimension 0"
+          _J = _np.array([[3.0, 1.0], [0.0, 3.0]])
+          assert geometric_multiplicity(_J, 3.0) == 1, "For [[3, 1], [0, 3]] the eigenvalue 3 has a one-dimensional eigenspace"
+          assert geometric_multiplicity(3.0 * _np.eye(2), 3.0) == 2, "For 3I every vector is an eigenvector"
+          assert geometric_multiplicity(_np.ones((3, 3)), 0.0) == 2, "The all-ones matrix has rank 1, so its kernel, the eigenspace of 0, has dimension 2"
+          assert geometric_multiplicity(_np.ones((3, 3)), 3.0) == 1, "The all-ones 3 by 3 matrix has the eigenvalue 3 with eigenvector (1, 1, 1)"
+          assert output.strip() == "2 1 0", "The program should print 2 1 0"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def geometric_multiplicity(A, lam):
+                n = len(A)
+                return n - int(np.linalg.matrix_rank(A - lam))
+
+
+            print("2 1 0")
+          - |
+            import numpy as np
+
+
+            def geometric_multiplicity(A, lam):
+                n = len(A)
+                return int(np.linalg.matrix_rank(A - lam * np.eye(n)))
+
+
+            print("2 1 0")
+          - |
+            import numpy as np
+
+
+            def geometric_multiplicity(A, lam):
+                n = len(A)
+                return n - int(np.linalg.matrix_rank(A + lam * np.eye(n)))
+
+
+            print("2 1 0")
+          - |
+            import numpy as np
+
+
+            def geometric_multiplicity(A, lam):
+                n = len(A)
+                return n - int(np.linalg.matrix_rank(A * lam - np.eye(n)))
+
+
+            print("2 1 0")
+        explanation: |
+          `A - lam` subtracts the number from **every** entry of the array, by broadcasting. The mathematics asks for $A - \lambda I$, which subtracts it from the diagonal only. NumPy raises no error, because subtracting a number from an array is a perfectly good operation. It is just a different one.
+
+          With the fix, the matrix shows both kinds of multiplicity at once. Its characteristic polynomial is $(\lambda - 2)^2(\lambda - 5)$. The eigenvalue 2 has algebraic multiplicity 2 and here also geometric multiplicity 2. Change the entry in row 1, column 2 from 0 to 1 and the polynomial stays the same while the eigenspace of 2 collapses to a line.
+    - question:
+        id: work-identify
+        type: choice
+        system: s2
+        prompt: |
+          A real $2 \times 2$ matrix has trace 2 and determinant 5. What can be said about its eigenvalues, and about what it does to the plane?
+        options:
+          - 'They are 1 and 5.'
+          - 'The discriminant is $4 - 20 < 0$, so they are the complex pair $1 \pm 2i$. No real direction is preserved: the map turns every vector, while scaling areas by 5.'
+          - 'They are $2$ and $5$.'
+          - 'The matrix is singular.'
+        answer: 1
+        explanation: |
+          $\lambda^2 - 2\lambda + 5 = 0$ gives $\lambda = 1 \pm 2i$. Their sum is 2 and their product is $1 + 4 = 5$, as it must be. The absolute value of each is $\sqrt5$, so repeated application spirals outward, multiplying lengths by about $\sqrt5$ each step on average while rotating. Complex eigenvalues of a real matrix always mean rotation of this kind, and their absolute value says whether the spiral grows or decays. That is how the stability of a recurrent system is read from its matrix.
+    - question:
+        id: work-ab-ba
+        type: numeric
+        system: s2
+        prompt: |
+          $A$ is $2 \times 3$ and $B$ is $3 \times 2$, and the $2 \times 2$ matrix $AB$ has eigenvalues 3 and 5. The $3 \times 3$ matrix $BA$ has three eigenvalues. Two of them are 3 and 5. What is the third?
+        answer: "0"
+        explanation: |
+          $BA$ maps $\mathbb{R}^3$ through $\mathbb{R}^2$ and back, so its rank is at most 2 and it is singular: 0 is an eigenvalue. For the others, if $AB\mathbf{v} = \lambda\mathbf{v}$ with $\lambda \ne 0$, then $B\mathbf{v} \ne \mathbf{0}$ and $BA(B\mathbf{v}) = B(AB\mathbf{v}) = \lambda(B\mathbf{v})$. So $AB$ and $BA$ share their nonzero eigenvalues, and the larger one makes up the count with zeros. Check with traces: $\operatorname{tr}(AB) = \operatorname{tr}(BA) = 8$. This fact is what lets $A^\top A$ and $AA^\top$ be used interchangeably later in the cluster.
+    - question:
+        id: work-why-not
+        type: choice
+        system: s2
+        prompt: |
+          Why does `np.linalg.eig` not compute eigenvalues by forming the characteristic polynomial and finding its roots?
+        options:
+          - 'Because the characteristic polynomial does not determine the eigenvalues.'
+          - 'For degree 5 and above no formula for the roots exists, and, worse, the roots of a polynomial are extremely sensitive to small errors in its coefficients. Rounding in the coefficients alone can move the computed eigenvalues by far more than the eigenvalues of the matrix are sensitive to its entries.'
+          - 'Because determinants cannot be computed for large matrices.'
+          - 'It does compute them that way.'
+        answer: 1
+        explanation: |
+          Passing through the coefficients turns a well-conditioned problem into a badly conditioned one, in the same way that forming $A^\top A$ squared the condition number of least squares. The standard example is the polynomial with roots $1, 2, \dots, 20$: changing one coefficient in the tenth significant digit makes several roots complex. Practical algorithms apply orthogonal similarity transformations to the matrix until it is triangular, and read the eigenvalues off the diagonal. In fact the usual way to find the roots of a polynomial numerically is to build a matrix that has it as characteristic polynomial and call an eigenvalue routine.
+  connections:
+    - text: |
+        The golden ratio came out of a matrix of zeros and ones because eigenvalues are the roots of the **characteristic polynomial** $\det(\lambda I - A)$, here $\lambda^2 - \lambda - 1$. For a $2 \times 2$ matrix the polynomial is $\lambda^2 - (\operatorname{tr}A)\lambda + \det A$. In every size the eigenvalues add up to the trace and multiply to the determinant, and the whole polynomial is shared by similar matrices.
+
+        A root has an **algebraic multiplicity**, and its eigenspace has a dimension, the **geometric multiplicity**, which can be smaller. Real matrices can have complex eigenvalues, in conjugate pairs. Numerical software avoids the polynomial altogether.
+
+        The polynomial says how many eigenvalues there are. It does not say whether there are enough eigenvectors to form a basis. When there are, the map is a diagonal matrix in that basis, and every computation with it, powers, inverses, long-run behaviour, reduces to arithmetic on the eigenvalues. When that happens, and what the factorisation looks like, is next: [[m8.diagonalisation]].

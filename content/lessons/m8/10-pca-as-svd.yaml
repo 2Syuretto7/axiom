@@ -1,0 +1,643 @@
+concept: m8.pca-as-svd
+minutes: 90
+claim: You can carry out principal component analysis with the singular value decomposition of the centred data matrix, explain why the first right singular vector is the direction of greatest variance and why the same directions give the smallest reconstruction error, compute the variance along each component and the share it explains, project data to scores and reconstruct it, and name the three standard mistakes, which are forgetting to centre, mixing units, and reading meaning into signs.
+recalls: [m8.eckart-young-theorem]
+uses: [m8.singular-value-decomposition, m8.quadratic-forms-and-the-rayleigh-quotient, m8.spectral-theorem, m8.positive-definite-matrices-and-cholesky, m7.projection-onto-a-subspace, m7.orthonormal-bases, m7.conditioning, m4.projection-onto-a-vector, m4.norms-and-distance, e5.linear-algebra-routines, e5.axis-operations-and-reductions, e5.broadcasting, e5.arrays-dtype-and-shape, e0.functions]
+leads: [m8.operator-and-frobenius-norms]
+starter: |
+  # Scratch space. Six pupils, two tests. One row per pupil.
+  # How much do the marks vary in each test, and along the best single direction?
+  import numpy as np
+
+  X = np.array([[1.0, 2.0], [3.0, 3.0], [4.0, 5.0], [6.0, 6.0], [7.0, 9.0], [9.0, 11.0]])
+  Xc = X - X.mean(axis=0)
+  print([round(float(v), 4) for v in (Xc ** 2).sum(axis=0) / 5])
+
+  s = np.linalg.svd(Xc, compute_uv=False)
+  print([round(float(v), 4) for v in s ** 2 / 5])
+parts:
+  recall:
+    - text: |
+        [[m8.eckart-young-theorem]] showed that cutting the singular value decomposition short gives the closest matrix of low rank. Today the matrix is a table of data, and the theorem becomes a method. Three quick pulls first.
+  puzzle:
+    - text: |
+        Six pupils sat two tests. Each row is a pupil.
+
+        $$X = \begin{pmatrix} 1 & 2 \\ 3 & 3 \\ 4 & 5 \\ 6 & 6 \\ 7 & 9 \\ 9 & 11 \end{pmatrix}$$
+
+        Suppose only **one** number per pupil can be kept. Keeping the first test throws the second away, and the other way round. The two columns clearly move together, so it feels as if one well-chosen number should carry almost everything.
+
+        A fair way to measure what a number carries is its **variance**: how much it differs from pupil to pupil. A number that is the same for everyone tells nothing. The starter computes the variance of each test, and then something from the singular values of the table with its column averages removed.
+
+        ```
+        [8.4, 12.0]
+        [20.1639, 0.2361]
+        ```
+
+        The two tests have variances 8.4 and 12, adding to 20.4. The second line also adds to 20.4, but splits it very differently: 20.16 and 0.24.
+
+        **What single number per pupil has variance 20.16, nearly the whole of it? And what is the leftover 0.24?**
+  intuition:
+    - text: |
+        Plot the six pupils as points in the plane. They form a thin cloud along a slanted line. Move the origin to the centre of the cloud, the point of averages $(5, 6)$.
+
+        Any unit vector $\mathbf{w}$ gives one number per pupil: the coordinate of the pupil's point along $\mathbf{w}$, a dot product. Taking $\mathbf{w} = (1, 0)$ gives the first test. Taking $\mathbf{w} = (0, 1)$ gives the second. Other directions give weighted mixtures.
+
+        The cloud is long in one direction and thin across it. Along the long direction, about $(0.64, 0.77)$, the coordinates are spread widely: variance 20.16. Across it they hardly vary: variance 0.24. A rotation of the axes has moved nearly all the variation into one coordinate.
+
+        Finding the direction is a problem already solved. If the centred points are the rows of $X_c$, the coordinates along $\mathbf{w}$ are the entries of $X_c\mathbf{w}$, and their spread is $\|X_c\mathbf{w}\|^2$. The unit vector that a matrix stretches most is its **first right singular vector**. The next direction, perpendicular to the first, is the second, and so on.
+
+        This is **principal component analysis**, PCA: the singular value decomposition of a centred table. The directions are the **principal components**. Keeping the first $k$ coordinates is the truncated SVD, so by Eckart-Young it is also the closest that any $k$ numbers per row can come to the full table.
+  derivation:
+    - text: |
+        **Setting.** $X$ is $n \times d$: $n$ observations as rows, $d$ measured quantities as columns.
+
+        **Step 1. Centre.** Subtract from each column its average: $X_c = X - \mathbf{1}\bar{\mathbf{x}}^\top$. Every column of $X_c$ has average zero.
+
+        **Step 2. Variance along a direction.** The **variance** of numbers $z_1, \dots, z_n$ with average zero is $\frac{1}{n-1}\sum z_i^2$. For a unit vector $\mathbf{w}$ the coordinates along it are $\mathbf{z} = X_c\mathbf{w}$, with variance
+
+        $$\frac{1}{n-1}\|X_c\mathbf{w}\|^2 = \mathbf{w}^\top C\mathbf{w}, \qquad C = \frac{1}{n-1}X_c^\top X_c.$$
+
+        $C$ is the **covariance matrix**, $d \times d$, symmetric and positive semidefinite. Its diagonal holds the variances of the columns, and its trace is the **total variance**.
+
+        **Step 3. Maximise.** $\mathbf{w}^\top C\mathbf{w}$ over unit vectors is a Rayleigh quotient. Its maximum is the largest eigenvalue of $C$, at the top eigenvector. With the SVD $X_c = U\Sigma V^\top$,
+
+        $$C = \frac{1}{n-1}V\Sigma^2V^\top.$$
+
+        So the eigenvectors of $C$ are the right singular vectors $\mathbf{v}_i$ of $X_c$, and the eigenvalues are $\sigma_i^2/(n-1)$.
+
+        - The **principal components** are $\mathbf{v}_1, \mathbf{v}_2, \dots$, orthonormal directions in $\mathbb{R}^d$.
+        - The **variance along** $\mathbf{v}_i$ is $\sigma_i^2/(n-1)$, and these add up to the total variance.
+        - The **share explained** by component $i$ is $\sigma_i^2/\sum_j\sigma_j^2$.
+
+        By Courant-Fischer, $\mathbf{v}_2$ has the greatest variance among directions perpendicular to $\mathbf{v}_1$, and so on down.
+
+        **Step 4. Scores.** The coordinates of the centred data along the first $k$ components are the **scores**
+
+        $$Z = X_cV_k = U_k\Sigma_k, \qquad n \times k.$$
+
+        Their covariance matrix is $\frac{1}{n-1}\Sigma_k^2$, diagonal: different scores are uncorrelated.
+
+        *The puzzle.* The centred table has singular values $10.0409$ and $1.0864$. Dividing their squares by $5$ gives $20.1639$ and $0.2361$. The first component is $(0.6401, 0.7683)$: the single number is $0.64$ times the first mark plus $0.77$ times the second, measured from the averages. It carries $20.1639/20.4 = 98.8\%$ of the variance.
+    - question:
+        id: derivation-variance
+        type: numeric
+        system: s2
+        prompt: |
+          A centred data matrix with 10 rows has singular values 6 and 3. What is the variance of the data along its first principal component?
+        answer: "4"
+        explanation: |
+          $\sigma_1^2/(n - 1) = 36/9 = 4$. Along the second component it is $9/9 = 1$, so the total variance is 5 and the first component explains $4/5 = 80\%$. The share can be found without $n$, as $36/(36 + 9)$, since the divisor cancels.
+    - text: |
+        **Reconstruction.** From the scores, the data are rebuilt as
+
+        $$\hat X = \mathbf{1}\bar{\mathbf{x}}^\top + ZV_k^\top = \mathbf{1}\bar{\mathbf{x}}^\top + X_cV_kV_k^\top.$$
+
+        Each centred row is projected onto the span of the first $k$ components, and the averages are added back. The centred part of $\hat X$ is the truncated SVD of $X_c$. By Eckart-Young no other choice of $k$ directions gives a smaller total squared error, and that error is $\sigma_{k+1}^2 + \dots + \sigma_d^2$.
+
+        **Two aims, one answer.** For each centred row $\mathbf{x}$, Pythagoras gives $\|\mathbf{x}\|^2 = \|\text{projection}\|^2 + \|\text{residual}\|^2$. The left side is fixed by the data. So making the projections as spread out as possible and making the residuals as small as possible are the same problem. PCA is at once the directions of **greatest variance** and the subspace of **least reconstruction error**. In the puzzle the leftover variance $0.2361$ is the squared error per pupil of describing each one by a single number, with the same divisor $n - 1$.
+
+        **Three standard mistakes.**
+
+        - *Not centring.* Without Step 1 the first singular vector mostly points from the origin towards the average of the data, and describes where the cloud is, not how it varies.
+        - *Mixed units.* Variance depends on units. A column in millimetres has a million times the variance of the same column in metres, and will dominate. When the columns are different kinds of quantity, divide each centred column by its standard deviation first. PCA is then done on the correlation matrix.
+        - *Reading signs.* $\mathbf{v}_i$ and $-\mathbf{v}_i$ are equally valid, and different libraries return different ones. Only the line matters.
+
+        **In NumPy.**
+
+        ```python
+        mean = X.mean(axis=0)
+        U, s, Vt = np.linalg.svd(X - mean, full_matrices=False)
+        components = Vt[:k]                    # one per row
+        variances = s[:k] ** 2 / (len(X) - 1)
+        scores = (X - mean) @ components.T
+        ```
+
+        The SVD of $X_c$ is preferred to the eigendecomposition of $C$: forming $X_c^\top X_c$ squares the condition number.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the steps of principal component analysis on a data matrix X with observations as rows.
+        steps:
+          - 'Subtract from each column its average.'
+          - 'Compute the singular value decomposition of the centred matrix.'
+          - 'Take the first $k$ right singular vectors as the principal components.'
+          - 'Project the centred rows onto them to get the scores.'
+          - 'To reconstruct, multiply the scores by the components and add the averages back.'
+        explanation: Centre, decompose, keep the leading directions, project, and undo.
+  formal:
+    - text: |
+        **Data.** $X \in \mathbb{R}^{n \times d}$, mean $\bar{\mathbf{x}} = \frac1nX^\top\mathbf{1}$, centred $X_c = X - \mathbf{1}\bar{\mathbf{x}}^\top$.
+
+        **Covariance.** $C = \frac{1}{n-1}X_c^\top X_c \succeq 0$. $\operatorname{Var}(X_c\mathbf{w}) = \mathbf{w}^\top C\mathbf{w}$.
+
+        **PCA.** With $X_c = U\Sigma V^\top$: $C = V\frac{\Sigma^2}{n-1}V^\top$. The $i$th principal component is $\mathbf{v}_i$, with variance $\lambda_i = \sigma_i^2/(n-1)$.
+
+        **Variational property.** $\mathbf{v}_k = \arg\max\{\mathbf{w}^\top C\mathbf{w} : \|\mathbf{w}\| = 1,\ \mathbf{w} \perp \mathbf{v}_1, \dots, \mathbf{v}_{k-1}\}$.
+
+        **Best subspace.** Among all $d \times k$ matrices $W$ with orthonormal columns, $W = V_k$ maximises $\operatorname{tr}(W^\top CW)$ and minimises $\|X_c - X_cWW^\top\|_F^2$. The minimum is $\sum_{i > k}\sigma_i^2$. Among all affine subspaces of dimension $k$, the one closest to the data passes through $\bar{\mathbf{x}}$.
+
+        **Scores.** $Z = X_cV_k = U_k\Sigma_k$. $\frac{1}{n-1}Z^\top Z = \operatorname{diag}(\lambda_1, \dots, \lambda_k)$.
+
+        **Explained variance.** $\sum_{i \le k}\lambda_i/\operatorname{tr}C = \sum_{i \le k}\sigma_i^2/\|X_c\|_F^2$.
+
+        **Rank.** $\operatorname{rank}X_c \le \min(n - 1, d)$: centring removes one dimension, so at most $n - 1$ components have nonzero variance.
+
+        **Whitening.** $Z\,\operatorname{diag}(\lambda_i^{-1/2})$ has identity covariance.
+
+        **Dual form.** The nonzero eigenvalues of $X_cX_c^\top$ ($n \times n$) and $X_c^\top X_c$ ($d \times d$) agree, with $\mathbf{u}_i = X_c\mathbf{v}_i/\sigma_i$. When $d \gg n$ the smaller matrix can be used.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-first-step
+        type: choice
+        system: s1
+        prompt: |
+          The first step of PCA is to
+        options: ['sort the rows', 'subtract from each column its average', 'square every entry', 'transpose the table']
+        answer: 1
+        explanation: Centring moves the origin to the middle of the cloud.
+    - question:
+        id: drill-centred-mean
+        type: numeric
+        system: s1
+        prompt: |
+          After centring, what is the average of each column?
+        answer: "0"
+        explanation: That is what centring means.
+    - question:
+        id: drill-components
+        type: choice
+        system: s1
+        prompt: |
+          The principal components of a data matrix are
+        options: ['its columns', 'the right singular vectors of the centred matrix', 'the left singular vectors of the centred matrix', 'its rows']
+        answer: 1
+        explanation: Directions in the space of the measured quantities.
+    - question:
+        id: drill-first
+        type: choice
+        system: s1
+        prompt: |
+          The first principal component is the direction along which the data have
+        options: ['the least variance', 'the greatest variance', 'the greatest average', 'zero variance']
+        answer: 1
+        explanation: The most stretched direction of the centred matrix.
+    - question:
+        id: drill-variance
+        type: numeric
+        system: s1
+        prompt: |
+          A centred matrix with 5 rows has first singular value 8. What is the variance along the first component?
+        answer: "16"
+        explanation: $64/(5 - 1)$.
+    - question:
+        id: drill-share
+        type: numeric
+        system: s1
+        prompt: |
+          The centred matrix has singular values 3 and 1. What share of the variance does the first component explain? Answer as a decimal.
+        answer: "0.9"
+        explanation: $9/(9 + 1)$.
+    - question:
+        id: drill-covariance
+        type: choice
+        system: s1
+        prompt: |
+          The covariance matrix of centred data $X_c$ with $n$ rows is
+        options: ['$X_cX_c^\top$', '$X_c^\top X_c/(n - 1)$', '$X_c/(n - 1)$', '$X_c^\top X_c$']
+        answer: 1
+        explanation: A $d \times d$ symmetric matrix.
+    - question:
+        id: drill-total
+        type: numeric
+        system: s1
+        prompt: |
+          The columns of a table have variances 8.4 and 12. What is the sum of the variances along its two principal components?
+        answer: "20.4"
+        explanation: A rotation of axes does not change the total variance, the trace of the covariance matrix.
+    - question:
+        id: drill-scores
+        type: choice
+        system: s1
+        prompt: |
+          The scores on the first $k$ components are
+        options: ['$X_cV_k$', '$V_kX_c$', '$X_c^\top U_k$', '$\Sigma_k$']
+        answer: 0
+        explanation: Dot products of the centred rows with the components.
+    - question:
+        id: drill-perpendicular
+        type: numeric
+        system: s1
+        prompt: |
+          What is the dot product of the first and second principal components?
+        answer: "0"
+        explanation: Singular vectors are orthonormal.
+    - question:
+        id: drill-sign
+        type: choice
+        system: s1
+        prompt: |
+          One library returns the first component as $(0.64, 0.77)$ and another as $(-0.64, -0.77)$. Then
+        options: ['one of them has a bug', 'both are correct, since the sign of a component is arbitrary', 'the data must differ', 'the second is the second component']
+        answer: 1
+        explanation: Only the line matters.
+    - question:
+        id: drill-max
+        type: numeric
+        system: s1
+        prompt: |
+          A table has 4 rows and 10 columns. At most how many principal components can have nonzero variance?
+        answer: "3"
+        explanation: Centring removes one dimension, leaving rank at most $n - 1$.
+    - question:
+        id: drill-uncorrelated
+        type: choice
+        system: s1
+        prompt: |
+          The covariance matrix of the scores is
+        options: ['the identity', 'diagonal', 'the zero matrix', 'equal to $C$']
+        answer: 1
+        explanation: Different scores are uncorrelated, and the diagonal holds the variances.
+    - question:
+        id: predict-two-routes
+        type: predict
+        system: s1
+        prompt: The pupils of the puzzle. Variances along the components by two routes, and the share of the first. What does this show?
+        code: |
+          import numpy as np
+
+          X = np.array([[1.0, 2.0], [3.0, 3.0], [4.0, 5.0], [6.0, 6.0], [7.0, 9.0], [9.0, 11.0]])
+          Xc = X - X.mean(axis=0)
+          s = np.linalg.svd(Xc, compute_uv=False)
+          print([round(float(v), 4) for v in s ** 2 / 5])
+          C = Xc.T @ Xc / 5
+          print([round(float(v), 4) for v in np.linalg.eigvalsh(C)[::-1]])
+          print(round(float(s[0] ** 2 / (s ** 2).sum()), 4))
+        output: |
+          [20.1639, 0.2361]
+          [20.1639, 0.2361]
+          0.9884
+        explanation: The squared singular values of the centred table, divided by n - 1, are the eigenvalues of the covariance matrix. The first component explains 98.8% of the variance.
+    - question:
+        id: predict-scores
+        type: predict
+        system: s1
+        prompt: The scores of the six pupils on both components, and their covariance matrix. What does this show?
+        code: |
+          import numpy as np
+
+          X = np.array([[1.0, 2.0], [3.0, 3.0], [4.0, 5.0], [6.0, 6.0], [7.0, 9.0], [9.0, 11.0]])
+          Xc = X - X.mean(axis=0)
+          U, s, Vt = np.linalg.svd(Xc, full_matrices=False)
+          Z = Xc @ Vt.T
+          print(np.allclose(Z, U * s))
+          print([[round(float(v), 4) + 0.0 for v in row] for row in Z.T @ Z / 5])
+        output: |
+          True
+          [[20.1639, 0.0], [0.0, 0.2361]]
+        explanation: The scores are the left singular vectors scaled by the singular values. Their covariance matrix is diagonal, so the two scores are uncorrelated, with the variances on the diagonal.
+  work:
+    - text: Slower now. The first task is the whole method.
+    - question:
+        id: write-pca
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `pca(X, k)` for a data matrix with one observation per row. Return the pair `(components, variances)`: the first `k` principal components as the **rows** of a `k` by `d` array, and the variances along them as an array of length `k`, with divisor `n - 1`.
+        starter: |
+          import numpy as np
+
+
+          def pca(X, k):
+              d = X.shape[1]
+              return np.eye(d)[:k], np.ones(k)
+
+
+          X = np.array([[1.0, 2.0], [3.0, 3.0], [4.0, 5.0], [6.0, 6.0], [7.0, 9.0], [9.0, 11.0]])
+          W, variances = pca(X, 2)
+          print([round(float(v), 4) for v in variances])
+          print([round(abs(float(v)), 4) for v in W[0]])
+        solution: |
+          import numpy as np
+
+
+          def pca(X, k):
+              Xc = X - X.mean(axis=0)
+              U, s, Vt = np.linalg.svd(Xc, full_matrices=False)
+              return Vt[:k], s[:k] ** 2 / (len(X) - 1)
+
+
+          X = np.array([[1.0, 2.0], [3.0, 3.0], [4.0, 5.0], [6.0, 6.0], [7.0, 9.0], [9.0, 11.0]])
+          W, variances = pca(X, 2)
+          print([round(float(v), 4) for v in variances])
+          print([round(abs(float(v)), 4) for v in W[0]])
+        tests: |
+          import numpy as _np
+          _X = _np.array([[1.0, 2.0], [3.0, 3.0], [4.0, 5.0], [6.0, 6.0], [7.0, 9.0], [9.0, 11.0]])
+          _out = pca(_X, 2)
+          assert isinstance(_out, tuple) and len(_out) == 2, "pca should return the pair (components, variances)"
+          _W, _v = _out
+          assert _np.shape(_W) == (2, 2) and _np.shape(_v) == (2,), "For the pupils and k = 2 there are two components of length 2 and two variances"
+          assert _np.allclose(_v, [20.16393497, 0.23606503]), "The variances for the pupils are about 20.1639 and 0.2361. Centre the columns, square the singular values and divide by n - 1"
+          assert _np.allclose(_np.abs(_W[0]), [0.640058, 0.7683266], atol=1e-6), "The first component for the pupils is (0.6401, 0.7683), up to sign"
+          _Y = _np.array([[2.0, 0.0, 1.0], [4.0, 1.0, 3.0], [6.0, 1.0, 2.0], [8.0, 2.0, 6.0], [10.0, 1.0, 3.0]])
+          _W, _v = pca(_Y, 2)
+          assert _np.shape(_W) == (2, 3) and _np.shape(_v) == (2,), "For a table with 3 columns and k = 2 the components form a 2 by 3 array, one component per row"
+          assert _np.allclose(_W @ _W.T, _np.eye(2)), "The components should be orthonormal"
+          assert _np.allclose(_v, [11.83704254, 2.12316759]), "For the 5 by 3 table the first two variances are about 11.8370 and 2.1232"
+          _z = (_Y - _Y.mean(axis=0)) @ _W[0]
+          assert abs(float((_z ** 2).sum() / 4) - 11.83704254) < 1e-6, "The scores on the first component should have variance equal to the first returned variance"
+          _R = _np.random.default_rng(0).normal(size=(30, 4)) + 5.0
+          _W, _v = pca(_R, 4)
+          assert abs(float(_v.sum()) - float(_R.var(axis=0, ddof=1).sum())) < 1e-9, "With all components kept, the variances should add up to the total variance of the columns"
+          assert output.strip() == "[20.1639, 0.2361]\n[0.6401, 0.7683]", "The program should print [20.1639, 0.2361] and then [0.6401, 0.7683]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def pca(X, k):
+                U, s, Vt = np.linalg.svd(X, full_matrices=False)
+                return Vt[:k], s[:k] ** 2 / (len(X) - 1)
+
+
+            print("[20.1639, 0.2361]\n[0.6401, 0.7683]")
+          - |
+            import numpy as np
+
+
+            def pca(X, k):
+                Xc = X - X.mean(axis=0)
+                U, s, Vt = np.linalg.svd(Xc, full_matrices=False)
+                return Vt[:, :k], s[:k] ** 2 / (len(X) - 1)
+
+
+            print("[20.1639, 0.2361]\n[0.6401, 0.7683]")
+          - |
+            import numpy as np
+
+
+            def pca(X, k):
+                Xc = X - X.mean(axis=0)
+                U, s, Vt = np.linalg.svd(Xc, full_matrices=False)
+                return Vt[:k], s[:k] / (len(X) - 1)
+
+
+            print("[20.1639, 0.2361]\n[0.6401, 0.7683]")
+          - |
+            import numpy as np
+
+
+            def pca(X, k):
+                Xc = X - X.mean(axis=0)
+                U, s, Vt = np.linalg.svd(Xc, full_matrices=False)
+                return Vt[:k], s[:k] ** 2 / len(X)
+
+
+            print("[20.1639, 0.2361]\n[0.6401, 0.7683]")
+        explanation: |
+          Three lines: centre, decompose, slice. `X.mean(axis=0)` is the row of column averages, and subtracting it broadcasts over the rows. The components are the first `k` rows of `Vt`, and the variances are the squared singular values over $n - 1$.
+
+          The program prints the first component with absolute values, because its sign is arbitrary and any test of PCA code has to allow for that. The tests here compare `W @ W.T` with the identity and compare variances, both of which do not depend on signs.
+
+          The first wrong version skips the centring. For the pupils it reports a first "variance" of about 93, when the total variance of the data is only 20.4. Most of what it measures is the distance of the cloud from the origin.
+    - question:
+        id: write-reconstruct
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `reconstruct(X, k)` returning the best approximation of the data that uses `k` numbers per row: project the centred rows onto the first `k` principal components, and add the column averages back. The result has the same shape as `X`.
+        starter: |
+          import numpy as np
+
+
+          def reconstruct(X, k):
+              return X * 0.0
+
+
+          X = np.array([[1.0, 2.0], [3.0, 3.0], [4.0, 5.0], [6.0, 6.0], [7.0, 9.0], [9.0, 11.0]])
+          R = reconstruct(X, 1)
+          print([round(float(v), 2) for v in R[0]])
+          print(round(float(np.linalg.norm(X - R)), 4))
+        solution: |
+          import numpy as np
+
+
+          def reconstruct(X, k):
+              mean = X.mean(axis=0)
+              Xc = X - mean
+              U, s, Vt = np.linalg.svd(Xc, full_matrices=False)
+              W = Vt[:k]
+              return mean + (Xc @ W.T) @ W
+
+
+          X = np.array([[1.0, 2.0], [3.0, 3.0], [4.0, 5.0], [6.0, 6.0], [7.0, 9.0], [9.0, 11.0]])
+          R = reconstruct(X, 1)
+          print([round(float(v), 2) for v in R[0]])
+          print(round(float(np.linalg.norm(X - R)), 4))
+        tests: |
+          import numpy as _np
+          _X = _np.array([[1.0, 2.0], [3.0, 3.0], [4.0, 5.0], [6.0, 6.0], [7.0, 9.0], [9.0, 11.0]])
+          _R = reconstruct(_X, 1)
+          assert _np.shape(_R) == (6, 2), "The reconstruction has the same shape as the data"
+          assert _np.allclose(_R.mean(axis=0), [5.0, 6.0]), "The reconstruction should have the same column averages as the data, 5 and 6. Add the averages back"
+          assert abs(float(_np.linalg.norm(_X - _R)) - 1.0864277112) < 1e-8, "With one component the error for the pupils should be the second singular value of the centred table, about 1.0864"
+          assert _np.linalg.matrix_rank(_R - _R.mean(axis=0)) == 1, "With one component the centred reconstruction should have rank 1: the points lie on a line"
+          assert _np.allclose(reconstruct(_X, 2), _X), "With all components kept the reconstruction should be the data"
+          _Y = _np.array([[2.0, 0.0, 1.0], [4.0, 1.0, 3.0], [6.0, 1.0, 2.0], [8.0, 2.0, 6.0], [10.0, 1.0, 3.0]])
+          _s = _np.linalg.svd(_Y - _Y.mean(axis=0), compute_uv=False)
+          assert abs(float(_np.linalg.norm(_Y - reconstruct(_Y, 2))) - _s[2]) < 1e-9, "For the 5 by 3 table and k = 2 the error should be the third singular value of the centred table"
+          assert abs(float(_np.linalg.norm(_Y - reconstruct(_Y, 1))) - float(_np.sqrt(_s[1] ** 2 + _s[2] ** 2))) < 1e-9, "For the 5 by 3 table and k = 1 the error should be the root of the sum of squares of the last two singular values"
+          assert output.strip() == "[1.39, 1.67]\n1.0864", "The program should print [1.39, 1.67] and then 1.0864"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def reconstruct(X, k):
+                mean = X.mean(axis=0)
+                Xc = X - mean
+                U, s, Vt = np.linalg.svd(Xc, full_matrices=False)
+                W = Vt[:k]
+                return (Xc @ W.T) @ W
+
+
+            print("[1.39, 1.67]\n1.0864")
+          - |
+            import numpy as np
+
+
+            def reconstruct(X, k):
+                mean = X.mean(axis=0)
+                Xc = X - mean
+                U, s, Vt = np.linalg.svd(Xc, full_matrices=False)
+                W = Vt[:k]
+                return mean + (X @ W.T) @ W
+
+
+            print("[1.39, 1.67]\n1.0864")
+          - |
+            import numpy as np
+
+
+            def reconstruct(X, k):
+                U, s, Vt = np.linalg.svd(X, full_matrices=False)
+                W = Vt[:k]
+                return (X @ W.T) @ W
+
+
+            print("[1.39, 1.67]\n1.0864")
+          - |
+            import numpy as np
+
+
+            def reconstruct(X, k):
+                mean = X.mean(axis=0)
+                Xc = X - mean
+                U, s, Vt = np.linalg.svd(Xc, full_matrices=False)
+                W = Vt[-k:]
+                return mean + (Xc @ W.T) @ W
+
+
+            print("[1.39, 1.67]\n1.0864")
+        explanation: |
+          `Xc @ W.T` are the scores, one row of `k` numbers per observation. Multiplying by `W` turns each row of scores back into a point of the original space, on the subspace spanned by the components. Adding `mean` moves the origin back.
+
+          The first pupil, with marks $(1, 2)$, is rebuilt as $(1.39, 1.67)$: the nearest point on the line through $(5, 6)$ in the direction $(0.64, 0.77)$. The total error over all six pupils is $1.0864$, the discarded singular value, exactly as Eckart-Young says.
+
+          The third wrong version does a truncated SVD of the raw table. That is the best rank-one approximation of $X$ by a line **through the origin**. PCA allows the line to pass through the centre of the cloud, which is a different and better fit. For data far from the origin the difference is large.
+    - question:
+        id: fix-centre
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `first_share(X)` should return the share of the total variance explained by the first principal component. For this table the answer is about `0.8455`. The program prints `0.9695`, which looks even better, and is wrong. Fix it.
+        starter: |
+          import numpy as np
+
+
+          def first_share(X):
+              s = np.linalg.svd(X, compute_uv=False)
+              return float(s[0] ** 2 / (s ** 2).sum())
+
+
+          X = np.array([[2.0, 0.0, 1.0], [4.0, 1.0, 3.0], [6.0, 1.0, 2.0], [8.0, 2.0, 6.0], [10.0, 1.0, 3.0]])
+          print(round(first_share(X), 4))
+        solution: |
+          import numpy as np
+
+
+          def first_share(X):
+              s = np.linalg.svd(X - X.mean(axis=0), compute_uv=False)
+              return float(s[0] ** 2 / (s ** 2).sum())
+
+
+          X = np.array([[2.0, 0.0, 1.0], [4.0, 1.0, 3.0], [6.0, 1.0, 2.0], [8.0, 2.0, 6.0], [10.0, 1.0, 3.0]])
+          print(round(first_share(X), 4))
+        tests: |
+          import numpy as _np
+          _X = _np.array([[2.0, 0.0, 1.0], [4.0, 1.0, 3.0], [6.0, 1.0, 2.0], [8.0, 2.0, 6.0], [10.0, 1.0, 3.0]])
+          assert abs(first_share(_X) - 0.84550304) < 1e-6, "For this table the first component explains about 84.55% of the variance. Subtract the average of each column before the decomposition"
+          assert abs(first_share(_X + 100.0) - 0.84550304) < 1e-6, "Adding 100 to every entry moves the cloud and does not change how it varies, so the share should stay at 0.8455"
+          _P = _np.array([[1.0, 2.0], [3.0, 3.0], [4.0, 5.0], [6.0, 6.0], [7.0, 9.0], [9.0, 11.0]])
+          assert abs(first_share(_P) - 0.98842818) < 1e-6, "For the six pupils the first component explains about 98.84%"
+          _L = _np.array([[0.0, 10.0], [1.0, 10.0], [2.0, 10.0], [3.0, 10.0]])
+          assert abs(first_share(_L) - 1.0) < 1e-9, "When the second column is constant, all the variance is along the first, and the share is 1"
+          assert output.strip() == "0.8455", "The program should print 0.8455"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def first_share(X):
+                s = np.linalg.svd(X, compute_uv=False)
+                return float(s[0] ** 2 / (s ** 2).sum())
+
+
+            print("0.8455")
+          - |
+            import numpy as np
+
+
+            def first_share(X):
+                s = np.linalg.svd(X - X.mean(), compute_uv=False)
+                return float(s[0] ** 2 / (s ** 2).sum())
+
+
+            print("0.8455")
+          - |
+            import numpy as np
+
+
+            def first_share(X):
+                s = np.linalg.svd((X.T - X.mean(axis=1)).T, compute_uv=False)
+                return float(s[0] ** 2 / (s ** 2).sum())
+
+
+            print("0.8455")
+          - |
+            import numpy as np
+
+
+            def first_share(X):
+                s = np.linalg.svd(X - X.mean(axis=0), compute_uv=False)
+                return float(s[0] / s.sum())
+
+
+            print("0.8455")
+        explanation: |
+          The decomposition was applied to the raw table. Its first singular vector then points roughly from the origin to the average row $(6, 1, 3)$, and the first singular value measures how far the data are from the origin. That has nothing to do with how the rows differ from each other, and it gives a flattering share.
+
+          The second test makes the point sharply. Adding 100 to every entry changes nothing about the variation in the data. The uncentred version then reports a share of 99.99%.
+
+          Centring must be by **column**, `X.mean(axis=0)`. Subtracting the overall average `X.mean()` or the row averages are both different operations, and both run without error. A quick check after centring is that `Xc.mean(axis=0)` is zero.
+    - question:
+        id: work-units
+        type: choice
+        system: s2
+        prompt: |
+          A table has one row per person and two columns: height in millimetres, with variance about $10\,000$, and weight in kilograms, with variance about 100. PCA is applied after centring. What is the first component, and what should be done?
+        options:
+          - 'It is an even mix of height and weight, and nothing needs doing.'
+          - 'It is almost exactly the height axis, only because millimetres make that column numerically large. Divide each centred column by its standard deviation before the decomposition, so that each quantity has variance 1 and the result does not depend on units.'
+          - 'It is the weight axis, since weight matters more.'
+          - 'PCA cannot be applied to columns in different units.'
+        answer: 1
+        explanation: |
+          PCA maximises variance, and variance depends on units. Measured in metres the same heights would have variance $0.01$ and the first component would be the weight axis. Neither answer says anything about people. Standardising the columns removes the choice of units, and the components then describe how the quantities vary **together**. When all columns are already in the same unit, such as pixel intensities or marks out of 10, standardising is not needed and can even hurt, since it inflates columns that are nearly constant.
+    - question:
+        id: work-lost
+        type: numeric
+        system: s2
+        prompt: |
+          A centred data matrix has singular values $10, 5, 2, 1$. What share of the total variance is lost if only the first two components are kept? Answer as a decimal to 4 places.
+        answer: "0.0385"
+        explanation: |
+          The squares are $100, 25, 4, 1$, total 130. The discarded share is $5/130 = 0.0385$, and the kept share $125/130 = 96.15\%$. The same number is the relative squared reconstruction error $\|X_c - \hat X_c\|_F^2/\|X_c\|_F^2$. Variance lost and squared error made are one quantity seen two ways.
+    - question:
+        id: work-equivalence
+        type: choice
+        system: s2
+        prompt: |
+          PCA is described in one book as "the directions of greatest variance" and in another as "the subspace with the smallest reconstruction error". Why do these agree?
+        options:
+          - 'They agree only for data in two dimensions.'
+          - 'For each centred row, the squared length equals the squared length of its projection plus the squared length of the residual. The total is fixed by the data, so making the projections as large as possible makes the residuals as small as possible.'
+          - 'They do not agree, and the two books describe different methods.'
+          - 'Because variance and error are both always positive.'
+        answer: 1
+        explanation: |
+          It is Pythagoras, applied row by row and summed. $\|X_c\|_F^2 = \|X_cW\|_F^2 + \|X_c - X_cWW^\top\|_F^2$ for any $W$ with orthonormal columns. The first term on the right is $(n - 1)$ times the variance captured, and the second is the squared reconstruction error. The first description comes from the Rayleigh quotient and the second from Eckart-Young, and the singular value decomposition serves both. The same identity is why an autoencoder with linear layers and squared error, trained to its optimum, finds the same subspace as PCA.
+  connections:
+    - text: |
+        The single number with variance 20.16 is the coordinate of each pupil along the first **principal component**, the direction $(0.64, 0.77)$ through the centre of the cloud. The leftover 0.24 is the variance across it, and also the squared error of describing each pupil by that one number.
+
+        **PCA** is the singular value decomposition of the centred data matrix. The right singular vectors are the components, $\sigma_i^2/(n - 1)$ are the variances along them, and the scores $X_cV_k$ are the data in the new coordinates. The directions of greatest variance and the subspace of least reconstruction error are the same thing, by Pythagoras. Centre first, mind the units, and ignore the signs.
+
+        Throughout the last three lessons two different ways of measuring the size of a matrix have been in use: the largest stretch, and the root of the sum of squares. They gave different numbers for the same error. It is time to treat them properly, with their rules, their uses, and their relation to each other: [[m8.operator-and-frobenius-norms]].
