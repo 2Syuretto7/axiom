@@ -4,9 +4,9 @@ What is built, what comes next and in what order. The curriculum itself, every c
 
 ## Lessons
 
-133 lessons are written, covering 13 of the 54 clusters. Learn walks them in this order: M0, E0, M1, M2, E1, M3, M10, M4, E3, M5, E5, M12, E6.
+140 lessons are written, covering 14 of the 54 clusters. Learn walks them in this order: M0, E0, M1, M2, E1, M3, M10, M4, E3, M5, E5, M12, E6, M7.
 
-The next cluster is M7, orthogonality and least squares.
+The next cluster is M6, abstract vector spaces. With M7 written, it is the last thing M8, spectral theory, is waiting for.
 
 ## Mini-capstones
 
@@ -27,6 +27,7 @@ Built. A mini-capstone closes one cluster. It is one small project in stages tha
 | E5 NumPy and numerical computing | Rent by neighbours, without a loop |
 | M12 Multivariable calculus | An arm that reaches |
 | E6 Autograd from scratch | Water near the well, from an empty file |
+| M7 Orthogonality and least squares | A thermometer you can trust |
 
 Every written cluster now has one. From here on, every new cluster ships with its mini-capstone in the same batch as its lessons.
 

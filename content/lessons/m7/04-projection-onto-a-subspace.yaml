@@ -1,0 +1,673 @@
+concept: m7.projection-onto-a-subspace
+minutes: 85
+claim: You can find the point of a column space nearest to a given vector by requiring the leftover to be orthogonal to every column, solve the resulting equations for the coefficients, write the projection as a single matrix built from the original columns, state and use the two properties that mark a matrix as a projection, read the dimension of the subspace from the trace, and project onto the orthogonal complement by subtracting from the identity.
+recalls: [m7.gram-schmidt-and-qr]
+uses: [m7.orthonormal-bases, m7.orthogonal-subspaces, m5.elimination-and-linear-systems, m5.matrix-multiplication-as-composition, m5.identity-and-inverse, m5.transpose, m5.rank, m5.column-space-and-null-space, m4.projection-onto-a-vector, m4.linear-independence, m4.dot-product, m4.norms-and-distance, e5.linear-algebra-routines, e5.indexing-and-slicing, e5.arrays-dtype-and-shape, e0.functions]
+leads: [m7.least-squares-and-the-normal-equations, m7.pseudo-inverse, m7.conditioning, m8.spectral-theorem, l2.linear-regression-in-closed-form-and-as-geometry]
+starter: |
+  # Scratch space. With orthonormal columns Q, the projection of y is Q Q^T y.
+  # The columns of X are not orthonormal. What does X X^T y give?
+  import numpy as np
+
+  X = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+  y = np.array([1.0, 3.0, 4.0, 6.0])
+  print([round(float(v), 4) for v in X @ (X.T @ y)])
+parts:
+  recall:
+    - text: |
+        [[m7.gram-schmidt-and-qr]] built an orthonormal basis of any column space, and with it the projection $QQ^\top\mathbf{b}$. Today writes that projection without the detour, in terms of the matrix you started with. Three quick pulls first.
+  puzzle:
+    - text: |
+        The line fit asks for the point of a plane nearest to $\mathbf{y} = (1, 3, 4, 6)$. The plane is the column space of $X$, whose columns are the ones and the $x$ values $(0, 1, 2, 3)$. You know the answer already, from descent and from QR: $(1.1, 2.7, 4.3, 5.9)$.
+
+        With orthonormal columns the projection is $QQ^\top\mathbf{y}$. The starter tries the same formula with the columns as they are, $XX^\top\mathbf{y}$, and prints
+
+        ```
+        [14.0, 43.0, 72.0, 101.0]
+        ```
+
+        That is not close to anything. It is not even the right size: the nearest point of a subspace is never longer than the vector projected, and this is about fifteen times as long.
+
+        Yet the formula is half right. $X^\top\mathbf{y}$ measures $\mathbf{y}$ against each column, and multiplying by $X$ builds a combination of the columns, so the result does at least lie in the plane. Something is missing from the middle: a correction for the fact that the columns are too long, and overlap each other.
+
+        **What goes between $X$ and $X^\top$ to make the formula right for any independent columns? And once the projection is one matrix, what can be said about that matrix without computing a single entry?**
+  intuition:
+    - text: |
+        Go back to what "nearest" means. The lesson on orthogonal subspaces showed that at the nearest point, the leftover is at right angles to the whole subspace. If it leaned towards the subspace at all, sliding the point a little in that direction would shorten it.
+
+        So the nearest point $\mathbf{p}$ is pinned down by two conditions:
+
+        1. $\mathbf{p}$ is in the column space: $\mathbf{p} = A\hat{\mathbf{x}}$ for some coefficients $\hat{\mathbf{x}}$.
+        2. The leftover $\mathbf{b} - \mathbf{p}$ is orthogonal to every column of $A$.
+
+        Being orthogonal to every column means that each column's dot product with the leftover is zero, and those dot products, stacked, are $A^\top(\mathbf{b} - A\hat{\mathbf{x}})$. So the second condition is one matrix equation:
+
+        $$A^\top(\mathbf{b} - A\hat{\mathbf{x}}) = \mathbf{0}, \qquad\text{that is,}\qquad A^\top A\,\hat{\mathbf{x}} = A^\top\mathbf{b}.$$
+
+        There is the missing piece. $A^\top\mathbf{b}$ are the raw measurements of $\mathbf{b}$ against the columns, which is what the starter used as coefficients. The true coefficients are those measurements **after the matrix $A^\top A$ has been undone**. That matrix holds the dot products of the columns with one another: their squared lengths on its diagonal and their overlaps off it. With orthonormal columns it is the identity and there is nothing to undo, which is why $QQ^\top$ needed nothing in the middle.
+
+        The figure shows the two conditions for the line fit. The line drawn is a point of the plane, its misses are the leftover, and the two sums it reports are the dot products of the leftover with the two columns.
+    - figure: line-fit
+      props: { slope: 1.5, intercept: 1.1 }
+    - text: |
+        At slope 1.5 the misses are $-0.1, 0.4, -0.1, 0.4$. They add up to 0.6, which is their dot product with the column of ones, and weighted by $x$ they add up to 1.4, their dot product with the column of $x$ values. Neither is zero, so this line is not the nearest point. Raise the slope by one tenth and both sums become zero together, with the sum of squares at its least, 0.2. Move the intercept from there and the first sum leaves zero again.
+
+        One projection, then, is two things at once: a nearest point, and a leftover that every column fails to see.
+  derivation:
+    - text: |
+        **By hand.** Project $\mathbf{b} = (6, 0, 0)$ onto the plane spanned by $\mathbf{a}_1 = (1, 1, 1)$ and $\mathbf{a}_2 = (0, 1, 2)$.
+
+        The dot products of the columns with each other and with $\mathbf{b}$:
+
+        $$A^\top A = \begin{pmatrix} 3 & 3 \\ 3 & 5 \end{pmatrix}, \qquad A^\top\mathbf{b} = \begin{pmatrix} 6 \\ 0 \end{pmatrix}.$$
+
+        Solve $3\hat{x}_1 + 3\hat{x}_2 = 6$ and $3\hat{x}_1 + 5\hat{x}_2 = 0$. Subtracting, $2\hat{x}_2 = -6$, so $\hat{x}_2 = -3$ and $\hat{x}_1 = 5$. Then
+
+        $$\mathbf{p} = 5(1, 1, 1) - 3(0, 1, 2) = (5, 2, -1), \qquad \mathbf{e} = \mathbf{b} - \mathbf{p} = (1, -2, 1).$$
+
+        Check the leftover against each column: $1 - 2 + 1 = 0$ and $0 - 2 + 2 = 0$. And Pythagoras: $\lVert\mathbf{b}\rVert^2 = 36$, $\lVert\mathbf{p}\rVert^2 = 30$, $\lVert\mathbf{e}\rVert^2 = 6$.
+
+        **Is there always exactly one answer?** The equations $A^\top A\,\hat{\mathbf{x}} = A^\top\mathbf{b}$ have a unique solution when $A^\top A$ is invertible, and that holds exactly when the columns of $A$ are independent. Here is why. If $A^\top A\mathbf{x} = \mathbf{0}$, then $\mathbf{x}^\top A^\top A\mathbf{x} = \lVert A\mathbf{x}\rVert^2 = 0$, so $A\mathbf{x} = \mathbf{0}$, and independent columns force $\mathbf{x} = \mathbf{0}$. So $A^\top A$ has only the zero vector in its null space, and a square matrix like that is invertible.
+
+        **The projection as a matrix.** With independent columns, $\hat{\mathbf{x}} = (A^\top A)^{-1}A^\top\mathbf{b}$, and the nearest point is $A$ times that:
+
+        $$\mathbf{p} = P\mathbf{b}, \qquad P = A\,(A^\top A)^{-1}A^\top.$$
+
+        Read it from right to left: measure $\mathbf{b}$ against the columns, correct for their lengths and overlaps, rebuild from the columns. For the example,
+
+        $$P = \frac16\begin{pmatrix} 5 & 2 & -1 \\ 2 & 2 & 2 \\ -1 & 2 & 5 \end{pmatrix},$$
+
+        and its first column times 6 is the $\mathbf{p}$ found above.
+
+        A warning about the formula. It is tempting to "simplify" $(A^\top A)^{-1}$ to $A^{-1}(A^\top)^{-1}$, after which everything cancels to $P = I$. That step needs $A$ to be square and invertible. A tall $A$ has no inverse, and the formula does not collapse. When $A$ **is** square and invertible, its column space is everything, the nearest point to $\mathbf{b}$ is $\mathbf{b}$, and $P = I$ is the right answer.
+    - question:
+        id: derivation-coefficients
+        type: numeric
+        system: s2
+        prompt: |
+          Project $\mathbf{b} = (0, 6, 0)$ onto the same plane, spanned by $(1, 1, 1)$ and $(0, 1, 2)$, for which $A^\top A = \begin{pmatrix} 3 & 3 \\ 3 & 5 \end{pmatrix}$. What is the coefficient $\hat{x}_1$ of the first column?
+        answer: "2"
+        explanation: |
+          $A^\top\mathbf{b} = (6, 6)$. The equations are $3\hat{x}_1 + 3\hat{x}_2 = 6$ and $3\hat{x}_1 + 5\hat{x}_2 = 6$. Subtracting gives $\hat{x}_2 = 0$, then $\hat{x}_1 = 2$. The projection is $(2, 2, 2)$, the second column of $P$ times 6, and the leftover $(-2, 4, -2)$ is orthogonal to both columns.
+    - text: |
+        **Two properties that say everything.** Without computing any entries:
+
+        *Projecting twice is projecting once.* $P\mathbf{b}$ is already in the subspace, and the nearest point of the subspace to a point in it is that point. So $P(P\mathbf{b}) = P\mathbf{b}$ for every $\mathbf{b}$, which is $P^2 = P$. From the formula: $A(A^\top A)^{-1}A^\top A(A^\top A)^{-1}A^\top$, and the middle $A^\top A(A^\top A)^{-1}$ cancels.
+
+        *$P$ is symmetric.* $P^\top = A\,((A^\top A)^{-1})^\top A^\top = P$, since $A^\top A$ is symmetric and so is its inverse. Symmetry is what makes the projection **orthogonal**, dropping straight down onto the subspace. A matrix with $P^2 = P$ that is not symmetric also sends everything into a subspace and leaves that subspace fixed, but along a slant.
+
+        Conversely, any matrix with $P^2 = P$ and $P^\top = P$ is the orthogonal projection onto its own column space. The two equations are the definition.
+
+        **The other half.** The leftover is $\mathbf{b} - P\mathbf{b} = (I - P)\mathbf{b}$. The matrix $I - P$ is also symmetric and also satisfies $(I - P)^2 = I - 2P + P^2 = I - P$. It is the projection onto the orthogonal complement, the null space of $A^\top$. The two destroy each other, $P(I - P) = P - P^2 = 0$: what one keeps, the other removes. Every vector is split as $\mathbf{b} = P\mathbf{b} + (I - P)\mathbf{b}$, the decomposition of the first lesson of this cluster, now as two matrices.
+
+        **Trace.** The sum of the diagonal entries of $P$ equals the dimension of the subspace. Write $P = QQ^\top$ with $n$ orthonormal columns. Its trace is the sum of the squares of all the entries of $Q$, which is $n$, one for each column of length 1. For the example, $(5 + 2 + 5)/6 = 2$: a plane.
+
+        **It does not depend on the basis.** Replace $A$ by $AM$ for any invertible $M$, a different set of columns with the same span. Then $AM(M^\top A^\top AM)^{-1}M^\top A^\top = AMM^{-1}(A^\top A)^{-1}(M^\top)^{-1}M^\top A^\top = P$. In particular, taking the $Q$ of a QR factorisation gives $P = Q(Q^\top Q)^{-1}Q^\top = QQ^\top$. The matrix belongs to the subspace.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the steps for projecting a vector b onto the column space of a matrix A with independent columns.
+        steps:
+          - 'Compute the dot products of the columns with one another, $A^\top A$.'
+          - 'Compute the dot products of the columns with the vector, $A^\top\mathbf{b}$.'
+          - 'Solve $A^\top A\,\hat{\mathbf{x}} = A^\top\mathbf{b}$ for the coefficients.'
+          - 'Form the projection $\mathbf{p} = A\hat{\mathbf{x}}$.'
+          - 'Check that $A^\top(\mathbf{b} - \mathbf{p})$ is zero.'
+        explanation: The two sets of dot products are the ingredients, solving corrects the raw measurements for the columns' lengths and overlaps, and the combination of the columns is the nearest point. The check costs one product and catches most mistakes.
+  formal:
+    - text: |
+        Let $A \in \mathbb{R}^{m \times n}$ have linearly independent columns, and let $\mathbf{b} \in \mathbb{R}^m$.
+
+        **Projection.** There is exactly one $\mathbf{p}$ in the column space of $A$ with $\mathbf{b} - \mathbf{p}$ orthogonal to that column space. It is $\mathbf{p} = A\hat{\mathbf{x}}$, where $\hat{\mathbf{x}}$ is the unique solution of $A^\top A\,\hat{\mathbf{x}} = A^\top\mathbf{b}$, and it is the nearest point: $\lVert\mathbf{b} - \mathbf{p}\rVert \le \lVert\mathbf{b} - \mathbf{v}\rVert$ for every $\mathbf{v}$ in the column space, with equality only for $\mathbf{v} = \mathbf{p}$.
+
+        **Projection matrix.** $P = A(A^\top A)^{-1}A^\top$ satisfies $P\mathbf{b} = \mathbf{p}$ for all $\mathbf{b}$. If $A = QR$, then $P = QQ^\top$.
+
+        **Characterisation.** A matrix $P$ is the orthogonal projection onto a subspace if and only if $P^2 = P$ and $P^\top = P$. The subspace is then the column space of $P$.
+
+        **Properties.** $PA = A$. $I - P$ is the orthogonal projection onto the orthogonal complement, and $P(I - P) = 0$. $\operatorname{tr}P = \operatorname{rank}P = n$. $\lVert\mathbf{b}\rVert^2 = \lVert P\mathbf{b}\rVert^2 + \lVert(I - P)\mathbf{b}\rVert^2$. $P$ depends only on the column space of $A$.
+
+        **Invertibility of $A^\top A$.** $A^\top A$ and $A$ have the same null space. So $A^\top A$ is invertible if and only if the columns of $A$ are independent.
+
+        **A line.** For a single non-zero column $\mathbf{a}$, $P = \dfrac{\mathbf{a}\mathbf{a}^\top}{\mathbf{a}^\top\mathbf{a}}$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-condition
+        type: choice
+        system: s1
+        prompt: |
+          What condition picks out the projection $\mathbf{p} = A\hat{\mathbf{x}}$ of $\mathbf{b}$?
+        options: ['$A\hat{\mathbf{x}} = \mathbf{b}$', '$A^\top(\mathbf{b} - A\hat{\mathbf{x}}) = \mathbf{0}$', '$A(\mathbf{b} - \hat{\mathbf{x}}) = \mathbf{0}$', '$\hat{\mathbf{x}} = A^\top\mathbf{b}$']
+        answer: 1
+        explanation: The leftover is orthogonal to every column.
+    - question:
+        id: drill-formula
+        type: choice
+        system: s1
+        prompt: |
+          The projection matrix onto the column space of $A$, with independent columns, is
+        options: ['$AA^\top$', '$A(A^\top A)^{-1}A^\top$', '$A^\top(AA^\top)^{-1}A$', '$(A^\top A)^{-1}$']
+        answer: 1
+        explanation: Measure, correct for lengths and overlaps, rebuild.
+    - question:
+        id: drill-middle
+        type: choice
+        system: s1
+        prompt: |
+          What does the matrix $A^\top A$ contain?
+        options: ['The dot products of the rows of $A$ with one another', 'The dot products of the columns of $A$ with one another', 'The inverse of $A$', 'The projection']
+        answer: 1
+        explanation: Squared lengths on the diagonal, overlaps off it.
+    - question:
+        id: drill-orthonormal
+        type: choice
+        system: s1
+        prompt: |
+          When the columns are orthonormal, the formula $Q(Q^\top Q)^{-1}Q^\top$ becomes
+        options: ['$I$', '$QQ^\top$', '$Q^\top Q$', '$Q$']
+        answer: 1
+        explanation: The middle is the identity.
+    - question:
+        id: drill-twice
+        type: choice
+        system: s1
+        prompt: |
+          For a projection matrix $P$, what is $P^2$?
+        options: ['$I$', '$P$', '$0$', '$2P$']
+        answer: 1
+        explanation: A point already in the subspace is its own nearest point.
+    - question:
+        id: drill-symmetric
+        type: choice
+        system: s1
+        prompt: |
+          For an orthogonal projection matrix $P$, what is $P^\top$?
+        options: ['$P^{-1}$', '$P$', '$I - P$', '$-P$']
+        answer: 1
+        explanation: It is symmetric.
+    - question:
+        id: drill-complement
+        type: choice
+        system: s1
+        prompt: |
+          Which matrix gives the leftover $\mathbf{b} - \mathbf{p}$ from $\mathbf{b}$?
+        options: ['$P$', '$I - P$', '$P^\top$', '$P - I$']
+        answer: 1
+        explanation: The projection onto the orthogonal complement.
+    - question:
+        id: drill-product
+        type: choice
+        system: s1
+        prompt: |
+          What is $P(I - P)$?
+        options: ['$P$', 'The zero matrix', '$I$', '$I - P$']
+        answer: 1
+        explanation: $P - P^2 = P - P$.
+    - question:
+        id: drill-trace
+        type: numeric
+        system: s1
+        prompt: |
+          $P$ projects $\mathbb{R}^4$ onto the plane of the line fit's two columns. What is the trace of $P$?
+        answer: "2"
+        explanation: The dimension of the subspace.
+    - question:
+        id: drill-trace-complement
+        type: numeric
+        system: s1
+        prompt: |
+          $P$ projects $\mathbb{R}^{10}$ onto a 3-dimensional subspace. What is the trace of $I - P$?
+        answer: "7"
+        explanation: The dimension of the complement, $10 - 3$.
+    - question:
+        id: drill-pa
+        type: choice
+        system: s1
+        prompt: |
+          For $P = A(A^\top A)^{-1}A^\top$, what is $PA$?
+        options: ['$I$', '$A$', '$0$', '$A^\top$']
+        answer: 1
+        explanation: Each column of $A$ is already in the column space.
+    - question:
+        id: drill-invertible
+        type: choice
+        system: s1
+        prompt: |
+          $A^\top A$ is invertible exactly when
+        options: ['$A$ is square', 'the columns of $A$ are independent', 'the rows of $A$ are independent', '$A$ is symmetric']
+        answer: 1
+        explanation: $A^\top A$ and $A$ have the same null space.
+    - question:
+        id: drill-line
+        type: choice
+        system: s1
+        prompt: |
+          The projection matrix onto the line through $\mathbf{a} = (1, 2, 2)$ is $\mathbf{a}\mathbf{a}^\top$ divided by
+        options: ['3', '9', '5', '1']
+        answer: 1
+        explanation: By $\mathbf{a}^\top\mathbf{a} = 1 + 4 + 4$.
+    - question:
+        id: predict-hat
+        type: predict
+        system: s1
+        prompt: The projection matrix of the line fit, applied to the heights. What does this show?
+        code: |
+          import numpy as np
+
+          X = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          P = X @ np.linalg.solve(X.T @ X, X.T)
+          print([[round(float(v), 2) for v in row] for row in P])
+          print([round(float(v), 4) for v in P @ y])
+          print(round(float(np.trace(P)), 4), np.allclose(P @ P, P), np.allclose(P, P.T))
+        output: |
+          [[0.7, 0.4, 0.1, -0.2], [0.4, 0.3, 0.2, 0.1], [0.1, 0.2, 0.3, 0.4], [-0.2, 0.1, 0.4, 0.7]]
+          [1.1, 2.7, 4.3, 5.9]
+          2.0 True True
+        explanation: A 4 by 4 symmetric matrix that turns the measured heights into the fitted ones. Each fitted height is a weighted sum of all four measurements, and row 1 says the first fitted height takes 0.7 of the first measurement. Its trace is 2, the two columns, and applying it twice changes nothing. `np.linalg.solve` with a matrix on the right solves for each column of it, which gives the inverse times $X^\top$ without forming the inverse.
+    - question:
+        id: predict-complement
+        type: predict
+        system: s1
+        prompt: The other projection, onto everything the two columns cannot reach. What does this show?
+        code: |
+          import numpy as np
+
+          X = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          P = X @ np.linalg.solve(X.T @ X, X.T)
+          M = np.eye(4) - P
+          print([round(float(v), 4) for v in M @ y], round(float(np.trace(M)), 4))
+          print(np.allclose(M @ X, 0), np.allclose(P @ M, 0))
+        output: |
+          [-0.1, 0.3, -0.3, 0.1] 2.0
+          True True
+        explanation: The matrix $I - P$ returns the misses of the best line directly. Its trace is 2 because the complement of a plane in four dimensions is another plane. It sends both columns of $X$ to zero, and its product with $P$ is the zero matrix.
+  work:
+    - text: Slower now. The formula is short, and each of its three factors can be put in the wrong place.
+    - question:
+        id: write-project
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `project(A, b)`. `A` is an array with independent columns and `b` is a vector with one entry for each row of `A`. Return the pair `(x_hat, p)`: the coefficients solving $A^\top A\,\hat{\mathbf{x}} = A^\top\mathbf{b}$, and the projection `p`, which is `A @ x_hat`. Use `np.linalg.solve`.
+        starter: |
+          import numpy as np
+
+
+          def project(A, b):
+              # Solve for the coefficients, then rebuild from the columns.
+              return np.zeros(A.shape[1]), np.zeros(len(b))
+
+
+          A = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0]])
+          b = np.array([6.0, 0.0, 0.0])
+          x_hat, p = project(A, b)
+          print([round(float(v), 4) for v in x_hat], [round(float(v), 4) for v in p])
+        solution: |
+          import numpy as np
+
+
+          def project(A, b):
+              x_hat = np.linalg.solve(A.T @ A, A.T @ b)
+              return x_hat, A @ x_hat
+
+
+          A = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0]])
+          b = np.array([6.0, 0.0, 0.0])
+          x_hat, p = project(A, b)
+          print([round(float(v), 4) for v in x_hat], [round(float(v), 4) for v in p])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0]])
+          _b = _np.array([6.0, 0.0, 0.0])
+          _r = project(_A, _b)
+          assert isinstance(_r, tuple) and len(_r) == 2, "project should return the pair (x_hat, p)"
+          _x, _p = _r
+          assert _np.shape(_x) == (2,) and _np.shape(_p) == (3,), "x_hat has one entry for each column of A and p one for each row"
+          assert _np.allclose(_x, [5.0, -3.0]), "For the plane of (1, 1, 1) and (0, 1, 2) and b = (6, 0, 0) the coefficients are (5, -3): solve with A.T @ A on the left and A.T @ b on the right"
+          assert _np.allclose(_p, [5.0, 2.0, -1.0]), "For that plane and b the projection is (5, 2, -1), which is A @ x_hat"
+          assert _np.allclose(_A.T @ (_b - _p), 0), "The leftover b - p should be orthogonal to every column of A"
+          _X = _np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+          _y = _np.array([1.0, 3.0, 4.0, 6.0])
+          _x, _p = project(_X, _y)
+          assert _np.allclose(_x, [1.1, 1.6]) and _np.allclose(_p, [1.1, 2.7, 4.3, 5.9]), "For the line fit the coefficients are (1.1, 1.6) and the projection is (1.1, 2.7, 4.3, 5.9)"
+          _B = _np.random.default_rng(0).normal(size=(7, 3))
+          _c = _np.random.default_rng(1).normal(size=7)
+          _x, _p = project(_B, _c)
+          assert _np.allclose(_B.T @ (_c - _p), 0) and _np.allclose(_B @ _x, _p), "For a random 7 by 3 matrix, p should be A @ x_hat and the leftover should be orthogonal to the columns"
+          _x, _p = project(_A, _A @ _np.array([2.0, 1.0]))
+          assert _np.allclose(_x, [2.0, 1.0]), "A vector already in the column space should come back with its own coefficients"
+          assert output.strip() == "[5.0, -3.0] [5.0, 2.0, -1.0]", "The program should print [5.0, -3.0] [5.0, 2.0, -1.0]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def project(A, b):
+                x_hat = A.T @ b
+                return x_hat, A @ x_hat
+
+
+            print("[5.0, -3.0] [5.0, 2.0, -1.0]")
+          - |
+            import numpy as np
+
+
+            def project(A, b):
+                x_hat = np.linalg.solve(A.T @ A, A.T @ b)
+                return x_hat, x_hat
+
+
+            print("[5.0, -3.0] [5.0, 2.0, -1.0]")
+          - |
+            import numpy as np
+
+
+            def project(A, b):
+                x_hat = np.linalg.solve(A.T @ A, A.T @ b)
+                return A @ x_hat, x_hat
+
+
+            print("[5.0, -3.0] [5.0, 2.0, -1.0]")
+          - |
+            import numpy as np
+
+
+            def project(A, b):
+                x_hat = (A.T @ b) / np.diag(A.T @ A)
+                return x_hat, A @ x_hat
+
+
+            print("[5.0, -3.0] [5.0, 2.0, -1.0]")
+        explanation: |
+          Two lines: solve the equations that say the leftover is orthogonal to the columns, and combine the columns with the coefficients found.
+
+          Using $A^\top\mathbf{b}$ itself as the coefficients is the puzzle's mistake. Dividing each measurement by its own column's squared length, the last wrong version, corrects for the lengths and ignores the overlaps. It is right when the columns are orthogonal and wrong otherwise, which makes it easy to miss on a friendly example.
+
+          The function solves a system and never forms an inverse. That is the habit to keep: `solve` is faster than `inv` followed by a product, and loses less to rounding.
+    - question:
+        id: write-projector
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `projector(A)`, returning the square matrix $P = A(A^\top A)^{-1}A^\top$ that projects onto the column space of `A`, and `split(A, b)`, returning the pair `(p, e)` with `p` the projection of `b` and `e` the leftover, computed as $(I - P)\mathbf{b}$.
+
+          In `projector`, call `np.linalg.solve` with `A.T` as its second argument. It then solves for every column at once and returns $(A^\top A)^{-1}A^\top$.
+        starter: |
+          import numpy as np
+
+
+          def projector(A):
+              m = A.shape[0]
+              return np.zeros((m, m))
+
+
+          def split(A, b):
+              return b * 0.0, b * 1.0
+
+
+          A = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0]])
+          P = projector(A)
+          print([[round(float(v), 4) for v in row] for row in P * 6])
+          p, e = split(A, np.array([6.0, 0.0, 0.0]))
+          print([round(float(v), 4) for v in p], [round(float(v), 4) for v in e])
+        solution: |
+          import numpy as np
+
+
+          def projector(A):
+              return A @ np.linalg.solve(A.T @ A, A.T)
+
+
+          def split(A, b):
+              P = projector(A)
+              return P @ b, (np.eye(len(b)) - P) @ b
+
+
+          A = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0]])
+          P = projector(A)
+          print([[round(float(v), 4) for v in row] for row in P * 6])
+          p, e = split(A, np.array([6.0, 0.0, 0.0]))
+          print([round(float(v), 4) for v in p], [round(float(v), 4) for v in e])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0]])
+          _P = projector(_A)
+          assert _np.shape(_P) == (3, 3), "The projector is square, with one row for each row of A"
+          assert _np.allclose(_P * 6, [[5.0, 2.0, -1.0], [2.0, 2.0, 2.0], [-1.0, 2.0, 5.0]]), "For the plane of (1, 1, 1) and (0, 1, 2), six times P is [[5, 2, -1], [2, 2, 2], [-1, 2, 5]]"
+          assert _np.allclose(_P @ _P, _P), "Projecting twice should be the same as projecting once"
+          assert _np.allclose(_P, _P.T), "P should be symmetric"
+          assert _np.allclose(_P @ _A, _A), "P should leave every column of A where it is"
+          _B = _np.random.default_rng(3).normal(size=(6, 3))
+          _P = projector(_B)
+          assert _np.allclose(_P @ _P, _P) and _np.allclose(_P, _P.T) and _np.allclose(_P @ _B, _B) and abs(float(_np.trace(_P)) - 3) < 1e-9, "For a random 6 by 3 matrix: P squared is P, P is symmetric, P @ A is A and the trace is 3"
+          _b = _np.array([6.0, 0.0, 0.0])
+          _r = split(_A, _b)
+          assert isinstance(_r, tuple) and len(_r) == 2, "split should return the pair (p, e)"
+          _p, _e = _r
+          assert _np.allclose(_p, [5.0, 2.0, -1.0]), "The projection of (6, 0, 0) onto that plane is (5, 2, -1)"
+          assert _np.allclose(_e, [1.0, -2.0, 1.0]), "The leftover of (6, 0, 0) is (1, -2, 1)"
+          _c = _np.random.default_rng(4).normal(size=6)
+          _p, _e = split(_B, _c)
+          assert _np.allclose(_p + _e, _c) and _np.allclose(_B.T @ _e, 0), "The two parts should add up to b, and the leftover should be orthogonal to the columns"
+          assert output.strip() == "[[5.0, 2.0, -1.0], [2.0, 2.0, 2.0], [-1.0, 2.0, 5.0]]\n[5.0, 2.0, -1.0] [1.0, -2.0, 1.0]", "The program should print six times P, then the two parts of (6, 0, 0)"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def projector(A):
+                return A @ A.T
+
+
+            def split(A, b):
+                P = projector(A)
+                return P @ b, (np.eye(len(b)) - P) @ b
+
+
+            print("[[5.0, 2.0, -1.0], [2.0, 2.0, 2.0], [-1.0, 2.0, 5.0]]\n[5.0, 2.0, -1.0] [1.0, -2.0, 1.0]")
+          - |
+            import numpy as np
+
+
+            def projector(A):
+                return np.linalg.solve(A.T @ A, A.T) @ A
+
+
+            def split(A, b):
+                P = projector(A)
+                return P @ b, (np.eye(len(b)) - P) @ b
+
+
+            print("[[5.0, 2.0, -1.0], [2.0, 2.0, 2.0], [-1.0, 2.0, 5.0]]\n[5.0, 2.0, -1.0] [1.0, -2.0, 1.0]")
+          - |
+            import numpy as np
+
+
+            def projector(A):
+                return A @ np.linalg.solve(A.T @ A, A.T)
+
+
+            def split(A, b):
+                P = projector(A)
+                return P @ b, (P - np.eye(len(b))) @ b
+
+
+            print("[[5.0, 2.0, -1.0], [2.0, 2.0, 2.0], [-1.0, 2.0, 5.0]]\n[5.0, 2.0, -1.0] [1.0, -2.0, 1.0]")
+          - |
+            import numpy as np
+
+
+            def projector(A):
+                return A @ np.linalg.solve(A.T @ A, A.T)
+
+
+            def split(A, b):
+                P = projector(A)
+                return P @ b, b
+
+
+            print("[[5.0, 2.0, -1.0], [2.0, 2.0, 2.0], [-1.0, 2.0, 5.0]]\n[5.0, 2.0, -1.0] [1.0, -2.0, 1.0]")
+        explanation: |
+          `np.linalg.solve(A.T @ A, A.T)` is $(A^\top A)^{-1}A^\top$, a wide matrix that turns a vector into its coefficients. Multiplying by `A` on the left rebuilds from the columns. Putting `A` on the right instead gives $(A^\top A)^{-1}A^\top A$, which is the small identity: the coefficients of the columns themselves.
+
+          `split` is the decomposition into a subspace and its complement, written with the two projectors. The sign matters: $P - I$ returns the leftover negated.
+
+          For a large number of rows, forming the square matrix $P$ is wasteful. It has as many entries as the square of the number of rows, and its whole effect on a vector can be had from `project`, which never builds it. The matrix earns its place when its **properties** are what is wanted, as they will be in statistics, where its diagonal says how much each measurement influences its own fitted value.
+    - question:
+        id: fix-not-orthonormal
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `nearest(A, b)` should return the point of the column space of `A` nearest to `b`. It was written and tested with matrices whose columns were orthonormal, and passed. On the plane of $(1, 1, 1)$ and $(0, 1, 2)$ it returns $(6, 6, 6)$ for $\mathbf{b} = (6, 0, 0)$, a point of the plane much further from $\mathbf{b}$ than the true answer $(5, 2, -1)$. Fix it so that it is right for any independent columns. One line needs to change.
+        starter: |
+          import numpy as np
+
+
+          def nearest(A, b):
+              coefficients = A.T @ b
+              return A @ coefficients
+
+
+          A = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0]])
+          b = np.array([6.0, 0.0, 0.0])
+          print([round(float(v), 4) for v in nearest(A, b)])
+        solution: |
+          import numpy as np
+
+
+          def nearest(A, b):
+              coefficients = np.linalg.solve(A.T @ A, A.T @ b)
+              return A @ coefficients
+
+
+          A = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0]])
+          b = np.array([6.0, 0.0, 0.0])
+          print([round(float(v), 4) for v in nearest(A, b)])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0]])
+          _b = _np.array([6.0, 0.0, 0.0])
+          _p = nearest(_A, _b)
+          assert _np.shape(_p) == (3,), "The nearest point has one entry for each row of A"
+          assert _np.allclose(_p, [5.0, 2.0, -1.0]), "For the plane of (1, 1, 1) and (0, 1, 2) the point nearest (6, 0, 0) is (5, 2, -1): the measurements A.T @ b have to be corrected by A.T @ A"
+          assert _np.allclose(_A.T @ (_b - _p), 0), "The leftover should be orthogonal to both columns"
+          _Q = _np.array([[1.0, 0.0], [0.0, 0.6], [0.0, 0.8]])
+          assert _np.allclose(nearest(_Q, _np.array([2.0, 5.0, 10.0])), [2.0, 6.6, 8.8]), "With orthonormal columns the answer should be unchanged: (2, 6.6, 8.8) for b = (2, 5, 10)"
+          _D = _np.array([[2.0, 0.0], [0.0, 3.0], [0.0, 0.0]])
+          assert _np.allclose(nearest(_D, _np.array([1.0, 1.0, 1.0])), [1.0, 1.0, 0.0]), "With orthogonal columns of lengths 2 and 3 the point nearest (1, 1, 1) is (1, 1, 0): the lengths must be corrected for too"
+          _B = _np.random.default_rng(5).normal(size=(6, 3))
+          _c = _np.random.default_rng(6).normal(size=6)
+          assert _np.allclose(_B.T @ (_c - nearest(_B, _c)), 0), "For a random 6 by 3 matrix the leftover should be orthogonal to the columns"
+          assert output.strip() == "[5.0, 2.0, -1.0]", "The program should print [5.0, 2.0, -1.0]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def nearest(A, b):
+                coefficients = A.T @ b
+                return A @ coefficients
+
+
+            print("[5.0, 2.0, -1.0]")
+          - |
+            import numpy as np
+
+
+            def nearest(A, b):
+                coefficients = (A.T @ b) / np.diag(A.T @ A)
+                return A @ coefficients
+
+
+            print("[5.0, 2.0, -1.0]")
+          - |
+            import numpy as np
+
+
+            def nearest(A, b):
+                coefficients = np.linalg.solve(A.T @ A, A.T @ b)
+                return coefficients
+
+
+            print("[5.0, 2.0, -1.0]")
+          - |
+            import numpy as np
+
+
+            def nearest(A, b):
+                coefficients = A.T @ b / len(b)
+                return A @ coefficients
+
+
+            print("[5.0, 2.0, -1.0]")
+        explanation: |
+          `A.T @ b` are the dot products of `b` with the columns. They are the coefficients of the projection only when the columns are orthonormal, since only then is $A^\top A$ the identity. For other columns they must be passed through $(A^\top A)^{-1}$, which is what solving the system does.
+
+          The function was not wrong for the inputs it was tested on. It carried an assumption about its input that nobody wrote down, and it failed without any error when the assumption stopped holding: the shapes were right and the result was a real point of the plane. Two checks would have caught it at once, and both come from this lesson. The leftover of a projection is orthogonal to the columns, and a projection is never longer than the vector projected. $(6, 6, 6)$ has squared length 108, against 36 for $\mathbf{b}$.
+
+          Dividing by each column's squared length repairs the lengths and not the overlap. It passes for orthogonal columns of any length, and fails here.
+    - question:
+        id: work-identity
+        type: choice
+        system: s2
+        prompt: |
+          A student simplifies $P = A(A^\top A)^{-1}A^\top$ to $AA^{-1}(A^\top)^{-1}A^\top = I$ and concludes that every projection is the identity. What is wrong?
+        options:
+          - 'Nothing. Every projection matrix is the identity.'
+          - 'The inverse of a product is the product of the inverses in reverse order only when each factor has an inverse. A tall matrix $A$ has none, so $(A^\top A)^{-1}$ cannot be split. When $A$ is square and invertible the step is valid and the conclusion is right for that case: the column space is the whole space, and projecting onto it changes nothing.'
+          - 'The inverses were written in the wrong order.'
+          - '$A^\top A$ is never invertible.'
+        answer: 1
+        explanation: |
+          $A^\top A$ is a small square matrix that can be invertible even though neither of its rectangular factors is. The argument is a good test of the formula at its edge: with $n = m$ independent columns the subspace is everything, the leftover is always zero, and $P = I$. For $n < m$ the trace of $P$ is $n$, so it cannot be the $m \times m$ identity, whose trace is $m$.
+    - question:
+        id: work-slant
+        type: choice
+        system: s2
+        prompt: |
+          $S = \begin{pmatrix} 1 & 1 \\ 0 & 0 \end{pmatrix}$ satisfies $S^2 = S$. Is it the orthogonal projection onto the horizontal axis?
+        options:
+          - 'Yes. Any matrix with $S^2 = S$ is an orthogonal projection.'
+          - 'No. It sends every vector to the horizontal axis and leaves that axis fixed, but it sends $(0, 1)$ to $(1, 0)$, which is not the nearest point of the axis. The leftover $(-1, 1)$ is not orthogonal to the axis. $S$ is not symmetric, and symmetry is what makes a projection orthogonal.'
+          - 'No, because its determinant is zero.'
+          - 'Yes, because its trace is 1.'
+        answer: 1
+        explanation: |
+          The nearest point of the horizontal axis to $(0, 1)$ is the origin. $S$ projects along the slanted direction $(-1, 1)$ instead of straight down. Both conditions are needed: $P^2 = P$ says the matrix is a projection onto its column space along **some** direction, and $P^\top = P$ says that direction is the perpendicular one. Every projection, orthogonal or not, has determinant zero unless it is the identity, so the determinant decides nothing here.
+    - question:
+        id: work-trace
+        type: numeric
+        system: s2
+        prompt: |
+          A model fits 50 measurements with a design matrix of 50 rows and 4 independent columns. The matrix $I - P$ turns the measurements into the leftovers of the fit. What is its trace?
+        answer: "46"
+        explanation: |
+          $P$ projects onto a 4-dimensional subspace of $\mathbb{R}^{50}$, so its trace is 4 and the trace of $I - P$ is $50 - 4 = 46$. The leftovers have 50 entries but live in a subspace of dimension 46, since they satisfy 4 equations, one for each column they are orthogonal to. Statistics calls this number the degrees of freedom of the residual, and divides the sum of squared leftovers by 46, not 50, to estimate the noise. The four fitted coefficients have used up four dimensions' worth of the data.
+    - question:
+        id: work-basis
+        type: choice
+        system: s2
+        prompt: |
+          Two people fit a line to the same points. One uses the columns ones and $x$. The other uses ones and $x - 1.5$, the centred values. Which of the following are the same for both?
+        options:
+          - 'The coefficients, but not the fitted heights.'
+          - 'The fitted heights and the leftovers, but not the coefficients. Both pairs of columns span the same plane, the projection matrix depends only on the plane, and so $P\mathbf{y}$ is the same. The coefficients say how to build that point from a particular set of columns, and differ: 1.1 and 1.6 for the first, 3.5 and 1.6 for the second.'
+          - 'Nothing.'
+          - 'Everything, including the coefficients.'
+        answer: 1
+        explanation: |
+          The second set of columns is the first times an invertible 2 by 2 matrix, and $P$ is unchanged by that. The fitted line is the same line, written as $1.1 + 1.6x$ or as $3.5 + 1.6(x - 1.5)$. This separation is worth keeping in mind whenever features are rescaled or recombined: predictions are a property of the subspace, and coefficients are a property of the basis.
+  connections:
+    - text: |
+        $XX^\top\mathbf{y}$ gave a vector fifteen times too long, because the raw dot products of $\mathbf{y}$ with the columns are not coefficients unless the columns are orthonormal. The correction is the matrix of the columns' own dot products: the coefficients solve $A^\top A\,\hat{\mathbf{x}} = A^\top\mathbf{b}$, an equation that says no more than that the leftover is orthogonal to every column.
+
+        Assembled, the projection is one matrix, $P = A(A^\top A)^{-1}A^\top$. It is marked by two equations, $P^2 = P$ and $P^\top = P$. Its trace is the dimension of the subspace, $I - P$ projects onto the complement, and neither depends on which basis of the subspace was used.
+
+        All of this was phrased as geometry: a vector, a subspace, a nearest point. Read the same equations as a statement about **equations**. $A\mathbf{x} = \mathbf{b}$ with more rows than columns usually has no solution, because $\mathbf{b}$ is not in the column space. The projection replaces $\mathbf{b}$ by the nearest vector for which a solution exists, and $\hat{\mathbf{x}}$ is the solution of that repaired system. This is how every over-determined problem in science is solved, from the orbit of a planet to the weights of a linear model, and it is where the gradient of the autograd cluster and the right angle of this one turn out to be the same condition. That is the next lesson: [[m7.least-squares-and-the-normal-equations]].

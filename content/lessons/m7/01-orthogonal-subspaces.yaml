@@ -1,0 +1,660 @@
+concept: m7.orthogonal-subspaces
+minutes: 80
+claim: You can say what it means for two subspaces to be orthogonal and check it on spanning sets alone, form the orthogonal complement of a subspace and give its dimension, prove that the null space of a matrix is the orthogonal complement of its row space and that the vectors orthogonal to every column form the null space of the transpose, split any vector into a part in a subspace and a part in its complement, and explain why the leftover of a best fit is at right angles to every column of the data.
+recalls: [m5.determinant, e6.training-an-mlp-on-your-own-engine]
+uses: [m5.column-space-and-null-space, m5.rank, m5.basis-and-dimension, m5.transpose, m5.matrix-vector-product, m5.elimination-and-linear-systems, m4.dot-product, m4.projection-onto-a-vector, m4.linear-combinations-and-span, m4.linear-independence, m4.lines-planes-and-hyperplanes, m12.gradient, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e5.broadcasting, e5.axis-operations-and-reductions, e0.functions, e0.loops]
+leads: [m7.orthonormal-bases, m7.projection-onto-a-subspace, m7.least-squares-and-the-normal-equations, m7.pseudo-inverse, m8.spectral-theorem, m8.singular-value-decomposition]
+bridges:
+  e6.training-an-mlp-on-your-own-engine: |
+    The autograd cluster fitted a line to four points by gradient descent, and its loss crept down towards a floor of 0.2 without ever being told where the floor was. That cluster was about how to compute a gradient. This one is about what the bottom looks like when the model is linear in its weights. There, the bottom is not a matter of step sizes and patience. It is a matter of geometry, and the geometry is a right angle. Today's lesson finds that right angle and gives it a precise meaning.
+starter: |
+  # Scratch space. A line fitted to four points by gradient descent, run for
+  # long enough to settle. Then: what is left over, and how does it sit
+  # against the columns of X?
+  import numpy as np
+
+  X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+  y = np.array([1.0, 3.0, 4.0, 6.0])
+
+  w = np.zeros(2)
+  for step in range(2000):
+      w = w - 0.02 * 2 * X.T @ (X @ w - y)
+
+  r = y - X @ w
+  print([round(float(v), 4) for v in w])
+  print([round(float(v), 4) for v in r])
+  print([round(abs(float(v)), 4) for v in X.T @ r])
+parts:
+  recall:
+    - text: |
+        Two lines of work meet here. [[m5.determinant]] closed a study of matrices as maps, with their column spaces, null spaces and ranks. [[e6.training-an-mlp-on-your-own-engine]] closed the building of an engine that minimises a loss by following its gradient downhill. Today looks at what is true at the bottom. Three quick pulls first.
+  puzzle:
+    - text: |
+        The starter fits a line $y = w_1 x + w_2$ to the points $(0, 1)$, $(1, 3)$, $(2, 4)$, $(3, 6)$ by gradient descent on the sum of squared errors. The matrix $X$ has a column of the $x$ values and a column of ones, so that $X\mathbf{w}$ is the line's height at each point. It runs for 2,000 steps, far more than it needs.
+
+        Run it.
+
+        ```
+        [1.6, 1.1]
+        [-0.1, 0.3, -0.3, 0.1]
+        [0.0, 0.0]
+        ```
+
+        The first line is the best slope and intercept. The second is what is left over: the **residual** $\mathbf{r} = \mathbf{y} - X\mathbf{w}$, how far each point sits above or below the line. No line passes through all four points, so the residual is not zero.
+
+        The third line is $X^\top \mathbf{r}$: the dot product of the residual with each column of $X$. Both are zero. The leftover is at a right angle to the column of $x$ values, and at a right angle to the column of ones.
+
+        Nobody asked for that. Gradient descent was told to make the squared error small. It was told nothing about angles.
+
+        **Why should the best fit leave a residual perpendicular to every column of the data? And if it is perpendicular to both columns, what else is it perpendicular to?**
+  intuition:
+    - text: |
+        The second question first, because its answer is the idea of the lesson.
+
+        If $\mathbf{r}$ is orthogonal to the column $\mathbf{a}_1$ and to the column $\mathbf{a}_2$, then it is orthogonal to every combination of them:
+
+        $$\mathbf{r} \cdot (c_1 \mathbf{a}_1 + c_2 \mathbf{a}_2) = c_1 (\mathbf{r} \cdot \mathbf{a}_1) + c_2 (\mathbf{r} \cdot \mathbf{a}_2) = 0.$$
+
+        So $\mathbf{r}$ is orthogonal to the whole **column space** of $X$: to every vector $X\mathbf{w}$, which is to say, to every line's list of heights. Being perpendicular is not really a relation between two vectors here. It is a relation between a vector and a **subspace**.
+
+        Now the first question. The heights of all possible lines form a plane through the origin in four-dimensional space, the column space of $X$. The data $\mathbf{y}$ is a point not on that plane. Fitting a line means choosing the point $X\mathbf{w}$ of the plane nearest to $\mathbf{y}$. And the nearest point of a plane to a point off it is where the perpendicular lands, as you found for a line in the lesson on projecting onto a vector. If the leftover leaned at all along some direction of the plane, sliding a little that way would shorten it.
+
+        There is a second way to see it, straight from the engine. The gradient of the loss $\lVert X\mathbf{w} - \mathbf{y} \rVert^2$ is $2X^\top(X\mathbf{w} - \mathbf{y}) = -2X^\top\mathbf{r}$. At the bottom the gradient is zero. **"The gradient is zero" and "the residual is orthogonal to every column" are the same sentence.**
+
+        So the vectors orthogonal to every column of $X$ matter, and they form a subspace of their own: add two of them, or scale one, and the result is still orthogonal to every column. Two subspaces, each made of vectors perpendicular to everything in the other. That pairing turns out to be built into every matrix, twice.
+  derivation:
+    - text: |
+        **Orthogonal subspaces.** Two subspaces $U$ and $V$ of $\mathbb{R}^n$ are **orthogonal** if $\mathbf{u} \cdot \mathbf{v} = 0$ for every $\mathbf{u}$ in $U$ and every $\mathbf{v}$ in $V$.
+
+        That is infinitely many conditions, and the calculation above shows that finitely many suffice: **it is enough to check a spanning set of $U$ against a spanning set of $V$**. If the columns of a matrix $U$ span one and the columns of $V$ span the other, the subspaces are orthogonal exactly when every entry of $U^\top V$ is zero, since that matrix holds every dot product of a column with a column.
+
+        In $\mathbb{R}^3$, the $z$-axis is orthogonal to the floor, the plane of vectors $(x, y, 0)$. A wall and the floor are **not** orthogonal subspaces, though a builder would call them perpendicular. Take the wall of vectors $(x, 0, z)$. The vector $(1, 0, 0)$ lies in the wall and in the floor, and its dot product with itself is 1. Two orthogonal subspaces can share only the zero vector: a vector $\mathbf{x}$ in both must satisfy $\mathbf{x} \cdot \mathbf{x} = 0$, so its length is zero.
+
+        **The orthogonal complement.** For a subspace $U$ of $\mathbb{R}^n$, collect **every** vector orthogonal to all of $U$:
+
+        $$U^\perp = \{\mathbf{x} : \mathbf{x} \cdot \mathbf{u} = 0 \text{ for all } \mathbf{u} \in U\}.$$
+
+        This is the largest subspace orthogonal to $U$, called its **orthogonal complement** and read "U perp". The complement of the floor is the $z$-axis, and not merely orthogonal to it: nothing else is perpendicular to the whole floor.
+
+        **Every matrix carries two such pairs.** Let $A$ have $m$ rows and $n$ columns. The equation $A\mathbf{x} = \mathbf{0}$ says, one row at a time,
+
+        $$(\text{row } 1) \cdot \mathbf{x} = 0, \quad (\text{row } 2) \cdot \mathbf{x} = 0, \quad \dots$$
+
+        So $\mathbf{x}$ is in the null space exactly when it is orthogonal to every row, which is to say to every combination of rows. **The null space of $A$ is the orthogonal complement of its row space.** Nothing was computed. The definition of the matrix-vector product, read row by row, is the proof.
+
+        Apply the same sentence to $A^\top$, whose rows are the columns of $A$. The vectors $\mathbf{y}$ with $A^\top\mathbf{y} = \mathbf{0}$ are those orthogonal to every column of $A$. **The null space of $A^\top$ is the orthogonal complement of the column space of $A$.** The puzzle's residual satisfies $X^\top\mathbf{r} = \mathbf{0}$, so it lies in that complement.
+
+        | in $\mathbb{R}^n$, where $\mathbf{x}$ lives | in $\mathbb{R}^m$, where $A\mathbf{x}$ lives |
+        | --- | --- |
+        | row space of $A$, dimension $r$ | column space of $A$, dimension $r$ |
+        | null space of $A$, dimension $n - r$ | null space of $A^\top$, dimension $m - r$ |
+
+        Here $r$ is the rank. In each column of the table the two subspaces are orthogonal complements, and their dimensions add up to the dimension of the whole space. That count is the rank-nullity relation you met with the null space, now seen as geometry: the directions a matrix responds to and the directions it ignores are at right angles and together fill the space.
+
+        Take $A = \begin{pmatrix} 1 & 0 & 1 \\ 0 & 1 & 1 \end{pmatrix}$. Its rows span a plane in $\mathbb{R}^3$. Its null space is the line through $\mathbf{n} = (1, 1, -1)$, and indeed $(1, 0, 1) \cdot \mathbf{n} = 0$ and $(0, 1, 1) \cdot \mathbf{n} = 0$. A plane and the line perpendicular to it: dimensions 2 and 1, in a space of dimension 3.
+    - question:
+        id: derivation-dimension
+        type: numeric
+        system: s2
+        prompt: |
+          A matrix has 5 rows, 8 columns and rank 3. What is the dimension of the subspace of vectors orthogonal to every one of its **columns**?
+        answer: "2"
+        explanation: |
+          The columns live in $\mathbb{R}^5$, and they span the column space, of dimension 3. The vectors orthogonal to all of them form its orthogonal complement, the null space of $A^\top$, of dimension $5 - 3 = 2$. The 8 is a distraction for this question. It matters for the other pair: the null space of $A$ lives in $\mathbb{R}^8$ and has dimension $8 - 3 = 5$.
+    - text: |
+        **Splitting a vector.** Because a subspace and its complement share only $\mathbf{0}$ and their dimensions add up to $n$, a basis of one together with a basis of the other is a basis of $\mathbb{R}^n$. So **every vector is, in exactly one way, a vector of $U$ plus a vector of $U^\perp$**:
+
+        $$\mathbf{x} = \mathbf{x}_U + \mathbf{x}_\perp.$$
+
+        For the matrix above, with $U$ the row space, take $\mathbf{x} = (3, 0, 0)$. Its part along the null space is its projection onto $\mathbf{n}$:
+
+        $$\mathbf{x}_\perp = \frac{\mathbf{x} \cdot \mathbf{n}}{\mathbf{n} \cdot \mathbf{n}}\,\mathbf{n} = \frac{3}{3}(1, 1, -1) = (1, 1, -1),$$
+
+        and the rest, $\mathbf{x}_U = (2, -1, 1)$, is in the row space: it is $2(1, 0, 1) - (0, 1, 1)$. The matrix cannot tell $\mathbf{x}$ from $\mathbf{x}_U$, since $A\mathbf{x}_\perp = \mathbf{0}$: both are sent to $(3, 0)$. **A matrix acts only on the row-space part of what it is given.**
+
+        The same split, in the other space, is the puzzle. The data $\mathbf{y}$ in $\mathbb{R}^4$ is a part in the column space of $X$, the fitted heights $X\mathbf{w} = (1.1, 2.7, 4.3, 5.9)$, plus a part in the complement, the residual $(-0.1, 0.3, -0.3, 0.1)$. Fitting a line **is** this split. The rest of this cluster is about computing it well.
+
+        Since the two parts are orthogonal, Pythagoras applies to them: $\lVert\mathbf{x}\rVert^2 = \lVert\mathbf{x}_U\rVert^2 + \lVert\mathbf{x}_\perp\rVert^2$. And taking the complement twice returns the subspace you began with: $(U^\perp)^\perp = U$.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the steps of the argument that the null space of $A$ is the orthogonal complement of its row space.
+        steps:
+          - '$\mathbf{x}$ is in the null space means $A\mathbf{x} = \mathbf{0}$.'
+          - 'Entry $i$ of $A\mathbf{x}$ is the dot product of row $i$ with $\mathbf{x}$.'
+          - 'So $\mathbf{x}$ is in the null space exactly when it is orthogonal to every row.'
+          - 'A vector orthogonal to every row is orthogonal to every combination of rows, and conversely.'
+          - 'So the null space is the set of all vectors orthogonal to the row space.'
+        explanation: The argument unpacks the definition of the product one row at a time, and then uses the fact that orthogonality to a spanning set is orthogonality to the span. No computation is involved, which is why the statement holds for every matrix.
+  formal:
+    - text: |
+        **Orthogonal subspaces.** Subspaces $U, V \subseteq \mathbb{R}^n$ are orthogonal, written $U \perp V$, if $\mathbf{u} \cdot \mathbf{v} = 0$ for all $\mathbf{u} \in U$, $\mathbf{v} \in V$. If $U$ and $V$ are the column spaces of matrices $U$ and $V$, this holds if and only if $U^\top V = 0$. Then $U \cap V = \{\mathbf{0}\}$.
+
+        **Orthogonal complement.** $U^\perp = \{\mathbf{x} \in \mathbb{R}^n : \mathbf{x} \cdot \mathbf{u} = 0 \text{ for all } \mathbf{u} \in U\}$. It is a subspace, $\dim U + \dim U^\perp = n$, and $(U^\perp)^\perp = U$.
+
+        **The four subspaces.** For $A \in \mathbb{R}^{m \times n}$ of rank $r$, writing $C(\cdot)$ for a column space and $N(\cdot)$ for a null space,
+
+        $$N(A) = C(A^\top)^\perp \subseteq \mathbb{R}^n, \qquad N(A^\top) = C(A)^\perp \subseteq \mathbb{R}^m,$$
+
+        with dimensions $n - r$, $r$, $m - r$ and $r$.
+
+        **Orthogonal decomposition.** For a subspace $U$, every $\mathbf{x} \in \mathbb{R}^n$ is uniquely $\mathbf{x} = \mathbf{x}_U + \mathbf{x}_\perp$ with $\mathbf{x}_U \in U$ and $\mathbf{x}_\perp \in U^\perp$, and $\lVert\mathbf{x}\rVert^2 = \lVert\mathbf{x}_U\rVert^2 + \lVert\mathbf{x}_\perp\rVert^2$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-meaning
+        type: choice
+        system: s1
+        prompt: |
+          What does it mean for subspaces $U$ and $V$ to be orthogonal?
+        options: ['Some vector of $U$ is orthogonal to some vector of $V$', 'Every vector of $U$ is orthogonal to every vector of $V$', 'They have the same dimension', 'They share only a line']
+        answer: 1
+        explanation: Every pair, one from each, has dot product zero.
+    - question:
+        id: drill-check
+        type: choice
+        system: s1
+        prompt: |
+          The columns of $U$ span one subspace and the columns of $V$ another. Which test shows that the subspaces are orthogonal?
+        options: ['$U^\top V$ is the zero matrix', '$U^\top V$ is the identity', '$UV^\top$ is the zero matrix', '$U + V$ is the zero matrix']
+        answer: 0
+        explanation: Its entries are the dot products of each column of U with each column of V.
+    - question:
+        id: drill-common
+        type: choice
+        system: s1
+        prompt: |
+          Which vectors can lie in both of two orthogonal subspaces?
+        options: ['Any unit vector', 'Only the zero vector', 'Any vector of the smaller one', 'None at all']
+        answer: 1
+        explanation: Such a vector is orthogonal to itself, so its length is zero.
+    - question:
+        id: drill-wall
+        type: choice
+        system: s1
+        prompt: |
+          In $\mathbb{R}^3$, are the floor, all $(x, y, 0)$, and the wall, all $(x, 0, z)$, orthogonal subspaces?
+        options: ['Yes, they meet at a right angle', 'No, they share the line of vectors $(x, 0, 0)$', 'Yes, since their normals are orthogonal', 'Only at the origin']
+        answer: 1
+        explanation: A non-zero vector in both is not orthogonal to itself.
+    - question:
+        id: drill-complement-dim
+        type: numeric
+        system: s1
+        prompt: |
+          $U$ is a 2-dimensional subspace of $\mathbb{R}^5$. What is the dimension of $U^\perp$?
+        answer: "3"
+        explanation: The two dimensions add up to 5.
+    - question:
+        id: drill-null-rows
+        type: choice
+        system: s1
+        prompt: |
+          The null space of $A$ is the orthogonal complement of which subspace?
+        options: ['The column space of $A$', 'The row space of $A$', 'The null space of $A^\top$', 'All of $\mathbb{R}^n$']
+        answer: 1
+        explanation: Each entry of Ax is a row dotted with x.
+    - question:
+        id: drill-left-null
+        type: choice
+        system: s1
+        prompt: |
+          A vector $\mathbf{y}$ is orthogonal to every column of $A$. Which equation does it satisfy?
+        options: ['$A\mathbf{y} = \mathbf{0}$', '$A^\top\mathbf{y} = \mathbf{0}$', '$A^\top A\mathbf{y} = \mathbf{y}$', '$\mathbf{y} = A\mathbf{x}$ for some $\mathbf{x}$']
+        answer: 1
+        explanation: The rows of the transpose are the columns of A.
+    - question:
+        id: drill-null-dim
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ has 4 rows, 6 columns and rank 4. What is the dimension of its null space?
+        answer: "2"
+        explanation: Six minus the rank.
+    - question:
+        id: drill-n
+        type: choice
+        system: s1
+        prompt: |
+          $A = \begin{pmatrix} 1 & 0 & 1 \\ 0 & 1 & 1 \end{pmatrix}$. Which vector is orthogonal to both rows?
+        options: ['$(1, 1, 1)$', '$(1, 1, -1)$', '$(1, -1, 0)$', '$(0, 0, 1)$']
+        answer: 1
+        explanation: One minus one, and one minus one.
+    - question:
+        id: drill-twice
+        type: choice
+        system: s1
+        prompt: |
+          What is $(U^\perp)^\perp$?
+        options: ['$U$', '$U^\perp$', 'Only the zero vector', 'All of $\mathbb{R}^n$']
+        answer: 0
+        explanation: Taking the complement twice returns the subspace.
+    - question:
+        id: drill-planes
+        type: choice
+        system: s1
+        prompt: |
+          Can two planes through the origin in $\mathbb{R}^3$ be orthogonal subspaces?
+        options: ['Yes, if their normals are orthogonal', 'No, their dimensions add up to 4, more than 3, so they must share a line', 'Yes, always', 'Only if one is the floor']
+        answer: 1
+        explanation: Orthogonal subspaces share only the zero vector, and two planes in three dimensions always share at least a line.
+    - question:
+        id: drill-pythagoras
+        type: numeric
+        system: s1
+        prompt: |
+          A vector splits into a part of length 3 in $U$ and a part of length 4 in $U^\perp$. What is its length?
+        answer: "5"
+        explanation: The parts are orthogonal, so the squares of the lengths add.
+    - question:
+        id: predict-rows
+        type: predict
+        system: s1
+        prompt: A matrix applied to a vector, and to that vector plus a multiple of the null-space direction. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[1.0, 0.0, 1.0], [0.0, 1.0, 1.0]])
+          n = np.array([1.0, 1.0, -1.0])
+          x = np.array([3.0, 0.0, 0.0])
+          print((A @ n).tolist())
+          print((A @ x).tolist(), (A @ (x - n)).tolist())
+        output: |
+          [0.0, 0.0]
+          [3.0, 0.0] [3.0, 0.0]
+        explanation: Each row of A has dot product zero with n, so n is in the null space. Removing the null-space part of x, which here is n itself, leaves (2, -1, 1), and the matrix sends it to the same place.
+    - question:
+        id: predict-residual
+        type: predict
+        system: s1
+        prompt: The best line's fitted heights and its residual, for the puzzle's four points. What does this show?
+        code: |
+          import numpy as np
+
+          X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          fit = X @ np.array([1.6, 1.1])
+          r = y - fit
+          print(round(abs(float(fit @ r)), 6))
+          print(round(float(y @ y), 4), round(float(fit @ fit + r @ r), 4))
+        output: |
+          0.0
+          62.0 62.0
+        explanation: The fitted heights are in the column space and the residual is in its complement, so their dot product is zero and Pythagoras holds, 62 = 61.8 + 0.2. The 0.2 is the least sum of squared errors, and the 62 is the loss gradient descent started from, with both weights at zero.
+  work:
+    - text: Slower now. In code a dot product is never exactly zero, so each of these has a tolerance.
+    - question:
+        id: write-orthogonal
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `orthogonal(U, V, tol=1e-9)`. `U` and `V` are arrays with the same number of rows. Their columns span two subspaces. Return `True` if the subspaces are orthogonal, in the sense that every dot product of a column of `U` with a column of `V` is smaller than `tol` in absolute value, and `False` otherwise.
+        starter: |
+          import numpy as np
+
+
+          def orthogonal(U, V, tol=1e-9):
+              # Replace the next line with your own.
+              return True
+
+
+          X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          r = np.array([[-0.1], [0.3], [-0.3], [0.1]])
+          floor = np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]])
+          wall = np.array([[1.0, 0.0], [0.0, 0.0], [0.0, 1.0]])
+          print(orthogonal(X, r), orthogonal(floor, wall))
+        solution: |
+          import numpy as np
+
+
+          def orthogonal(U, V, tol=1e-9):
+              return float(np.abs(U.T @ V).max()) < tol
+
+
+          X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          r = np.array([[-0.1], [0.3], [-0.3], [0.1]])
+          floor = np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]])
+          wall = np.array([[1.0, 0.0], [0.0, 0.0], [0.0, 1.0]])
+          print(orthogonal(X, r), orthogonal(floor, wall))
+        tests: |
+          import numpy as _np
+          _floor = _np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]])
+          _wall = _np.array([[1.0, 0.0], [0.0, 0.0], [0.0, 1.0]])
+          _up = _np.array([[0.0], [0.0], [2.0]])
+          assert orthogonal(_floor, _up) == True, "The floor and the vertical axis are orthogonal"
+          assert orthogonal(_floor, _wall) == False, "The floor and a wall share a line, so they are not orthogonal"
+          assert orthogonal(_np.array([[1.0, 0.0], [0.0, 1.0]]), _np.array([[1.0], [-1.0]])) == False, "The dot products 1 and -1 cancel when added. Look at each one, not at their sum"
+          assert orthogonal(_np.array([[1.0, 5.0], [1.0, 5.0], [0.0, 0.0]]), _np.array([[0.0, 1.0], [0.0, -1.0], [3.0, 0.0]])) == True, "Every column of the first is orthogonal to every column of the second here"
+          assert orthogonal(_np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]]), _np.array([[0.0, 0.0], [0.0, 1.0], [1.0, 0.0]])) == False, "Check every column against every column, not only the first of each"
+          _a = _np.array([[0.1], [0.2], [0.3]]); _b = _np.array([[0.3], [0.0], [-0.1]])
+          assert orthogonal(_a, _b) == True, "A dot product that is zero up to rounding should count as zero"
+          assert orthogonal(_a, _b + 1e-3) == False and orthogonal(_a, _b + 1e-3, 0.01) == True, "The tolerance passed in should be the one used"
+          assert output.strip() == "True False", "The program should print True False"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def orthogonal(U, V, tol=1e-9):
+                return abs(float((U.T @ V).sum())) < tol
+
+
+            print("True False")
+          - |
+            import numpy as np
+
+
+            def orthogonal(U, V, tol=1e-9):
+                return abs(float(U[:, 0] @ V[:, 0])) < tol
+
+
+            print("True False")
+          - |
+            import numpy as np
+
+
+            def orthogonal(U, V, tol=1e-9):
+                return float(np.abs(U.T @ V).max()) == 0.0
+
+
+            print("True False")
+          - |
+            import numpy as np
+
+
+            def orthogonal(U, V, tol=1e-9):
+                return float(np.abs(U.T @ V).min()) < tol
+
+
+            print("True False")
+        explanation: |
+          `U.T @ V` is the table of every column of `U` dotted with every column of `V`. The subspaces are orthogonal when the largest entry of that table, in absolute value, is zero, and in floating point "zero" means "below a tolerance".
+
+          Adding the dot products up lets a 1 and a $-1$ cancel. Checking one pair of columns checks one pair of vectors. Asking for exact equality with zero fails on $0.03 - 0.03$, which in floats can leave a crumb of about $10^{-18}$. And taking the smallest entry asks whether **some** pair is orthogonal, which is the opposite quantifier.
+
+          The program confirms the puzzle, that the residual is orthogonal to the column space of $X$, and refuses the floor and the wall.
+    - question:
+        id: write-complement
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          `orthogonal` is given. Write `complements(U, V)`. The columns of `U` and of `V` span two subspaces of $\mathbb{R}^n$, where $n$ is the number of rows. Return `True` if each subspace is the orthogonal complement of the other: they are orthogonal, and their dimensions add up to $n$. Otherwise return `False`.
+
+          The columns need not be independent, so find each dimension with `np.linalg.matrix_rank`.
+        starter: |
+          import numpy as np
+
+
+          def orthogonal(U, V, tol=1e-9):
+              return float(np.abs(U.T @ V).max()) < tol
+
+
+          def complements(U, V):
+              # Replace the next line with your own.
+              return orthogonal(U, V)
+
+
+          A = np.array([[1.0, 0.0, 1.0], [0.0, 1.0, 1.0]])
+          n = np.array([[1.0], [1.0], [-1.0]])
+          X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          r = np.array([[-0.1], [0.3], [-0.3], [0.1]])
+          print(complements(A.T, n), complements(X, r))
+        solution: |
+          import numpy as np
+
+
+          def orthogonal(U, V, tol=1e-9):
+              return float(np.abs(U.T @ V).max()) < tol
+
+
+          def complements(U, V):
+              n = U.shape[0]
+              return orthogonal(U, V) and int(np.linalg.matrix_rank(U) + np.linalg.matrix_rank(V)) == n
+
+
+          A = np.array([[1.0, 0.0, 1.0], [0.0, 1.0, 1.0]])
+          n = np.array([[1.0], [1.0], [-1.0]])
+          X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          r = np.array([[-0.1], [0.3], [-0.3], [0.1]])
+          print(complements(A.T, n), complements(X, r))
+        tests: |
+          import numpy as _np
+          _floor = _np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]])
+          _up = _np.array([[0.0], [0.0], [2.0]])
+          _wall = _np.array([[1.0, 0.0], [0.0, 0.0], [0.0, 1.0]])
+          assert complements(_floor, _up) == True and complements(_up, _floor) == True, "The floor and the vertical axis are complements, either way round"
+          assert complements(_floor, _wall) == False, "The floor and a wall are not orthogonal, though their dimensions add up to more than 3"
+          assert complements(_floor, _np.array([[1.0], [0.0], [1.0]])) == False, "The floor and a line that leans over it have dimensions adding up to 3, and they are not orthogonal"
+          _x = _np.array([[1.0], [0.0], [0.0]])
+          assert complements(_x, _up) == False, "Two orthogonal lines in three dimensions are not complements: their dimensions add up to 2"
+          _twice = _np.array([[1.0, 2.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 0.0]])
+          assert complements(_twice, _up) == True, "A repeated direction does not add a dimension: use the rank, not the number of columns"
+          _line = _np.array([[1.0, 2.0], [1.0, 2.0], [0.0, 0.0]])
+          assert complements(_line, _up) == False, "Two columns along the same line span one dimension: use the rank, not the number of columns"
+          _A = _np.array([[1.0, 2.0, 0.0, 1.0], [0.0, 1.0, 1.0, 0.0]])
+          _N = _np.array([[2.0, -1.0], [-1.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+          assert complements(_A.T, _N) == True, "The row space and the null space of a matrix are complements"
+          assert output.strip() == "True False", "The program should print True False"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def orthogonal(U, V, tol=1e-9):
+                return float(np.abs(U.T @ V).max()) < tol
+
+
+            def complements(U, V):
+                return orthogonal(U, V)
+
+
+            print("True False")
+          - |
+            import numpy as np
+
+
+            def orthogonal(U, V, tol=1e-9):
+                return float(np.abs(U.T @ V).max()) < tol
+
+
+            def complements(U, V):
+                n = U.shape[0]
+                return int(np.linalg.matrix_rank(U) + np.linalg.matrix_rank(V)) == n
+
+
+            print("True False")
+          - |
+            import numpy as np
+
+
+            def orthogonal(U, V, tol=1e-9):
+                return float(np.abs(U.T @ V).max()) < tol
+
+
+            def complements(U, V):
+                n = U.shape[0]
+                return orthogonal(U, V) and U.shape[1] + V.shape[1] == n
+
+
+            print("True False")
+          - |
+            import numpy as np
+
+
+            def orthogonal(U, V, tol=1e-9):
+                return float(np.abs(U.T @ V).max()) < tol
+
+
+            def complements(U, V):
+                n = U.shape[1]
+                return orthogonal(U, V) and int(np.linalg.matrix_rank(U) + np.linalg.matrix_rank(V)) == n
+
+
+            print("True False")
+        explanation: |
+          Two conditions. Orthogonality says that $V$ is inside $U^\perp$. The count of dimensions says that $V$ is all of it, because a subspace of $U^\perp$ with the full dimension $n - \dim U$ cannot be a proper part.
+
+          The program shows both outcomes. The row space of the 2 by 3 matrix and the line through $(1, 1, -1)$ are complements in $\mathbb{R}^3$. The column space of $X$ and the line through the residual are orthogonal but not complements in $\mathbb{R}^4$: the dimensions are 2 and 1, and one more direction orthogonal to both columns is unaccounted for. The residual lies **in** the complement of the column space. It does not span it.
+
+          Counting columns in place of rank miscounts whenever columns repeat a direction. The dimension of a span is the rank.
+    - question:
+        id: fix-split
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `split(x, n)` should split `x` into its part along the line through `n` and the remainder, which lies in the orthogonal complement of that line. It returns the pair `(remainder, along)`. For the matrix $A$ in the program, whose null space is the line through $\mathbf{n} = (1, 1, -1)$, the remainder of $(3, 0, 0)$ should be $(2, -1, 1)$, which is orthogonal to $\mathbf{n}$ and so in the row space. This returns $(0, -3, 3)$, which is not. Fix `split`.
+        starter: |
+          import numpy as np
+
+
+          def split(x, n):
+              along = (x @ n) * n
+              return x - along, along
+
+
+          A = np.array([[1.0, 0.0, 1.0], [0.0, 1.0, 1.0]])
+          n = np.array([1.0, 1.0, -1.0])
+          x = np.array([3.0, 0.0, 0.0])
+          rest, along = split(x, n)
+          print(rest.tolist(), along.tolist(), (A @ rest).tolist())
+        solution: |
+          import numpy as np
+
+
+          def split(x, n):
+              along = (x @ n) / (n @ n) * n
+              return x - along, along
+
+
+          A = np.array([[1.0, 0.0, 1.0], [0.0, 1.0, 1.0]])
+          n = np.array([1.0, 1.0, -1.0])
+          x = np.array([3.0, 0.0, 0.0])
+          rest, along = split(x, n)
+          print(rest.tolist(), along.tolist(), (A @ rest).tolist())
+        tests: |
+          import numpy as _np
+          _n = _np.array([1.0, 1.0, -1.0])
+          _x = _np.array([3.0, 0.0, 0.0])
+          _rest, _along = split(_x, _n)
+          assert _np.allclose(_rest + _along, _x), "The two parts should add up to x"
+          assert _np.allclose(_along, [1.0, 1.0, -1.0]), "The part of (3, 0, 0) along (1, 1, -1) is (1, 1, -1): divide by n dot n"
+          assert abs(float(_rest @ _n)) < 1e-12, "The remainder should be orthogonal to n"
+          _rest, _along = split(_np.array([2.0, 5.0]), _np.array([0.0, 4.0]))
+          assert _np.allclose(_along, [0.0, 5.0]) and _np.allclose(_rest, [2.0, 0.0]), "Along (0, 4), the vector (2, 5) has the part (0, 5): the length of n should not matter"
+          _rest, _along = split(_np.array([1.0, 2.0, 3.0]), _np.array([0.0, 0.0, 1.0]))
+          assert _np.allclose(_along, [0.0, 0.0, 3.0]), "Along a unit vector the part is the dot product times that vector"
+          _rest, _along = split(_np.array([1.0, 1.0]), _np.array([-2.0, 2.0]))
+          assert _np.allclose(_along, [0.0, 0.0]) and _np.allclose(_rest, [1.0, 1.0]), "A vector orthogonal to n has no part along it"
+          assert output.strip() == "[2.0, -1.0, 1.0] [1.0, 1.0, -1.0] [3.0, 0.0]", "The program should print [2.0, -1.0, 1.0] [1.0, 1.0, -1.0] [3.0, 0.0]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def split(x, n):
+                along = (x @ n) * n
+                return x - along, along
+
+
+            print("[2.0, -1.0, 1.0] [1.0, 1.0, -1.0] [3.0, 0.0]")
+          - |
+            import numpy as np
+
+
+            def split(x, n):
+                along = (x @ n) / np.linalg.norm(n) * n
+                return x - along, along
+
+
+            print("[2.0, -1.0, 1.0] [1.0, 1.0, -1.0] [3.0, 0.0]")
+          - |
+            import numpy as np
+
+
+            def split(x, n):
+                along = (x @ n) / (x @ x) * n
+                return x - along, along
+
+
+            print("[2.0, -1.0, 1.0] [1.0, 1.0, -1.0] [3.0, 0.0]")
+          - |
+            import numpy as np
+
+
+            def split(x, n):
+                along = (x @ n) / (n @ n) * x
+                return x - along, along
+
+
+            print("[2.0, -1.0, 1.0] [1.0, 1.0, -1.0] [3.0, 0.0]")
+        explanation: |
+          The part of $\mathbf{x}$ along $\mathbf{n}$ is $\dfrac{\mathbf{x} \cdot \mathbf{n}}{\mathbf{n} \cdot \mathbf{n}}\,\mathbf{n}$. The division by $\mathbf{n} \cdot \mathbf{n}$ was missing. Without it the formula is right only when $\mathbf{n}$ has length 1, and $(1, 1, -1)$ has squared length 3, so the part came out three times too long. The remainder, $(0, -3, 3)$, was then not orthogonal to $\mathbf{n}$ and not in the row space.
+
+          Notice that $A$ still sends the wrong remainder to $(3, 0)$, the same place as $\mathbf{x}$. Any multiple of $\mathbf{n}$ is in the null space, so removing the wrong multiple of it changes nothing that $A$ can see. Checking $A$ times the remainder could never have caught this bug.
+
+          Dividing by the length in place of the squared length is the same mistake by half: $\mathbf{n}$ appears twice in the formula, once in the dot product and once as the direction, so its length must be divided out twice.
+
+          The check that catches all of these is the one the lesson is about: **the remainder must be orthogonal to $\mathbf{n}$**. A split into a subspace and its complement can always be tested this way, by a dot product that should be zero.
+    - question:
+        id: work-gradient
+        type: choice
+        system: s2
+        prompt: |
+          For the loss $L(\mathbf{w}) = \lVert X\mathbf{w} - \mathbf{y} \rVert^2$ the gradient is $2X^\top(X\mathbf{w} - \mathbf{y})$. At a minimum the gradient is zero. Which statement says the same thing?
+        options:
+          - 'The residual $\mathbf{y} - X\mathbf{w}$ is the zero vector.'
+          - 'The residual $\mathbf{y} - X\mathbf{w}$ lies in the null space of $X^\top$, that is, it is orthogonal to the column space of $X$.'
+          - 'The residual lies in the column space of $X$.'
+          - 'The weights $\mathbf{w}$ lie in the null space of $X$.'
+        answer: 1
+        explanation: |
+          A zero gradient is $X^\top \mathbf{r} = \mathbf{0}$ with $\mathbf{r} = \mathbf{y} - X\mathbf{w}$, and the solutions of $X^\top\mathbf{r} = \mathbf{0}$ are, by today's result, exactly the vectors orthogonal to every column of $X$. The residual itself is zero only if the data lies in the column space, which for four points and a line would need them to be collinear. So the calculus of the last clusters and the geometry of this one describe the minimum in two languages. The geometric one has an advantage: it will give the minimiser by solving a linear system, with no descent.
+    - question:
+        id: work-unique
+        type: choice
+        system: s2
+        prompt: |
+          Why can a vector $\mathbf{x}$ be written as $\mathbf{x}_U + \mathbf{x}_\perp$, with $\mathbf{x}_U \in U$ and $\mathbf{x}_\perp \in U^\perp$, in only **one** way?
+        options:
+          - 'Because $U$ has a unique basis.'
+          - 'Suppose $\mathbf{x} = \mathbf{u}_1 + \mathbf{v}_1 = \mathbf{u}_2 + \mathbf{v}_2$. Then $\mathbf{u}_1 - \mathbf{u}_2 = \mathbf{v}_2 - \mathbf{v}_1$ is a vector lying in both $U$ and $U^\perp$, so it is orthogonal to itself and must be zero. Hence $\mathbf{u}_1 = \mathbf{u}_2$ and $\mathbf{v}_1 = \mathbf{v}_2$.'
+          - 'Because the dimensions of $U$ and $U^\perp$ are equal.'
+          - 'It cannot. There are many such splittings.'
+        answer: 1
+        explanation: |
+          The left side of $\mathbf{u}_1 - \mathbf{u}_2 = \mathbf{v}_2 - \mathbf{v}_1$ is in $U$ and the right side is in $U^\perp$, and they are the same vector. The only vector in a subspace and its complement is $\mathbf{0}$. Uniqueness is what lets one speak of **the** part of $\mathbf{x}$ in $U$, and it is what makes the fitted heights of a least-squares problem well defined even in cases where the weights that produce them are not.
+    - question:
+        id: work-row-part
+        type: numeric
+        system: s2
+        prompt: |
+          $A = \begin{pmatrix} 1 & 0 & 1 \\ 0 & 1 & 1 \end{pmatrix}$ has null space spanned by $\mathbf{n} = (1, 1, -1)$. The vector $\mathbf{x} = (0, 6, 0)$ is split into a row-space part and a null-space part. What is the **third** entry of the row-space part?
+        answer: "2"
+        explanation: |
+          The null-space part is $\dfrac{\mathbf{x} \cdot \mathbf{n}}{\mathbf{n} \cdot \mathbf{n}}\,\mathbf{n} = \dfrac{6}{3}(1, 1, -1) = (2, 2, -2)$. The row-space part is the rest, $(0, 6, 0) - (2, 2, -2) = (-2, 4, 2)$, whose third entry is 2. Check: $(-2, 4, 2) \cdot (1, 1, -1) = -2 + 4 - 2 = 0$, and it equals $-2(1, 0, 1) + 4(0, 1, 1)$, a combination of the rows.
+    - question:
+        id: work-system
+        type: choice
+        system: s2
+        prompt: |
+          The system $A\mathbf{x} = \mathbf{b}$ has a solution exactly when $\mathbf{b}$ is in the column space of $A$. Using today's result, which test decides that without solving anything for $\mathbf{x}$?
+        options:
+          - '$\mathbf{b}$ is orthogonal to every vector $\mathbf{y}$ with $A^\top\mathbf{y} = \mathbf{0}$.'
+          - '$\mathbf{b}$ is orthogonal to every column of $A$.'
+          - '$\mathbf{b}$ is in the null space of $A$.'
+          - '$A^\top\mathbf{b} = \mathbf{0}$.'
+        answer: 0
+        explanation: |
+          The column space is the complement of the null space of $A^\top$, and the complement of a complement is the subspace itself. So $\mathbf{b}$ is in the column space exactly when it is orthogonal to everything in the null space of $A^\top$. For the puzzle, the residual $(-0.1, 0.3, -0.3, 0.1)$ is such a $\mathbf{y}$, and $\mathbf{y} \cdot (1, 3, 4, 6) = 0.2 \neq 0$, which proves that no line passes through the four points. The second and fourth options say that $\mathbf{b}$ is orthogonal to the column space, which is the opposite extreme.
+  connections:
+    - text: |
+        Gradient descent settled on the line $y = 1.6x + 1.1$, and the residual it left was orthogonal to both columns of $X$, though nothing had asked for that. Orthogonality to the columns is orthogonality to their whole span, and **the nearest point of a subspace to a point outside it is where the perpendicular lands**. A zero gradient and a perpendicular residual are one condition.
+
+        Two subspaces are **orthogonal** when every vector of one is orthogonal to every vector of the other, which need only be checked on spanning sets, by $U^\top V = 0$. The **orthogonal complement** $U^\perp$ is everything orthogonal to $U$, and its dimension is what $U$ leaves over. Every matrix comes with two such pairs: **the null space is the complement of the row space, and the null space of the transpose is the complement of the column space**. Every vector splits uniquely into a part in a subspace and a part in its complement.
+
+        Fitting is that split, and so far it has been computed only one direction at a time, by the projection formula for a single vector. A subspace has many directions. If they happen to be at right angles to one another and of length 1, the one-direction formula can simply be applied to each and the results added, and every calculation in this cluster becomes easy. Bases with that property are the next lesson: [[m7.orthonormal-bases]].

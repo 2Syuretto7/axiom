@@ -1,0 +1,564 @@
+cluster: M7
+title: A thermometer you can trust
+minutes: 100
+claim: You will have calibrated a cheap temperature sensor against a reference thermometer, found the best line through five disagreeing readings in three ways, shown that the sensor needs no curved correction, written the calibration as a fixed set of weights on the readings, and worked out how far its digits can be believed.
+brief: |
+  This cluster began with a right angle and ended with a warning about digits. This project uses both on one small job, of the kind that sits behind every measuring instrument.
+
+  **The project.** A cheap temperature sensor does not report degrees. It reports a raw count, a whole number from its electronics. To turn counts into degrees, it is put in a water bath beside a good reference thermometer, the bath is warmed in steps, and at each step both are read:
+
+  | Raw count $r$ | 500 | 510 | 520 | 530 | 540 |
+  |---|---|---|---|---|---|
+  | Reference $T$, in °C | 17.1 | 20.8 | 25.0 | 29.2 | 32.9 |
+
+  The sensor is supposed to be linear: $T = a + b\,r$ for some offset $a$ and gain $b$. A **calibration** is a choice of those two numbers, stored in the device for the rest of its life. Five readings and two unknowns make five equations that cannot all hold, since the reference is itself read only to a tenth of a degree.
+
+  Throughout, write $c = r - 520$ for the count measured from the middle of the range, so that $c = (-20, -10, 0, 10, 20)$, and fit $T = a + b\,c$. The last stage is about why.
+
+  Nothing here is new. Keep your results as you go, because later stages use earlier ones.
+starter: |
+  # Scratch space for the calibration.
+  import numpy as np
+
+  r = np.array([500.0, 510.0, 520.0, 530.0, 540.0])
+  T = np.array([17.1, 20.8, 25.0, 29.2, 32.9])
+  c = r - 520
+
+  # The gain from the first two readings alone, and from the last two.
+  print(round(float((T[1] - T[0]) / (c[1] - c[0])), 4))
+  print(round(float((T[4] - T[3]) / (c[4] - c[3])), 4))
+stages:
+  - title: Five readings, two numbers
+    blocks:
+      - text: |
+          Run the starter. The first two readings give a gain of 0.37 degrees per count, and so do the last two. The middle pairs disagree.
+      - question:
+          id: middle-gain
+          type: numeric
+          system: s1
+          concepts: [m7.least-squares-and-the-normal-equations]
+          prompt: What gain, in degrees per count, do the second and third readings give on their own?
+          answer: "0.42"
+          tolerance: "0.001"
+          explanation: |
+            $(25.0 - 20.8)/10 = 0.42$. Pairs of readings give 0.37 or 0.42 depending on which pair is taken, and no single line passes through all five points. With the design matrix $A$ whose columns are the ones and $c$, the system $A\mathbf{x} = \mathbf{T}$ has five equations, two unknowns and no solution: $\mathbf{T}$ is not in the column space.
+      - text: |
+          So ask for the line that makes the sum of the squared misses least. Its coefficients solve the normal equations $A^\top A\,\hat{\mathbf{x}} = A^\top\mathbf{T}$.
+      - question:
+          id: calibrate
+          type: code
+          mode: write
+          system: s2
+          concepts: [m7.least-squares-and-the-normal-equations, m7.projection-onto-a-subspace]
+          prompt: |
+            Write `calibrate(c, T)`. Build the design matrix with a column of ones and the column `c`, solve the normal equations with `np.linalg.solve`, and return the pair `(x_hat, residual)`: the array holding the offset and the gain, and the array of misses `T - A @ x_hat`.
+          starter: |
+            import numpy as np
+
+
+            def calibrate(c, T):
+                return np.zeros(2), T * 1.0
+
+
+            r = np.array([500.0, 510.0, 520.0, 530.0, 540.0])
+            T = np.array([17.1, 20.8, 25.0, 29.2, 32.9])
+            x_hat, residual = calibrate(r - 520, T)
+            print([round(float(v), 4) for v in x_hat])
+            print([round(abs(float(v)), 4) for v in residual])
+          solution: |
+            import numpy as np
+
+
+            def calibrate(c, T):
+                A = np.stack([np.ones(len(c)), c], axis=1)
+                x_hat = np.linalg.solve(A.T @ A, A.T @ T)
+                return x_hat, T - A @ x_hat
+
+
+            r = np.array([500.0, 510.0, 520.0, 530.0, 540.0])
+            T = np.array([17.1, 20.8, 25.0, 29.2, 32.9])
+            x_hat, residual = calibrate(r - 520, T)
+            print([round(float(v), 4) for v in x_hat])
+            print([round(abs(float(v)), 4) for v in residual])
+          tests: |
+            import numpy as _np
+            _c = _np.array([-20.0, -10.0, 0.0, 10.0, 20.0])
+            _T = _np.array([17.1, 20.8, 25.0, 29.2, 32.9])
+            _out = calibrate(_c, _T)
+            assert isinstance(_out, tuple) and len(_out) == 2, "calibrate should return the pair (x_hat, residual)"
+            _x, _e = _out
+            assert _np.shape(_x) == (2,) and _np.shape(_e) == (5,), "x_hat holds the offset and the gain, and the residual has one entry for each reading"
+            assert _np.allclose(_x, [25.0, 0.4]), "For the five readings the offset is 25 and the gain is 0.4: solve with A.T @ A on the left and A.T @ T on the right, where A has a column of ones and the column c"
+            assert _np.allclose(_e, [0.1, -0.2, 0.0, 0.2, -0.1]), "The misses are 0.1, -0.2, 0, 0.2, -0.1: the reference minus the fitted temperature"
+            assert abs(float(_e.sum())) < 1e-9 and abs(float(_c @ _e)) < 1e-9, "The residual should be orthogonal to both columns: its entries add up to zero, plainly and weighted by c"
+            _x, _e = calibrate(_np.array([0.0, 1.0, 2.0, 3.0]), _np.array([1.0, 3.0, 4.0, 6.0]))
+            assert _np.allclose(_x, [1.1, 1.6]) and _np.allclose(_e, [-0.1, 0.3, -0.3, 0.1]), "For the four points of the lessons the coefficients are 1.1 and 1.6 and the misses are -0.1, 0.3, -0.3, 0.1"
+            assert output.strip() == "[25.0, 0.4]\n[0.1, 0.2, 0.0, 0.2, 0.1]", "The program should print [25.0, 0.4] and then the sizes of the misses, [0.1, 0.2, 0.0, 0.2, 0.1]"
+          wrong:
+            - |
+              import numpy as np
+
+
+              def calibrate(c, T):
+                  A = np.stack([c], axis=1)
+                  x_hat = np.linalg.solve(A.T @ A, A.T @ T)
+                  return np.array([0.0, float(x_hat[0])]), T - A @ x_hat
+
+
+              print("[25.0, 0.4]\n[0.1, 0.2, 0.0, 0.2, 0.1]")
+            - |
+              import numpy as np
+
+
+              def calibrate(c, T):
+                  A = np.stack([np.ones(len(c)), c], axis=1)
+                  x_hat = np.linalg.solve(A.T @ A, A.T @ T)
+                  return x_hat, A @ x_hat - T
+
+
+              print("[25.0, 0.4]\n[0.1, 0.2, 0.0, 0.2, 0.1]")
+            - |
+              import numpy as np
+
+
+              def calibrate(c, T):
+                  A = np.stack([np.ones(len(c)), c], axis=1)
+                  x_hat = A.T @ T
+                  return x_hat, T - A @ x_hat
+
+
+              print("[25.0, 0.4]\n[0.1, 0.2, 0.0, 0.2, 0.1]")
+            - |
+              import numpy as np
+
+
+              def calibrate(c, T):
+                  A = np.stack([c, np.ones(len(c))], axis=1)
+                  x_hat = np.linalg.solve(A.T @ A, A.T @ T)
+                  return x_hat, T - A @ x_hat
+
+
+              print("[25.0, 0.4]\n[0.1, 0.2, 0.0, 0.2, 0.1]")
+          explanation: |
+            The design matrix states the model: a column of ones for the offset, and the counts for the gain. The normal equations then give offset 25 and gain 0.4. The device should report $25 + 0.4\,(r - 520)$ degrees.
+
+            The fitted temperatures are $17, 21, 25, 29, 33$ and the misses are $0.1, -0.2, 0, 0.2, -0.1$, each within the two tenths that a reference read to one decimal place could be wrong by. Leaving out the column of ones forces the line through $c = 0$, $T = 0$, which is far from the data. Putting the columns in the other order is a legitimate model with its coefficients returned in the other order, and anything that reads the first as the offset is then wrong.
+      - question:
+          id: not-least-squares
+          type: choice
+          system: s2
+          concepts: [m7.orthogonal-subspaces, m7.least-squares-and-the-normal-equations]
+          prompt: |
+            A colleague proposes a different line and reports its misses at the five readings as $(0.3, 0.0, 0.2, 0.4, 0.1)$. Without knowing their line, can you tell whether it is the least squares line?
+          options:
+            - 'No. The line itself is needed.'
+            - 'Yes, it is not. The residual of a least squares fit is orthogonal to every column of the design matrix. Orthogonal to the column of ones means the misses add up to zero, and these add up to 1.'
+            - 'Yes, it is, since the misses are small.'
+            - 'Yes, it is not, because one of the misses is zero.'
+          answer: 1
+          explanation: |
+            The residual lies in the orthogonal complement of the column space, which is the null space of $A^\top$. That gives two equations any least squares residual must satisfy here: $\sum e_i = 0$ and $\sum c_i e_i = 0$. Misses that are all of one sign fail the first at a glance. Shifting the colleague's line up by 0.2 would lower its sum of squared misses. The true residual $(0.1, -0.2, 0, 0.2, -0.1)$ passes both: its sum is 0, and weighted by $c$ it gives $-2 + 2 + 0 + 2 - 2 = 0$.
+  - title: The same line by two dot products
+    blocks:
+      - text: |
+          The columns of $A$ are the ones and $c = (-20, -10, 0, 10, 20)$. Their dot product is zero. Measuring the counts from the middle of the range has made the two columns **orthogonal**, and with an orthogonal basis each coefficient is one projection, found without reference to the other.
+      - question:
+          id: gain-by-projection
+          type: numeric
+          system: s2
+          concepts: [m7.orthonormal-bases, m7.least-squares-and-the-normal-equations]
+          prompt: |
+            The gain is the coefficient of $\mathbf{T}$ along $\mathbf{c}$, which is $\dfrac{\mathbf{c} \cdot \mathbf{T}}{\mathbf{c} \cdot \mathbf{c}}$. Given $\mathbf{c} \cdot \mathbf{T} = 400$, what is it?
+          answer: "0.4"
+          tolerance: "0.0001"
+          explanation: |
+            $\mathbf{c} \cdot \mathbf{c} = 400 + 100 + 0 + 100 + 400 = 1000$, so the gain is $400/1000 = 0.4$. In the same way the offset is $\dfrac{\mathbf{1} \cdot \mathbf{T}}{\mathbf{1} \cdot \mathbf{1}} = 125/5 = 25$, the mean of the reference temperatures. The matrix $A^\top A$ is diagonal, with entries 5 and 1000, and the normal equations fall apart into two separate divisions. Had the raw counts been used, the two columns would overlap heavily and neither coefficient could be found alone.
+      - question:
+          id: pythagoras
+          type: numeric
+          system: s2
+          concepts: [m7.projection-onto-a-subspace, m7.orthogonal-subspaces]
+          prompt: |
+            $\lVert\mathbf{T}\rVert^2 = 3285.1$. The fitted temperatures $(17, 21, 25, 29, 33)$ have squared length 3285. Without using the misses, what is the least possible sum of squared misses?
+          answer: "0.1"
+          tolerance: "0.0001"
+          explanation: |
+            $\mathbf{T}$ is the sum of its projection onto the column space and a residual orthogonal to it, so the squared lengths add: $3285.1 = 3285 + \lVert\mathbf{e}\rVert^2$. The answer agrees with the misses themselves, $0.01 + 0.04 + 0 + 0.04 + 0.01$. Nearly all of $\mathbf{T}$ lies in the plane of the model, and one part in thirty thousand of its squared length lies outside.
+      - text: |
+          Is the sensor really linear? A curved response would call for a third column, $c^2$. That column is not orthogonal to the ones, and Gram-Schmidt is the tool that finds the part of it which is new.
+      - question:
+          id: curvature
+          type: code
+          mode: write
+          system: s2
+          concepts: [m7.gram-schmidt-and-qr, m7.orthonormal-bases, m7.least-squares-and-the-normal-equations]
+          prompt: |
+            Write `gram_schmidt(A)`, the modified Gram-Schmidt process: return `(Q, R)` with the columns of `Q` orthonormal, `R` upper triangular and `Q @ R` equal to `A`. For column `j`, copy it into `v`, and for each earlier `i` set `R[i, j]` to the dot product of column `i` of `Q` with `v` and subtract that multiple of the column from `v`. Then `R[j, j]` is the length of `v` and column `j` of `Q` is `v` over that length.
+
+            The program applies it to the design matrix with columns ones, $c$ and $c^2$, and prints the sizes of the components of $\mathbf{T}$ along the three orthonormal directions.
+          starter: |
+            import numpy as np
+
+
+            def gram_schmidt(A):
+                m, n = A.shape
+                return np.zeros((m, n)), np.zeros((n, n))
+
+
+            r = np.array([500.0, 510.0, 520.0, 530.0, 540.0])
+            T = np.array([17.1, 20.8, 25.0, 29.2, 32.9])
+            c = r - 520
+            Q, R = gram_schmidt(np.stack([np.ones(5), c, c ** 2], axis=1))
+            print([round(abs(float(v)), 4) for v in Q.T @ T])
+          solution: |
+            import numpy as np
+
+
+            def gram_schmidt(A):
+                m, n = A.shape
+                Q = np.zeros((m, n))
+                R = np.zeros((n, n))
+                for j in range(n):
+                    v = A[:, j] * 1.0
+                    for i in range(j):
+                        R[i, j] = Q[:, i] @ v
+                        v = v - R[i, j] * Q[:, i]
+                    R[j, j] = np.linalg.norm(v)
+                    Q[:, j] = v / R[j, j]
+                return Q, R
+
+
+            r = np.array([500.0, 510.0, 520.0, 530.0, 540.0])
+            T = np.array([17.1, 20.8, 25.0, 29.2, 32.9])
+            c = r - 520
+            Q, R = gram_schmidt(np.stack([np.ones(5), c, c ** 2], axis=1))
+            print([round(abs(float(v)), 4) for v in Q.T @ T])
+          tests: |
+            import numpy as _np
+            _c = _np.array([-20.0, -10.0, 0.0, 10.0, 20.0])
+            _A = _np.stack([_np.ones(5), _c, _c ** 2], axis=1)
+            _keep = _A.copy()
+            _out = gram_schmidt(_A)
+            assert isinstance(_out, tuple) and len(_out) == 2, "gram_schmidt should return the pair (Q, R)"
+            _Q, _R = _out
+            assert _np.array_equal(_A, _keep), "A should be left as it was: copy each column before changing it"
+            assert _np.shape(_Q) == (5, 3) and _np.shape(_R) == (3, 3), "Q has the shape of A and R is square"
+            assert _np.allclose(_Q.T @ _Q, _np.eye(3)), "The columns of Q should be orthonormal: subtract the projections onto the earlier columns of Q, then divide by the length of what remains"
+            assert _np.allclose(_R, _np.triu(_R)), "R should be upper triangular: the coefficient of column j along the earlier direction i goes at R[i, j]"
+            assert _np.allclose(_Q @ _R, _A), "Q @ R should rebuild A"
+            assert _np.allclose(_Q[:, 2] * 14 ** 0.5, [2.0, -1.0, -2.0, -1.0, 2.0]), "The third direction is (2, -1, -2, -1, 2) divided by its length: the squares of c with their mean removed"
+            _B = _np.array([[1.0, 3.0, 5.0], [2.0, 3.0, 1.0], [2.0, 0.0, 4.0]])
+            _Q, _R = gram_schmidt(_B)
+            assert _np.allclose(_R, [[3.0, 3.0, 5.0], [0.0, 3.0, 1.0], [0.0, 0.0, 4.0]]), "For the columns (1, 2, 2), (3, 3, 0), (5, 1, 4), R is [[3, 3, 5], [0, 3, 1], [0, 0, 4]]"
+            assert output.strip() == "[55.9017, 12.6491, 0.0]", "The program should print [55.9017, 12.6491, 0.0]"
+          wrong:
+            - |
+              import numpy as np
+
+
+              def gram_schmidt(A):
+                  m, n = A.shape
+                  Q = np.zeros((m, n))
+                  R = np.zeros((n, n))
+                  for j in range(n):
+                      v = A[:, j] * 1.0
+                      for i in range(j):
+                          R[i, j] = Q[:, i] @ v
+                          v = v - R[i, j] * Q[:, i]
+                      R[j, j] = np.linalg.norm(v)
+                      Q[:, j] = v
+                  return Q, R
+
+
+              print("[55.9017, 12.6491, 0.0]")
+            - |
+              import numpy as np
+
+
+              def gram_schmidt(A):
+                  m, n = A.shape
+                  Q = np.zeros((m, n))
+                  R = np.zeros((n, n))
+                  for j in range(n):
+                      v = A[:, j] * 1.0
+                      for i in range(j):
+                          R[i, j] = Q[:, i] @ v
+                      R[j, j] = np.linalg.norm(v)
+                      Q[:, j] = v / R[j, j]
+                  return Q, R
+
+
+              print("[55.9017, 12.6491, 0.0]")
+            - |
+              import numpy as np
+
+
+              def gram_schmidt(A):
+                  m, n = A.shape
+                  Q = np.zeros((m, n))
+                  R = np.zeros((n, n))
+                  for j in range(n):
+                      v = A[:, j] * 1.0
+                      for i in range(j):
+                          R[j, i] = Q[:, i] @ v
+                          v = v - R[j, i] * Q[:, i]
+                      R[j, j] = np.linalg.norm(v)
+                      Q[:, j] = v / R[j, j]
+                  return Q, R
+
+
+              print("[55.9017, 12.6491, 0.0]")
+            - |
+              import numpy as np
+
+
+              def gram_schmidt(A):
+                  m, n = A.shape
+                  Q = np.zeros((m, n))
+                  R = np.zeros((n, n))
+                  for j in range(n):
+                      v = A[:, j]
+                      for i in range(j):
+                          R[i, j] = Q[:, i] @ v
+                          v -= R[i, j] * Q[:, i]
+                      R[j, j] = np.linalg.norm(v)
+                      Q[:, j] = v / R[j, j]
+                  return Q, R
+
+
+              print("[55.9017, 12.6491, 0.0]")
+          explanation: |
+            The first two columns were orthogonal already, so Gram-Schmidt only gives them length 1. From the squares $(400, 100, 0, 100, 400)$ it removes their shadow on the ones, which is their mean, 200, and nothing along $c$. What remains is a multiple of $(2, -1, -2, -1, 2)$: the shape of a curve that is high at the ends and low in the middle.
+
+            The three numbers printed are the components of $\mathbf{T}$ along the three directions. The first two rebuild the line: $55.9017/\sqrt5 = 25$ and $12.6491/\sqrt{1000} = 0.4$. The third is zero. **The readings have no component at all along the curved direction**, so allowing a quadratic term would not lower the sum of squares by anything. As far as these five readings can tell, the sensor is linear. With an orthonormal basis that is read off directly, with no second fit.
+      - question:
+          id: no-curvature
+          type: choice
+          system: s2
+          concepts: [m7.projection-onto-a-subspace, m7.gram-schmidt-and-qr]
+          prompt: |
+            The component of $\mathbf{T}$ along the third orthonormal direction is zero. What does that say about the projection of $\mathbf{T}$ onto the three-dimensional column space of ones, $c$ and $c^2$?
+          options:
+            - 'It is the zero vector.'
+            - 'It is the same vector as the projection onto the plane of ones and $c$ alone. The projection onto the larger space is the sum of the components along $\mathbf{q}_1$, $\mathbf{q}_2$ and $\mathbf{q}_3$, and the third term is zero.'
+            - 'It is $\mathbf{T}$ itself.'
+            - 'It cannot be computed, since the columns are dependent.'
+          answer: 1
+          explanation: |
+            With orthonormal columns the projection is $QQ^\top\mathbf{T} = \sum_i (\mathbf{q}_i \cdot \mathbf{T})\,\mathbf{q}_i$, and enlarging the subspace adds one term for each new direction. A larger column space can never give a worse fit. Here it gives exactly the same one, because the residual of the line, $(0.1, -0.2, 0, 0.2, -0.1)$, happens to be orthogonal to $(2, -1, -2, -1, 2)$ as well: $0.2 + 0.2 + 0 - 0.2 - 0.2 = 0$.
+  - title: The calibration as a set of weights
+    blocks:
+      - text: |
+          The offset and the gain were computed from the five reference temperatures. Each is a fixed weighted sum of them, and the weights are the rows of the pseudo-inverse $A^+ = (A^\top A)^{-1}A^\top$. Since $A^\top A$ is diagonal with entries 5 and 1000, the rows are the ones divided by 5 and $\mathbf{c}$ divided by 1000:
+
+          $$A^+ = \begin{pmatrix} 0.2 & 0.2 & 0.2 & 0.2 & 0.2 \\ -0.02 & -0.01 & 0 & 0.01 & 0.02 \end{pmatrix}.$$
+      - question:
+          id: misread
+          type: numeric
+          system: s1
+          concepts: [m7.pseudo-inverse]
+          prompt: |
+            Suppose the last reference temperature had been misread as 33.9 in place of 32.9. By how much would the fitted gain change?
+          answer: "0.02"
+          tolerance: "0.0001"
+          explanation: |
+            The gain is the second row of $A^+$ applied to $\mathbf{T}$, and the last entry of that row is 0.02. An error of 1 degree in the last reading moves the gain by 0.02, from 0.4 to 0.42. The same error in the middle reading, whose weight is 0, would not move the gain at all, and would move the offset by 0.2. The end points decide the gain, and every point has an equal say in the offset.
+      - question:
+          id: leverage
+          type: numeric
+          system: s2
+          concepts: [m7.projection-onto-a-subspace, m7.pseudo-inverse]
+          prompt: |
+            The fitted temperatures are $P\mathbf{T}$ with $P = AA^+$. Its diagonal entry for reading $i$ is $0.2 + c_i^2/1000$. With the last reference temperature misread by 1 degree, by how much does the fitted temperature **at that same reading** move?
+          answer: "0.6"
+          tolerance: "0.0001"
+          explanation: |
+            $0.2 + 400/1000 = 0.6$. The line follows a mistake at an end point by six tenths of its size. At the middle reading the figure is 0.2. The five diagonal entries are $0.6, 0.3, 0.2, 0.3, 0.6$ and they add up to 2, the trace of a projection onto a plane: two coefficients' worth of freedom, shared unequally among five readings. A calibration is most at the mercy of its extreme points, which is a reason to take those with the greatest care, or to take them twice.
+      - question:
+          id: two-sensors
+          type: choice
+          system: s2
+          concepts: [m7.pseudo-inverse, m7.least-squares-and-the-normal-equations]
+          prompt: |
+            A second sensor is wired in by mistake to the same electronics, so that its count is always exactly the first one's. The design matrix now has columns ones, $c$ and $c$ again. What does least squares give?
+          options:
+            - 'A better fit, with two gains.'
+            - 'The same fitted temperatures as before, and no unique coefficients: any two gains adding up to 0.4 fit equally well, and $A^\top A$ is singular. The pseudo-inverse picks the shortest choice, which gives each sensor a gain of 0.2.'
+            - 'No fit at all.'
+            - 'A gain of 0.4 for the first sensor and 0 for the second.'
+          answer: 1
+          explanation: |
+            The column space has not changed, so the projection and the residual are as before. The null space of $A$ now contains $(0, 1, -1)$, and any multiple of it can be added to the coefficients without changing a prediction. The least squares solutions form a line, and the shortest of them is the one with no component along $(0, 1, -1)$, which splits the gain equally. Nothing in the data distinguishes the two sensors, and the pseudo-inverse does not pretend otherwise. `np.linalg.solve` on the normal equations would stop with an error, or worse, would not.
+  - title: How far to believe it
+    blocks:
+      - text: |
+          The device will not be given $c$. It reads the raw count $r$, with values near 520. Fitting $T = a + b\,r$ directly describes the same line, with offset $25 - 0.4 \times 520 = -183$. The column of raw counts, though, is almost parallel to the column of ones: its entries differ from one another by only a few per cent.
+      - question:
+          id: condition-centred
+          type: numeric
+          system: s2
+          concepts: [m7.conditioning, m7.orthonormal-bases]
+          prompt: |
+            The design matrix with columns ones and $c$ has orthogonal columns of lengths $\sqrt5$ and $\sqrt{1000}$. What is its condition number, to two decimal places?
+          answer: "14.14"
+          tolerance: "0.01"
+          explanation: |
+            With orthogonal columns the greatest and least stretch are the longest and shortest column lengths, so $\kappa = \sqrt{1000}/\sqrt5 = \sqrt{200} = 14.14$. All of it comes from the two columns having different sizes, and none from their directions. Dividing $c$ by 10 would bring it down to $\sqrt{10}/\sqrt5 = 1.41$, and dividing $c$ by its standard deviation, 14.14, makes the two columns equally long and the condition number exactly 1.
+      - question:
+          id: conditions
+          type: code
+          mode: write
+          system: s2
+          concepts: [m7.conditioning, m7.least-squares-and-the-normal-equations]
+          prompt: |
+            Write `design(r, shift, scale)`, returning the design matrix whose columns are the ones and `(r - shift) / scale`. Then write `conditions(r)`, returning three floats: the condition number of the design matrix for the raw counts (shift 0, scale 1), for the centred counts (shift the mean of `r`, scale 1), and for the standardised counts (shift the mean, scale the standard deviation `r.std()`). Use `np.linalg.cond`.
+          starter: |
+            import numpy as np
+
+
+            def design(r, shift, scale):
+                return np.zeros((len(r), 2))
+
+
+            def conditions(r):
+                return 0.0, 0.0, 0.0
+
+
+            r = np.array([500.0, 510.0, 520.0, 530.0, 540.0])
+            raw, centred, standard = conditions(r)
+            print(round(raw, -2), round(centred, 4), round(standard, 4))
+          solution: |
+            import numpy as np
+
+
+            def design(r, shift, scale):
+                return np.stack([np.ones(len(r)), (r - shift) / scale], axis=1)
+
+
+            def conditions(r):
+                raw = float(np.linalg.cond(design(r, 0.0, 1.0)))
+                centred = float(np.linalg.cond(design(r, r.mean(), 1.0)))
+                standard = float(np.linalg.cond(design(r, r.mean(), r.std())))
+                return raw, centred, standard
+
+
+            r = np.array([500.0, 510.0, 520.0, 530.0, 540.0])
+            raw, centred, standard = conditions(r)
+            print(round(raw, -2), round(centred, 4), round(standard, 4))
+          tests: |
+            import numpy as _np
+            _r = _np.array([500.0, 510.0, 520.0, 530.0, 540.0])
+            _keep = _r.copy()
+            _A = design(_r, 520.0, 10.0)
+            assert _np.array_equal(_r, _keep), "r should be left as it was"
+            assert _np.shape(_A) == (5, 2), "The design matrix has one row for each reading and two columns"
+            assert _np.allclose(_A[:, 0], 1.0), "The first column should be all ones"
+            assert _np.allclose(_A[:, 1], [-2.0, -1.0, 0.0, 1.0, 2.0]), "With shift 520 and scale 10 the second column is -2, -1, 0, 1, 2: subtract the shift, then divide by the scale"
+            _out = conditions(_r)
+            assert isinstance(_out, tuple) and len(_out) == 3, "conditions should return three numbers"
+            _raw, _cen, _std = _out
+            assert isinstance(_raw, float) and isinstance(_cen, float) and isinstance(_std, float), "Each condition number should be a float"
+            assert abs(_raw - 19134.38) < 1.0, "For the raw counts the condition number is about 19 134: shift 0 and scale 1"
+            assert abs(_cen - 200 ** 0.5) < 1e-6, "For the centred counts the condition number is the square root of 200, about 14.14: shift by the mean of r"
+            assert abs(_std - 1.0) < 1e-6, "For the standardised counts the condition number is 1: shift by the mean and scale by r.std()"
+            _raw, _cen, _std = conditions(_np.array([2000.0, 2001.0, 2002.0, 2003.0, 2004.0, 2005.0]))
+            assert abs(_cen - 1.7078251) < 1e-5 and abs(_std - 1.0) < 1e-6 and _raw > 2e6, "For the years 2000 to 2005 the three values are about 2.3 million, 1.7078 and 1"
+            assert output.strip() == "19100.0 14.1421 1.0", "The program should print 19100.0 14.1421 1.0"
+          wrong:
+            - |
+              import numpy as np
+
+
+              def design(r, shift, scale):
+                  return np.stack([np.ones(len(r)), r / scale - shift], axis=1)
+
+
+              def conditions(r):
+                  raw = float(np.linalg.cond(design(r, 0.0, 1.0)))
+                  centred = float(np.linalg.cond(design(r, r.mean(), 1.0)))
+                  standard = float(np.linalg.cond(design(r, r.mean(), r.std())))
+                  return raw, centred, standard
+
+
+              print("19100.0 14.1421 1.0")
+            - |
+              import numpy as np
+
+
+              def design(r, shift, scale):
+                  return np.stack([np.ones(len(r)), (r - shift) * scale], axis=1)
+
+
+              def conditions(r):
+                  raw = float(np.linalg.cond(design(r, 0.0, 1.0)))
+                  centred = float(np.linalg.cond(design(r, r.mean(), 1.0)))
+                  standard = float(np.linalg.cond(design(r, r.mean(), r.std())))
+                  return raw, centred, standard
+
+
+              print("19100.0 14.1421 1.0")
+            - |
+              import numpy as np
+
+
+              def design(r, shift, scale):
+                  return np.stack([np.ones(len(r)), (r - shift) / scale], axis=1)
+
+
+              def conditions(r):
+                  raw = float(np.linalg.cond(design(r, 0.0, 1.0)))
+                  centred = float(np.linalg.cond(design(r, r.mean(), 1.0)))
+                  standard = float(np.linalg.cond(design(r, 0.0, r.std())))
+                  return raw, centred, standard
+
+
+              print("19100.0 14.1421 1.0")
+            - |
+              import numpy as np
+
+
+              def design(r, shift, scale):
+                  return np.stack([np.ones(len(r)), (r - shift) / scale], axis=1)
+
+
+              def conditions(r):
+                  raw = float(np.linalg.det(design(r, 0.0, 1.0).T @ design(r, 0.0, 1.0)))
+                  centred = float(np.linalg.cond(design(r, r.mean(), 1.0)))
+                  standard = float(np.linalg.cond(design(r, r.mean(), r.std())))
+                  return raw, centred, standard
+
+
+              print("19100.0 14.1421 1.0")
+          explanation: |
+            The three matrices have the same column space, so they describe the same family of lines and give the same fitted temperatures. Their condition numbers are about 19 000, 14 and 1.
+
+            With the raw counts, the normal equations would work at $19\,000^2$, about $4 \times 10^8$, and eight of sixteen digits would be at risk. That is survivable here. It would not be with a quadratic term: the design matrix of ones, $r$ and $r^2$ has a condition number of about $4 \times 10^8$ on its own, and the normal equations square it past the limit of the arithmetic. With centred counts the same quadratic design has a condition number of about 400.
+
+            Scaling without centring, the third wrong version, leaves the two columns as nearly parallel as before. It is the centring that turns the column away from the ones, and the scaling that then evens out the lengths.
+      - question:
+          id: data-error
+          type: choice
+          system: s2
+          concepts: [m7.conditioning, m7.gram-schmidt-and-qr]
+          prompt: |
+            The calibration is done with the raw counts, condition number about 19 000, and solved by QR so that the method adds no further loss. The reference temperatures are good to about one part in 250. How well is the offset $-183$ determined, and does it matter?
+          options:
+            - 'To sixteen digits, since QR was used.'
+            - 'Possibly not at all: the bound allows a relative error of $19\,000/250$, far more than the whole value. The offset at count zero is an extrapolation 500 counts beyond the data, where a small tilt of the line moves it a long way. It does not matter for the device, which only ever evaluates the line near counts of 500 to 540, where offset and gain errors nearly cancel. The centred form states what the data determines: 25 degrees at count 520, to about a tenth.'
+            - 'To one part in 250, the same as the data.'
+            - 'It cannot be computed.'
+          answer: 1
+          explanation: |
+            The condition number bounds the error passed from the data to the solution, whatever the method, and QR only avoids adding to it. The misread of the earlier question shows the mechanism: one degree of error in the last reading changes the gain by 0.02, and so the offset at count zero by about $0.02 \times 520$, some ten degrees, while the fitted value in the middle of the range moves by 0.2. Ill-conditioned coefficients and well-determined predictions sit together comfortably. Choosing the centred basis makes the coefficients themselves meaningful, which is the same advice as before, now for a reason that has nothing to do with rounding.
+review: |
+  One sensor, and the whole cluster:
+
+  - Seeing that five readings could not all be satisfied, and replacing the demand with the least sum of squares, was [[m7.least-squares-and-the-normal-equations]].
+  - Testing a claimed fit by whether its misses were orthogonal to the columns, and splitting the squared length of the readings into a fitted part and a residual part, was [[m7.orthogonal-subspaces]].
+  - Finding the gain and the offset as two separate projections, because centring had made the columns orthogonal, was [[m7.orthonormal-bases]].
+  - Extracting from the column of squares the one direction that was new, and reading off that the readings had no component along it, was [[m7.gram-schmidt-and-qr]].
+  - The matrix that turns readings into fitted values, its diagonal, and its trace of 2 were [[m7.projection-onto-a-subspace]].
+  - The rows of weights that turn readings into coefficients, and the equal split between two indistinguishable sensors, were [[m7.pseudo-inverse]].
+  - The three condition numbers for one and the same line, and the offset that the data did not determine, were [[m7.conditioning]].
+
+  Two things here go forward. The first is the habit of asking, of any fitted number, how it would move if one measurement moved. For a linear fit the answer is a fixed matrix, and the statistics of regression is largely the study of that matrix. The second is the centred, scaled basis. Every later model in this curriculum, however large, trains better when its inputs are prepared this way, and the reason is the one found here: the shape of the bowl depends on the basis in which the problem is written.

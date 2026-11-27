@@ -4061,6 +4061,72 @@ function PolarCell(props: Props) {
   );
 }
 
+const FIT_POINTS: Pair[] = [
+  [0, 1],
+  [1, 3],
+  [2, 4],
+  [3, 6],
+];
+
+/** A line through four points with its misses drawn, their sum of squares, and the two sums that vanish for the best line. */
+function LineFit(props: Props) {
+  const [slope, setSlope] = useState(clamp(Math.round(num(props.slope, 1) * 10), 0, 30));
+  const [intercept, setIntercept] = useState(clamp(Math.round(num(props.intercept, 1) * 10), -10, 30));
+  const m = slope / 10;
+  const c = intercept / 10;
+  const misses = FIT_POINTS.map(([x, y]) => y - (m * x + c));
+  const squares = misses.reduce((total, r) => total + r * r, 0);
+  const plain = misses.reduce((total, r) => total + r, 0);
+  const weighted = misses.reduce((total, r, i) => total + r * FIT_POINTS[i][0], 0);
+  const best = Math.abs(plain) < 1e-9 && Math.abs(weighted) < 1e-9;
+  const fx = (x: number) => 50 + x * 110;
+  const fy = (y: number) => 250 - y * 32;
+  return (
+    <Frame
+      title="Fitting a line by least squares"
+      summary={`The points are (0, 1), (1, 3), (2, 4) and (3, 6), and the line is y = ${dp(m)}x ${signed(c)}. Its misses, each point's height minus the line's, are ${misses.map((r) => dp(r)).join(", ")}. The sum of their squares is ${dp(squares)}. The misses add up to ${dp(plain)}, and weighted by x they add up to ${dp(weighted)}. ${
+        best
+          ? "Both sums are zero, so the vector of misses is at right angles to the column of ones and to the column of x values. That is the mark of the best line: no other slope and intercept give a sum of squares below 0.2."
+          : "For the best line both of those sums are zero. Here they are not, so some other slope and intercept give a smaller sum of squares."
+      }`}
+      controls={
+        <>
+          <Stepper label="slope in tenths" value={slope} onChange={setSlope} min={0} max={30} />
+          <Stepper label="intercept in tenths" value={intercept} onChange={setIntercept} min={-10} max={30} />
+        </>
+      }
+    >
+      <svg viewBox="0 0 440 280" role="img" aria-label={`Four points, the line y = ${dp(m)}x ${signed(c)}, and a vertical segment from each point to the line`}>
+        <line x1={fx(-0.3)} y1={fy(0)} x2={fx(3.4)} y2={fy(0)} className="fig-axis" />
+        <line x1={fx(0)} y1={fy(-0.4)} x2={fx(0)} y2={fy(7.4)} className="fig-axis" />
+        {[1, 2, 3].map((x) => (
+          <text key={x} x={fx(x)} y={fy(0) + 16} textAnchor="middle" className="fig-small">
+            {x}
+          </text>
+        ))}
+        {[2, 4, 6].map((y) => (
+          <text key={y} x={fx(0) - 8} y={fy(y) + 4} textAnchor="end" className="fig-small">
+            {y}
+          </text>
+        ))}
+        <clipPath id="fit-clip">
+          <rect x={fx(-0.3)} y={fy(7.4)} width={fx(3.4) - fx(-0.3)} height={fy(-0.4) - fy(7.4)} />
+        </clipPath>
+        <line x1={fx(-0.3)} y1={fy(m * -0.3 + c)} x2={fx(3.4)} y2={fy(m * 3.4 + c)} className="fig-line" clipPath="url(#fit-clip)" />
+        {FIT_POINTS.map(([x, y], i) => (
+          <g key={x}>
+            <line x1={fx(x)} y1={fy(y)} x2={fx(x)} y2={fy(m * x + c)} className="fig-accent-line" style={{ strokeWidth: 2 }} clipPath="url(#fit-clip)" />
+            <circle cx={fx(x)} cy={fy(y)} r="5" className="fig-accent" />
+            <text x={fx(x) + 9} y={fy(y) - 7} className="fig-small">
+              {dp(misses[i], 2)}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </Frame>
+  );
+}
+
 /* One small computation, L = (w × x + b − y)², drawn as the graph an autograd engine records. */
 const TRAIL: Record<string, Spot> = { w: [44, 40], x: [44, 104], b: [44, 168], y: [44, 232], p: [150, 72], q: [236, 120], e: [322, 176], L: [404, 176] };
 const TRAIL_VALUES: Record<string, number> = { w: 3, x: 2, b: 1, y: 5, p: 6, q: 7, e: 2, L: 4 };
@@ -4225,6 +4291,7 @@ const FIGURES: Record<FigureName, ComponentType<Props>> = {
   contours: Contours,
   "polar-cell": PolarCell,
   "trail-graph": TrailGraph,
+  "line-fit": LineFit,
 };
 
 export function Figure({ name, props }: { name: string; props?: Props }) {

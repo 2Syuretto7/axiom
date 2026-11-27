@@ -1,0 +1,678 @@
+concept: m7.pseudo-inverse
+minutes: 80
+claim: You can write down the matrix that takes a right-hand side straight to the least squares solution when the columns are independent, find the shortest of the infinitely many solutions of a system with independent rows and explain why it lies in the row space, describe the pseudo-inverse of any matrix as the map that returns the shortest least squares solution, say which of the properties of an inverse it keeps and which it loses, and compute it in code for both shapes.
+recalls: [m7.least-squares-and-the-normal-equations]
+uses: [m7.projection-onto-a-subspace, m7.orthogonal-subspaces, m5.identity-and-inverse, m5.elimination-and-linear-systems, m5.transpose, m5.rank, m5.column-space-and-null-space, m5.basis-and-dimension, m4.norms-and-distance, m4.linear-independence, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e5.indexing-and-slicing, e0.functions, e0.booleans-and-conditionals]
+leads: [m7.conditioning, m8.singular-value-decomposition, l2.ridge-and-lasso, l2.linear-regression-in-closed-form-and-as-geometry]
+starter: |
+  # Scratch space. Two equations, three unknowns. Many solutions exist.
+  # np.linalg.pinv returns one of them without complaint. Which?
+  import numpy as np
+
+  A = np.array([[1.0, 0.0, 1.0], [0.0, 1.0, 1.0]])
+  b = np.array([3.0, 3.0])
+
+  for x in [[3.0, 3.0, 0.0], [0.0, 0.0, 3.0], [2.0, 2.0, 1.0]]:
+      x = np.array(x)
+      print(x.tolist(), (A @ x).tolist(), float(x @ x))
+
+  x = np.linalg.pinv(A) @ b
+  print([round(float(v), 4) for v in x], float(round(float(x @ x), 4)))
+parts:
+  recall:
+    - text: |
+        [[m7.least-squares-and-the-normal-equations]] dealt with too many equations, and closed on the cases it could not handle: dependent columns, and too few equations. Today gives all of them one answer. Three quick pulls first.
+  puzzle:
+    - text: |
+        Two equations in three unknowns:
+
+        $$x_1 + x_3 = 3, \qquad x_2 + x_3 = 3.$$
+
+        The trouble is the opposite of the last lesson's. There the system had no solution. This one has too many. The starter checks three candidates and then asks the library.
+
+        ```
+        [3.0, 3.0, 0.0] [3.0, 3.0] 18.0
+        [0.0, 0.0, 3.0] [3.0, 3.0] 9.0
+        [2.0, 2.0, 1.0] [3.0, 3.0] 9.0
+        [1.0, 1.0, 2.0] 6.0
+        ```
+
+        All three candidates solve the system exactly. The third number on each line is the squared length of the candidate. `np.linalg.pinv(A) @ b` returns a fourth solution, $(1, 1, 2)$, of squared length 6, shorter than the others.
+
+        The matrix $A$ is 2 by 3 and has no inverse. `np.linalg.inv` refuses it. Yet `pinv` hands back a 3 by 2 matrix that, multiplied by $\mathbf{b}$, yields a solution, and seemingly a special one.
+
+        **Among infinitely many solutions, which has `pinv` chosen, and how can it be found without a library? And is there one matrix that does the right thing for every shape: an exact solution when there is one, the least squares solution when there is none, and a sensible choice when there are many?**
+  intuition:
+    - text: |
+        **Too many equations.** Start from the last lesson. With independent columns, the least squares solution is $\hat{\mathbf{x}} = (A^\top A)^{-1}A^\top\mathbf{b}$. The matrix in front of $\mathbf{b}$ does not depend on $\mathbf{b}$. Give it a name:
+
+        $$A^+ = (A^\top A)^{-1}A^\top.$$
+
+        It behaves like an inverse from one side. $A^+A = (A^\top A)^{-1}A^\top A = I$: apply $A$ to coefficients, then $A^+$, and the coefficients return. From the other side it does not: $AA^+ = A(A^\top A)^{-1}A^\top$ is the projection $P$ of two lessons ago, not the identity. A right-hand side that is not in the column space cannot be recovered, because $A$ never produces it. $A^+$ does the best that can be done, and returns the coefficients of the nearest thing $A$ can produce.
+
+        **Too few equations.** Now the puzzle. Every solution of $A\mathbf{x} = \mathbf{b}$ can be split, as the first lesson of this cluster showed, into a part in the row space of $A$ and a part in the null space:
+
+        $$\mathbf{x} = \mathbf{x}_r + \mathbf{x}_n.$$
+
+        $A$ sends the null space part to zero, so $A\mathbf{x}_r = \mathbf{b}$ on its own. The null space part contributes nothing to solving the equations. It only adds length: the two parts are orthogonal, so $\lVert\mathbf{x}\rVert^2 = \lVert\mathbf{x}_r\rVert^2 + \lVert\mathbf{x}_n\rVert^2$.
+
+        Two things follow. All solutions share the **same** row space part, since two solutions differ by a null space vector. And the shortest solution is the one with no null space part at all. For the puzzle, the null space is the line through $(1, 1, -1)$. The solution $(2, 2, 1)$ is $(1, 1, 2) + (1, 1, -1)$, and $(3, 3, 0)$ is $(1, 1, 2) + 2(1, 1, -1)$. Strip the null space part from any of them and $(1, 1, 2)$ is left.
+
+        So the rule is: **when there are many solutions, take the one in the row space, which is the shortest.** It contains nothing the equations did not ask for.
+  derivation:
+    - text: |
+        **The shortest solution, by formula.** A vector in the row space is a combination of the rows: $\mathbf{x} = A^\top\mathbf{z}$ for some $\mathbf{z}$. Substituting into $A\mathbf{x} = \mathbf{b}$ gives $AA^\top\mathbf{z} = \mathbf{b}$. If the rows of $A$ are independent, $AA^\top$ is invertible, by the argument that made $A^\top A$ invertible for independent columns. Then $\mathbf{z} = (AA^\top)^{-1}\mathbf{b}$ and
+
+        $$\mathbf{x} = A^\top(AA^\top)^{-1}\mathbf{b}, \qquad A^+ = A^\top(AA^\top)^{-1}.$$
+
+        For the puzzle, $AA^\top = \begin{pmatrix} 2 & 1 \\ 1 & 2 \end{pmatrix}$. Solve $2z_1 + z_2 = 3$ and $z_1 + 2z_2 = 3$: $\mathbf{z} = (1, 1)$. Then $\mathbf{x} = A^\top\mathbf{z}$ is the sum of the two rows, $(1, 0, 1) + (0, 1, 1) = (1, 1, 2)$.
+
+        The two formulas are mirror images. For a tall matrix, $A^+ = (A^\top A)^{-1}A^\top$ and $A^+A = I$. For a wide one, $A^+ = A^\top(AA^\top)^{-1}$ and $AA^+ = I$, while $A^+A$ is the projection onto the row space. Each is an inverse on the side where an inverse is possible, and a projection on the other.
+
+        **The line fit's pseudo-inverse.** For the tall matrix with columns ones and $(0, 1, 2, 3)$,
+
+        $$X^+ = \begin{pmatrix} 0.7 & 0.4 & 0.1 & -0.2 \\ -0.3 & -0.1 & 0.1 & 0.3 \end{pmatrix}.$$
+
+        The second row says how the slope is made from the heights: $-0.3y_1 - 0.1y_2 + 0.1y_3 + 0.3y_4$. For the heights $(1, 3, 4, 6)$ that is $-0.3 - 0.3 + 0.4 + 1.8 = 1.6$. The outer points count three times as much as the inner ones, and the weights add up to zero, so that raising every height together does not change the slope. The fit is a fixed linear map applied to the data, and this matrix is that map.
+    - question:
+        id: derivation-shortest
+        type: numeric
+        system: s2
+        prompt: |
+          One equation, two unknowns: $x_1 + 2x_2 = 5$. In the shortest solution, what is $x_2$?
+        answer: "2"
+        explanation: |
+          The row space is the line through $(1, 2)$, so the shortest solution is $z(1, 2)$ with $z + 4z = 5$, giving $z = 1$ and $\mathbf{x} = (1, 2)$. By the formula, $AA^\top = 5$ and $\mathbf{x} = A^\top \cdot 5/5$. Geometrically, the solutions form a line in the plane, and the shortest is the point of that line nearest the origin, reached by going from the origin perpendicular to the line, along the direction $(1, 2)$. Compare $(5, 0)$, of squared length 25, and $(1, 2)$, of squared length 5.
+    - text: |
+        **Every matrix.** Both formulas need full rank: independent columns for the first, independent rows for the second. A matrix can have neither, like the design matrix with temperature in both Celsius and kelvin. Then there is usually no exact solution **and** the least squares solution is not unique. The two rules combine into one:
+
+        > $A^+\mathbf{b}$ is the shortest vector among all those that minimise $\lVert A\mathbf{x} - \mathbf{b}\rVert$.
+
+        This defines a matrix $A^+$, the **pseudo-inverse** or Moore-Penrose inverse, for every $A$ of any shape and rank. In two steps: project $\mathbf{b}$ onto the column space, which makes the system solvable, then take the row space solution, which makes the answer unique. When $A$ is invertible both steps do nothing and $A^+ = A^{-1}$.
+
+        A small case with neither kind of full rank: three equations $x_1 + x_2 = 1$, $x_1 + x_2 = 2$, $x_1 + x_2 = 6$. The best that can be done for the sum $x_1 + x_2$ is the mean, 3. Every pair adding to 3 is a least squares solution. The shortest is $(1.5, 1.5)$, and that is what `np.linalg.pinv` returns.
+
+        Computing $A^+$ in general needs a factorisation that separates the directions $A$ stretches from the ones it destroys. That is the singular value decomposition, in the next cluster. Until then, `np.linalg.pinv` computes it, and the two formulas cover the full rank cases.
+
+        **What it keeps and what it loses.** It keeps: $(A^+)^+ = A$, $(A^\top)^+ = (A^+)^\top$, and $AA^+A = A$. It loses: $A^+A$ and $AA^+$ are projections and in general not the identity, and $(AB)^+$ is in general **not** $B^+A^+$.
+
+        **Why the shortest?** It is not only tidy. Start gradient descent on $\lVert A\mathbf{x} - \mathbf{b}\rVert^2$ from $\mathbf{x} = \mathbf{0}$. Each step adds a multiple of $A^\top(\ldots)$, a combination of the rows. The iterates never leave the row space. So when descent converges, it converges to the solution in the row space: the pseudo-inverse solution. A model with more weights than data points, trained from zero by plain gradient descent, is steered to the smallest weights that fit, without being asked. Start somewhere else, and the null space part of the starting point is carried along untouched to the end.
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the steps for finding the shortest solution of a system with fewer equations than unknowns and independent rows.
+        steps:
+          - 'Note that the shortest solution has no null space part, so it is a combination of the rows: $\mathbf{x} = A^\top\mathbf{z}$.'
+          - 'Substitute into the system to get $AA^\top\mathbf{z} = \mathbf{b}$.'
+          - 'Form the small square matrix $AA^\top$, the dot products of the rows with one another.'
+          - 'Solve for $\mathbf{z}$.'
+          - 'Compute $\mathbf{x} = A^\top\mathbf{z}$ and check $A\mathbf{x} = \mathbf{b}$.'
+        explanation: The unknown is changed from x, with too many entries, to z, with one entry for each equation, and the system in z is square and invertible.
+  formal:
+    - text: |
+        Let $A \in \mathbb{R}^{m \times n}$.
+
+        **Pseudo-inverse.** There is a unique matrix $A^+ \in \mathbb{R}^{n \times m}$ such that, for every $\mathbf{b}$, the vector $A^+\mathbf{b}$ is the minimiser of $\lVert A\mathbf{x} - \mathbf{b}\rVert$ of least norm. Equivalently, $A^+$ is the unique matrix satisfying the four Penrose conditions:
+
+        $$AA^+A = A, \qquad A^+AA^+ = A^+, \qquad (AA^+)^\top = AA^+, \qquad (A^+A)^\top = A^+A.$$
+
+        **Projections.** $AA^+$ is the orthogonal projection onto the column space of $A$. $A^+A$ is the orthogonal projection onto the row space of $A$.
+
+        **Full column rank.** If the columns of $A$ are independent, $A^+ = (A^\top A)^{-1}A^\top$ and $A^+A = I_n$. $A^+$ is a left inverse.
+
+        **Full row rank.** If the rows of $A$ are independent, $A^+ = A^\top(AA^\top)^{-1}$ and $AA^+ = I_m$. $A^+$ is a right inverse, and $A^+\mathbf{b}$ is the solution of $A\mathbf{x} = \mathbf{b}$ of least norm.
+
+        **Invertible.** If $A$ is square and invertible, $A^+ = A^{-1}$.
+
+        **All solutions.** The minimisers of $\lVert A\mathbf{x} - \mathbf{b}\rVert$ are exactly the vectors $A^+\mathbf{b} + \mathbf{n}$ with $\mathbf{n}$ in the null space of $A$, and $\lVert A^+\mathbf{b} + \mathbf{n}\rVert^2 = \lVert A^+\mathbf{b}\rVert^2 + \lVert\mathbf{n}\rVert^2$.
+
+        **A single column.** For a non-zero vector $\mathbf{a}$, taken as a matrix with one column, $\mathbf{a}^+ = \mathbf{a}^\top / (\mathbf{a}^\top\mathbf{a})$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-tall
+        type: choice
+        system: s1
+        prompt: |
+          For a tall $A$ with independent columns, $A^+$ is
+        options: ['$A^\top(AA^\top)^{-1}$', '$(A^\top A)^{-1}A^\top$', '$A^\top$', '$A(A^\top A)^{-1}$']
+        answer: 1
+        explanation: The matrix that turns $\mathbf{b}$ into the least squares solution.
+    - question:
+        id: drill-wide
+        type: choice
+        system: s1
+        prompt: |
+          For a wide $A$ with independent rows, $A^+$ is
+        options: ['$(A^\top A)^{-1}A^\top$', '$A^\top(AA^\top)^{-1}$', '$(AA^\top)^{-1}A$', '$A^\top$']
+        answer: 1
+        explanation: Solve for a combination of the rows.
+    - question:
+        id: drill-left
+        type: choice
+        system: s1
+        prompt: |
+          For a tall $A$ with independent columns, what is $A^+A$?
+        options: ['The projection onto the column space', 'The identity', 'The zero matrix', '$A^\top A$']
+        answer: 1
+        explanation: $(A^\top A)^{-1}A^\top A = I$.
+    - question:
+        id: drill-right
+        type: choice
+        system: s1
+        prompt: |
+          For a tall $A$ with independent columns, what is $AA^+$?
+        options: ['The identity', 'The projection onto the column space of $A$', 'The projection onto the null space of $A$', '$AA^\top$']
+        answer: 1
+        explanation: $A(A^\top A)^{-1}A^\top = P$.
+    - question:
+        id: drill-shape
+        type: choice
+        system: s1
+        prompt: |
+          $A$ has 2 rows and 3 columns. What shape is $A^+$?
+        options: ['2 by 3', '3 by 2', '2 by 2', '3 by 3']
+        answer: 1
+        explanation: It maps right-hand sides back to unknowns, the shape of $A^\top$.
+    - question:
+        id: drill-where
+        type: choice
+        system: s1
+        prompt: |
+          The shortest solution of $A\mathbf{x} = \mathbf{b}$ lies in
+        options: ['the null space of $A$', 'the row space of $A$', 'the column space of $A$', 'the null space of $A^\top$']
+        answer: 1
+        explanation: It has no null space part.
+    - question:
+        id: drill-differ
+        type: choice
+        system: s1
+        prompt: |
+          Two solutions of $A\mathbf{x} = \mathbf{b}$ differ by a vector in
+        options: ['the row space of $A$', 'the null space of $A$', 'the column space of $A$', 'no particular subspace']
+        answer: 1
+        explanation: $A(\mathbf{x} - \mathbf{x}') = \mathbf{b} - \mathbf{b} = \mathbf{0}$.
+    - question:
+        id: drill-invertible
+        type: choice
+        system: s1
+        prompt: |
+          If $A$ is square and invertible, $A^+$ is
+        options: ['$A^\top$', '$A^{-1}$', '$I$', 'undefined']
+        answer: 1
+        explanation: Nothing to project and nothing to choose.
+    - question:
+        id: drill-twice
+        type: choice
+        system: s1
+        prompt: |
+          What is $(A^+)^+$?
+        options: ['$A^\top$', '$A$', '$A^+$', '$I$']
+        answer: 1
+        explanation: Taking the pseudo-inverse twice returns the matrix.
+    - question:
+        id: drill-row
+        type: numeric
+        system: s1
+        prompt: |
+          What is the first entry of the shortest solution of $3x_1 + 4x_2 = 25$?
+        answer: "3"
+        explanation: The solution is a multiple of $(3, 4)$, and $9z + 16z = 25$ gives $z = 1$.
+    - question:
+        id: drill-mean
+        type: numeric
+        system: s1
+        prompt: |
+          $A$ is a single column of four ones. What is $A^+\mathbf{b}$ for $\mathbf{b} = (1, 3, 4, 6)$?
+        answer: "3.5"
+        explanation: $\mathbf{a}^\top\mathbf{b} / \mathbf{a}^\top\mathbf{a} = 14/4$, the mean.
+    - question:
+        id: drill-product
+        type: choice
+        system: s1
+        prompt: |
+          Is $(AB)^+ = B^+A^+$ always true?
+        options: ['Yes, as for inverses', 'No, not in general', 'Only for wide matrices', 'Only when $A = B$']
+        answer: 1
+        explanation: This rule of inverses is one that the pseudo-inverse loses.
+    - question:
+        id: drill-descent
+        type: choice
+        system: s1
+        prompt: |
+          Gradient descent on $\lVert A\mathbf{x} - \mathbf{b}\rVert^2$ is started from $\mathbf{x} = \mathbf{0}$. Its iterates stay in
+        options: ['the null space of $A$', 'the row space of $A$', 'the column space of $A$', 'no particular subspace']
+        answer: 1
+        explanation: Every step adds a combination of the rows.
+    - question:
+        id: predict-fit
+        type: predict
+        system: s1
+        prompt: The pseudo-inverse of the line fit's matrix. What does this show?
+        code: |
+          import numpy as np
+
+          X = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          Xp = np.linalg.pinv(X)
+          print([[round(float(v), 4) for v in row] for row in Xp])
+          print([round(float(v), 4) for v in Xp @ y])
+          print(np.allclose(Xp @ X, np.eye(2)), np.allclose(X @ Xp, np.eye(4)))
+        output: |
+          [[0.7, 0.4, 0.1, -0.2], [-0.3, -0.1, 0.1, 0.3]]
+          [1.1, 1.6]
+          True False
+        explanation: A 2 by 4 matrix whose rows are the weights that turn the four heights into the intercept and the slope. It is an inverse on the left, and not on the right, where the product is the 4 by 4 projection onto the column space.
+    - question:
+        id: predict-descent
+        type: predict
+        system: s1
+        prompt: Gradient descent on the puzzle's two equations, from two starting points. What does this show?
+        code: |
+          import numpy as np
+
+          A = np.array([[1.0, 0.0, 1.0], [0.0, 1.0, 1.0]])
+          b = np.array([3.0, 3.0])
+          for start in [[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]]:
+              x = np.array(start)
+              for step in range(200):
+                  x = x - 0.1 * 2 * A.T @ (A @ x - b)
+              print([round(float(v), 4) for v in x], [round(float(v), 4) for v in A @ x])
+        output: |
+          [1.0, 1.0, 2.0] [3.0, 3.0]
+          [2.0, 2.0, 1.0] [3.0, 3.0]
+        explanation: Both runs end at exact solutions. From zero, descent reaches the pseudo-inverse solution, since its steps are combinations of the rows. The start $(3, 0, 0)$ has a null space part, $(1, 1, -1)$, which no step can change, and the run ends at $(1, 1, 2) + (1, 1, -1)$.
+  work:
+    - text: Slower now. Two formulas that look alike, each wrong for the other's shape.
+    - question:
+        id: write-left-inverse
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `pinv_tall(A)` for an array `A` with independent columns, returning $A^+ = (A^\top A)^{-1}A^\top$. Use `np.linalg.solve` with `A.T` as the second argument, and do not call `np.linalg.pinv` or `np.linalg.inv`.
+        starter: |
+          import numpy as np
+
+
+          def pinv_tall(A):
+              return np.zeros((A.shape[1], A.shape[0]))
+
+
+          X = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+          print([[round(float(v), 4) for v in row] for row in pinv_tall(X)])
+        solution: |
+          import numpy as np
+
+
+          def pinv_tall(A):
+              return np.linalg.solve(A.T @ A, A.T)
+
+
+          X = np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+          print([[round(float(v), 4) for v in row] for row in pinv_tall(X)])
+        tests: |
+          import numpy as _np
+          _X = _np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+          _P = pinv_tall(_X)
+          assert _np.shape(_P) == (2, 4), "The pseudo-inverse of a 4 by 2 matrix is 2 by 4"
+          assert _np.allclose(_P, [[0.7, 0.4, 0.1, -0.2], [-0.3, -0.1, 0.1, 0.3]]), "For the line fit the pseudo-inverse is [[0.7, 0.4, 0.1, -0.2], [-0.3, -0.1, 0.1, 0.3]]: solve with A.T @ A on the left and A.T on the right"
+          assert _np.allclose(_P @ _X, _np.eye(2)), "pinv_tall(A) @ A should be the identity"
+          assert _np.allclose(_P @ _np.array([1.0, 3.0, 4.0, 6.0]), [1.1, 1.6]), "Applied to the heights it should give intercept 1.1 and slope 1.6"
+          _a = _np.array([[1.0], [2.0], [2.0]])
+          assert _np.allclose(pinv_tall(_a) * 9, [[1.0, 2.0, 2.0]]), "For the single column (1, 2, 2) the pseudo-inverse is the row (1, 2, 2) divided by 9"
+          _B = _np.random.default_rng(0).normal(size=(7, 3))
+          _P = pinv_tall(_B)
+          assert _np.allclose(_P @ _B, _np.eye(3)) and _np.allclose(_B @ _P, (_B @ _P).T) and _np.allclose(_P, _np.linalg.pinv(_B)), "For a random 7 by 3 matrix: A+ A is the identity, A A+ is symmetric, and the result agrees with the library"
+          _S = _np.array([[2.0, 1.0], [1.0, 1.0]])
+          assert _np.allclose(pinv_tall(_S), [[1.0, -1.0], [-1.0, 2.0]]), "For an invertible square matrix the result should be its inverse"
+          assert output.strip() == "[[0.7, 0.4, 0.1, -0.2], [-0.3, -0.1, 0.1, 0.3]]", "The program should print [[0.7, 0.4, 0.1, -0.2], [-0.3, -0.1, 0.1, 0.3]]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def pinv_tall(A):
+                return A.T
+
+
+            print("[[0.7, 0.4, 0.1, -0.2], [-0.3, -0.1, 0.1, 0.3]]")
+          - |
+            import numpy as np
+
+
+            def pinv_tall(A):
+                return A.T / np.diag(A.T @ A).reshape(-1, 1)
+
+
+            print("[[0.7, 0.4, 0.1, -0.2], [-0.3, -0.1, 0.1, 0.3]]")
+          - |
+            import numpy as np
+
+
+            def pinv_tall(A):
+                return A @ np.linalg.solve(A.T @ A, A.T)
+
+
+            print("[[0.7, 0.4, 0.1, -0.2], [-0.3, -0.1, 0.1, 0.3]]")
+          - |
+            import numpy as np
+
+
+            def pinv_tall(A):
+                return np.linalg.solve(A.T @ A, A.T).T
+
+
+            print("[[0.7, 0.4, 0.1, -0.2], [-0.3, -0.1, 0.1, 0.3]]")
+        explanation: |
+          One line. `np.linalg.solve(M, B)` with a matrix `B` solves for each column of `B`, which gives $M^{-1}B$ without forming $M^{-1}$.
+
+          The transpose alone has the right shape and is the pseudo-inverse only when the columns are orthonormal. Dividing each row of the transpose by its column's squared length corrects the lengths and not the overlaps. Multiplying by `A` on the left goes one step too far and returns the projection, a square matrix.
+
+          For a single column the formula is the projection coefficient of the vectors track, $\mathbf{a}^\top\mathbf{b}/\mathbf{a}^\top\mathbf{a}$, read as a row applied to $\mathbf{b}$.
+    - question:
+        id: write-min-norm
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `min_norm_solution(A, b)` for an array `A` with independent rows, fewer rows than columns. Return the shortest `x` with `A @ x` equal to `b`: solve $AA^\top\mathbf{z} = \mathbf{b}$ and return $A^\top\mathbf{z}$. Do not call `np.linalg.pinv`.
+
+          Then write `null_part(A, x)`, returning the part of the vector `x` that lies in the null space of `A`, which is `x` minus the shortest solution of $A\mathbf{v} = A\mathbf{x}$.
+        starter: |
+          import numpy as np
+
+
+          def min_norm_solution(A, b):
+              return np.zeros(A.shape[1])
+
+
+          def null_part(A, x):
+              return x * 0.0
+
+
+          A = np.array([[1.0, 0.0, 1.0], [0.0, 1.0, 1.0]])
+          print([round(float(v), 4) for v in min_norm_solution(A, np.array([3.0, 3.0]))])
+          print([round(float(v), 4) for v in null_part(A, np.array([3.0, 3.0, 0.0]))])
+        solution: |
+          import numpy as np
+
+
+          def min_norm_solution(A, b):
+              z = np.linalg.solve(A @ A.T, b)
+              return A.T @ z
+
+
+          def null_part(A, x):
+              return x - min_norm_solution(A, A @ x)
+
+
+          A = np.array([[1.0, 0.0, 1.0], [0.0, 1.0, 1.0]])
+          print([round(float(v), 4) for v in min_norm_solution(A, np.array([3.0, 3.0]))])
+          print([round(float(v), 4) for v in null_part(A, np.array([3.0, 3.0, 0.0]))])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[1.0, 0.0, 1.0], [0.0, 1.0, 1.0]])
+          _b = _np.array([3.0, 3.0])
+          _x = min_norm_solution(_A, _b)
+          assert _np.shape(_x) == (3,), "The solution has one entry for each column of A"
+          assert _np.allclose(_A @ _x, _b), "The result should solve the system: A @ x should equal b"
+          assert _np.allclose(_x, [1.0, 1.0, 2.0]), "For the puzzle's system the shortest solution is (1, 1, 2): a combination of the rows, A.T @ z, with A @ A.T @ z equal to b"
+          assert _np.allclose(min_norm_solution(_np.array([[1.0, 2.0]]), _np.array([5.0])), [1.0, 2.0]), "The shortest solution of x1 + 2 x2 = 5 is (1, 2)"
+          assert _np.allclose(min_norm_solution(_np.array([[3.0, 4.0]]), _np.array([25.0])), [3.0, 4.0]), "The shortest solution of 3 x1 + 4 x2 = 25 is (3, 4)"
+          _B = _np.random.default_rng(0).normal(size=(3, 6))
+          _c = _np.random.default_rng(1).normal(size=3)
+          _x = min_norm_solution(_B, _c)
+          assert _np.allclose(_B @ _x, _c) and _np.allclose(_x, _np.linalg.pinv(_B) @ _c), "For a random 3 by 6 system the result should solve it and agree with the library's pseudo-inverse"
+          _n = null_part(_A, _np.array([3.0, 3.0, 0.0]))
+          assert _np.shape(_n) == (3,), "The null space part has the shape of x"
+          assert _np.allclose(_n, [2.0, 2.0, -2.0]), "The null space part of (3, 3, 0) is (2, 2, -2), what is left after the shortest solution (1, 1, 2) is taken away"
+          assert _np.allclose(null_part(_A, _np.array([1.0, 1.0, 2.0])), 0), "A vector in the row space has no null space part"
+          _v = _np.random.default_rng(2).normal(size=6)
+          _n = null_part(_B, _v)
+          assert _np.allclose(_B @ _n, 0) and _np.allclose(_B @ (_v - _n), _B @ _v) and abs(float(_n @ (_v - _n))) < 1e-9, "For a random vector: A sends the null space part to zero, and the two parts are orthogonal"
+          assert output.strip() == "[1.0, 1.0, 2.0]\n[2.0, 2.0, -2.0]", "The program should print [1.0, 1.0, 2.0] and then [2.0, 2.0, -2.0]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def min_norm_solution(A, b):
+                return A.T @ b
+
+
+            def null_part(A, x):
+                return x - min_norm_solution(A, A @ x)
+
+
+            print("[1.0, 1.0, 2.0]\n[2.0, 2.0, -2.0]")
+          - |
+            import numpy as np
+
+
+            def min_norm_solution(A, b):
+                z = np.linalg.solve(A @ A.T, b)
+                return z
+
+
+            def null_part(A, x):
+                return x - min_norm_solution(A, A @ x)
+
+
+            print("[1.0, 1.0, 2.0]\n[2.0, 2.0, -2.0]")
+          - |
+            import numpy as np
+
+
+            def min_norm_solution(A, b):
+                x = np.zeros(A.shape[1])
+                x[:len(b)] = b
+                return x
+
+
+            def null_part(A, x):
+                return x - min_norm_solution(A, A @ x)
+
+
+            print("[1.0, 1.0, 2.0]\n[2.0, 2.0, -2.0]")
+          - |
+            import numpy as np
+
+
+            def min_norm_solution(A, b):
+                z = np.linalg.solve(A @ A.T, b)
+                return A.T @ z
+
+
+            def null_part(A, x):
+                return min_norm_solution(A, A @ x)
+
+
+            print("[1.0, 1.0, 2.0]\n[2.0, 2.0, -2.0]")
+          - |
+            import numpy as np
+
+
+            def min_norm_solution(A, b):
+                z = np.linalg.solve(A @ A.T, b)
+                return A.T @ z
+
+
+            def null_part(A, x):
+                return x - A.T @ (A @ x)
+
+
+            print("[1.0, 1.0, 2.0]\n[2.0, 2.0, -2.0]")
+        explanation: |
+          `min_norm_solution` changes the unknown. In place of three numbers constrained by two equations, it looks for two numbers $\mathbf{z}$, the weights of the rows, and the system for those is square. The answer is then rebuilt from the rows.
+
+          `null_part` uses the decomposition directly. $A\mathbf{x}$ is what the equations see of $\mathbf{x}$. The shortest vector that the equations see in the same way is the row space part of $\mathbf{x}$, and whatever remains is invisible to $A$.
+
+          The third wrong version sets the free unknown to zero and reads off the others, which is what elimination does when it writes down a particular solution. It gives $(3, 3, 0)$, a correct solution, and three times the squared length of the shortest. The choice of which unknown is "free" is an accident of the order of the columns. The shortest solution does not depend on such a choice.
+    - question:
+        id: fix-wrong-shape
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `pinv_full_rank(A)` should return the pseudo-inverse of any matrix of full rank, using the formula for independent columns when `A` has at least as many rows as columns, and the formula for independent rows otherwise. On the puzzle's 2 by 3 matrix it stops with `LinAlgError: Singular matrix`. Fix it. One line needs to change.
+        starter: |
+          import numpy as np
+
+
+          def pinv_full_rank(A):
+              m, n = A.shape
+              if m <= n:
+                  return np.linalg.solve(A.T @ A, A.T)
+              return A.T @ np.linalg.inv(A @ A.T)
+
+
+          A = np.array([[1.0, 0.0, 1.0], [0.0, 1.0, 1.0]])
+          print([[round(float(v), 4) for v in row] for row in pinv_full_rank(A) * 3])
+        solution: |
+          import numpy as np
+
+
+          def pinv_full_rank(A):
+              m, n = A.shape
+              if m >= n:
+                  return np.linalg.solve(A.T @ A, A.T)
+              return A.T @ np.linalg.inv(A @ A.T)
+
+
+          A = np.array([[1.0, 0.0, 1.0], [0.0, 1.0, 1.0]])
+          print([[round(float(v), 4) for v in row] for row in pinv_full_rank(A) * 3])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[1.0, 0.0, 1.0], [0.0, 1.0, 1.0]])
+          try:
+              _P = pinv_full_rank(_A)
+          except _np.linalg.LinAlgError:
+              assert False, "For a wide matrix, A.T @ A is singular: the wide formula, with A @ A.T, is the one to use when there are fewer rows than columns"
+          assert _np.shape(_P) == (3, 2), "The pseudo-inverse of a 2 by 3 matrix is 3 by 2"
+          assert _np.allclose(_P * 3, [[2.0, -1.0], [-1.0, 2.0], [1.0, 1.0]]), "For the puzzle's matrix, three times the pseudo-inverse is [[2, -1], [-1, 2], [1, 1]]"
+          assert _np.allclose(_A @ _P, _np.eye(2)), "For a wide matrix of full rank, A @ A+ should be the identity"
+          _X = _np.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
+          try:
+              _P = pinv_full_rank(_X)
+          except _np.linalg.LinAlgError:
+              assert False, "For a tall matrix, A @ A.T is singular: the tall formula, with A.T @ A, is the one to use when there are at least as many rows as columns"
+          assert _np.allclose(_P, [[0.7, 0.4, 0.1, -0.2], [-0.3, -0.1, 0.1, 0.3]]), "For the line fit's tall matrix the pseudo-inverse is [[0.7, 0.4, 0.1, -0.2], [-0.3, -0.1, 0.1, 0.3]]"
+          _S = _np.array([[2.0, 1.0], [1.0, 1.0]])
+          assert _np.allclose(pinv_full_rank(_S), [[1.0, -1.0], [-1.0, 2.0]]), "For an invertible square matrix the result should be its inverse"
+          _B = _np.random.default_rng(0).normal(size=(3, 6))
+          assert _np.allclose(pinv_full_rank(_B), _np.linalg.pinv(_B)) and _np.allclose(pinv_full_rank(_B.T), _np.linalg.pinv(_B.T)), "For a random 3 by 6 matrix and its transpose the result should agree with the library"
+          assert output.strip() == "[[2.0, -1.0], [-1.0, 2.0], [1.0, 1.0]]", "The program should print [[2.0, -1.0], [-1.0, 2.0], [1.0, 1.0]]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def pinv_full_rank(A):
+                m, n = A.shape
+                if m <= n:
+                    return np.linalg.solve(A.T @ A, A.T)
+                return A.T @ np.linalg.inv(A @ A.T)
+
+
+            print("[[2.0, -1.0], [-1.0, 2.0], [1.0, 1.0]]")
+          - |
+            import numpy as np
+
+
+            def pinv_full_rank(A):
+                m, n = A.shape
+                if m >= n:
+                    return np.linalg.solve(A.T @ A, A.T)
+                return np.linalg.inv(A @ A.T) @ A
+
+
+            print("[[2.0, -1.0], [-1.0, 2.0], [1.0, 1.0]]")
+          - |
+            import numpy as np
+
+
+            def pinv_full_rank(A):
+                m, n = A.shape
+                if m >= n:
+                    return np.linalg.solve(A.T @ A, A.T)
+                return A.T
+
+
+            print("[[2.0, -1.0], [-1.0, 2.0], [1.0, 1.0]]")
+          - |
+            import numpy as np
+
+
+            def pinv_full_rank(A):
+                m, n = A.shape
+                return A.T @ np.linalg.inv(A @ A.T)
+
+
+            print("[[2.0, -1.0], [-1.0, 2.0], [1.0, 1.0]]")
+        explanation: |
+          The comparison was the wrong way round, so each shape was sent to the other's formula. For the 2 by 3 matrix, $A^\top A$ is 3 by 3 but has rank 2, the rank of $A$. It has no inverse, and the solver says so.
+
+          The rule behind the choice: $A^\top A$ is invertible when the **columns** are independent, and $AA^\top$ when the **rows** are. A matrix cannot have more independent columns than it has rows. So for a wide matrix $A^\top A$ is always singular, and for a tall one $AA^\top$ always is. Invert the smaller of the two products.
+
+          Here the mistake was announced by an error, which is the fortunate case. Had the matrix been only **nearly** singular, the solver would have returned an answer with no warning, and the answer would have been mostly rounding. How to tell, and how much to trust the result of solving a linear system at all, is the next lesson.
+    - question:
+        id: work-row-space
+        type: choice
+        system: s2
+        prompt: |
+          Why is the shortest solution of $A\mathbf{x} = \mathbf{b}$ the one that lies in the row space of $A$?
+        options:
+          - 'Because the row space is smaller than the null space.'
+          - 'Any solution is a row space part plus a null space part, and the two are orthogonal. $A$ ignores the null space part, so the row space part alone already solves the system, and it is the same for every solution. The null space part adds its squared length to the total and contributes nothing, so the shortest solution has none.'
+          - 'Because $\mathbf{b}$ lies in the row space.'
+          - 'It is a convention, and any solution could have been chosen.'
+        answer: 1
+        explanation: |
+          $\lVert\mathbf{x}\rVert^2 = \lVert\mathbf{x}_r\rVert^2 + \lVert\mathbf{x}_n\rVert^2$, with $\mathbf{x}_r$ fixed by the equations and $\mathbf{x}_n$ free. The minimum is at $\mathbf{x}_n = \mathbf{0}$. Note that $\mathbf{b}$ lives in a different space from $\mathbf{x}$, with one entry for each equation and not for each unknown, so it cannot be in the row space. The picture to hold is the first lesson's: the row space and the null space split the space of unknowns at right angles, and the equations see only one of the two.
+    - question:
+        id: work-not-inverse
+        type: choice
+        system: s2
+        prompt: |
+          For the line fit's 4 by 2 matrix $X$, the pseudo-inverse satisfies $X^+X = I$. A colleague concludes that $X\mathbf{w} = \mathbf{y}$ can be solved exactly as $\mathbf{w} = X^+\mathbf{y}$. What is wrong?
+        options:
+          - 'Nothing. $X^+$ is the inverse of $X$.'
+          - '$X^+X = I$ says that weights survive the round trip: from $\mathbf{w}$ to $X\mathbf{w}$ and back. It says nothing about starting from an arbitrary $\mathbf{y}$. Going from $\mathbf{y}$ to $X^+\mathbf{y}$ and forward again gives $XX^+\mathbf{y}$, the projection of $\mathbf{y}$, which equals $\mathbf{y}$ only if $\mathbf{y}$ was in the column space to begin with.'
+          - '$X^+X$ is not the identity.'
+          - 'The pseudo-inverse of a tall matrix does not exist.'
+        answer: 1
+        explanation: |
+          A left inverse undoes $X$. It does not make $X$ reach everything. $X\,X^+\mathbf{y} = (1.1, 2.7, 4.3, 5.9)$, not $(1, 3, 4, 6)$. For a true inverse both products are the identity, which is possible only for a square matrix. The pseudo-inverse splits the two halves of invertibility: a tall matrix of full rank keeps "nothing is lost going forward", and a wide one keeps "everything can be reached".
+    - question:
+        id: work-rank-deficient
+        type: numeric
+        system: s2
+        prompt: |
+          The equations $x_1 + x_2 = 1$, $x_1 + x_2 = 2$, $x_1 + x_2 = 6$ have no solution, and their least squares solutions are all the pairs with $x_1 + x_2 = 3$. What is $x_1$ in the solution the pseudo-inverse returns? Give a decimal.
+        answer: "1.5"
+        explanation: |
+          Among the pairs with sum 3, the shortest is the one in the row space, the line through $(1, 1)$: $x_1 = x_2 = 1.5$. Both steps of the definition are visible. The inconsistent right-hand side $(1, 2, 6)$ is replaced by its projection onto the column space, $(3, 3, 3)$. Then, of the many solutions of the repaired system, the one with no null space part is taken. With two identical columns nothing in the data distinguishes them, and the pseudo-inverse treats them alike.
+    - question:
+        id: work-ridge
+        type: choice
+        system: s2
+        prompt: |
+          For the puzzle's system, solving $(A^\top A + \lambda I)\mathbf{x} = A^\top\mathbf{b}$ gives $(0.75, 0.75, 1.5)$ for $\lambda = 1$, $(0.9967, 0.9967, 1.9934)$ for $\lambda = 0.01$, and $(1, 1, 2)$ to four places for $\lambda = 10^{-6}$. What does this suggest?
+        options:
+          - 'That adding $\lambda I$ is a mistake.'
+          - 'Adding a small multiple of the identity makes the singular matrix $A^\top A$ invertible, which amounts to adding a small penalty on the length of $\mathbf{x}$. As the penalty shrinks, the solution tends to the pseudo-inverse solution, the shortest one. The pseudo-inverse is the limit of a preference for small solutions as that preference becomes infinitely weak.'
+          - 'That the system has a unique solution.'
+          - 'That $\lambda$ should be as large as possible.'
+        answer: 1
+        explanation: |
+          The modified equations are the normal equations of minimising $\lVert A\mathbf{x} - \mathbf{b}\rVert^2 + \lambda\lVert\mathbf{x}\rVert^2$. For any $\lambda > 0$ the minimiser is unique and lies in the row space. A large $\lambda$ gives up some fit to gain shortness, as at $\lambda = 1$, where the equations are missed. A vanishing $\lambda$ fits as well as possible and uses shortness only to break ties. This penalised problem is ridge regression, a standard tool of the learning track, and it is also the practical way to compute with matrices that are close to rank deficient.
+  connections:
+    - text: |
+        Two equations in three unknowns had infinitely many solutions, and `pinv` returned $(1, 1, 2)$. Every solution is that vector plus something from the null space, which the equations cannot see and which only adds length. The **shortest solution lies in the row space**, and for independent rows it is $A^\top(AA^\top)^{-1}\mathbf{b}$.
+
+        With the last lesson's $(A^\top A)^{-1}A^\top$ for independent columns, that makes two mirror-image formulas, each a one-sided inverse. Behind both is one definition valid for every matrix: the **pseudo-inverse** $A^+$ sends $\mathbf{b}$ to the shortest of the vectors that minimise $\lVert A\mathbf{x} - \mathbf{b}\rVert$. It is where gradient descent from zero ends up, and the limit of a vanishing penalty on length.
+
+        Everything in this cluster has so far been exact: a matrix has independent columns or it does not, and $A^\top A$ is invertible or singular. Computation is not like that. Columns can be almost dependent, a matrix almost singular, and then the formulas run without complaint and return digits that mean nothing. The last lesson of the cluster measures how close to that edge a problem sits, and shows that one of the formulas you have been using, the normal equations, moves every problem closer to it. That is [[m7.conditioning]].

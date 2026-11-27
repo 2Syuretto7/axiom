@@ -1,0 +1,608 @@
+concept: m7.orthonormal-bases
+minutes: 75
+claim: You can say what makes a set of vectors orthonormal and state it as a single matrix equation, read off the coordinates of a vector in an orthonormal basis as dot products with no system to solve, explain why a square matrix with orthonormal columns has its transpose as its inverse and preserves lengths and angles, tell that case apart from a tall matrix with orthonormal columns, and project a vector onto a subspace by adding its projections onto orthonormal directions.
+recalls: [m7.orthogonal-subspaces]
+uses: [m5.change-of-basis, m5.identity-and-inverse, m5.transpose, m5.matrix-multiplication-as-composition, m5.determinant, m5.basis-and-dimension, m4.dot-product, m4.norms-and-distance, m4.projection-onto-a-vector, m4.linear-independence, m4.angle-and-cosine-similarity, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e5.axis-operations-and-reductions, e5.broadcasting, e0.functions]
+leads: [m7.gram-schmidt-and-qr, m7.projection-onto-a-subspace, m7.least-squares-and-the-normal-equations, m7.conditioning, m8.spectral-theorem, m8.singular-value-decomposition]
+starter: |
+  # Scratch space. The coordinates of x in two bases, each found two ways:
+  # by solving a system, and by taking dot products with the basis vectors.
+  import numpy as np
+
+  x = np.array([2.0, 11.0])
+  Q = np.array([[0.6, -0.8], [0.8, 0.6]])
+  B = np.array([[2.0, 1.0], [1.0, 1.0]])
+
+  print([round(float(v), 4) for v in np.linalg.solve(Q, x)], [round(float(v), 4) for v in Q.T @ x])
+  print([round(float(v), 4) for v in np.linalg.solve(B, x)], [round(float(v), 4) for v in B.T @ x])
+parts:
+  recall:
+    - text: |
+        [[m7.orthogonal-subspaces]] split a vector into a part along one direction and a part orthogonal to it, with the projection formula for a single vector. Today asks what happens when a whole basis is made of directions at right angles. Three quick pulls first.
+  puzzle:
+    - text: |
+        The columns of a matrix are a basis, and the coordinates of $\mathbf{x}$ in that basis are the numbers $\mathbf{c}$ with $B\mathbf{c} = \mathbf{x}$. Finding them means solving a system, as you learnt with change of basis.
+
+        The starter does that for $\mathbf{x} = (2, 11)$ in two bases of the plane. For each it also tries a shortcut: the dot product of $\mathbf{x}$ with each basis vector, which is $B^\top\mathbf{x}$ and needs no solving at all.
+
+        Run it.
+
+        ```
+        [10.0, 5.0] [10.0, 5.0]
+        [-9.0, 20.0] [15.0, 13.0]
+        ```
+
+        For the basis $Q$, with columns $(0.6, 0.8)$ and $(-0.8, 0.6)$, the shortcut gives the right coordinates, $(10, 5)$. For the basis $B$, with columns $(2, 1)$ and $(1, 1)$, the true coordinates are $(-9, 20)$ and the shortcut gives $(15, 13)$, which is wrong in both entries.
+
+        **What does $Q$ have that $B$ lacks, so that dot products are coordinates? And if finding coordinates costs nothing in such a basis, what else comes for nothing?**
+  intuition:
+    - text: |
+        Write $\mathbf{x}$ in a basis: $\mathbf{x} = c_1\mathbf{q}_1 + c_2\mathbf{q}_2$. To isolate $c_1$, take the dot product of both sides with $\mathbf{q}_1$:
+
+        $$\mathbf{q}_1 \cdot \mathbf{x} = c_1(\mathbf{q}_1 \cdot \mathbf{q}_1) + c_2(\mathbf{q}_1 \cdot \mathbf{q}_2).$$
+
+        In general that is one equation in two unknowns, and $c_1$ is tangled with $c_2$. Two things would untangle it. If $\mathbf{q}_1 \cdot \mathbf{q}_2 = 0$, the second term disappears. If also $\mathbf{q}_1 \cdot \mathbf{q}_1 = 1$, what remains is $\mathbf{q}_1 \cdot \mathbf{x} = c_1$.
+
+        The columns of $Q$ have both properties: $0.6 \times (-0.8) + 0.8 \times 0.6 = 0$, and each has length $\sqrt{0.36 + 0.64} = 1$. The columns of $B$ have neither: $(2, 1) \cdot (1, 1) = 3$, and their lengths are $\sqrt5$ and $\sqrt2$.
+
+        Vectors that are mutually orthogonal and each of length 1 are **orthonormal**. In an orthonormal basis each coordinate is simply how far $\mathbf{x}$ reaches along that basis vector, measured without interference from the others. It is the plain situation of the standard axes, where the first coordinate of a point is its dot product with $(1, 0)$. An orthonormal basis is a set of standard axes that has been turned.
+
+        That is the picture to hold on to. $Q$ above is the usual pair of axes rotated by about 53 degrees. Turning a rigid frame changes no lengths and no angles. So everything about lengths and angles can be computed in the new coordinates as if they were the old ones: the length of $\mathbf{x}$ is $\sqrt{2^2 + 11^2} = \sqrt{125}$, and from the coordinates it is $\sqrt{10^2 + 5^2} = \sqrt{125}$ as well.
+  derivation:
+    - text: |
+        **Orthonormal, in one equation.** Vectors $\mathbf{q}_1, \dots, \mathbf{q}_k$ in $\mathbb{R}^n$ are orthonormal if
+
+        $$\mathbf{q}_i \cdot \mathbf{q}_j = \begin{cases} 1 & i = j \\ 0 & i \neq j. \end{cases}$$
+
+        Put them as the columns of an $n \times k$ matrix $Q$. Entry $(i, j)$ of $Q^\top Q$ is $\mathbf{q}_i \cdot \mathbf{q}_j$, so the whole definition is
+
+        $$Q^\top Q = I.$$
+
+        Orthonormal vectors are automatically independent. If $c_1\mathbf{q}_1 + \dots + c_k\mathbf{q}_k = \mathbf{0}$, the dot product with $\mathbf{q}_j$ leaves $c_j = 0$, for each $j$.
+
+        **Coordinates.** If $\mathbf{x} = Q\mathbf{c}$, multiply by $Q^\top$: $Q^\top\mathbf{x} = Q^\top Q\mathbf{c} = \mathbf{c}$. **The coordinates are $\mathbf{c} = Q^\top\mathbf{x}$**, one dot product each, and
+
+        $$\mathbf{x} = (\mathbf{q}_1 \cdot \mathbf{x})\,\mathbf{q}_1 + \dots + (\mathbf{q}_k \cdot \mathbf{x})\,\mathbf{q}_k.$$
+
+        Each term is the projection of $\mathbf{x}$ onto one basis vector. A vector is the sum of its projections onto orthonormal directions. For a skewed basis that is false: the projections onto $(2, 1)$ and $(1, 1)$ overlap, each counting some of what the other counts, and their sum overshoots.
+
+        **Square $Q$: the transpose is the inverse.** When $k = n$, the matrix $Q$ is square and $Q^\top Q = I$ says that $Q^\top$ is a left inverse. For a square matrix a left inverse is the inverse, so
+
+        $$Q^{-1} = Q^\top, \qquad QQ^\top = I \text{ as well}.$$
+
+        Such a matrix is called an **orthogonal matrix**. The name is traditional and a little unfortunate, since its columns are orthonormal, not merely orthogonal. Inverting it costs nothing: swap rows and columns. And since $QQ^\top = I$, its rows are orthonormal too.
+
+        **Lengths and angles survive.** For any $\mathbf{x}$ and $\mathbf{y}$,
+
+        $$(Q\mathbf{x}) \cdot (Q\mathbf{y}) = \mathbf{x}^\top Q^\top Q\,\mathbf{y} = \mathbf{x} \cdot \mathbf{y}.$$
+
+        Dot products are unchanged, and lengths and angles are built from dot products. With $\mathbf{y} = \mathbf{x}$: $\lVert Q\mathbf{x} \rVert = \lVert\mathbf{x}\rVert$. An orthogonal matrix moves the space rigidly. It is a rotation, or a reflection, or one followed by the other, and its determinant is $+1$ or $-1$, since $\det(Q^\top Q) = (\det Q)^2 = 1$. Read the other way, the same identity gives $\lVert\mathbf{x}\rVert^2 = \lVert Q^\top\mathbf{x}\rVert^2 = c_1^2 + \dots + c_n^2$: the squared length of a vector is the sum of the squares of its coordinates in **any** orthonormal basis.
+
+        This matters in computation. A matrix that stretches some directions and squeezes others also stretches and squeezes the rounding errors in whatever it multiplies. An orthogonal matrix cannot enlarge an error at all. Algorithms built from orthogonal matrices are the stable ones, and the end of this cluster will show how much that is worth.
+    - question:
+        id: derivation-inverse
+        type: choice
+        system: s2
+        prompt: |
+          $Q$ is a 3 by 3 matrix with orthonormal columns and $\mathbf{b}$ is a vector. What is the cheapest correct way to solve $Q\mathbf{x} = \mathbf{b}$?
+        options:
+          - 'Run elimination on $Q$, as for any system.'
+          - 'Compute $\mathbf{x} = Q^\top\mathbf{b}$: three dot products.'
+          - 'Compute $\mathbf{x} = Q\mathbf{b}$.'
+          - 'It cannot be solved without the determinant.'
+        answer: 1
+        explanation: |
+          Multiply both sides by $Q^\top$: the left side becomes $Q^\top Q\mathbf{x} = \mathbf{x}$. Since $Q$ is square its transpose is its inverse, so this is the solution and it is unique. Elimination would reach the same answer with far more arithmetic, and each of its steps is a chance for rounding error to grow. This is why so much of numerical linear algebra consists of turning a problem into one with an orthogonal matrix in it.
+    - text: |
+        **Tall $Q$: half of that is lost.** Let $Q$ have orthonormal columns but fewer of them than rows, such as
+
+        $$Q = \begin{pmatrix} 1 & 0 \\ 0 & 0.6 \\ 0 & 0.8 \end{pmatrix}, \qquad Q^\top Q = \begin{pmatrix} 1 & 0 \\ 0 & 1 \end{pmatrix}, \qquad QQ^\top = \begin{pmatrix} 1 & 0 & 0 \\ 0 & 0.36 & 0.48 \\ 0 & 0.48 & 0.64 \end{pmatrix}.$$
+
+        $Q^\top Q = I$ still holds: it is the definition. But $QQ^\top$ is 3 by 3 and is **not** the identity. Two columns cannot span $\mathbb{R}^3$, so most vectors $\mathbf{b}$ are not of the form $Q\mathbf{c}$ and cannot be rebuilt from their two dot products.
+
+        What $QQ^\top\mathbf{b}$ gives is the next best thing. Take $\mathbf{b} = (2, 5, 10)$. Its dot products with the columns are $\mathbf{c} = Q^\top\mathbf{b} = (2, 11)$, and
+
+        $$\mathbf{p} = Q\mathbf{c} = 2\,\mathbf{q}_1 + 11\,\mathbf{q}_2 = (2, 6.6, 8.8).$$
+
+        The leftover $\mathbf{b} - \mathbf{p} = (0, -1.6, 1.2)$ is orthogonal to both columns: $Q^\top(\mathbf{b} - \mathbf{p}) = Q^\top\mathbf{b} - Q^\top Q\,Q^\top\mathbf{b} = \mathbf{0}$. So $\mathbf{b}$ has been split into a part in the column space of $Q$ and a part in its orthogonal complement, the split of the last lesson, by two dot products and a sum. **With an orthonormal basis of a subspace, projecting onto the subspace is $\mathbf{p} = QQ^\top\mathbf{b}$.**
+
+        | | square $Q$ | tall $Q$ |
+        | --- | --- | --- |
+        | $Q^\top Q$ | $I$ | $I$ |
+        | $QQ^\top$ | $I$ | the projection onto the column space |
+        | $Q^\top\mathbf{x}$ | the coordinates of $\mathbf{x}$ | the coordinates of the projection of $\mathbf{x}$ |
+        | lengths | $\lVert Q\mathbf{c}\rVert = \lVert\mathbf{c}\rVert$ | $\lVert Q\mathbf{c}\rVert = \lVert\mathbf{c}\rVert$, and $\lVert Q^\top\mathbf{x}\rVert \le \lVert\mathbf{x}\rVert$ |
+    - question:
+        id: derivation-order
+        type: order
+        system: s2
+        prompt: Put in order the steps showing that a matrix $Q$ with orthonormal columns preserves length.
+        steps:
+          - 'The squared length of $Q\mathbf{x}$ is $(Q\mathbf{x})^\top(Q\mathbf{x})$.'
+          - 'The transpose of a product reverses it, giving $\mathbf{x}^\top Q^\top Q\,\mathbf{x}$.'
+          - 'Orthonormal columns mean $Q^\top Q = I$.'
+          - 'So the expression is $\mathbf{x}^\top\mathbf{x}$, the squared length of $\mathbf{x}$.'
+        explanation: Only $Q^\top Q = I$ is used, never $QQ^\top = I$, so the result holds for tall matrices as well as square ones. A tall $Q$ carries a short vector of coordinates into a higher-dimensional space without changing its length.
+  formal:
+    - text: |
+        **Orthonormal set.** Vectors $\mathbf{q}_1, \dots, \mathbf{q}_k \in \mathbb{R}^n$ with $\mathbf{q}_i \cdot \mathbf{q}_j = \delta_{ij}$. Equivalently the $n \times k$ matrix $Q$ with these columns satisfies $Q^\top Q = I_k$. Such a set is linearly independent, so $k \le n$.
+
+        **Orthonormal basis.** An orthonormal set that spans the space or subspace in question. For $\mathbf{x}$ in the span, $\mathbf{x} = \sum_i (\mathbf{q}_i \cdot \mathbf{x})\,\mathbf{q}_i$ and $\lVert\mathbf{x}\rVert^2 = \sum_i (\mathbf{q}_i \cdot \mathbf{x})^2$.
+
+        **Orthogonal matrix.** A square $Q$ with $Q^\top Q = I$. Then $Q^{-1} = Q^\top$, $QQ^\top = I$, $\det Q = \pm 1$, and $(Q\mathbf{x}) \cdot (Q\mathbf{y}) = \mathbf{x} \cdot \mathbf{y}$ for all $\mathbf{x}, \mathbf{y}$. Products, inverses and transposes of orthogonal matrices are orthogonal.
+
+        **Projection with an orthonormal basis.** If the columns of $Q \in \mathbb{R}^{n \times k}$ are an orthonormal basis of a subspace $U$, then for every $\mathbf{b} \in \mathbb{R}^n$ the vector $QQ^\top\mathbf{b}$ lies in $U$ and $\mathbf{b} - QQ^\top\mathbf{b}$ lies in $U^\perp$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-define
+        type: choice
+        system: s1
+        prompt: |
+          What makes a set of vectors orthonormal?
+        options: ['They are independent', 'Each pair is orthogonal and each has length 1', 'Each pair is orthogonal', 'They span the space']
+        answer: 1
+        explanation: Orthogonal to one another, and normalised.
+    - question:
+        id: drill-equation
+        type: choice
+        system: s1
+        prompt: |
+          Which equation says that the columns of $Q$ are orthonormal?
+        options: ['$QQ^\top = I$', '$Q^\top Q = I$', '$Q^\top = Q$', '$Q^2 = I$']
+        answer: 1
+        explanation: The entries of that product are the dot products of columns with columns.
+    - question:
+        id: drill-is
+        type: choice
+        system: s1
+        prompt: |
+          Which pair is orthonormal?
+        options: ['$(1, 1)$ and $(1, -1)$', '$(0.6, 0.8)$ and $(-0.8, 0.6)$', '$(1, 0)$ and $(1, 1)$', '$(2, 0)$ and $(0, 2)$']
+        answer: 1
+        explanation: Orthogonal, and each of length 1. The first and last pairs are orthogonal but not of length 1.
+    - question:
+        id: drill-coordinate
+        type: numeric
+        system: s1
+        prompt: |
+          $\mathbf{q}_1 = (0.6, 0.8)$ is the first vector of an orthonormal basis. What is the first coordinate of $\mathbf{x} = (5, 10)$ in that basis?
+        answer: "11"
+        explanation: The dot product, 3 plus 8.
+    - question:
+        id: drill-inverse
+        type: choice
+        system: s1
+        prompt: |
+          What is the inverse of a square matrix $Q$ with orthonormal columns?
+        options: ['$Q$ itself', '$Q^\top$', '$-Q$', 'It has none']
+        answer: 1
+        explanation: The transpose is a left inverse, and for a square matrix that is the inverse.
+    - question:
+        id: drill-length
+        type: numeric
+        system: s1
+        prompt: |
+          $Q$ is an orthogonal matrix and $\mathbf{x} = (3, 4)$. What is the length of $Q\mathbf{x}$?
+        answer: "5"
+        explanation: An orthogonal matrix preserves length.
+    - question:
+        id: drill-det
+        type: choice
+        system: s1
+        prompt: |
+          What can the determinant of an orthogonal matrix be?
+        options: ['Any number', 'Only 1', '1 or $-1$', 'Only 0']
+        answer: 2
+        explanation: Its square is the determinant of the identity. Rotations have 1 and reflections have minus 1.
+    - question:
+        id: drill-parseval
+        type: numeric
+        system: s1
+        prompt: |
+          A vector has coordinates $(10, 5)$ in an orthonormal basis of the plane. What is its squared length?
+        answer: "125"
+        explanation: The sum of the squares of the coordinates.
+    - question:
+        id: drill-tall
+        type: choice
+        system: s1
+        prompt: |
+          $Q$ has 3 rows and 2 orthonormal columns. Which is true?
+        options: ['$Q^\top Q = I$ and $QQ^\top = I$', '$Q^\top Q = I$ and $QQ^\top \neq I$', '$Q^\top Q \neq I$ and $QQ^\top = I$', 'Neither product is the identity']
+        answer: 1
+        explanation: Two columns cannot span three dimensions, so the larger product cannot be the identity.
+    - question:
+        id: drill-project
+        type: choice
+        system: s1
+        prompt: |
+          The columns of a tall $Q$ are an orthonormal basis of a subspace. What is the projection of $\mathbf{b}$ onto that subspace?
+        options: ['$Q^\top Q\,\mathbf{b}$', '$QQ^\top\mathbf{b}$', '$Q^\top\mathbf{b}$', '$Q\mathbf{b}$']
+        answer: 1
+        explanation: Dot products with the columns, then the combination of the columns with those weights.
+    - question:
+        id: drill-independent
+        type: choice
+        system: s1
+        prompt: |
+          Can five orthonormal vectors exist in $\mathbb{R}^4$?
+        options: ['Yes', 'No, orthonormal vectors are independent and four dimensions hold at most four', 'Only if one is zero', 'Only if two are equal']
+        answer: 1
+        explanation: Independence limits their number to the dimension.
+    - question:
+        id: drill-rows
+        type: choice
+        system: s1
+        prompt: |
+          A square matrix has orthonormal columns. What about its rows?
+        options: ['They are orthonormal too', 'They are orthogonal but need not have length 1', 'Nothing can be said', 'They are equal to the columns']
+        answer: 0
+        explanation: For a square matrix the other product is the identity as well, and its entries are dot products of rows.
+    - question:
+        id: predict-rotation
+        type: predict
+        system: s1
+        prompt: A rotation by 30 degrees applied to two vectors. Their lengths and their dot product, before and after. What does this show?
+        code: |
+          import numpy as np
+
+          t = np.pi / 6
+          Q = np.array([[np.cos(t), -np.sin(t)], [np.sin(t), np.cos(t)]])
+          x = np.array([3.0, 4.0])
+          y = np.array([2.0, -1.0])
+          print(round(float(np.linalg.norm(x)), 6), round(float(np.linalg.norm(Q @ x)), 6))
+          print(round(float(x @ y), 6), round(float((Q @ x) @ (Q @ y)), 6))
+        output: |
+          5.0 5.0
+          2.0 2.0
+        explanation: The columns of a rotation matrix are orthonormal, so it leaves every dot product as it was, and with it every length and angle.
+    - question:
+        id: predict-tall
+        type: predict
+        system: s1
+        prompt: A matrix with three rows and two orthonormal columns, multiplied by its transpose in each order. What does this show?
+        code: |
+          import numpy as np
+
+          Q = np.array([[1.0, 0.0], [0.0, 0.6], [0.0, 0.8]])
+          print([[round(float(v), 2) for v in row] for row in Q.T @ Q])
+          print([[round(float(v), 2) for v in row] for row in Q @ Q.T])
+        output: |
+          [[1.0, 0.0], [0.0, 1.0]]
+          [[1.0, 0.0, 0.0], [0.0, 0.36, 0.48], [0.0, 0.48, 0.64]]
+        explanation: The small product is the identity, which is what orthonormal columns means. The large one is not. It is the matrix that projects onto the plane the two columns span.
+  work:
+    - text: Slower now. Each function is a line or two, and the difficulty is in which product, which axis and which shape.
+    - question:
+        id: write-is-orthonormal
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `is_orthonormal(Q, tol=1e-9)`. Return `True` if the columns of the array `Q` are orthonormal, in the sense that every entry of $Q^\top Q$ is within `tol` of the corresponding entry of the identity, and `False` otherwise. `Q` may be square or tall.
+        starter: |
+          import numpy as np
+
+
+          def is_orthonormal(Q, tol=1e-9):
+              # Replace the next line with your own.
+              return True
+
+
+          Q = np.array([[0.6, -0.8], [0.8, 0.6]])
+          B = np.array([[2.0, 1.0], [1.0, 1.0]])
+          T = np.array([[1.0, 0.0], [0.0, 0.6], [0.0, 0.8]])
+          print(is_orthonormal(Q), is_orthonormal(B), is_orthonormal(T))
+        solution: |
+          import numpy as np
+
+
+          def is_orthonormal(Q, tol=1e-9):
+              return float(np.abs(Q.T @ Q - np.eye(Q.shape[1])).max()) < tol
+
+
+          Q = np.array([[0.6, -0.8], [0.8, 0.6]])
+          B = np.array([[2.0, 1.0], [1.0, 1.0]])
+          T = np.array([[1.0, 0.0], [0.0, 0.6], [0.0, 0.8]])
+          print(is_orthonormal(Q), is_orthonormal(B), is_orthonormal(T))
+        tests: |
+          import numpy as _np
+          assert is_orthonormal(_np.eye(3)) == True, "The identity has orthonormal columns"
+          assert is_orthonormal(_np.array([[0.6, -0.8], [0.8, 0.6]])) == True, "(0.6, 0.8) and (-0.8, 0.6) are orthonormal"
+          assert is_orthonormal(_np.array([[1.0, 1.0], [1.0, -1.0]])) == False, "(1, 1) and (1, -1) are orthogonal but not of length 1"
+          assert is_orthonormal(_np.array([[1.0, 0.6], [0.0, 0.8]])) == False, "(1, 0) and (0.6, 0.8) have length 1 but are not orthogonal"
+          assert is_orthonormal(_np.array([[1.0, 0.0], [0.0, 0.6], [0.0, 0.8]])) == True, "A tall matrix can have orthonormal columns: compare Q transposed times Q with the identity of the smaller size"
+          assert is_orthonormal(_np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])) == False, "Three columns in two dimensions cannot be orthonormal"
+          assert is_orthonormal(_np.array([[1.0], [1.0]]) / _np.sqrt(2)) == True, "A single column of length 1 is orthonormal"
+          _t = 0.7
+          _R = _np.array([[_np.cos(_t), -_np.sin(_t)], [_np.sin(_t), _np.cos(_t)]])
+          assert is_orthonormal(_R) == True, "A rotation matrix should pass despite rounding in its entries"
+          assert is_orthonormal(_R * 1.001) == False and is_orthonormal(_R * 1.001, 0.01) == True, "The tolerance passed in should be the one used"
+          assert output.strip() == "True False True", "The program should print True False True"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def is_orthonormal(Q, tol=1e-9):
+                return float(np.abs(Q @ Q.T - np.eye(Q.shape[0])).max()) < tol
+
+
+            print("True False True")
+          - |
+            import numpy as np
+
+
+            def is_orthonormal(Q, tol=1e-9):
+                return float(np.abs(np.linalg.norm(Q, axis=0) - 1).max()) < tol
+
+
+            print("True False True")
+          - |
+            import numpy as np
+
+
+            def is_orthonormal(Q, tol=1e-9):
+                G = Q.T @ Q
+                return float(np.abs(G - np.diag(np.diag(G))).max()) < tol
+
+
+            print("True False True")
+          - |
+            import numpy as np
+
+
+            def is_orthonormal(Q, tol=1e-9):
+                return float(np.abs(Q.T @ Q - np.eye(Q.shape[1])).max()) == 0.0
+
+
+            print("True False True")
+        explanation: |
+          The definition is one matrix equation, and the function is that equation with a tolerance: form $Q^\top Q$, subtract the identity of its size, and look at the largest entry in absolute value.
+
+          The size of the identity is the number of **columns**. Testing $QQ^\top$ against the identity of the number of rows happens to work for square matrices and gets both non-square cases backwards: it rejects the tall matrix whose columns are orthonormal and accepts the wide one whose columns cannot be. Checking only the lengths of the columns misses a pair that is not orthogonal. Checking only that the off-diagonal entries vanish misses columns that are too long. And exact equality with zero fails for a rotation, whose sines and cosines are rounded.
+    - question:
+        id: write-project
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `project(Q, b)`. The columns of `Q` are orthonormal. Return a pair: the array of dot products of `b` with each column of `Q`, and the projection of `b` onto the subspace those columns span. Use no solver.
+        starter: |
+          import numpy as np
+
+
+          def project(Q, b):
+              # Replace the next line with your own.
+              return np.zeros(Q.shape[1]), np.zeros(Q.shape[0])
+
+
+          Q = np.array([[1.0, 0.0], [0.0, 0.6], [0.0, 0.8]])
+          b = np.array([2.0, 5.0, 10.0])
+          c, p = project(Q, b)
+          print([round(float(v), 4) for v in c], [round(float(v), 4) for v in p])
+        solution: |
+          import numpy as np
+
+
+          def project(Q, b):
+              c = Q.T @ b
+              return c, Q @ c
+
+
+          Q = np.array([[1.0, 0.0], [0.0, 0.6], [0.0, 0.8]])
+          b = np.array([2.0, 5.0, 10.0])
+          c, p = project(Q, b)
+          print([round(float(v), 4) for v in c], [round(float(v), 4) for v in p])
+        tests: |
+          import numpy as _np
+          _Q = _np.array([[1.0, 0.0], [0.0, 0.6], [0.0, 0.8]])
+          _b = _np.array([2.0, 5.0, 10.0])
+          _c, _p = project(_Q, _b)
+          assert _np.shape(_c) == (2,) and _np.shape(_p) == (3,), "There is one dot product for each column, and the projection has as many entries as b"
+          assert _np.allclose(_c, [2.0, 11.0]), "The dot products of (2, 5, 10) with the two columns are 2 and 11"
+          assert _np.allclose(_p, [2.0, 6.6, 8.8]), "The projection is 2 times the first column plus 11 times the second"
+          assert _np.abs(_Q.T @ (_b - _p)).max() < 1e-12, "What is left over should be orthogonal to every column"
+          _R = _np.array([[0.6, -0.8], [0.8, 0.6]])
+          _c, _p = project(_R, _np.array([2.0, 11.0]))
+          assert _np.allclose(_c, [10.0, 5.0]) and _np.allclose(_p, [2.0, 11.0]), "For a square Q the dot products are the coordinates and the projection is the vector itself"
+          _one = _np.array([[0.0], [0.6], [0.8]])
+          _c, _p = project(_one, _np.array([7.0, 5.0, 10.0]))
+          assert _np.shape(_c) == (1,) and _np.allclose(_p, [0.0, 6.6, 8.8]), "With one column this is the projection onto a single unit vector"
+          _c, _p = project(_Q, _np.array([0.0, -0.8, 0.6]))
+          assert _np.allclose(_p, 0.0), "A vector orthogonal to the subspace projects to zero"
+          assert output.strip() == "[2.0, 11.0] [2.0, 6.6, 8.8]", "The program should print [2.0, 11.0] [2.0, 6.6, 8.8]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def project(Q, b):
+                c = Q.T @ b
+                return c, c
+
+
+            print("[2.0, 11.0] [2.0, 6.6, 8.8]")
+          - |
+            import numpy as np
+
+
+            def project(Q, b):
+                c = Q.T @ b
+                return c, Q @ c / (c @ c)
+
+
+            print("[2.0, 11.0] [2.0, 6.6, 8.8]")
+          - |
+            import numpy as np
+
+
+            def project(Q, b):
+                c = Q.T @ b
+                return c, (Q * c).sum(axis=0)
+
+
+            print("[2.0, 11.0] [2.0, 6.6, 8.8]")
+          - |
+            import numpy as np
+
+
+            def project(Q, b):
+                c = Q.T @ b
+                return c, b
+
+
+            print("[2.0, 11.0] [2.0, 6.6, 8.8]")
+        explanation: |
+          Two lines. `Q.T @ b` is every dot product at once, and `Q @ c` is the combination of the columns with those weights, which is $QQ^\top\mathbf{b}$.
+
+          Nothing is solved and nothing is inverted, and that is the entire benefit of an orthonormal basis. With a general basis $A$ of the same plane, the projection is $A(A^\top A)^{-1}A^\top\mathbf{b}$, which you will derive two lessons from now. The middle factor is there to undo the overlaps between the columns of $A$. Here $Q^\top Q = I$, and there is nothing to undo.
+
+          Returning `b` as its own projection is right only when `Q` is square.
+    - question:
+        id: fix-normalise
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `normalise(A)` should return a copy of `A` in which each **column** has been divided by its own length. The columns of the `A` in the program are orthogonal, with lengths 5 and 10, so the result should have orthonormal columns and its $Q^\top Q$ should be the identity. It is not. Fix `normalise`.
+        starter: |
+          import numpy as np
+
+
+          def normalise(A):
+              return A / np.linalg.norm(A)
+
+
+          A = np.array([[3.0, -8.0], [4.0, 6.0]])
+          Q = normalise(A)
+          print([[round(float(v), 4) for v in row] for row in Q.T @ Q])
+        solution: |
+          import numpy as np
+
+
+          def normalise(A):
+              return A / np.linalg.norm(A, axis=0)
+
+
+          A = np.array([[3.0, -8.0], [4.0, 6.0]])
+          Q = normalise(A)
+          print([[round(float(v), 4) for v in row] for row in Q.T @ Q])
+        tests: |
+          import numpy as _np
+          _A = _np.array([[3.0, -8.0], [4.0, 6.0]])
+          _keep = _A.copy()
+          _Q = normalise(_A)
+          assert _np.array_equal(_A, _keep), "A should be left as it was"
+          assert _np.allclose(_Q, [[0.6, -0.8], [0.8, 0.6]]), "Dividing (3, 4) by 5 and (-8, 6) by 10 gives (0.6, 0.8) and (-0.8, 0.6): each column by its own length"
+          _B = _np.array([[1.0, 2.0], [1.0, -2.0], [0.0, 0.0]])
+          _Q = normalise(_B)
+          assert _np.shape(_Q) == (3, 2), "The result should have the shape of A"
+          assert _np.allclose(_np.linalg.norm(_Q, axis=0), 1.0), "Every column of the result should have length 1"
+          assert _np.allclose(_Q[:, 1], _np.array([2.0, -2.0, 0.0]) / _np.sqrt(8)), "The second column should be divided by its own length, the square root of 8"
+          _C = _np.array([[2.0], [0.0], [0.0]])
+          assert _np.allclose(normalise(_C), [[1.0], [0.0], [0.0]]), "A single column should come back with length 1"
+          assert output.strip() == "[[1.0, 0.0], [0.0, 1.0]]", "The program should print [[1.0, 0.0], [0.0, 1.0]]"
+        wrong:
+          - |
+            import numpy as np
+
+
+            def normalise(A):
+                return A / np.linalg.norm(A)
+
+
+            print("[[1.0, 0.0], [0.0, 1.0]]")
+          - |
+            import numpy as np
+
+
+            def normalise(A):
+                return A / np.linalg.norm(A, axis=1)
+
+
+            print("[[1.0, 0.0], [0.0, 1.0]]")
+          - |
+            import numpy as np
+
+
+            def normalise(A):
+                return A / np.abs(A).max(axis=0)
+
+
+            print("[[1.0, 0.0], [0.0, 1.0]]")
+          - |
+            import numpy as np
+
+
+            def normalise(A):
+                return A / (A * A).sum(axis=0)
+
+
+            print("[[1.0, 0.0], [0.0, 1.0]]")
+        explanation: |
+          `np.linalg.norm(A)` with no axis treats the whole matrix as one long vector and returns a single number, here $\sqrt{9 + 16 + 64 + 36} = \sqrt{125}$. Dividing by it scales every column by the same amount, which leaves the short column too short and the long one too long. `axis=0` asks for the length of each column, an array with one entry for each, and the division then broadcasts along the columns.
+
+          `axis=1` gives the lengths of the rows. For a matrix with a different number of rows and columns that fails outright, and for a square one it divides each column by a mixture of row lengths. Dividing by the largest entry, or by the squared length, gives columns that point the right way with the wrong length.
+
+          Normalising is the easy half of making a basis orthonormal, and it works here only because the two columns were orthogonal to begin with. Starting from columns that are not, something has to be subtracted first.
+    - question:
+        id: work-skew
+        type: choice
+        system: s2
+        prompt: |
+          In the puzzle, the dot products of $\mathbf{x} = (2, 11)$ with the basis vectors $(2, 1)$ and $(1, 1)$ were $(15, 13)$, and the true coordinates were $(-9, 20)$. What do the dot products $B^\top\mathbf{x}$ equal, in terms of the true coordinates $\mathbf{c}$?
+        options:
+          - '$\mathbf{c}$ itself, with rounding error.'
+          - '$B^\top B\,\mathbf{c}$. Since $\mathbf{x} = B\mathbf{c}$, the dot products are $B^\top B\mathbf{c}$, and $B^\top B = \begin{pmatrix} 5 & 3 \\ 3 & 2 \end{pmatrix}$ mixes the coordinates together. Only when $B^\top B = I$ do they come out unmixed.'
+          - '$B^{-1}\mathbf{c}$.'
+          - '$\mathbf{c}$ divided by the lengths of the basis vectors.'
+        answer: 1
+        explanation: |
+          Check: $\begin{pmatrix} 5 & 3 \\ 3 & 2 \end{pmatrix}\begin{pmatrix} -9 \\ 20 \end{pmatrix} = \begin{pmatrix} 15 \\ 13 \end{pmatrix}$. The matrix $B^\top B$ holds the dot products of the basis vectors with one another. Its diagonal, 5 and 2, are their squared lengths, and its off-diagonal 3 is their overlap. Recovering $\mathbf{c}$ from the dot products means solving $B^\top B\,\mathbf{c} = B^\top\mathbf{x}$. That system will reappear, for a tall matrix, as the central equation of this cluster.
+    - question:
+        id: work-third
+        type: numeric
+        system: s2
+        prompt: |
+          $\mathbf{q}_1 = \tfrac13(1, 2, 2)$, $\mathbf{q}_2 = \tfrac13(2, 1, -2)$ and $\mathbf{q}_3 = \tfrac13(2, -2, 1)$ are an orthonormal basis of $\mathbb{R}^3$. For $\mathbf{x} = (3, 3, 3)$, what is its coordinate along $\mathbf{q}_1$?
+        answer: "5"
+        explanation: |
+          $\mathbf{q}_1 \cdot \mathbf{x} = \tfrac13(3 + 6 + 6) = 5$. The other two are $\tfrac13(6 + 3 - 6) = 1$ and $\tfrac13(6 - 6 + 3) = 1$. Check with lengths: $\lVert\mathbf{x}\rVert^2 = 27$ and $5^2 + 1^2 + 1^2 = 27$. Each coordinate was found alone, with no reference to the other two basis vectors.
+    - question:
+        id: work-why-tall
+        type: choice
+        system: s2
+        prompt: |
+          For a tall $Q$ with orthonormal columns, $Q^\top Q = I$. Why does it not follow that $QQ^\top = I$, as it does for a square matrix?
+        options:
+          - 'It does follow. The two products are always equal.'
+          - 'For a square matrix, a left inverse is automatically a right inverse, because the map is one-to-one and therefore onto. A tall $Q$ maps $\mathbb{R}^k$ into the larger $\mathbb{R}^n$ and is not onto: vectors outside its column space are not $Q$ of anything, so nothing can map them back to themselves through $Q$.'
+          - 'Because the transpose of a tall matrix is not defined.'
+          - 'Because the columns of a tall matrix cannot be orthonormal.'
+        answer: 1
+        explanation: |
+          $QQ^\top\mathbf{b}$ is always a combination of the columns of $Q$, so it is in the column space. If $\mathbf{b}$ is not, $QQ^\top\mathbf{b} \neq \mathbf{b}$. The rank says the same: $QQ^\top$ is $n \times n$ with rank at most $k < n$, and the identity has rank $n$. What $QQ^\top$ does instead is the best available: it returns the point of the column space nearest to $\mathbf{b}$.
+    - question:
+        id: work-product
+        type: choice
+        system: s2
+        prompt: |
+          $Q_1$ and $Q_2$ are orthogonal matrices of the same size. Is $Q_1Q_2$ orthogonal?
+        options:
+          - 'Yes: $(Q_1Q_2)^\top(Q_1Q_2) = Q_2^\top Q_1^\top Q_1 Q_2 = Q_2^\top Q_2 = I$.'
+          - 'Only if they commute.'
+          - 'No, the columns of a product are combinations of columns and lose their lengths.'
+          - 'Only if both are rotations.'
+        answer: 0
+        explanation: |
+          The transpose of a product reverses the order, and the inner pair collapses to the identity, then the outer pair. In terms of pictures: a rigid motion followed by a rigid motion is a rigid motion. This closure under products is what lets an algorithm apply a long sequence of rotations and reflections to a matrix and still know that no length has changed.
+  connections:
+    - text: |
+        The dot products of $\mathbf{x}$ with the columns of $Q$ were its coordinates, and with the columns of $B$ they were not. $Q$'s columns are **orthonormal**: orthogonal to one another, and each of length 1. In one equation, $Q^\top Q = I$.
+
+        In an orthonormal basis the coordinates are $Q^\top\mathbf{x}$, with nothing to solve. A square such $Q$, an **orthogonal matrix**, has $Q^{-1} = Q^\top$ and moves space rigidly: dot products, lengths and angles are unchanged, and no error is magnified. A tall $Q$ keeps $Q^\top Q = I$ and loses $QQ^\top = I$, and what $QQ^\top$ does instead is **project onto the column space**.
+
+        So every hard thing in this cluster is easy once an orthonormal basis is in hand. The difficulty has only been moved. Data does not arrive with orthonormal columns: the column of $x$ values and the column of ones in the line fit are neither orthogonal nor of length 1. What is needed is a procedure that takes any independent columns and returns orthonormal ones spanning the same space. It exists, it uses only the one-vector projection you already know, and it is the next lesson: [[m7.gram-schmidt-and-qr]].
