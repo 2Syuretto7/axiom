@@ -1,0 +1,646 @@
+concept: m12.hessian-and-symmetry-of-mixed-partials
+minutes: 90
+claim: You can compute the second partial derivatives of a function, explain why the two mixed ones agree when they are continuous, assemble them into the symmetric Hessian matrix, read the curvature of the function along any direction from it, classify a stationary point of a function of two variables as a minimum, a maximum or a saddle, and use the Hessian to take a Newton step towards a minimum.
+recalls: [m12.jacobian]
+uses: [m12.gradient, m12.partial-derivatives, m12.directional-derivative, m12.functions-of-several-variables, m12.total-derivative-as-best-linear-approximation, m12.multivariable-chain-rule, m10.second-derivative-and-curvature, m10.maxima-and-minima, m10.taylor-approximation, m10.differentiation-rules, m5.determinant, m5.transpose, m5.matrix-vector-product, m5.elimination-and-linear-systems, m5.identity-and-inverse, m4.dot-product, m1.quadratics, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e5.reshaping-views-and-copies, e5.vectorisation, e5.numerical-error-analysis-in-practice, e0.functions, e0.loops, e0.booleans-and-conditionals]
+leads: [m12.multivariable-taylor-expansion, m13.hessian-vector-products, m19.newton-and-quasi-newton-methods, m19.convex-functions-and-their-conditions]
+starter: |
+  # Scratch space. Three functions, each with a level tangent plane at the origin.
+  # Their values a short way out along the two axes and the two diagonals.
+  def bowl(x, y):
+      return x * x + y * y
+
+  def saddle(x, y):
+      return x * x - y * y
+
+  def third(x, y):
+      return x * x + 3 * x * y + y * y
+
+  s = 0.1
+  for f in [bowl, saddle, third]:
+      print(f.__name__, [round(f(s * a, s * b), 3) for a, b in [(1, 0), (0, 1), (1, 1), (1, -1)]])
+parts:
+  recall:
+    - text: |
+        [[m12.jacobian]] gathered the first derivatives of a function with several outputs into a matrix, and ended by pointing out that the gradient of a scalar function is itself a function with several outputs. Today it gets a Jacobian of its own. Three quick pulls first.
+  puzzle:
+    - text: |
+        Here are three functions. Each has both partial derivatives equal to zero at the origin, so each has a stationary point there, with a level tangent plane.
+
+        $$x^2 + y^2, \qquad x^2 - y^2, \qquad x^2 + 3xy + y^2.$$
+
+        The first is the bowl, with a minimum at the origin. The second is the saddle, which you settled in the first lesson of this cluster by slicing along the two axes: a bowl one way, a dome the other.
+
+        Apply the same test to the third. Along the $x$-axis, where $y = 0$, it is $x^2$: a bowl. Along the $y$-axis it is $y^2$: a bowl again. Both slices curve upwards. It looks like a minimum.
+
+        The starter prints the values of all three a short way from the origin, along both axes and along both diagonals.
+
+        Run it. For the third function the values along the axes are 0.01 and 0.01, positive, as expected. Along the diagonal $y = x$ the value is 0.05. **Along the other diagonal, $y = -x$, it is $-0.01$.** The function goes **down** in that direction. The origin is not a minimum. It is a saddle, whose downhill directions happen to lie between the axes, where the two axis slices cannot see them.
+
+        **So checking the axes is not enough, and there are infinitely many other directions. How can a stationary point be classified without trying them all? What is it about $x^2 + 3xy + y^2$ that the two axis slices missed? And what, for a function of several variables, plays the part that the second derivative played for one?**
+  intuition:
+    - text: |
+        In one variable the second derivative measured how the slope changes: positive where the graph bends upwards like a bowl, negative where it bends like a dome. At a point with a level tangent, its sign told a minimum from a maximum.
+
+        Try to say "how the slope changes" in two variables and you find there is more to say. There are two slopes, $f_x$ and $f_y$. And each of them can change in two ways, as $x$ moves or as $y$ moves. That makes **four** second derivatives:
+
+        - $f_{xx}$: how the slope along $x$ changes as you move along $x$. The bend of the slice along $x$.
+        - $f_{yy}$: how the slope along $y$ changes as you move along $y$. The bend of the slice along $y$.
+        - $f_{xy}$ and $f_{yx}$: how the slope along one axis changes as you move along the **other**. These are the **mixed** partial derivatives.
+
+        The mixed ones are the new thing, and they are what the puzzle's axis slices missed. Picture a flat sheet of card. Hold one edge still and lift the far corner, so that the card twists. Along any line parallel to an edge the card is still straight: no bend at all in the $x$ direction or in the $y$ direction. Yet the card is plainly not flat. The slope along $x$ is different at different values of $y$. **A mixed partial derivative measures twist.** The function $xy$ is exactly this twisted card: $f_{xx} = 0$, $f_{yy} = 0$ and $f_{xy} = 1$.
+
+        The third function of the puzzle is a bowl, $x^2 + y^2$, plus three helpings of twist, $3xy$. Along the axes the twist contributes nothing, because $xy = 0$ there. Along the diagonal $y = -x$ it contributes $-3x^2$, and that overwhelms the bowl's $+2x^2$.
+
+        **Four numbers, in a table.** Arrange them with a row for each slope and a column for each direction of movement:
+
+        $$H = \begin{pmatrix} f_{xx} & f_{xy} \\ f_{yx} & f_{yy} \end{pmatrix}.$$
+
+        This is the **Hessian matrix**. It is the Jacobian of the gradient: row $i$ says how the $i$-th partial derivative changes with each input. For the three functions of the puzzle it is
+
+        $$\begin{pmatrix} 2 & 0 \\ 0 & 2 \end{pmatrix}, \qquad \begin{pmatrix} 2 & 0 \\ 0 & -2 \end{pmatrix}, \qquad \begin{pmatrix} 2 & 3 \\ 3 & 2 \end{pmatrix}.$$
+
+        The diagonal entries are the bends of the axis slices, and for the third function they are both positive, as you found. The trouble is off the diagonal.
+
+        Something else shows in all three: the two off-diagonal entries are equal. **That is no accident.** For any function smooth enough to be worth differentiating twice, $f_{xy} = f_{yx}$: the order in which you take the two partial derivatives does not matter. So the Hessian is a symmetric matrix, and there are really three second derivatives in two variables, not four.
+
+        The figure shows the third function. Turn the direction through the full circle and watch the slice along it change from a bowl to a dome and back.
+    - figure: contours
+      props: { surface: twist, x: 0, y: 0, show: bend, angle: 135 }
+  derivation:
+    - text: |
+        **Second partial derivatives.** Each first partial derivative of $f : \mathbb{R}^n \to \mathbb{R}$ is a function and may be differentiated again. Write
+
+        $$\frac{\partial^2 f}{\partial x_i\,\partial x_j} = \frac{\partial}{\partial x_i}\!\left( \frac{\partial f}{\partial x_j} \right), \qquad\text{also written } f_{x_j x_i}.$$
+
+        For $f(x, y) = x^3 y^2$: $f_x = 3x^2 y^2$ and $f_y = 2x^3 y$. Then $f_{xx} = 6xy^2$, $f_{yy} = 2x^3$, and the two mixed ones are $\dfrac{\partial}{\partial y}(3x^2 y^2) = 6x^2 y$ and $\dfrac{\partial}{\partial x}(2x^3 y) = 6x^2 y$. Equal.
+
+        **Symmetry of mixed partials.** *If the second partial derivatives of $f$ are continuous near a point, then at that point $\dfrac{\partial^2 f}{\partial x\,\partial y} = \dfrac{\partial^2 f}{\partial y\,\partial x}$.*
+
+        *Why.* Take a small rectangle with corners $(a, b)$, $(a + h, b)$, $(a, b + k)$ and $(a + h, b + k)$, and form the alternating sum of the values of $f$ at its corners:
+
+        $$\Delta = f(a + h, b + k) - f(a + h, b) - f(a, b + k) + f(a, b).$$
+
+        Group it as (the change along $y$ at $x = a + h$) minus (the change along $y$ at $x = a$). Each change along $y$ is about $k f_y$, and the difference between the two, a distance $h$ apart in $x$, is about $h$ times the rate of change of $f_y$ with $x$. So $\Delta \approx hk\,\dfrac{\partial}{\partial x} f_y$. Now group the same four numbers the other way: (the change along $x$ at $y = b + k$) minus (the change along $x$ at $y = b$). The same reasoning gives $\Delta \approx hk\,\dfrac{\partial}{\partial y} f_x$. One quantity, two descriptions: so the two mixed partial derivatives agree. Making each "about" precise takes the mean value theorem twice and continuity of the second derivatives at the end. $\blacksquare$
+
+        The condition is needed. The function $\dfrac{xy(x^2 - y^2)}{x^2 + y^2}$, with value 0 at the origin, has mixed partial derivatives $-1$ and $+1$ there. Its second derivatives are not continuous at the origin. For polynomials, exponentials and every other smooth formula, the order never matters.
+
+        **The Hessian.** For $f : \mathbb{R}^n \to \mathbb{R}$ the **Hessian** at $\mathbf{a}$ is the $n$ by $n$ matrix
+
+        $$H_f(\mathbf{a}) = \left( \frac{\partial^2 f}{\partial x_i\,\partial x_j}(\mathbf{a}) \right), \qquad H_f = J_{\nabla f}.$$
+
+        By the theorem it is symmetric, $H = H^{\mathsf T}$, so of its $n^2$ entries only $\tfrac{n(n+1)}{2}$ are different.
+
+        **Two Hessians to know.** For a quadratic $f(\mathbf{x}) = \mathbf{x}^{\mathsf T} A\mathbf{x}$, the gradient is $(A + A^{\mathsf T})\mathbf{x}$, a linear map, whose Jacobian is its matrix: $H = A + A^{\mathsf T}$, the same at every point, and $2A$ when $A$ is symmetric. For the least-squares loss $\lVert X\boldsymbol\theta - \mathbf{y} \rVert^2$ the gradient is $2X^{\mathsf T}(X\boldsymbol\theta - \mathbf{y})$ and so
+
+        $$H = 2X^{\mathsf T}X.$$
+
+        For the four points of the running example, $H = \begin{pmatrix} 28 & 12 \\ 12 & 8 \end{pmatrix}$, which you can read off the multiplied-out loss $14w^2 + 12wb + 4b^2 - \dots$ directly. It does not depend on $\mathbf{y}$ at all: the shape of the bowl is fixed by where the data points are along $x$, and the targets only decide where its bottom lies.
+
+        **Curvature along a direction.** Slice $f$ along the line $\mathbf{a} + t\mathbf{u}$ and call the slice $\varphi(t)$. By the chain rule $\varphi'(t) = \nabla f(\mathbf{a} + t\mathbf{u}) \cdot \mathbf{u}$. Differentiate again: the gradient changes at the rate $H\mathbf{u}$ along the line, so
+
+        $$\varphi''(0) = \mathbf{u}^{\mathsf T} H\,\mathbf{u} = \sum_{i, j} H_{ij}\,u_i u_j.$$
+
+        **The second derivative of the slice in direction $\mathbf{u}$ is $\mathbf{u}^{\mathsf T}H\mathbf{u}$.** One symmetric matrix holds the curvature in every direction. With $\mathbf{u} = \mathbf{e}_i$ it gives the diagonal entry $H_{ii}$, the bend of an axis slice. For the puzzle's third function and the unit vector $\mathbf{u} = \tfrac{1}{\sqrt2}(1, -1)$, it gives $\tfrac12(2 - 3 - 3 + 2) = -1$: a dome.
+    - question:
+        id: derivation-twist
+        type: choice
+        system: s2
+        prompt: |
+          $f(x, y) = xy$ has $f_{xx} = 0$ and $f_{yy} = 0$ everywhere. Is its graph a plane?
+        options:
+          - 'Yes. With no bend along $x$ and none along $y$, it is flat.'
+          - 'No. $f_{xy} = 1$: the slope along $x$, which is $y$, changes as $y$ changes. Each slice parallel to an axis is a straight line, but the lines tilt more and more steeply as you move across them, so the surface is twisted. Along the diagonal $y = x$ it is $x^2$, which curves up, and along $y = -x$ it is $-x^2$, which curves down.'
+          - 'No, because its gradient is never zero.'
+          - 'Yes, because its Hessian is the zero matrix.'
+        answer: 1
+        explanation: |
+          The Hessian of $xy$ is $\begin{pmatrix} 0 & 1 \\ 1 & 0 \end{pmatrix}$, which is not zero. The diagonal entries give the curvature along the axes only. The curvature along a general unit direction $\mathbf{u}$ is $\mathbf{u}^{\mathsf T}H\mathbf{u} = 2u_1u_2$, which is $+1$ along one diagonal and $-1$ along the other. The surface is a saddle, the same shape as $x^2 - y^2$ turned through 45°. A function is flat to second order only when the whole Hessian vanishes.
+    - text: |
+        **Classifying a stationary point.** At a stationary point the gradient is zero, so along every direction the slice has a level tangent, and the sign of $\mathbf{u}^{\mathsf T}H\mathbf{u}$ decides whether that slice has a minimum or a maximum there.
+
+        - If $\mathbf{u}^{\mathsf T}H\mathbf{u} > 0$ for **every** direction $\mathbf{u}$, every slice is a bowl and the point is a **local minimum**. Such a matrix is called **positive definite**.
+        - If $\mathbf{u}^{\mathsf T}H\mathbf{u} < 0$ for every direction, the point is a **local maximum**. The matrix is **negative definite**.
+        - If it is positive for some directions and negative for others, the point is a **saddle**. The matrix is **indefinite**.
+
+        This turns the question into one about a matrix: is $\mathbf{u}^{\mathsf T}H\mathbf{u}$ of one sign for all $\mathbf{u}$? For two variables there is a test that needs only three numbers. Write $H = \begin{pmatrix} A & B \\ B & C \end{pmatrix}$, so that for $\mathbf{u} = (p, q)$
+
+        $$\mathbf{u}^{\mathsf T}H\mathbf{u} = Ap^2 + 2Bpq + Cq^2.$$
+
+        Complete the square, as for any quadratic. When $A \ne 0$,
+
+        $$Ap^2 + 2Bpq + Cq^2 = A\left(p + \frac{B}{A}q\right)^2 + \frac{AC - B^2}{A}\,q^2.$$
+
+        Two squares, with coefficients $A$ and $\dfrac{AC - B^2}{A}$. Both coefficients are positive exactly when $A > 0$ and $AC - B^2 > 0$. Both are negative exactly when $A < 0$ and $AC - B^2 > 0$. They have opposite signs exactly when $AC - B^2 < 0$. And $AC - B^2$ is the determinant of $H$.
+
+        | $\det H = f_{xx}f_{yy} - f_{xy}^2$ | $f_{xx}$ | The stationary point is |
+        |---|---|---|
+        | positive | positive | a local minimum |
+        | positive | negative | a local maximum |
+        | negative | either | a saddle |
+        | zero | either | undecided by this test |
+
+        This is the **second-derivative test** in two variables. The puzzle's third function has $\det H = 4 - 9 = -5$: a saddle, whatever its diagonal says. The loss of the running example has $\det H = 224 - 144 = 80 > 0$ and $f_{ww} = 28 > 0$: its stationary point is a minimum. For more than two variables the same question is answered by the eigenvalues of $H$, which a later cluster introduces.
+
+        **Newton's method for a minimum.** A minimum is where the gradient is zero, and that is a system of equations, $\nabla f(\mathbf{x}) = \mathbf{0}$. The last lesson solved systems by Newton's method, which needs the Jacobian of the function being set to zero. The Jacobian of the gradient is the Hessian. So the step is
+
+        $$H(\mathbf{x})\,\mathbf{d} = -\nabla f(\mathbf{x}), \qquad \mathbf{x} \leftarrow \mathbf{x} + \mathbf{d}.$$
+
+        For the loss, from $(2, 1)$: solve $28d_1 + 12d_2 = -10$, $12d_1 + 8d_2 = -4$, giving $\mathbf{d} = (-0.4, 0.1)$, and the new point is $(1.6, 1.1)$. **One step, and exactly at the minimum**, where gradient descent needed about a hundred. The Hessian knows the shape of the bowl, and so it knows where the bottom is. For a quadratic the linear approximation of the gradient is exact, so one step suffices. For other functions the step is repeated.
+
+        **Why this is not how networks are trained.** A model with a million weights has a Hessian with a million million entries. It cannot be stored, let alone solved with. What can be had cheaply is the Hessian **applied to one vector**: since $H\mathbf{v}$ is the rate of change of the gradient along $\mathbf{v}$,
+
+        $$H\mathbf{v} \approx \frac{\nabla f(\mathbf{x} + \varepsilon\mathbf{v}) - \nabla f(\mathbf{x} - \varepsilon\mathbf{v})}{2\varepsilon},$$
+
+        two gradients and no matrix. Much of practical optimisation consists of ways to get some of the Hessian's knowledge at something like the gradient's price.
+    - question:
+        id: order-classify
+        type: order
+        system: s2
+        prompt: Put in order the steps for finding and classifying the stationary point of $f(x, y) = x^2 + 3xy + y^2 - 5x$.
+        steps:
+          - 'Find the gradient: $(2x + 3y - 5,\ 3x + 2y)$.'
+          - 'Set it to zero and solve the two equations: $x = -2$, $y = 3$.'
+          - 'Find the Hessian: $f_{xx} = 2$, $f_{xy} = 3$, $f_{yy} = 2$.'
+          - 'Compute its determinant: $2 \times 2 - 3^2 = -5$.'
+          - 'The determinant is negative, so the stationary point is a saddle.'
+        explanation: The first derivatives locate the candidates and the second derivatives classify them. Here the Hessian is constant, so it need not be evaluated at the point, but in general it must be. The linear term −5x moves the stationary point away from the origin and has no effect on the Hessian, so the point is a saddle like that of the puzzle.
+  formal:
+    - text: |
+        **Schwarz's theorem** (also called Clairaut's). If $\dfrac{\partial^2 f}{\partial x_i\,\partial x_j}$ and $\dfrac{\partial^2 f}{\partial x_j\,\partial x_i}$ exist near $\mathbf{a}$ and are continuous at $\mathbf{a}$, they are equal at $\mathbf{a}$. A function whose second partial derivatives are all continuous is said to be of class $C^2$.
+
+        **Hessian.** For $f$ of class $C^2$, $H_f(\mathbf{a})$ is the symmetric $n \times n$ matrix with entries $\dfrac{\partial^2 f}{\partial x_i\,\partial x_j}(\mathbf{a})$. It is the Jacobian of $\nabla f$.
+
+        **Second directional derivative.** $\dfrac{d^2}{dt^2} f(\mathbf{a} + t\mathbf{u})\Big|_{t=0} = \mathbf{u}^{\mathsf T}H_f(\mathbf{a})\,\mathbf{u}$.
+
+        **Definiteness.** A symmetric matrix $H$ is positive definite if $\mathbf{u}^{\mathsf T}H\mathbf{u} > 0$ for all $\mathbf{u} \ne \mathbf{0}$, negative definite if $-H$ is positive definite, and indefinite if $\mathbf{u}^{\mathsf T}H\mathbf{u}$ takes both signs.
+
+        **Second-derivative test.** Let $\nabla f(\mathbf{a}) = \mathbf{0}$ with $f$ of class $C^2$. If $H_f(\mathbf{a})$ is positive definite, $\mathbf{a}$ is a strict local minimum. If negative definite, a strict local maximum. If indefinite, a saddle. For $n = 2$: positive definite iff $\det H > 0$ and $f_{xx} > 0$, negative definite iff $\det H > 0$ and $f_{xx} < 0$, indefinite iff $\det H < 0$.
+
+        **Newton step for a minimum.** $\mathbf{x}_{k+1} = \mathbf{x}_k - H_f(\mathbf{x}_k)^{-1}\,\nabla f(\mathbf{x}_k)$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-fxx
+        type: choice
+        system: s1
+        prompt: |
+          $f(x, y) = x^3 y^2$. What is $f_{xx}$?
+        options: ['$6xy^2$', '$3x^2 y^2$', '$6x^2 y$', '$2x^3$']
+        answer: 0
+        explanation: Differentiate 3 x squared y squared once more with respect to x.
+    - question:
+        id: drill-fxy
+        type: choice
+        system: s1
+        prompt: |
+          $f(x, y) = x^3 y^2$. What is $f_{xy}$?
+        options: ['$6xy^2$', '$6x^2 y$', '$2x^3$', '$3x^2$']
+        answer: 1
+        explanation: Differentiate 3 x squared y squared with respect to y.
+    - question:
+        id: drill-order
+        type: choice
+        system: s1
+        prompt: |
+          For a function with continuous second partial derivatives, how are $f_{xy}$ and $f_{yx}$ related?
+        options: ['They are equal', 'They are negatives of each other', 'One is twice the other', 'There is no relation']
+        answer: 0
+        explanation: The order of the two differentiations does not matter.
+    - question:
+        id: drill-shape
+        type: choice
+        system: s1
+        prompt: |
+          What is the shape of the Hessian of a function of 5 variables?
+        options: ['5 by 5', '5 by 1', '1 by 5', '25 by 25']
+        answer: 0
+        explanation: A row for each first partial derivative and a column for each input.
+    - question:
+        id: drill-distinct
+        type: numeric
+        system: s1
+        prompt: |
+          The Hessian of a function of 3 variables is symmetric. At most how many different entries has it?
+        answer: "6"
+        explanation: Three on the diagonal and three above it.
+    - question:
+        id: drill-hessian-bowl
+        type: choice
+        system: s1
+        prompt: |
+          What is the Hessian of $x^2 + y^2$?
+        options: ['$\begin{pmatrix} 2 & 0 \\ 0 & 2 \end{pmatrix}$', '$\begin{pmatrix} 1 & 0 \\ 0 & 1 \end{pmatrix}$', '$\begin{pmatrix} 2x & 0 \\ 0 & 2y \end{pmatrix}$', '$\begin{pmatrix} 0 & 2 \\ 2 & 0 \end{pmatrix}$']
+        answer: 0
+        explanation: Each square has second derivative 2 and there is no cross term.
+    - question:
+        id: drill-hessian-xy
+        type: numeric
+        system: s1
+        prompt: |
+          $f(x, y) = 5xy$. What is the off-diagonal entry of its Hessian?
+        answer: "5"
+        explanation: The slope along x is 5y, which changes at 5 per unit of y.
+    - question:
+        id: drill-test-1
+        type: choice
+        system: s1
+        prompt: |
+          At a stationary point, $f_{xx} = 2$, $f_{yy} = 3$, $f_{xy} = 1$. What is the point?
+        options: ['A local minimum', 'A local maximum', 'A saddle', 'Undecided']
+        answer: 0
+        explanation: The determinant is 6 less 1, positive, and the first entry is positive.
+    - question:
+        id: drill-test-2
+        type: choice
+        system: s1
+        prompt: |
+          At a stationary point, $f_{xx} = 2$, $f_{yy} = 3$, $f_{xy} = 4$. What is the point?
+        options: ['A local minimum', 'A local maximum', 'A saddle', 'Undecided']
+        answer: 2
+        explanation: The determinant is 6 less 16, which is negative.
+    - question:
+        id: drill-test-3
+        type: choice
+        system: s1
+        prompt: |
+          At a stationary point, $f_{xx} = -2$, $f_{yy} = -3$, $f_{xy} = 1$. What is the point?
+        options: ['A local minimum', 'A local maximum', 'A saddle', 'Undecided']
+        answer: 1
+        explanation: The determinant is positive and the first entry is negative.
+    - question:
+        id: drill-curvature
+        type: numeric
+        system: s1
+        prompt: |
+          $H = \begin{pmatrix} 2 & 0 \\ 0 & 8 \end{pmatrix}$. What is the curvature $\mathbf{u}^{\mathsf T}H\mathbf{u}$ along $\mathbf{u} = (0, 1)$?
+        answer: "8"
+        explanation: Along an axis it is the matching diagonal entry.
+    - question:
+        id: drill-ls
+        type: choice
+        system: s1
+        prompt: |
+          What is the Hessian of the least-squares loss $\lVert X\boldsymbol\theta - \mathbf{y} \rVert^2$?
+        options: ['$2X^{\mathsf T}X$', '$2XX^{\mathsf T}$', '$2X^{\mathsf T}\mathbf{y}$', '$X$']
+        answer: 0
+        explanation: It is the Jacobian of the gradient, which is linear in theta with matrix 2 X transpose X.
+    - question:
+        id: predict-hessian
+        type: predict
+        system: s1
+        prompt: The Hessian of the puzzle's third function, and its curvature along four directions. What does this show?
+        code: |
+          import numpy as np
+
+          H = np.array([[2.0, 3.0], [3.0, 2.0]])
+          for u in [np.array([1.0, 0.0]), np.array([0.0, 1.0]), np.array([1.0, 1.0]), np.array([1.0, -1.0])]:
+              u = u / np.linalg.norm(u)
+              print(round(float(u @ H @ u), 6))
+          print(round(float(np.linalg.det(H)), 6))
+        output: |
+          2.0
+          2.0
+          5.0
+          -1.0
+          -5.0
+        explanation: Along both axes the curvature is the diagonal entry, 2, a bowl. Along one diagonal the twist adds 3, and along the other it takes 3 away and leaves a dome. The negative determinant says in one number that the curvature takes both signs.
+    - question:
+        id: predict-newton
+        type: predict
+        system: s1
+        prompt: One Newton step on the least-squares loss. What does this show?
+        code: |
+          import numpy as np
+
+          X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          theta = np.array([2.0, 1.0])
+          H = 2 * X.T @ X
+          g = 2 * X.T @ (X @ theta - y)
+          print(H.tolist())
+          print([round(float(v), 6) for v in theta + np.linalg.solve(H, -g)])
+        output: |
+          [[28.0, 12.0], [12.0, 8.0]]
+          [1.6, 1.1]
+        explanation: The Hessian is twice X transpose X, whose entries are twice the sum of the squares of the x values, twice their sum, and twice the number of points. Solving with it against minus the gradient gives the step (−0.4, 0.1), which lands on the best line in one move.
+  work:
+    - text: Slower now. The diagonal of a Hessian speaks for the axes only.
+    - question:
+        id: write-hessian
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `hessian(grad, a)`. `grad` takes a point, an array of length $n$, and returns the gradient of some function there, an array of length $n$. Return the $n$ by $n$ array of central-difference estimates of the Hessian at `a`, with step `1e-5`, made exactly symmetric by averaging the estimate with its transpose. Leave `a` unchanged.
+        starter: |
+          import numpy as np
+
+          def hessian(grad, a):
+              # Replace the next line with your own.
+              return np.zeros((a.size, a.size))
+
+          grad = lambda p: np.array([2 * p[0] + 3 * p[1], 3 * p[0] + 2 * p[1]])
+          print([[round(float(v), 4) for v in row] for row in hessian(grad, np.array([0.0, 0.0]))])
+        solution: |
+          import numpy as np
+
+          def hessian(grad, a):
+              h = 1e-5
+              columns = []
+              for j in range(a.size):
+                  step = np.zeros(a.size)
+                  step[j] = h
+                  columns.append((grad(a + step) - grad(a - step)) / (2 * h))
+              H = np.stack(columns, axis=1)
+              return (H + H.T) / 2
+
+          grad = lambda p: np.array([2 * p[0] + 3 * p[1], 3 * p[0] + 2 * p[1]])
+          print([[round(float(v), 4) for v in row] for row in hessian(grad, np.array([0.0, 0.0]))])
+        tests: |
+          import numpy as _np
+          _grad = lambda p: _np.array([2 * p[0] + 3 * p[1], 3 * p[0] + 2 * p[1]])
+          _a = _np.array([0.0, 0.0])
+          _H = hessian(_grad, _a)
+          assert _H.shape == (2, 2), "Two inputs give a 2 by 2 matrix"
+          assert _np.allclose(_H, [[2.0, 3.0], [3.0, 2.0]], atol=1e-7), "The Hessian of x squared plus 3xy plus y squared is [[2, 3], [3, 2]]"
+          _g3 = lambda p: _np.array([3 * p[0] ** 2 * p[1] ** 2, 2 * p[0] ** 3 * p[1] + p[2], p[1] + _np.cos(p[2])])
+          _b = _np.array([1.0, 2.0, 0.5])
+          _H = hessian(_g3, _b)
+          assert _H.shape == (3, 3), "Three inputs give a 3 by 3 matrix"
+          assert _np.allclose(_H, [[24.0, 12.0, 0.0], [12.0, 2.0, 1.0], [0.0, 1.0, -_np.sin(0.5)]], atol=1e-6), "For x cubed y squared plus yz plus sin z at (1, 2, 0.5) the Hessian is [[24, 12, 0], [12, 2, 1], [0, 1, -sin 0.5]]"
+          assert (_H == _H.T).all(), "Make the result exactly symmetric"
+          assert _b.tolist() == [1.0, 2.0, 0.5], "The point passed in must not be changed"
+          _skew = lambda p: _np.array([p[1] * 2.0, 0.0 * p[0]])
+          assert _np.allclose(hessian(_skew, _np.array([1.0, 1.0])), [[0.0, 1.0], [1.0, 0.0]], atol=1e-7), "Averaging with the transpose shares an off-diagonal estimate between the two places"
+          assert output.strip() == "[[2.0, 3.0], [3.0, 2.0]]", "The program should print [[2.0, 3.0], [3.0, 2.0]]"
+        wrong:
+          - |
+            import numpy as np
+
+            def hessian(grad, a):
+                h = 1e-5
+                columns = []
+                for j in range(a.size):
+                    step = np.zeros(a.size)
+                    step[j] = h
+                    columns.append((grad(a + step) - grad(a - step)) / (2 * h))
+                return np.stack(columns, axis=1)
+
+            print([[2.0, 3.0], [3.0, 2.0]])
+          - |
+            import numpy as np
+
+            def hessian(grad, a):
+                h = 1e-5
+                columns = []
+                for j in range(a.size):
+                    step = np.zeros(a.size)
+                    step[j] = h
+                    columns.append((grad(a + step) - grad(a)) / (2 * h))
+                H = np.stack(columns, axis=1)
+                return (H + H.T) / 2
+
+            print([[2.0, 3.0], [3.0, 2.0]])
+          - |
+            import numpy as np
+
+            def hessian(grad, a):
+                h = 1e-5
+                columns = []
+                for j in range(a.size):
+                    step = np.zeros(a.size)
+                    step[j] = h
+                    columns.append((grad(a + step) - grad(a - step)) / (2 * h))
+                H = np.stack(columns, axis=1)
+                return H + H.T
+
+            print([[2.0, 3.0], [3.0, 2.0]])
+        explanation: |
+          The Hessian is the Jacobian of the gradient, so this is the last lesson's `jacobian` applied to `grad`: step one input, difference the whole gradient, and that is one column. Rounding makes the two estimates of each mixed derivative differ in their last digits, so the result is not exactly symmetric, though the true Hessian is. Averaging with the transpose imposes what the theorem guarantees. Routines that expect a symmetric matrix are entitled to assume it.
+    - question:
+        id: write-classify
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `classify(H)` for a symmetric 2 by 2 array `H`, the Hessian at a stationary point. Return the string `"minimum"`, `"maximum"`, `"saddle"` or `"undecided"` according to the second-derivative test. Treat a determinant whose absolute value is below `1e-12` as zero.
+        starter: |
+          import numpy as np
+
+          def classify(H):
+              # Replace the next line with your own.
+              return "undecided"
+
+          for H in [np.array([[2.0, 0.0], [0.0, 2.0]]), np.array([[2.0, 0.0], [0.0, -2.0]]), np.array([[2.0, 3.0], [3.0, 2.0]])]:
+              print(classify(H))
+        solution: |
+          import numpy as np
+
+          def classify(H):
+              det = H[0, 0] * H[1, 1] - H[0, 1] * H[1, 0]
+              if abs(det) < 1e-12:
+                  return "undecided"
+              if det < 0:
+                  return "saddle"
+              if H[0, 0] > 0:
+                  return "minimum"
+              return "maximum"
+
+          for H in [np.array([[2.0, 0.0], [0.0, 2.0]]), np.array([[2.0, 0.0], [0.0, -2.0]]), np.array([[2.0, 3.0], [3.0, 2.0]])]:
+              print(classify(H))
+        tests: |
+          import numpy as _np
+          _c = lambda rows: classify(_np.array(rows))
+          assert _c([[2.0, 0.0], [0.0, 2.0]]) == "minimum", "The bowl has a minimum"
+          assert _c([[2.0, 0.0], [0.0, -2.0]]) == "saddle", "The saddle is a saddle"
+          assert _c([[2.0, 3.0], [3.0, 2.0]]) == "saddle", "With both diagonal entries positive and a large twist, the point is still a saddle"
+          assert _c([[-2.0, 1.0], [1.0, -3.0]]) == "maximum", "Positive determinant and negative first entry: a maximum"
+          assert _c([[28.0, 12.0], [12.0, 8.0]]) == "minimum", "The least-squares loss has a minimum"
+          assert _c([[0.0, 1.0], [1.0, 0.0]]) == "saddle", "The twisted card xy is a saddle though its diagonal is zero"
+          assert _c([[1.0, 1.0], [1.0, 1.0]]) == "undecided", "A zero determinant leaves the test undecided"
+          assert _c([[0.0, 0.0], [0.0, 0.0]]) == "undecided", "The zero matrix leaves the test undecided"
+          assert _c([[-1.0, 0.0], [0.0, 5.0]]) == "saddle", "Opposite signs on the diagonal: a saddle"
+          assert output.split() == ["minimum", "saddle", "saddle"], "The program should print minimum, saddle, saddle on three lines"
+        wrong:
+          - |
+            import numpy as np
+
+            def classify(H):
+                if H[0, 0] > 0 and H[1, 1] > 0:
+                    return "minimum"
+                if H[0, 0] < 0 and H[1, 1] < 0:
+                    return "maximum"
+                if H[0, 0] * H[1, 1] < 0:
+                    return "saddle"
+                return "undecided"
+
+            print("minimum saddle saddle")
+          - |
+            import numpy as np
+
+            def classify(H):
+                det = H[0, 0] * H[1, 1] - H[0, 1] * H[1, 0]
+                if abs(det) < 1e-12:
+                    return "undecided"
+                if det < 0:
+                    return "saddle"
+                return "minimum"
+
+            print("minimum saddle saddle")
+          - |
+            import numpy as np
+
+            def classify(H):
+                det = H[0, 0] * H[1, 1] + H[0, 1] * H[1, 0]
+                if abs(det) < 1e-12:
+                    return "undecided"
+                if det < 0:
+                    return "saddle"
+                if H[0, 0] > 0:
+                    return "minimum"
+                return "maximum"
+
+            print("minimum saddle saddle")
+        explanation: |
+          The determinant comes first. If it is negative the curvature takes both signs and the point is a saddle, whatever the diagonal says. If it is positive the curvature has one sign in every direction, and the sign of any diagonal entry tells which. If it is zero there is a direction along which the function is flat to second order, and higher derivatives would be needed. The first wrong version looks only at the diagonal, which is the mistake of the puzzle: it calls $x^2 + 3xy + y^2$ a minimum.
+    - question:
+        id: fix-hvp
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `hessian_times(grad, a, v)` should return an estimate of the Hessian at `a` applied to the vector `v`, using two evaluations of the gradient function and no matrix. For the least-squares loss it should match `2 * X.T @ X @ v`, and the program prints `False`. Fix it.
+        starter: |
+          import numpy as np
+
+          def hessian_times(grad, a, v):
+              eps = 1e-5
+              return (grad(a + eps * v) - grad(a - eps * v)) / eps
+
+          X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          grad = lambda t: 2 * X.T @ (X @ t - y)
+          v = np.array([1.0, -2.0])
+          print(np.allclose(hessian_times(grad, np.array([2.0, 1.0]), v), 2 * X.T @ X @ v))
+        solution: |
+          import numpy as np
+
+          def hessian_times(grad, a, v):
+              eps = 1e-5
+              return (grad(a + eps * v) - grad(a - eps * v)) / (2 * eps)
+
+          X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          y = np.array([1.0, 3.0, 4.0, 6.0])
+          grad = lambda t: 2 * X.T @ (X @ t - y)
+          v = np.array([1.0, -2.0])
+          print(np.allclose(hessian_times(grad, np.array([2.0, 1.0]), v), 2 * X.T @ X @ v))
+        tests: |
+          import numpy as _np
+          _X = _np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          _y = _np.array([1.0, 3.0, 4.0, 6.0])
+          _grad = lambda t: 2 * _X.T @ (_X @ t - _y)
+          _a = _np.array([2.0, 1.0])
+          assert _np.allclose(hessian_times(_grad, _a, _np.array([1.0, -2.0])), [4.0, -4.0], atol=1e-6), "For the least-squares loss, H times (1, -2) is (4, -4)"
+          assert _np.allclose(hessian_times(_grad, _a, _np.array([1.0, 0.0])), [28.0, 12.0], atol=1e-6), "H times the first basis vector is the first column of H"
+          assert _np.allclose(hessian_times(_grad, _a, _np.array([0.0, 1.0])), [12.0, 8.0], atol=1e-6), "H times the second basis vector is the second column of H"
+          _g = lambda p: _np.array([3 * p[0] ** 2 * p[1] ** 2, 2 * p[0] ** 3 * p[1]])
+          assert _np.allclose(hessian_times(_g, _np.array([1.0, 2.0]), _np.array([1.0, 1.0])), [36.0, 14.0], atol=1e-5), "For x cubed y squared at (1, 2), H is [[24, 12], [12, 2]] and H times (1, 1) is (36, 14)"
+          _n = [0]
+          def _counted(p):
+              _n[0] += 1
+              return 2 * p
+          hessian_times(_counted, _np.zeros(50), _np.ones(50))
+          assert _n[0] == 2, "Use exactly two evaluations of the gradient"
+          assert output.strip() == "True", "The program should print True"
+        wrong:
+          - |
+            import numpy as np
+
+            def hessian_times(grad, a, v):
+                eps = 1e-5
+                return (grad(a + eps * v) - grad(a - eps * v)) / eps
+
+            print(True)
+          - |
+            import numpy as np
+
+            def hessian_times(grad, a, v):
+                eps = 1e-5
+                return (grad(a + eps) - grad(a - eps)) / (2 * eps)
+
+            print(True)
+          - |
+            import numpy as np
+
+            def hessian_times(grad, a, v):
+                eps = 1e-5
+                return (grad(a + eps * v) - grad(a)) / (2 * eps)
+
+            print(True)
+        explanation: |
+          The two points at which the gradient is evaluated are $2\varepsilon$ apart along $\mathbf{v}$, so the difference must be divided by $2\varepsilon$. Dividing by $\varepsilon$ gives twice the right answer. The idea deserves notice more than the slip does. $H\mathbf{v}$ is the directional derivative of the gradient along $\mathbf{v}$: how the gradient changes as you move that way. So it costs two gradients, and the Hessian itself, with its $n^2$ entries, is never formed. For fifty variables the matrix would have 2500 entries. For a network it could not be stored at all, and this product still could be computed.
+    - question:
+        id: work-find-classify
+        type: choice
+        system: s2
+        prompt: |
+          $f(x, y) = x^3 - 3x + y^2$. It has two stationary points. What are they?
+        options:
+          - '$(1, 0)$ is a local minimum and $(-1, 0)$ is a saddle.'
+          - '$(1, 0)$ is a saddle and $(-1, 0)$ is a local maximum.'
+          - 'Both are local minima.'
+          - '$(1, 0)$ is a local minimum and $(-1, 0)$ is a local maximum.'
+        answer: 0
+        explanation: |
+          $\nabla f = (3x^2 - 3,\ 2y)$ is zero where $x = \pm 1$ and $y = 0$. The Hessian is $\begin{pmatrix} 6x & 0 \\ 0 & 2 \end{pmatrix}$, which depends on the point, so it must be evaluated at each. At $(1, 0)$ it is $\begin{pmatrix} 6 & 0 \\ 0 & 2 \end{pmatrix}$: determinant 12, first entry positive, a minimum. At $(-1, 0)$ it is $\begin{pmatrix} -6 & 0 \\ 0 & 2 \end{pmatrix}$: determinant $-12$, a saddle. Along $x$ the point $(-1, 0)$ is the top of a hump of the cubic, and along $y$ it is the bottom of a parabola.
+    - question:
+        id: work-curvature-direction
+        type: numeric
+        system: s2
+        prompt: |
+          The least-squares loss of the running example has Hessian $\begin{pmatrix} 28 & 12 \\ 12 & 8 \end{pmatrix}$. What is its curvature $\mathbf{u}^{\mathsf T}H\mathbf{u}$ along the unit direction $\mathbf{u} = (0.6, -0.8)$? Give it to two decimal places.
+        answer: "3.68"
+        tolerance: "0.01"
+        explanation: |
+          $\mathbf{u}^{\mathsf T}H\mathbf{u} = 28(0.36) + 2 \times 12 \times (0.6)(-0.8) + 8(0.64) = 10.08 - 11.52 + 5.12 = 3.68$. Compare the curvature along the $w$-axis, 28. The bowl is nearly eight times as sharply curved along $w$ as along this slanting direction, which runs roughly along the floor of the valley. That disparity is what limited the step size of gradient descent to 0.05 or so and made it take a hundred steps. Raising $w$ while lowering $b$ changes the predictions little, since the two changes partly cancel over the data, so the loss is insensitive to that combination.
+    - question:
+        id: work-why-symmetric
+        type: choice
+        system: s2
+        prompt: |
+          For a smooth function, why must $\dfrac{\partial}{\partial x}\!\left(\dfrac{\partial f}{\partial y}\right)$ equal $\dfrac{\partial}{\partial y}\!\left(\dfrac{\partial f}{\partial x}\right)$?
+        options:
+          - 'Because multiplication of numbers is commutative.'
+          - 'Because both describe one quantity. Take the alternating sum of $f$ at the four corners of a tiny rectangle of sides $h$ and $k$. Seen as the difference between the changes along $y$ on its two vertical sides, it is about $hk$ times the first expression. Seen as the difference between the changes along $x$ on its two horizontal sides, it is about $hk$ times the second.'
+          - 'Because the Hessian is defined to be symmetric.'
+          - 'They need not be equal for any function.'
+        answer: 1
+        explanation: |
+          The four-corner sum $f(a+h, b+k) - f(a+h, b) - f(a, b+k) + f(a, b)$ does not care in which order its terms are grouped. Each grouping exhibits it as a second difference, first in one variable and then in the other, and a second difference divided by $hk$ approaches the matching mixed partial derivative as the rectangle shrinks. The argument needs the second derivatives to be continuous so that "approaches" can be justified, and there are functions without that property whose mixed partials differ. The symmetry is a theorem about smooth functions and not a convention.
+    - question:
+        id: work-newton-vs-descent
+        type: choice
+        system: s2
+        prompt: |
+          On the least-squares loss, one Newton step from any starting point lands exactly on the minimum, while gradient descent takes many steps. Why is Newton's method not simply used to train large networks?
+        options:
+          - 'Because Newton steps go uphill.'
+          - 'Because it needs the Hessian, which for $n$ weights has $n^2$ entries and costs of the order of $n^3$ operations to solve with. For a million weights that is a million million entries. Also, away from a minimum the Hessian may be indefinite, and then the Newton step heads for a saddle as readily as for a minimum.'
+          - 'Because the gradient is not available for networks.'
+          - 'Because Newton''s method only works for functions of two variables.'
+        answer: 1
+        explanation: |
+          Newton's method solves $\nabla f = \mathbf{0}$, and saddles and maxima satisfy that equation as well as minima do. For a bowl-shaped quadratic the Hessian is positive definite everywhere and the single stationary point is the minimum, so there is no difficulty. A network's loss is not a bowl, and its Hessian is too large to form. The gradient costs about as much as evaluating the loss a few times, independent of the number of weights, which is why first-order methods dominate. The methods of the later cluster on optimisation sit between the two: they use gradients, and products of the Hessian with a vector, to recover some of what Newton's method knows.
+  connections:
+    - text: |
+        $x^2 + 3xy + y^2$ curves upwards along both axes and is a saddle all the same, because of its twist: along $y = -x$ it is $-x^2$.
+
+        A function of several variables has a second partial derivative for every ordered pair of inputs. The **mixed** ones measure how the slope along one input changes as another moves. When the second derivatives are continuous the order does not matter, $f_{xy} = f_{yx}$, because both describe the four-corner sum of $f$ round a small rectangle.
+
+        The **Hessian** $H$ is the symmetric matrix of all of them, the Jacobian of the gradient. The curvature of $f$ along a unit direction $\mathbf{u}$ is $\mathbf{u}^{\mathsf T}H\mathbf{u}$. At a stationary point, if that is positive in every direction the point is a minimum, if negative in every direction a maximum, and if it takes both signs a saddle. In two variables, $\det H > 0$ with $f_{xx} > 0$ is a minimum, $\det H > 0$ with $f_{xx} < 0$ a maximum, and $\det H < 0$ a saddle.
+
+        For least squares $H = 2X^{\mathsf T}X$. Solving $H\mathbf{d} = -\nabla f$ is a Newton step, which reaches the minimum of a quadratic at once. The Hessian is too large to form for big models, but $H\mathbf{v}$ costs two gradients.
+
+        Everything in this lesson came from looking at $f$ near a point to second order: its value, plus a slope term from the gradient, plus a curvature term from the Hessian. In one variable that was the Taylor polynomial of degree 2, and it had an error you could estimate. The same expansion for several variables, which justifies today's test and Newton's step, is the next lesson, [[m12.multivariable-taylor-expansion]].
