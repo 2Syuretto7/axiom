@@ -1,0 +1,610 @@
+concept: m12.partial-derivatives
+minutes: 80
+claim: You can define the partial derivative of a function with respect to one input as the slope of a slice, compute partial derivatives by treating the other inputs as constants, estimate them numerically one coordinate at a time, find where all of them vanish, and explain why the existence of partial derivatives alone does not make a function well behaved.
+recalls: [m12.functions-of-several-variables]
+uses: [m10.derivative-as-slope-and-rate, m10.differentiation-rules, m10.chain-rule, m10.derivatives-of-exp-log-and-trig, m10.maxima-and-minima, m10.limits-and-continuity, e5.numerical-error-analysis-in-practice, e5.reshaping-views-and-copies, e5.indexing-and-slicing, e5.arrays-dtype-and-shape, e5.axis-operations-and-reductions, e5.vectorisation, m1.simultaneous-equations, m4.dot-product, m4.norms-and-distance, m2.summation-and-product-notation, e0.functions, e0.loops, e0.lists-and-tuples]
+leads: [m12.total-derivative-as-best-linear-approximation, m12.gradient, m12.hessian-and-symmetry-of-mixed-partials, m12.multivariable-chain-rule]
+starter: |
+  # Scratch space. The loss of the line y = w x + b on four points,
+  # and what happens to it when one knob is nudged and the other is left alone.
+  import numpy as np
+
+  xs = np.array([0.0, 1.0, 2.0, 3.0])
+  ys = np.array([1.0, 3.0, 4.0, 6.0])
+
+  def loss(w, b):
+      return ((w * xs + b - ys) ** 2).sum()
+
+  w, b, h = 2.0, 1.0, 0.001
+  print("loss here        ", loss(w, b))
+  print("nudge w by 0.001 ", loss(w + h, b) - loss(w, b))
+  print("nudge b by 0.001 ", loss(w, b + h) - loss(w, b))
+parts:
+  recall:
+    - text: |
+        [[m12.functions-of-several-variables]] gave three ways of seeing a function of several numbers: its surface, its level curves, and its slices, the ordinary functions of one variable left when every input but one is held still. Today the slices are differentiated. Three quick pulls first.
+  puzzle:
+    - text: |
+        You are standing on the loss surface of the last lesson at the line $w = 2$, $b = 1$. The loss there is 2. It is not the best line, and you would like to improve it by turning one of the two knobs a little.
+
+        The starter turns each knob by one thousandth, leaving the other alone, and prints the change in the loss.
+
+        Run it. Nudging $w$ raises the loss by about 0.010. Nudging $b$ raises it by about 0.004.
+
+        So both knobs should be turned **down**, and $w$ matters two and a half times as much as $b$ does, here. Divide each change by the size of the nudge: the loss is changing at about 10 per unit of $w$ and about 4 per unit of $b$.
+
+        **Where do those two numbers come from? Could you have found them without running anything? And is there a line at which neither knob, nudged alone, makes any difference at all?**
+  intuition:
+    - text: |
+        Each of the two numbers is a derivative you already know how to take.
+
+        Hold $b$ at 1. The loss is then a function of $w$ only, the slice of the surface along the line $b = 1$. It has a graph, a curve, and at $w = 2$ that curve has a slope. The starter estimated that slope with a small step, exactly as `derivative(f, x)` did at the end of the NumPy lessons. **It is about 10.**
+
+        Now hold $w$ at 2 and let $b$ vary. That is another slice, at right angles to the first, through the same point. Its slope at $b = 1$ **is about 4.**
+
+        Stand on a hillside facing east. The ground rises in front of you at some rate: that is one slope. Turn to face north. The ground rises at some other rate: that is another. A hillside does not have a slope. It has a slope **in each direction**, and the two you get by facing along the axes are called its **partial derivatives**.
+
+        The word "partial" is honest. Each one tells part of the story: how the output responds to one input when the others are frozen. The notation uses a curly $\partial$ in place of $d$ to remind you of the freezing:
+
+        $$\frac{\partial L}{\partial w} \quad\text{is the slope of the slice in which only } w \text{ moves.}$$
+
+        The figure shows the two slices through a point of a surface. Move the point, and read off the two slopes.
+    - figure: contours
+      props: { surface: bowl, x: 2, y: 1, show: partials }
+    - text: |
+        **Computing one costs nothing new.** In the slice with $b$ frozen, $b$ is a constant, like 7 or $\pi$. So to differentiate with respect to $w$, treat every other letter as a constant and use the rules you have. That is the entire method.
+
+        Try it on $f(x, y) = x^2 y + 3y$.
+
+        With respect to $x$: $y$ is a constant. The derivative of $x^2$ times a constant is $2x$ times that constant, and the term $3y$ is a constant with derivative 0. So $\dfrac{\partial f}{\partial x} = 2xy$.
+
+        With respect to $y$: now $x$ is the constant. The term $x^2 y$ is a constant times $y$, with derivative $x^2$, and $3y$ has derivative 3. So $\dfrac{\partial f}{\partial y} = x^2 + 3$.
+
+        Two inputs, two partial derivatives, and each is itself a function of both inputs: the slope of the east-west slice depends on where on the hillside you stand.
+
+        **What a partial derivative is for.** It answers the question a person tuning anything always asks: if I change this one setting a little and touch nothing else, how much does the result move? A loss with a million weights has a million partial derivatives at each point, one for each weight. Each says how much the loss would respond to that weight alone. Training a model consists of computing all of them and adjusting every weight a little against its own.
+  derivation:
+    - text: |
+        **Definition.** For $f : \mathbb{R}^n \to \mathbb{R}$ and a point $\mathbf{a}$, the **partial derivative of $f$ with respect to $x_i$ at $\mathbf{a}$** is
+
+        $$\frac{\partial f}{\partial x_i}(\mathbf{a}) = \lim_{h \to 0} \frac{f(a_1, \dots, a_i + h, \dots, a_n) - f(a_1, \dots, a_i, \dots, a_n)}{h},$$
+
+        when the limit exists. Only the $i$-th input is stepped. Writing $\mathbf{e}_i$ for the standard basis vector with a 1 in place $i$ and zeros elsewhere, the top is $f(\mathbf{a} + h\mathbf{e}_i) - f(\mathbf{a})$. Other notations for the same thing are $f_{x_i}$, $\partial_i f$ and $D_i f$.
+
+        **The puzzle.** The loss, multiplied out, was $L(w, b) = 14w^2 + 12wb + 4b^2 - 58w - 28b + 62$. Freeze $b$ and differentiate in $w$, then freeze $w$ and differentiate in $b$:
+
+        $$\frac{\partial L}{\partial w} = 28w + 12b - 58, \qquad \frac{\partial L}{\partial b} = 12w + 8b - 28.$$
+
+        At $w = 2$, $b = 1$ these are $56 + 12 - 58 = 10$ and $24 + 8 - 28 = 4$. Those are the two numbers the starter found.
+
+        **Straight from the data.** There was no need to multiply out. Differentiate the sum term by term with the chain rule. The derivative of $(w x_i + b - y_i)^2$ with respect to $w$ is twice the bracket times the derivative of the bracket, which is $x_i$. With respect to $b$ the derivative of the bracket is 1. Writing $r_i = w x_i + b - y_i$ for the miss at point $i$, the **residual**,
+
+        $$\frac{\partial L}{\partial w} = \sum_i 2\,r_i\,x_i, \qquad \frac{\partial L}{\partial b} = \sum_i 2\,r_i.$$
+
+        Read them. The loss responds to $b$ in proportion to the total miss: if the line is too high on balance, lower it. It responds to $w$ in proportion to the misses weighted by $x_i$: a miss far out along the $x$-axis is one that tilting the line can do most about. In code these are `(2 * r * xs).sum()` and `(2 * r).sum()` with `r = w * xs + b - ys`.
+
+        **Where both vanish.** At the lowest point of the bowl, every slice through it is at its own lowest point, so each slice is level there. **Both partial derivatives are zero at the minimum.** That is two equations:
+
+        $$28w + 12b = 58, \qquad 12w + 8b = 28.$$
+
+        From the second, $b = \tfrac{7 - 3w}{2}$. Put that in the first: $28w + 6(7 - 3w) = 58$, so $10w = 16$. **The best line has $w = 1.6$ and $b = 1.1$.** Two unknowns, two equations, and they are linear, because the loss is a quadratic. With $n$ adjustable numbers there are $n$ partial derivatives and $n$ equations, and a later cluster on least squares is the study of exactly this system.
+
+        Be careful about what was shown. At a minimum the partial derivatives are zero. It was **not** shown that wherever they are zero there is a minimum. The saddle $x^2 - y^2$ has partial derivatives $2x$ and $-2y$, both zero at the origin, and the origin is no minimum. Points where every partial derivative vanishes are called **stationary points**, and they are the candidates, as in one variable.
+
+        **Numerically.** A partial derivative is a derivative, so the central difference of the last cluster estimates it. Step one coordinate each way and leave the rest:
+
+        $$\frac{\partial f}{\partial x_i}(\mathbf{a}) \approx \frac{f(\mathbf{a} + h\mathbf{e}_i) - f(\mathbf{a} - h\mathbf{e}_i)}{2h}, \qquad h \approx 10^{-5}.$$
+
+        All $n$ of them cost $2n$ evaluations of $f$. For a network with a million weights that is two million passes through the network to take one step, which is hopeless as a way of training and exactly right as a way of checking a formula on a small case.
+    - question:
+        id: derivation-freeze
+        type: choice
+        system: s2
+        prompt: |
+          $f(x, y) = x^2 y + 3y$. A student computes $\dfrac{\partial f}{\partial x} = 2xy + 3$. What went wrong?
+        options:
+          - 'Nothing. That is correct.'
+          - 'The term $3y$ does not contain $x$. With $y$ frozen it is a constant, and the derivative of a constant is 0. The 3 is its derivative with respect to $y$, which belongs to the other partial derivative. The right answer is $2xy$.'
+          - 'The derivative of $x^2 y$ with respect to $x$ is $x^2$.'
+          - 'Partial derivatives cannot be taken of a sum.'
+        answer: 1
+        explanation: |
+          Differentiating with respect to $x$ means looking at the slice in which only $x$ moves. In that slice $3y$ does not move at all, so it contributes nothing to the slope. The commonest slip in this subject is to differentiate a term with respect to whichever letter it happens to contain. Before each term, ask: does this term change when $x$ changes and nothing else does?
+    - text: |
+        **Common cases.** Three results that are used all the time, each found by freezing all coordinates but one.
+
+        *A linear function.* $f(\mathbf{x}) = \mathbf{a} \cdot \mathbf{x} = a_1 x_1 + \dots + a_n x_n$. Only the term $a_i x_i$ contains $x_i$, so $\dfrac{\partial f}{\partial x_i} = a_i$. The partial derivatives of a linear function are its coefficients, the same at every point.
+
+        *A squared length.* $f(\mathbf{x}) = \lVert \mathbf{x} \rVert^2 = x_1^2 + \dots + x_n^2$. Then $\dfrac{\partial f}{\partial x_i} = 2x_i$.
+
+        *A product.* $f(x, y) = xy$ has $\dfrac{\partial f}{\partial x} = y$ and $\dfrac{\partial f}{\partial y} = x$. The rate at which a product responds to one factor is the other factor. A rectangle of sides $x$ and $y$ grows, when $x$ is lengthened a little, by a thin strip of height $y$.
+
+        **A warning.** In one variable, a function that has a derivative at a point is continuous there. It would be natural to expect that a function with all its partial derivatives at a point is continuous there too. **It is false.**
+
+        Take the function from the end of the last lesson, with a value supplied at the origin:
+
+        $$g(x, y) = \frac{xy}{x^2 + y^2} \ \text{ away from the origin}, \qquad g(0, 0) = 0.$$
+
+        Along the $x$-axis, $g(x, 0) = 0$ for every $x$. That slice is the constant 0, so $\dfrac{\partial g}{\partial x}(0, 0) = 0$. Along the $y$-axis likewise, so $\dfrac{\partial g}{\partial y}(0, 0) = 0$. Both partial derivatives exist at the origin. Yet $g$ is $\tfrac12$ all along the line $y = x$, arbitrarily close to the origin, where its value is 0. It is not even continuous there.
+
+        The partial derivatives look along the axes only, and this function behaves along the axes and misbehaves everywhere between them. **Knowing the slopes of two slices does not, by itself, tell you what the surface does in other directions.** Something stronger than the mere existence of partial derivatives is needed before they can be trusted to describe the function near a point. What that is, and the good news that every function you will meet in practice has it, is the next lesson.
+    - question:
+        id: order-stationary
+        type: order
+        system: s2
+        prompt: Put in order the steps for finding the stationary point of $f(x, y) = x^2 + xy + y^2 - 3x$.
+        steps:
+          - 'Freeze $y$ and differentiate in $x$: $\partial f / \partial x = 2x + y - 3$.'
+          - 'Freeze $x$ and differentiate in $y$: $\partial f / \partial y = x + 2y$.'
+          - 'Set both to zero. The second gives $x = -2y$.'
+          - 'Substitute in the first: $-4y + y - 3 = 0$, so $y = -1$.'
+          - 'Then $x = 2$, and the stationary point is $(2, -1)$.'
+        explanation: Each partial derivative is found on its own slice. Setting them all to zero together gives as many equations as there are unknowns, here two linear ones. Whether the point found is a minimum, a maximum or a saddle is a separate question, which the second derivatives answer later in the cluster. This one is a minimum.
+  formal:
+    - text: |
+        **Partial derivative.** For $f : D \to \mathbb{R}$ with $D \subseteq \mathbb{R}^n$, and $\mathbf{a}$ a point inside $D$,
+
+        $$\frac{\partial f}{\partial x_i}(\mathbf{a}) = \lim_{h \to 0} \frac{f(\mathbf{a} + h\mathbf{e}_i) - f(\mathbf{a})}{h}.$$
+
+        It is the ordinary derivative at $t = a_i$ of the slice $t \mapsto f(a_1, \dots, t, \dots, a_n)$.
+
+        **Rules.** Since a partial derivative is an ordinary derivative of a slice, the sum, product, quotient and chain rules hold with the other variables treated as constants.
+
+        **Stationary point.** $\mathbf{a}$ is a stationary point of $f$ if $\dfrac{\partial f}{\partial x_i}(\mathbf{a}) = 0$ for every $i$. If $f$ has a local maximum or minimum at a point inside its domain and its partial derivatives exist there, that point is stationary. The converse fails.
+
+        **Central difference.** $\dfrac{\partial f}{\partial x_i}(\mathbf{a}) \approx \dfrac{f(\mathbf{a} + h\mathbf{e}_i) - f(\mathbf{a} - h\mathbf{e}_i)}{2h}$, with error of order $h^2$.
+
+        **Caution.** The existence of all partial derivatives at $\mathbf{a}$ does not imply continuity at $\mathbf{a}$.
+  drill:
+    - text: |
+        Seconds each. Freeze every letter but the one named.
+    - question:
+        id: drill-px
+        type: choice
+        system: s1
+        prompt: |
+          $f(x, y) = x^3 + y^2$. What is $\dfrac{\partial f}{\partial x}$?
+        options: ['$3x^2$', '$3x^2 + 2y$', '$2y$', '$3x^2 + y^2$']
+        answer: 0
+        explanation: The term in y alone is a constant in this slice.
+    - question:
+        id: drill-py
+        type: choice
+        system: s1
+        prompt: |
+          $f(x, y) = x^3 + y^2$. What is $\dfrac{\partial f}{\partial y}$?
+        options: ['$3x^2$', '$3x^2 + 2y$', '$2y$', '$x^3 + 2y$']
+        answer: 2
+        explanation: The term in x alone is a constant in this slice.
+    - question:
+        id: drill-product
+        type: choice
+        system: s1
+        prompt: |
+          $f(x, y) = xy$. What is $\dfrac{\partial f}{\partial x}$?
+        options: ['$x$', '$y$', '$1$', '$x + y$']
+        answer: 1
+        explanation: With y frozen this is a constant times x.
+    - question:
+        id: drill-mixed-term
+        type: choice
+        system: s1
+        prompt: |
+          $f(x, y) = x^2 y^3$. What is $\dfrac{\partial f}{\partial y}$?
+        options: ['$2x y^3$', '$3x^2 y^2$', '$6x y^2$', '$x^2 y^3$']
+        answer: 1
+        explanation: The factor x squared is a constant, and the power rule acts on y cubed.
+    - question:
+        id: drill-linear
+        type: numeric
+        system: s1
+        prompt: |
+          $f(x, y, z) = 4x - 7y + 2z$. What is $\dfrac{\partial f}{\partial y}$?
+        answer: "-7"
+        explanation: The partial derivatives of a linear function are its coefficients.
+    - question:
+        id: drill-value
+        type: numeric
+        system: s1
+        prompt: |
+          $f(x, y) = x^2 y$. What is $\dfrac{\partial f}{\partial x}$ at the point $(3, 2)$?
+        answer: "12"
+        explanation: The partial derivative is 2xy, which is 2 times 3 times 2.
+    - question:
+        id: drill-exp
+        type: choice
+        system: s1
+        prompt: |
+          $f(x, y) = e^{xy}$. What is $\dfrac{\partial f}{\partial x}$?
+        options: ['$e^{xy}$', '$x e^{xy}$', '$y e^{xy}$', '$xy e^{xy}$']
+        answer: 2
+        explanation: By the chain rule the derivative of the exponent with respect to x is y.
+    - question:
+        id: drill-norm
+        type: choice
+        system: s1
+        prompt: |
+          $f(\mathbf{x}) = x_1^2 + x_2^2 + x_3^2$. What is $\dfrac{\partial f}{\partial x_2}$?
+        options: ['$2x_2$', '$2x_1 + 2x_2 + 2x_3$', '$x_2^2$', '$2$']
+        answer: 0
+        explanation: Only one of the three squares contains the second coordinate.
+    - question:
+        id: drill-count
+        type: numeric
+        system: s1
+        prompt: |
+          A function of 10 variables has how many first partial derivatives at a point?
+        answer: "10"
+        explanation: There is one for each input.
+    - question:
+        id: drill-evals
+        type: numeric
+        system: s1
+        prompt: |
+          How many evaluations of $f$ does it take to estimate all the partial derivatives of a function of 10 variables by central differences?
+        answer: "20"
+        explanation: Each coordinate is stepped once forwards and once backwards.
+    - question:
+        id: drill-saddle
+        type: choice
+        system: s1
+        prompt: |
+          Both partial derivatives of $x^2 - y^2$ are zero at the origin. What is the origin?
+        options: ['A minimum', 'A maximum', 'A saddle point', 'Not in the domain']
+        answer: 2
+        explanation: It is the bottom of the slice along one axis and the top of the slice along the other.
+    - question:
+        id: drill-meaning
+        type: choice
+        system: s1
+        prompt: |
+          At some point $\dfrac{\partial L}{\partial w} = 10$. If $w$ is raised by 0.01 and nothing else changes, about how much does $L$ change?
+        options: ['It rises by about 0.1', 'It falls by about 0.1', 'It rises by about 10', 'It rises by about 1000']
+        answer: 0
+        explanation: The change is about the rate times the size of the nudge.
+    - question:
+        id: predict-central
+        type: predict
+        system: s1
+        prompt: Two slopes at one point, by central differences. What does this show?
+        code: |
+          def f(x, y):
+              return x * x * y + 3 * y
+
+          h = 1e-5
+          px = (f(2 + h, 5) - f(2 - h, 5)) / (2 * h)
+          py = (f(2, 5 + h) - f(2, 5 - h)) / (2 * h)
+          print(round(px, 4), round(py, 4))
+        output: |
+          20.0 7.0
+        explanation: The partial derivative with respect to x is 2xy, which is 20 at the point (2, 5). With respect to y it is x squared plus 3, which is 7.
+    - question:
+        id: predict-residuals
+        type: predict
+        system: s1
+        prompt: The two partial derivatives of the loss, straight from the data. What does this show?
+        code: |
+          import numpy as np
+
+          xs = np.array([0.0, 1.0, 2.0, 3.0])
+          ys = np.array([1.0, 3.0, 4.0, 6.0])
+          r = 2.0 * xs + 1.0 - ys
+          print(r.tolist())
+          print((2 * r * xs).sum(), (2 * r).sum())
+        output: |
+          [0.0, 0.0, 1.0, 1.0]
+          10.0 4.0
+        explanation: The line with slope 2 and intercept 1 passes through the first two points and is 1 too high at each of the last two. Twice the misses weighted by x is 2 times (2 + 3), and twice the misses is 2 times 2.
+  work:
+    - text: Slower now. Before differentiating a term, ask whether it moves when the chosen input moves alone.
+    - question:
+        id: write-partial
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `partial(f, a, i)`. `f` takes a one-dimensional float array and returns a number, `a` is such an array and `i` an index. Return the central-difference estimate of $\partial f / \partial x_i$ at `a` with step `1e-5`, as a float. The array `a` must be unchanged afterwards.
+        starter: |
+          import numpy as np
+
+          def partial(f, a, i):
+              # Replace the next line with your own.
+              return 0.0
+
+          print(round(partial(lambda v: v[0] ** 2 * v[1] + 3 * v[1], np.array([2.0, 5.0]), 0), 4))
+        solution: |
+          import numpy as np
+
+          def partial(f, a, i):
+              h = 1e-5
+              up = a.copy()
+              down = a.copy()
+              up[i] += h
+              down[i] -= h
+              return float((f(up) - f(down)) / (2 * h))
+
+          print(round(partial(lambda v: v[0] ** 2 * v[1] + 3 * v[1], np.array([2.0, 5.0]), 0), 4))
+        tests: |
+          import numpy as _np
+          _f = lambda v: v[0] ** 2 * v[1] + 3 * v[1]
+          _a = _np.array([2.0, 5.0])
+          assert abs(partial(_f, _a, 0) - 20.0) < 1e-6, "At (2, 5) the partial derivative of x squared y plus 3y with respect to x is 20"
+          assert abs(partial(_f, _a, 1) - 7.0) < 1e-6, "At (2, 5) the partial derivative with respect to y is 7"
+          assert _a.tolist() == [2.0, 5.0], "The array passed in must not be changed"
+          _g = lambda v: float((v ** 2).sum())
+          _b = _np.array([1.0, -2.0, 3.0, 0.5])
+          for _i in range(4):
+              assert abs(partial(_g, _b, _i) - 2 * _b[_i]) < 1e-6, "The partial derivatives of the squared length are twice the coordinates"
+          assert _b.tolist() == [1.0, -2.0, 3.0, 0.5], "The array passed in must not be changed"
+          _c = _np.array([0.3, 0.7])
+          assert abs(partial(lambda v: _np.exp(v[0] * v[1]), _c, 0) - 0.7 * _np.exp(0.21)) < 1e-6, "The partial derivative of exp(xy) with respect to x is y exp(xy)"
+          assert abs(partial(lambda v: v[0] ** 3, _np.array([10.0]), 0) - 300.0) < 1e-4, "The derivative of the cube at 10 is 300"
+          assert output.strip() == "20.0", "The program should print 20.0"
+        wrong:
+          - |
+            import numpy as np
+
+            def partial(f, a, i):
+                h = 1e-5
+                up = a
+                up[i] += h
+                top = f(up)
+                up[i] -= 2 * h
+                return float((top - f(up)) / (2 * h))
+
+            print(20.0)
+          - |
+            import numpy as np
+
+            def partial(f, a, i):
+                h = 1e-5
+                return float((f(a + h) - f(a - h)) / (2 * h))
+
+            print(20.0)
+          - |
+            import numpy as np
+
+            def partial(f, a, i):
+                h = 1e-5
+                up = a.copy()
+                up[i] += h
+                return float((f(up) - f(a)) / (2 * h))
+
+            print(20.0)
+          - |
+            import numpy as np
+
+            def partial(f, a, i):
+                h = 1e-5
+                up = a.copy()
+                down = a.copy()
+                up[i] += h
+                down[i] -= h
+                return float((f(up) - f(down)) / h)
+
+            print(20.0)
+        explanation: |
+          Make two copies, step coordinate `i` up in one and down in the other, and divide the difference of the values by the whole distance between them, $2h$. Adding `h` to the whole array, `a + h`, steps **every** coordinate at once, which measures the slope along the diagonal and is the sum of all the partial derivatives. Stepping `a` itself without a copy leaves the caller's array altered: an assignment gives a second name for the same block, as the lesson on views and copies showed. This function is the checking tool for the rest of the cluster. Whatever formula you derive for a partial derivative, compare it with this.
+    - question:
+        id: write-loss-partials
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `loss_partials(w, b, xs, ys)` to return the list `[dL_dw, dL_db]` of the two partial derivatives of $L(w, b) = \sum_i (w x_i + b - y_i)^2$, as floats, from the formulas and with no loop and no numerical differences.
+        starter: |
+          import numpy as np
+
+          def loss_partials(w, b, xs, ys):
+              # Replace the next line with your own.
+              return [0.0, 0.0]
+
+          xs = np.array([0.0, 1.0, 2.0, 3.0])
+          ys = np.array([1.0, 3.0, 4.0, 6.0])
+          print(loss_partials(2.0, 1.0, xs, ys))
+        solution: |
+          import numpy as np
+
+          def loss_partials(w, b, xs, ys):
+              r = w * xs + b - ys
+              return [float((2 * r * xs).sum()), float((2 * r).sum())]
+
+          xs = np.array([0.0, 1.0, 2.0, 3.0])
+          ys = np.array([1.0, 3.0, 4.0, 6.0])
+          print(loss_partials(2.0, 1.0, xs, ys))
+        tests: |
+          import numpy as _np
+          _x = _np.array([0.0, 1.0, 2.0, 3.0])
+          _y = _np.array([1.0, 3.0, 4.0, 6.0])
+          _p = loss_partials(2.0, 1.0, _x, _y)
+          assert len(_p) == 2, "Return a list of two numbers"
+          assert abs(_p[0] - 10.0) < 1e-9 and abs(_p[1] - 4.0) < 1e-9, "At w = 2, b = 1 the partial derivatives are 10 and 4"
+          _p = loss_partials(1.6, 1.1, _x, _y)
+          assert abs(_p[0]) < 1e-9 and abs(_p[1]) < 1e-9, "At w = 1.6, b = 1.1 both are 0"
+          _p = loss_partials(0.0, 0.0, _x, _y)
+          assert abs(_p[0] + 58.0) < 1e-9 and abs(_p[1] + 28.0) < 1e-9, "At w = 0, b = 0 they are -58 and -28"
+          _x2 = _np.array([1.0, 2.0])
+          _y2 = _np.array([1.0, 5.0])
+          _p = loss_partials(1.0, 1.0, _x2, _y2)
+          assert abs(_p[0] + 6.0) < 1e-9 and abs(_p[1] + 2.0) < 1e-9, "For the points (1, 1) and (2, 5) at w = 1, b = 1 they are -6 and -2"
+          assert "for " not in source, "Do it without a loop"
+          assert output.strip() == "[10.0, 4.0]", "The program should print [10.0, 4.0]"
+        wrong:
+          - |
+            import numpy as np
+
+            def loss_partials(w, b, xs, ys):
+                r = w * xs + b - ys
+                return [float((2 * r).sum()), float((2 * r * xs).sum())]
+
+            print([10.0, 4.0])
+          - |
+            import numpy as np
+
+            def loss_partials(w, b, xs, ys):
+                r = w * xs + b - ys
+                return [float((r * xs).sum()), float(r.sum())]
+
+            print([10.0, 4.0])
+          - |
+            import numpy as np
+
+            def loss_partials(w, b, xs, ys):
+                r = ys - w * xs - b
+                return [float((2 * r * xs).sum()), float((2 * r).sum())]
+
+            print([10.0, 4.0])
+          - |
+            import numpy as np
+
+            def loss_partials(w, b, xs, ys):
+                return [28 * w + 12 * b - 58, 12 * w + 8 * b - 28]
+
+            print([10.0, 4.0])
+        explanation: |
+          One array of residuals serves both. The chain rule on each squared term gives twice the residual times the derivative of the residual, which is $x_i$ for $w$ and 1 for $b$. The sign matters: the residual must be prediction less target, since that is what is inside the square as a function of $w$ and $b$. Writing target less prediction flips the sign of both answers and would send a training step uphill. The formulas with 28, 12 and 58 in them are right for the puzzle's four points only. The form with the residuals is right for any data.
+    - question:
+        id: fix-numeric-all
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `all_partials(f, a)` should return an array of the central-difference estimates of every partial derivative of `f` at `a`. For the squared length at $(1, 2, 3)$ it should give about `[2, 4, 6]`. It gives the right first entry and wrong ones after it, and it changes `a`. Fix it.
+        starter: |
+          import numpy as np
+
+          def all_partials(f, a):
+              h = 1e-5
+              out = np.zeros(a.size)
+              for i in range(a.size):
+                  up = a
+                  up[i] += h
+                  high = f(up)
+                  down = a
+                  down[i] -= h
+                  low = f(down)
+                  out[i] = (high - low) / (2 * h)
+              return out
+
+          print([round(float(g), 4) for g in all_partials(lambda v: (v ** 2).sum(), np.array([1.0, 2.0, 3.0]))])
+        solution: |
+          import numpy as np
+
+          def all_partials(f, a):
+              h = 1e-5
+              out = np.zeros(a.size)
+              for i in range(a.size):
+                  up = a.copy()
+                  up[i] += h
+                  high = f(up)
+                  down = a.copy()
+                  down[i] -= h
+                  low = f(down)
+                  out[i] = (high - low) / (2 * h)
+              return out
+
+          print([round(float(g), 4) for g in all_partials(lambda v: (v ** 2).sum(), np.array([1.0, 2.0, 3.0]))])
+        tests: |
+          import numpy as _np
+          _a = _np.array([1.0, 2.0, 3.0])
+          _g = all_partials(lambda v: (v ** 2).sum(), _a)
+          assert _g.shape == (3,), "Return one estimate for each coordinate"
+          assert _np.allclose(_g, [2.0, 4.0, 6.0], atol=1e-6), "The partial derivatives of the squared length at (1, 2, 3) are 2, 4, 6"
+          assert _a.tolist() == [1.0, 2.0, 3.0], "The array passed in must not be changed"
+          _b = _np.array([2.0, 5.0])
+          _g = all_partials(lambda v: v[0] ** 2 * v[1] + 3 * v[1], _b)
+          assert _np.allclose(_g, [20.0, 7.0], atol=1e-6), "At (2, 5) the partial derivatives of x squared y plus 3y are 20 and 7"
+          assert _b.tolist() == [2.0, 5.0], "The array passed in must not be changed"
+          _g = all_partials(lambda v: v[0] * v[1] * v[2], _np.array([2.0, 3.0, 4.0]))
+          assert _np.allclose(_g, [12.0, 8.0, 6.0], atol=1e-6), "Each partial derivative of xyz is the product of the other two"
+          assert output.strip() == "[2.0, 4.0, 6.0]", "The program should print [2.0, 4.0, 6.0]"
+        wrong:
+          - |
+            import numpy as np
+
+            def all_partials(f, a):
+                h = 1e-5
+                out = np.zeros(a.size)
+                for i in range(a.size):
+                    up = a
+                    up[i] += h
+                    high = f(up)
+                    down = a
+                    down[i] -= h
+                    low = f(down)
+                    out[i] = (high - low) / (2 * h)
+                return out
+
+            print([2.0, 4.0, 6.0])
+          - |
+            import numpy as np
+
+            def all_partials(f, a):
+                h = 1e-5
+                out = np.zeros(a.size)
+                for i in range(a.size):
+                    up = a.copy()
+                    up[i] += h
+                    out[i] = (f(up) - f(a)) / (2 * h)
+                return out
+
+            print([2.0, 4.0, 6.0])
+          - |
+            import numpy as np
+
+            def all_partials(f, a):
+                h = 1e-5
+                up = a.copy()
+                down = a.copy()
+                out = np.zeros(a.size)
+                for i in range(a.size):
+                    up[i] += h
+                    down[i] -= h
+                    out[i] = (f(up) - f(down)) / (2 * h)
+                return out
+
+            print([2.0, 4.0, 6.0])
+        explanation: |
+          `up = a` does not make a new array. It gives the caller's array a second name. Stepping `up[i]` up by $h$ moves `a` itself, and then `down = a` starts from the moved array, steps it back to where it began, and evaluates $f$ at the original point. So the difference measured is between $\mathbf{a} + h\mathbf{e}_i$ and $\mathbf{a}$, a forward difference divided by $2h$: half the right answer. Each coordinate needs its own fresh copies, so that one coordinate's step is not still in place when the next is taken. Keeping two copies across the loop without resetting them steps coordinate 0 and then coordinate 1 as well, measuring a slope in a diagonal direction.
+    - question:
+        id: work-stationary
+        type: numeric
+        system: s2
+        prompt: |
+          $f(x, y) = x^2 + 2y^2 - 4x + 4y + 1$. Its only stationary point is at $(x, y)$. What is the value of $f$ there?
+        answer: "-5"
+        explanation: |
+          $\partial f / \partial x = 2x - 4$ is zero at $x = 2$, and $\partial f / \partial y = 4y + 4$ is zero at $y = -1$. Here the two equations do not involve each other, because $f$ has no term in $xy$: each variable can be settled on its own. The value is $4 + 2 - 8 - 4 + 1 = -5$. Both slices through the point are parabolas opening upwards, and since there is no cross term every other slice is too, so this is the lowest value of $f$.
+    - question:
+        id: work-not-continuous
+        type: choice
+        system: s2
+        prompt: |
+          $g(x, y) = \dfrac{xy}{x^2 + y^2}$ away from the origin, and $g(0, 0) = 0$. Both partial derivatives of $g$ exist at the origin and equal 0. Yet $g$ is not continuous there. How can both be true?
+        options:
+          - 'They cannot. One of the two claims is mistaken.'
+          - 'The partial derivatives at the origin are computed from the values of $g$ along the two axes only, and along both axes $g$ is identically 0. Continuity concerns every point near the origin, and on the line $y = x$, which the partial derivatives never look at, $g$ is $\tfrac12$ however near the origin.'
+          - 'The partial derivatives are only approximately 0.'
+          - 'A function of two variables is never continuous where its formula has a zero on the bottom.'
+        answer: 1
+        explanation: |
+          A partial derivative at a point is a limit taken along one line through it, parallel to an axis. Two partial derivatives sample two lines out of infinitely many. This function is perfectly flat along those two and jumps along all the rest. In one variable there is only one line, so a derivative there sees everything, and differentiability forces continuity. In several variables the existence of partial derivatives at a single point is a weak condition. What repairs it is to ask that the partial derivatives exist near the point and are continuous, which holds for every formula built from polynomials, exponentials, logarithms and the like wherever it is defined.
+    - question:
+        id: work-rectangle
+        type: numeric
+        system: s2
+        prompt: |
+          A rectangle has sides $x = 3$ and $y = 5$, and area $A = xy$. Using the partial derivatives, estimate the change in area when $x$ grows by 0.1 and, separately, $y$ grows by 0.2, both at once. Add the two separate estimates.
+        answer: "1.1"
+        tolerance: "0.001"
+        explanation: |
+          $\partial A / \partial x = y = 5$, so lengthening $x$ by 0.1 adds about $5 \times 0.1 = 0.5$: a strip of height 5 and width 0.1. $\partial A / \partial y = x = 3$, so lengthening $y$ by 0.2 adds about $3 \times 0.2 = 0.6$. Together 1.1. The true new area is $3.1 \times 5.2 = 16.12$, a change of 1.12. The estimate misses the little corner rectangle, $0.1 \times 0.2 = 0.02$, where the two strips overlap. Adding up the separate effects of separate nudges, and being off only by something of the second order of smallness, is the idea the next lesson makes precise.
+  connections:
+    - text: |
+        At the line $w = 2$, $b = 1$ the loss rose by about 0.010 when $w$ was nudged by a thousandth and by about 0.004 when $b$ was. Those are the slopes of the two slices through the point, 10 and 4. The **partial derivative** of a function with respect to one input is the ordinary derivative of the slice in which only that input moves. You compute it by treating every other input as a constant.
+
+        For the loss, $\dfrac{\partial L}{\partial w} = \sum 2 r_i x_i$ and $\dfrac{\partial L}{\partial b} = \sum 2 r_i$, with $r_i$ the miss at each point. Both are zero at the bottom of the bowl, which gave two linear equations and the best line, $w = 1.6$, $b = 1.1$. Points where all the partial derivatives vanish are **stationary**. A minimum is always one of them, and so is a saddle.
+
+        A central difference in one coordinate estimates a partial derivative, at a cost of two evaluations for each input. That is far too slow for training and ideal for checking.
+
+        One thing was left unsettled, twice. The last question added up the effects of two separate nudges and came out nearly right. And the function $\dfrac{xy}{x^2 + y^2}$ had both partial derivatives at the origin and was not even continuous there. The partial derivatives describe the function along the axes. When do they describe it in **every** direction, so that the effect of any small step is the sum of the effects of its parts? The answer is the proper notion of a derivative in several variables, and it is the next lesson, [[m12.total-derivative-as-best-linear-approximation]].
