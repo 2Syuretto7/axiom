@@ -1,0 +1,568 @@
+concept: m12.multivariable-taylor-expansion
+minutes: 80
+claim: You can write the second-order Taylor expansion of a function of several variables from its value, gradient and Hessian at a point, derive it from the single-variable expansion along a line, say how its error shrinks with the step, use it to justify the second-derivative test, obtain Newton's step as the minimum of the quadratic model, and predict from it which step sizes make gradient descent go down.
+recalls: [m12.hessian-and-symmetry-of-mixed-partials]
+uses: [m12.gradient, m12.total-derivative-as-best-linear-approximation, m12.directional-derivative, m12.multivariable-chain-rule, m12.partial-derivatives, m12.jacobian, m10.taylor-approximation, m10.second-derivative-and-curvature, m10.maxima-and-minima, m10.derivatives-of-exp-log-and-trig, m5.matrix-vector-product, m5.transpose, m5.identity-and-inverse, m5.elimination-and-linear-systems, m4.dot-product, m4.norms-and-distance, m1.quadratics, m2.the-exponential-and-e, e5.linear-algebra-routines, e5.arrays-dtype-and-shape, e5.vectorisation, e5.numerical-error-analysis-in-practice, e0.functions, e0.loops]
+leads: [m12.inverse-and-implicit-function-theorems, m19.gradient-descent, m19.newton-and-quasi-newton-methods, m19.convergence-rates-for-smooth-and-strongly-convex-functions]
+starter: |
+  # Scratch space. f(x, y) = x e^y near the point (1, 0), where everything is known:
+  # the value is 1, the gradient is (1, 1), and the Hessian is [[0, 1], [1, 1]].
+  # How well can f be predicted at a nearby point from that knowledge alone?
+  import numpy as np
+
+  def f(x, y):
+      return x * np.exp(y)
+
+  for t in [1.0, 0.5, 0.25]:
+      h, k = 0.1 * t, 0.2 * t
+      truth = f(1 + h, k)
+      linear = 1 + h + k
+      quadratic = linear + h * k + k * k / 2
+      print(t, round(float(truth - linear), 6), round(float(truth - quadratic), 6))
+parts:
+  recall:
+    - text: |
+        [[m12.hessian-and-symmetry-of-mixed-partials]] collected the second derivatives of a function into a symmetric matrix and used it to tell a minimum from a saddle, on the strength of a claim that near a stationary point the function is its value plus a curvature term. Today that claim is derived. Three quick pulls first.
+  puzzle:
+    - text: |
+        You are told three things about a function $f$ at the point $(1, 0)$, and nothing else. Its value there is 1. Its gradient there is $(1, 1)$. Its Hessian there is $\begin{pmatrix} 0 & 1 \\ 1 & 1 \end{pmatrix}$.
+
+        You are asked for $f(1.1, 0.2)$.
+
+        With the value alone, the best you can say is "about 1". With the gradient too, you can use the linear approximation: $1 + 1 \times 0.1 + 1 \times 0.2 = 1.3$. What use is the Hessian?
+
+        The function is in fact $f(x, y) = x e^y$, and the true value is $1.1\,e^{0.2} \approx 1.3435$. The linear guess, 1.3, is off by 0.0435. The starter also forms a second guess, which uses the Hessian, and it comes to 1.34: off by 0.0035, twelve times better.
+
+        Run it, and look at how each error behaves as the step is halved, and halved again. The linear error goes 0.0435, 0.0105, 0.0026. The other goes 0.0035, 0.0004, 0.00005.
+
+        **Each halving of the step divides the first error by about four and the second by about eight.**
+
+        **What is the second guess, and how is it built from the Hessian? Why four and why eight? And if a function near a point can be replaced by something this simple and this accurate, what can be done with the replacement?**
+  intuition:
+    - text: |
+        In one variable you met this ladder already. Knowing $f(a)$, the best guess for $f(a + h)$ is the constant $f(a)$. Knowing the slope too, the tangent line, $f(a) + f'(a)h$. Knowing the second derivative as well, a parabola:
+
+        $$f(a + h) \approx f(a) + f'(a)\,h + \tfrac12 f''(a)\,h^2.$$
+
+        Each rung matches one more derivative of $f$ at the point, and each is more accurate than the last by one more power of $h$. That was the Taylor approximation.
+
+        In several variables the first two rungs are already in place. The value, $f(\mathbf{a})$. Then the linear approximation, with the gradient in the place of the slope: $f(\mathbf{a}) + \nabla f \cdot \mathbf{h}$. What should the third rung be?
+
+        The pattern says: one half, times the second derivative, times the step **twice**. The second derivative is now a matrix, the Hessian, and the natural way for a matrix to meet a vector twice is to be sandwiched: $\mathbf{h}^{\mathsf T}H\mathbf{h}$. You met that expression in the last lesson. It is the curvature along the direction of $\mathbf{h}$, times the square of the length of $\mathbf{h}$. So the guess is
+
+        $$f(\mathbf{a} + \mathbf{h}) \approx f(\mathbf{a}) + \nabla f(\mathbf{a}) \cdot \mathbf{h} + \tfrac12\,\mathbf{h}^{\mathsf T}H(\mathbf{a})\,\mathbf{h}.$$
+
+        **Where you are, plus slope times step, plus half of curvature times step squared.** It is the same sentence as in one variable, with a vector for the slope and a matrix for the curvature.
+
+        For the puzzle, with $\mathbf{h} = (h, k)$:
+
+        $$\tfrac12 \begin{pmatrix} h & k \end{pmatrix} \begin{pmatrix} 0 & 1 \\ 1 & 1 \end{pmatrix} \begin{pmatrix} h \\ k \end{pmatrix} = \tfrac12\,(2hk + k^2) = hk + \tfrac12 k^2.$$
+
+        With $h = 0.1$ and $k = 0.2$ that is $0.02 + 0.02 = 0.04$, and the guess is 1.34.
+
+        **Why four and why eight.** The linear approximation leaves out the curvature term and everything beyond. The largest thing it leaves out is of the size of the step squared. Halve the step and that is quartered. The quadratic approximation includes the curvature term, so the largest thing it leaves out is of the size of the step **cubed**. Halve the step, and it is divided by eight.
+
+        Geometrically, the linear approximation replaces the surface by its tangent plane. The quadratic one replaces it by a bowl, a dome or a saddle that touches the surface at the point with the same height, the same tilt and the same bending in every direction. It is the simplest surface that can bend at all, and it hugs the true surface much more closely than a plane can.
+
+        **Why this matters.** A quadratic in several variables is something you can **solve**. Its stationary point is found from a linear system. Its behaviour along any line is a parabola. So wherever a function is too complicated to handle directly, replace it locally by its quadratic model, solve the model, and move. Newton's method is exactly that, and the analysis of gradient descent is the study of what a straight step does to the model.
+  derivation:
+    - text: |
+        **From one variable to many.** Fix the point $\mathbf{a}$ and the step $\mathbf{h}$, and slice $f$ along the line joining $\mathbf{a}$ to $\mathbf{a} + \mathbf{h}$:
+
+        $$\varphi(t) = f(\mathbf{a} + t\mathbf{h}), \qquad \varphi(0) = f(\mathbf{a}), \quad \varphi(1) = f(\mathbf{a} + \mathbf{h}).$$
+
+        $\varphi$ is a function of one variable, so the single-variable Taylor approximation applies to it:
+
+        $$\varphi(1) \approx \varphi(0) + \varphi'(0) + \tfrac12\varphi''(0).$$
+
+        The derivatives of $\varphi$ are known from earlier lessons. By the chain rule, $\varphi'(t) = \nabla f(\mathbf{a} + t\mathbf{h}) \cdot \mathbf{h}$, so $\varphi'(0) = \nabla f(\mathbf{a}) \cdot \mathbf{h}$. And the last lesson found $\varphi''(0) = \mathbf{h}^{\mathsf T}H(\mathbf{a})\,\mathbf{h}$. Substituting:
+
+        $$f(\mathbf{a} + \mathbf{h}) \approx f(\mathbf{a}) + \nabla f(\mathbf{a}) \cdot \mathbf{h} + \tfrac12\,\mathbf{h}^{\mathsf T}H(\mathbf{a})\,\mathbf{h}.$$
+
+        Nothing new had to be proved. **The multivariable expansion is the single-variable one, applied along the line of the step.**
+
+        Written out for two variables, with $\mathbf{h} = (h, k)$:
+
+        $$f(a + h, b + k) \approx f + f_x h + f_y k + \tfrac12\left(f_{xx}h^2 + 2f_{xy}hk + f_{yy}k^2\right),$$
+
+        with everything on the right evaluated at $(a, b)$. The mixed term has a 2 because the Hessian contains $f_{xy}$ twice, once on each side of the diagonal.
+
+        **The error.** If $f$ has continuous third partial derivatives, the error of the second-order expansion is at most a constant times $\lVert \mathbf{h} \rVert^3$ for small steps. The error of the first-order expansion is at most a constant times $\lVert \mathbf{h} \rVert^2$. These are the eight and the four of the puzzle. If $f$ is itself a quadratic, its third derivatives are zero and the second-order expansion is **exact**: that is why the least-squares loss has been so obliging all through this cluster.
+
+        **The puzzle's function.** $f(x, y) = xe^y$ has $f_x = e^y$, $f_y = xe^y$, $f_{xx} = 0$, $f_{xy} = e^y$, $f_{yy} = xe^y$. At $(1, 0)$: value 1, gradient $(1, 1)$, Hessian $\begin{pmatrix} 0 & 1 \\ 1 & 1 \end{pmatrix}$. So near $(1, 0)$,
+
+        $$xe^y \approx 1 + h + k + hk + \tfrac12 k^2, \qquad h = x - 1,\ k = y.$$
+
+        **The second-derivative test, justified.** At a stationary point the gradient is zero, and the expansion reads
+
+        $$f(\mathbf{a} + \mathbf{h}) - f(\mathbf{a}) \approx \tfrac12\,\mathbf{h}^{\mathsf T}H\mathbf{h}, \quad\text{with an error of order } \lVert \mathbf{h} \rVert^3.$$
+
+        If $H$ is positive definite, the right side is positive and at least some fixed positive multiple of $\lVert \mathbf{h} \rVert^2$. For small steps a cubic error cannot overturn that, so $f(\mathbf{a} + \mathbf{h}) > f(\mathbf{a})$ for every small step: a local minimum. If $\mathbf{h}^{\mathsf T}H\mathbf{h}$ is negative along some direction and positive along another, $f$ goes down one way and up the other: a saddle. And if $\mathbf{h}^{\mathsf T}H\mathbf{h} = 0$ along some direction, the quadratic term says nothing there and the cubic error decides. That is why a zero determinant left the test undecided.
+    - question:
+        id: derivation-order
+        type: choice
+        system: s2
+        prompt: |
+          For a smooth function that is not a quadratic, the second-order Taylor expansion at a point has an error of 0.008 for a certain step. About what error should be expected for a step in the same direction and half as long?
+        options:
+          - 'About 0.004, since the error is proportional to the step.'
+          - 'About 0.002, since the error is proportional to the square of the step.'
+          - 'About 0.001. The expansion matches the function up to second order, so the first thing it leaves out is of third order: proportional to the cube of the step, and halving the step divides it by eight.'
+          - 'Exactly 0, since a shorter step is within the range where the expansion is exact.'
+        answer: 2
+        explanation: |
+          Along the line of the step, the function is a function of one variable, and its Taylor polynomial of degree 2 has an error that begins with the term in $t^3$. An approximation that is correct through order $k$ has an error of order $k + 1$. The linear approximation has an error that falls four-fold on halving, the quadratic eight-fold. No step is short enough to make the expansion of a function that is not a quadratic exact.
+    - text: |
+        **The quadratic model.** Give the right-hand side a name. Near $\mathbf{a}$, with $\mathbf{g} = \nabla f(\mathbf{a})$ and $H = H_f(\mathbf{a})$,
+
+        $$m(\mathbf{h}) = f(\mathbf{a}) + \mathbf{g} \cdot \mathbf{h} + \tfrac12\,\mathbf{h}^{\mathsf T}H\mathbf{h}.$$
+
+        This is a function of the step $\mathbf{h}$. It is a quadratic, whose gradient with respect to $\mathbf{h}$ is, by the rules of the lesson on the gradient, $\mathbf{g} + H\mathbf{h}$.
+
+        *Newton's step.* Where is the model lowest? Where its gradient vanishes: $\mathbf{g} + H\mathbf{h} = \mathbf{0}$, that is, $H\mathbf{h} = -\mathbf{g}$. **The Newton step of the last lesson is the step to the stationary point of the quadratic model.** If $H$ is positive definite the model is a bowl and that point is its bottom. If not, the model is a saddle or a dome and its stationary point is not somewhere one wants to go.
+
+        *A gradient step.* Take instead the step $\mathbf{h} = -\eta\,\mathbf{g}$ of gradient descent and put it into the model:
+
+        $$m(-\eta\mathbf{g}) = f(\mathbf{a}) - \eta\,\lVert \mathbf{g} \rVert^2 + \tfrac12\,\eta^2\,\mathbf{g}^{\mathsf T}H\mathbf{g}.$$
+
+        Two terms compete. The first-order term always helps, in proportion to $\eta$. The second-order term, when the curvature along the gradient is positive, hurts, in proportion to $\eta^2$. For small $\eta$ the first wins. As $\eta$ grows the second catches up. The model predicts a decrease exactly when
+
+        $$\eta < \frac{2\,\lVert \mathbf{g} \rVert^2}{\mathbf{g}^{\mathsf T}H\mathbf{g}},$$
+
+        and the largest decrease at half that, $\eta^{*} = \dfrac{\lVert \mathbf{g} \rVert^2}{\mathbf{g}^{\mathsf T}H\mathbf{g}}$, where it is $\dfrac{\lVert \mathbf{g} \rVert^4}{2\,\mathbf{g}^{\mathsf T}H\mathbf{g}}$.
+
+        For the least-squares loss at $(2, 1)$: $\mathbf{g} = (10, 4)$, $\lVert \mathbf{g} \rVert^2 = 116$, and $\mathbf{g}^{\mathsf T}H\mathbf{g} = 28 \cdot 100 + 2 \cdot 12 \cdot 40 + 8 \cdot 16 = 3888$. So $\eta^{*} = \tfrac{116}{3888} \approx 0.0298$: the very step that the exact line search found, four lessons ago, by another route. And a step size beyond $0.0597$ would raise the loss from this point.
+
+        **The step size is limited by curvature.** A small step size is safe because the linear term dominates. How small is small depends on how sharply the function bends along the direction of travel: the more curvature, the smaller the step must be. This one line of algebra is the seed of the whole theory of step sizes.
+    - question:
+        id: order-expand
+        type: order
+        system: s2
+        prompt: Put in order the steps for writing the second-order expansion of $f(x, y) = xe^y$ about the point $(1, 0)$.
+        steps:
+          - 'Find the first partial derivatives: $f_x = e^y$ and $f_y = xe^y$.'
+          - 'Find the second partial derivatives: $f_{xx} = 0$, $f_{xy} = e^y$, $f_{yy} = xe^y$.'
+          - 'Evaluate everything at $(1, 0)$: value 1, gradient $(1, 1)$, Hessian entries 0, 1 and 1.'
+          - 'Write the steps from the point as $h = x - 1$ and $k = y$.'
+          - 'Assemble: $1 + h + k + \tfrac12(0 \cdot h^2 + 2hk + k^2)$.'
+        explanation: Differentiate with the letters first, then put in the point, then build the polynomial in the steps measured from the point. The mixed term carries a 2 before the half is applied, because the Hessian holds the mixed derivative in two places.
+  formal:
+    - text: |
+        **Second-order Taylor expansion.** Let $f : D \to \mathbb{R}$ be of class $C^2$ near $\mathbf{a}$. Then
+
+        $$f(\mathbf{a} + \mathbf{h}) = f(\mathbf{a}) + \nabla f(\mathbf{a}) \cdot \mathbf{h} + \tfrac12\,\mathbf{h}^{\mathsf T}H_f(\mathbf{a})\,\mathbf{h} + R(\mathbf{h}), \qquad \lim_{\mathbf{h} \to \mathbf{0}} \frac{R(\mathbf{h})}{\lVert \mathbf{h} \rVert^2} = 0.$$
+
+        If $f$ is of class $C^3$, then $|R(\mathbf{h})| \le C\lVert \mathbf{h} \rVert^3$ for some constant $C$ and all small $\mathbf{h}$.
+
+        **Exact form.** For $f$ of class $C^2$ there is a point $\mathbf{c}$ on the segment from $\mathbf{a}$ to $\mathbf{a} + \mathbf{h}$ with $f(\mathbf{a} + \mathbf{h}) = f(\mathbf{a}) + \nabla f(\mathbf{a}) \cdot \mathbf{h} + \tfrac12\,\mathbf{h}^{\mathsf T}H_f(\mathbf{c})\,\mathbf{h}$.
+
+        **Quadratic model.** $m(\mathbf{h}) = f(\mathbf{a}) + \mathbf{g} \cdot \mathbf{h} + \tfrac12\mathbf{h}^{\mathsf T}H\mathbf{h}$ has $\nabla m(\mathbf{h}) = \mathbf{g} + H\mathbf{h}$. If $H$ is positive definite, $m$ has its unique minimum at $\mathbf{h} = -H^{-1}\mathbf{g}$, with value $f(\mathbf{a}) - \tfrac12\mathbf{g}^{\mathsf T}H^{-1}\mathbf{g}$.
+
+        **Along the negative gradient.** $m(-\eta\mathbf{g}) = f(\mathbf{a}) - \eta\lVert \mathbf{g} \rVert^2 + \tfrac12\eta^2\,\mathbf{g}^{\mathsf T}H\mathbf{g}$.
+  drill:
+    - text: |
+        Seconds each.
+    - question:
+        id: drill-terms
+        type: choice
+        system: s1
+        prompt: |
+          Which is the second-order term of the Taylor expansion of $f$ about $\mathbf{a}$?
+        options: ['$\mathbf{h}^{\mathsf T}H\mathbf{h}$', '$\tfrac12\,\mathbf{h}^{\mathsf T}H\mathbf{h}$', '$\tfrac12\,H\mathbf{h}$', '$\nabla f \cdot \mathbf{h}$']
+        answer: 1
+        explanation: Half of the curvature, sandwiched between two copies of the step.
+    - question:
+        id: drill-linear-term
+        type: numeric
+        system: s1
+        prompt: |
+          At a point, $f = 4$ and $\nabla f = (2, -1)$. What is the first-order estimate of $f$ after a step of $(0.5, 1)$?
+        answer: "4"
+        explanation: The step adds 1 and takes away 1.
+    - question:
+        id: drill-quad-term
+        type: numeric
+        system: s1
+        prompt: |
+          $H = \begin{pmatrix} 2 & 0 \\ 0 & 4 \end{pmatrix}$ and $\mathbf{h} = (1, 1)$. What is $\tfrac12\,\mathbf{h}^{\mathsf T}H\mathbf{h}$?
+        answer: "3"
+        explanation: The sandwich is 2 plus 4, and half of that is 3.
+    - question:
+        id: drill-mixed
+        type: numeric
+        system: s1
+        prompt: |
+          $H = \begin{pmatrix} 0 & 1 \\ 1 & 0 \end{pmatrix}$ and $\mathbf{h} = (0.1, 0.2)$. What is $\tfrac12\,\mathbf{h}^{\mathsf T}H\mathbf{h}$?
+        answer: "0.02"
+        tolerance: "0.0001"
+        explanation: The sandwich is twice the product of the two steps, and half of that is the product.
+    - question:
+        id: drill-error-1
+        type: choice
+        system: s1
+        prompt: |
+          The error of the **first**-order expansion of a smooth function shrinks like which power of the length of the step?
+        options: ['The first', 'The second', 'The third', 'The fourth']
+        answer: 1
+        explanation: The first term left out is the curvature term, which has the step in it twice.
+    - question:
+        id: drill-error-2
+        type: choice
+        system: s1
+        prompt: |
+          The error of the **second**-order expansion of a smooth function shrinks like which power of the length of the step?
+        options: ['The first', 'The second', 'The third', 'The fourth']
+        answer: 2
+        explanation: The first term left out has the step in it three times.
+    - question:
+        id: drill-halve
+        type: numeric
+        system: s1
+        prompt: |
+          The step is halved. By about what factor is the error of the second-order expansion divided?
+        answer: "8"
+        explanation: Two cubed.
+    - question:
+        id: drill-exact
+        type: choice
+        system: s1
+        prompt: |
+          For which of these is the second-order Taylor expansion exact, for steps of any size?
+        options: ['$e^{x + y}$', '$3x^2 - xy + 5y + 1$', '$x^3 + y$', '$\sin(xy)$']
+        answer: 1
+        explanation: It is a polynomial of degree 2, so all its third derivatives are zero.
+    - question:
+        id: drill-stationary
+        type: choice
+        system: s1
+        prompt: |
+          At a stationary point, which term of the expansion is the first that can change the value of $f$ nearby?
+        options: ['The constant term', 'The gradient term', 'The Hessian term', 'None']
+        answer: 2
+        explanation: The gradient is zero there, so the linear term vanishes.
+    - question:
+        id: drill-newton
+        type: choice
+        system: s1
+        prompt: |
+          The quadratic model $f + \mathbf{g} \cdot \mathbf{h} + \tfrac12\mathbf{h}^{\mathsf T}H\mathbf{h}$ has its stationary point at the step $\mathbf{h}$ that solves which equation?
+        options: ['$H\mathbf{h} = -\mathbf{g}$', '$H\mathbf{h} = \mathbf{g}$', '$\mathbf{g} \cdot \mathbf{h} = 0$', '$\mathbf{h} = -\mathbf{g}$']
+        answer: 0
+        explanation: The gradient of the model with respect to the step is g plus H h.
+    - question:
+        id: drill-eta
+        type: numeric
+        system: s1
+        prompt: |
+          Along the gradient, $\lVert \mathbf{g} \rVert^2 = 10$ and $\mathbf{g}^{\mathsf T}H\mathbf{g} = 40$. Which step size does the quadratic model say is best?
+        answer: "0.25"
+        tolerance: "0.0001"
+        explanation: The squared length of the gradient divided by the curvature term.
+    - question:
+        id: predict-ladder
+        type: predict
+        system: s1
+        prompt: Three guesses at one value, from the information at (1, 0). What does this show?
+        code: |
+          import numpy as np
+
+          g = np.array([1.0, 1.0])
+          H = np.array([[0.0, 1.0], [1.0, 1.0]])
+          h = np.array([0.1, 0.2])
+          print(1.0)
+          print(round(float(1.0 + g @ h), 4))
+          print(round(float(1.0 + g @ h + 0.5 * h @ H @ h), 4))
+          print(round(float(1.1 * np.exp(0.2)), 4))
+        output: |
+          1.0
+          1.3
+          1.34
+          1.3435
+        explanation: The value alone gives 1. The gradient adds 0.1 and 0.2. The Hessian adds half of 2 times 0.02 plus 0.04, which is 0.04. The truth is within 0.004 of the last guess.
+    - question:
+        id: predict-eta
+        type: predict
+        system: s1
+        prompt: What the quadratic model says about a gradient step on the least-squares loss. What does this show?
+        code: |
+          import numpy as np
+
+          g = np.array([10.0, 4.0])
+          H = np.array([[28.0, 12.0], [12.0, 8.0]])
+          gg = float(g @ g)
+          gHg = float(g @ H @ g)
+          print(gg, gHg)
+          for eta in [0.01, gg / gHg, 0.07]:
+              print(round(-eta * gg + 0.5 * eta ** 2 * gHg, 4))
+        output: |
+          116.0 3888.0
+          -0.9656
+          -1.7305
+          1.4056
+        explanation: The predicted change in the loss is minus the step size times 116 plus half the step size squared times 3888. A cautious step of 0.01 lowers the loss by nearly 1. The best step, 116 over 3888, lowers it by 1.73, from 2 to 0.27. A step of 0.07 is past twice the best and raises the loss.
+  work:
+    - text: Slower now. Keep the three rungs apart - value, slope times step, half of curvature times step squared.
+    - question:
+        id: write-model
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `quadratic_model(value, g, H, a)`. `value` is $f(\mathbf{a})$, `g` the gradient and `H` the Hessian of $f$ at the point `a`, all as numbers and arrays. Return a function which takes a point `x`, an array, and returns the second-order Taylor estimate of $f(\mathbf{x})$ as a float.
+        starter: |
+          import numpy as np
+
+          def quadratic_model(value, g, H, a):
+              # Replace the next two lines with your own.
+              def model(x):
+                  return value
+              return model
+
+          m = quadratic_model(1.0, np.array([1.0, 1.0]), np.array([[0.0, 1.0], [1.0, 1.0]]), np.array([1.0, 0.0]))
+          print(round(m(np.array([1.1, 0.2])), 6))
+        solution: |
+          import numpy as np
+
+          def quadratic_model(value, g, H, a):
+              def model(x):
+                  h = x - a
+                  return float(value + g @ h + 0.5 * h @ H @ h)
+              return model
+
+          m = quadratic_model(1.0, np.array([1.0, 1.0]), np.array([[0.0, 1.0], [1.0, 1.0]]), np.array([1.0, 0.0]))
+          print(round(m(np.array([1.1, 0.2])), 6))
+        tests: |
+          import numpy as _np
+          _m = quadratic_model(1.0, _np.array([1.0, 1.0]), _np.array([[0.0, 1.0], [1.0, 1.0]]), _np.array([1.0, 0.0]))
+          assert callable(_m), "Return a function"
+          assert abs(_m(_np.array([1.0, 0.0])) - 1.0) < 1e-12, "At the point itself the model equals the value"
+          assert abs(_m(_np.array([1.1, 0.2])) - 1.34) < 1e-9, "At (1.1, 0.2) the model gives 1.34"
+          assert abs(_m(_np.array([2.0, 0.0])) - 2.0) < 1e-9, "A step of 1 along x adds 1 and no curvature"
+          assert abs(_m(_np.array([1.0, 1.0])) - 2.5) < 1e-9, "A step of 1 along y adds 1 and half of the curvature 1"
+          assert abs(_m(_np.array([0.0, -1.0])) - 0.5) < 1e-9, "At (0, -1) the model gives 1 - 1 - 1 + 1 + 0.5"
+          _X = _np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          _y = _np.array([1.0, 3.0, 4.0, 6.0])
+          _q = quadratic_model(2.0, _np.array([10.0, 4.0]), 2 * _X.T @ _X, _np.array([2.0, 1.0]))
+          for _p in [_np.array([1.6, 1.1]), _np.array([0.0, 0.0]), _np.array([-3.0, 5.0])]:
+              assert abs(_q(_p) - float(((_X @ _p - _y) ** 2).sum())) < 1e-9, "For the least-squares loss, which is a quadratic, the model is exact at every point"
+          assert abs(float(output.strip()) - 1.34) < 1e-9, "The program should print 1.34"
+        wrong:
+          - |
+            import numpy as np
+
+            def quadratic_model(value, g, H, a):
+                def model(x):
+                    h = x - a
+                    return float(value + g @ h + h @ H @ h)
+                return model
+
+            print(1.34)
+          - |
+            import numpy as np
+
+            def quadratic_model(value, g, H, a):
+                def model(x):
+                    return float(value + g @ x + 0.5 * x @ H @ x)
+                return model
+
+            print(1.34)
+          - |
+            import numpy as np
+
+            def quadratic_model(value, g, H, a):
+                def model(x):
+                    h = x - a
+                    return float(value + g @ h + 0.5 * (h * h) @ np.diag(H))
+                return model
+
+            print(1.34)
+          - |
+            import numpy as np
+
+            def quadratic_model(value, g, H, a):
+                def model(x):
+                    h = x - a
+                    return float(value + g @ h)
+                return model
+
+            print(1.34)
+        explanation: |
+          Compute the step from the point, then add the three rungs: the value, the gradient dotted with the step, and half the step sandwiched round the Hessian. `h @ H @ h` does the sandwich. Using only the diagonal of the Hessian keeps the curvature along the axes and drops the twist, the mistake of the last lesson's puzzle in a new place. The final test is the one to dwell on. For the least-squares loss the model built at one point reproduces the loss **everywhere**, since a quadratic has no third-order term to leave out.
+    - question:
+        id: write-newton-step
+        type: code
+        mode: write
+        system: s2
+        prompt: |
+          Write `model_minimum(value, g, H)` for a quadratic model with gradient `g` and positive definite Hessian `H` at the current point, where the function has value `value`. Return a list of two things: the step $\mathbf{h}$, an array, that minimises the model, and the value of the model there, a float. Do not form an inverse matrix.
+        starter: |
+          import numpy as np
+
+          def model_minimum(value, g, H):
+              # Replace the next line with your own.
+              return [np.zeros(g.size), value]
+
+          step, low = model_minimum(2.0, np.array([10.0, 4.0]), np.array([[28.0, 12.0], [12.0, 8.0]]))
+          print([round(float(v), 6) for v in step], round(low, 6))
+        solution: |
+          import numpy as np
+
+          def model_minimum(value, g, H):
+              h = np.linalg.solve(H, -g)
+              return [h, float(value + g @ h + 0.5 * h @ H @ h)]
+
+          step, low = model_minimum(2.0, np.array([10.0, 4.0]), np.array([[28.0, 12.0], [12.0, 8.0]]))
+          print([round(float(v), 6) for v in step], round(low, 6))
+        tests: |
+          import numpy as _np
+          _h, _low = model_minimum(2.0, _np.array([10.0, 4.0]), _np.array([[28.0, 12.0], [12.0, 8.0]]))
+          assert _np.allclose(_h, [-0.4, 0.1]), "For the least-squares loss at (2, 1) the step is (-0.4, 0.1)"
+          assert abs(_low - 0.2) < 1e-9, "The model's least value is 0.2, the least value of the loss"
+          _h, _low = model_minimum(5.0, _np.array([2.0, -8.0]), _np.array([[2.0, 0.0], [0.0, 4.0]]))
+          assert _np.allclose(_h, [-1.0, 2.0]), "With a diagonal Hessian each entry of the step is minus the gradient entry over the curvature"
+          assert abs(_low - (-4.0)) < 1e-9, "The model's least value is 5 - 1 - 8"
+          _h, _low = model_minimum(1.0, _np.zeros(3), _np.eye(3))
+          assert _np.allclose(_h, [0.0, 0.0, 0.0]) and abs(_low - 1.0) < 1e-12, "With zero gradient the best step is no step"
+          assert "inv" not in source, "Solve the linear system and do not form an inverse"
+          assert output.strip() == "[-0.4, 0.1] 0.2", "The program should print [-0.4, 0.1] 0.2"
+        wrong:
+          - |
+            import numpy as np
+
+            def model_minimum(value, g, H):
+                h = np.linalg.solve(H, g)
+                return [h, float(value + g @ h + 0.5 * h @ H @ h)]
+
+            print("[-0.4, 0.1] 0.2")
+          - |
+            import numpy as np
+
+            def model_minimum(value, g, H):
+                h = -g / np.diag(H)
+                return [h, float(value + g @ h + 0.5 * h @ H @ h)]
+
+            print("[-0.4, 0.1] 0.2")
+          - |
+            import numpy as np
+
+            def model_minimum(value, g, H):
+                h = np.linalg.solve(H, -g)
+                return [h, float(value + g @ h)]
+
+            print("[-0.4, 0.1] 0.2")
+          - |
+            import numpy as np
+
+            def model_minimum(value, g, H):
+                h = -(g @ g) / (g @ H @ g) * g
+                return [h, float(value + g @ h + 0.5 * h @ H @ h)]
+
+            print("[-0.4, 0.1] 0.2")
+        explanation: |
+          The model's gradient with respect to the step is $\mathbf{g} + H\mathbf{h}$, and setting it to zero gives the linear system $H\mathbf{h} = -\mathbf{g}$. Putting the solution back into the model gives its least value, which simplifies to $f - \tfrac12\mathbf{g}^{\mathsf T}H^{-1}\mathbf{g}$, though evaluating the model directly is just as good. Dividing each gradient entry by the matching diagonal entry of $H$ treats the variables as if they did not interact, and is right only when $H$ is diagonal. The last wrong version is the best step **along the gradient**, which is a good step and not the best one: it reaches 0.27 where the true minimum of the model is 0.2.
+    - question:
+        id: fix-safe-rate
+        type: code
+        mode: find-bug
+        system: s2
+        prompt: |
+          `predicted_change(g, H, eta)` should return what the quadratic model predicts for the change in $f$ after a gradient-descent step of size `eta`, given the gradient `g` and Hessian `H` at the current point. On the least-squares loss at $(2, 1)$ it claims that a step size of 0.07 lowers the loss, and in fact the loss rises from 2 to about 3.41. Fix it.
+        starter: |
+          import numpy as np
+
+          def predicted_change(g, H, eta):
+              return -eta * (g @ g) + 0.5 * eta * (g @ H @ g)
+
+          g = np.array([10.0, 4.0])
+          H = np.array([[28.0, 12.0], [12.0, 8.0]])
+          print(round(float(predicted_change(g, H, 0.07)), 4))
+        solution: |
+          import numpy as np
+
+          def predicted_change(g, H, eta):
+              return -eta * (g @ g) + 0.5 * eta ** 2 * (g @ H @ g)
+
+          g = np.array([10.0, 4.0])
+          H = np.array([[28.0, 12.0], [12.0, 8.0]])
+          print(round(float(predicted_change(g, H, 0.07)), 4))
+        tests: |
+          import numpy as _np
+          _g = _np.array([10.0, 4.0])
+          _H = _np.array([[28.0, 12.0], [12.0, 8.0]])
+          _X = _np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]])
+          _y = _np.array([1.0, 3.0, 4.0, 6.0])
+          _L = lambda p: float(((_X @ p - _y) ** 2).sum())
+          _a = _np.array([2.0, 1.0])
+          for _eta in [0.01, 0.03, 0.05, 0.07, 0.1]:
+              assert abs(predicted_change(_g, _H, _eta) - (_L(_a - _eta * _g) - _L(_a))) < 1e-9, "For a quadratic loss the prediction should equal the true change, for any step size"
+          assert predicted_change(_g, _H, 0.07) > 0, "A step size of 0.07 raises the loss"
+          assert predicted_change(_g, _H, 0.03) < 0, "A step size of 0.03 lowers the loss"
+          assert abs(predicted_change(_np.array([1.0, 0.0]), _np.eye(2), 2.0)) < 1e-12, "With curvature 1 along the gradient, a step size of 2 lands at the same height on the far side"
+          assert output.strip() == "1.4056", "The program should print 1.4056"
+        wrong:
+          - |
+            import numpy as np
+
+            def predicted_change(g, H, eta):
+                return -eta * (g @ g) + 0.5 * eta * (g @ H @ g)
+
+            print(1.4056)
+          - |
+            import numpy as np
+
+            def predicted_change(g, H, eta):
+                return -eta * (g @ g) + eta ** 2 * (g @ H @ g)
+
+            print(1.4056)
+          - |
+            import numpy as np
+
+            def predicted_change(g, H, eta):
+                return eta * (g @ g) + 0.5 * eta ** 2 * (g @ H @ g)
+
+            print(1.4056)
+        explanation: |
+          The step is $\mathbf{h} = -\eta\mathbf{g}$, and it appears **twice** in the curvature term, so that term carries $\eta^2$. With a single $\eta$ both terms are proportional to the step size, their ratio never changes, and the function concludes that if a small step helps then every step helps. The square is the whole story of step sizes: the benefit grows like $\eta$ and the cost like $\eta^2$, so the cost must win in the end. Here it wins beyond $\eta = 2 \times 116 / 3888 \approx 0.0597$.
+    - question:
+        id: work-expand
+        type: numeric
+        system: s2
+        prompt: |
+          $f(x, y) = e^{x}\cos y$. Use the second-order Taylor expansion about the origin to estimate $f(0.1, 0.2)$. Give the estimate to three decimal places.
+        answer: "1.085"
+        tolerance: "0.0005"
+        explanation: |
+          At the origin: $f = 1$. $f_x = e^x\cos y = 1$ and $f_y = -e^x\sin y = 0$. $f_{xx} = e^x\cos y = 1$, $f_{xy} = -e^x\sin y = 0$, $f_{yy} = -e^x\cos y = -1$. So $f \approx 1 + h + \tfrac12(h^2 - k^2)$, and with $h = 0.1$, $k = 0.2$ this is $1 + 0.1 + \tfrac12(0.01 - 0.04) = 1.085$. The true value is $e^{0.1}\cos 0.2 \approx 1.0831$. The first-order estimate, 1.1, has nine times the error.
+    - question:
+        id: work-test-justified
+        type: choice
+        system: s2
+        prompt: |
+          At a stationary point $\mathbf{a}$ of a smooth function, the Hessian is positive definite. The Taylor expansion has an error term. Why can that error not spoil the conclusion that $\mathbf{a}$ is a local minimum?
+        options:
+          - 'Because the error term is always positive.'
+          - 'Because the quadratic term $\tfrac12\mathbf{h}^{\mathsf T}H\mathbf{h}$ is at least a fixed positive multiple of $\lVert \mathbf{h} \rVert^2$, while the error is at most a multiple of $\lVert \mathbf{h} \rVert^3$. For short enough steps a multiple of the cube is smaller than any fixed multiple of the square, so the sum is still positive.'
+          - 'Because the error term is exactly zero at a stationary point.'
+          - 'It can. The test is only a rule of thumb.'
+        answer: 1
+        explanation: |
+          The comparison is between two powers of a small number. If the quadratic term is at least $c\lVert \mathbf{h} \rVert^2$ and the error at most $C\lVert \mathbf{h} \rVert^3$, then for $\lVert \mathbf{h} \rVert < c / C$ the quadratic term is the larger and $f(\mathbf{a} + \mathbf{h}) > f(\mathbf{a})$. The need for a fixed positive multiple is what "positive definite" delivers. If the curvature were zero along some direction, there would be no $c$ to stand against the error along that direction, and the test fails, as it does for $x^4$ and $x^3$, which share a zero second derivative at the origin.
+    - question:
+        id: work-rate-bound
+        type: numeric
+        system: s2
+        prompt: |
+          At some point of a loss, the gradient is $\mathbf{g} = (3, 4)$ and the Hessian is $\begin{pmatrix} 10 & 0 \\ 0 & 2 \end{pmatrix}$. According to the quadratic model, above what step size does a gradient-descent step from this point raise the loss? Give it to three decimal places.
+        answer: "0.410"
+        tolerance: "0.001"
+        explanation: |
+          $\lVert \mathbf{g} \rVert^2 = 25$ and $\mathbf{g}^{\mathsf T}H\mathbf{g} = 10 \cdot 9 + 2 \cdot 16 = 122$. The predicted change, $-25\eta + 61\eta^2$, is negative for $\eta < \tfrac{50}{122} \approx 0.410$. This is the bound for this one step from this one point. Repeated steps are a harsher matter: the coordinate with curvature 10 is multiplied by $1 - 10\eta$ at every step, and for that to shrink $\eta$ must be below 0.2. A step size between 0.2 and 0.41 lowers the loss now and diverges later, as the steep direction comes to dominate the gradient.
+  connections:
+    - text: |
+        From the value 1, the gradient $(1, 1)$ and the Hessian $\begin{pmatrix} 0 & 1 \\ 1 & 1 \end{pmatrix}$ at the point $(1, 0)$, the estimate of $xe^y$ at $(1.1, 0.2)$ was 1.3 to first order and 1.34 to second, against a truth of 1.3435. Halving the step divided the first error by four and the second by eight.
+
+        The **second-order Taylor expansion** is $f(\mathbf{a} + \mathbf{h}) \approx f(\mathbf{a}) + \nabla f \cdot \mathbf{h} + \tfrac12\mathbf{h}^{\mathsf T}H\mathbf{h}$: where you are, slope times step, half of curvature times step squared. It is the single-variable expansion applied along the line of the step. Its error is of the order of the cube of the step, and it is exact for quadratics.
+
+        It justifies the second-derivative test: at a stationary point the Hessian term is all there is, and a cubic error cannot overturn a definite quadratic. It gives **Newton's step** as the minimiser of the quadratic model, $H\mathbf{h} = -\mathbf{g}$. And it shows that a gradient step of size $\eta$ changes the function by about $-\eta\lVert \mathbf{g} \rVert^2 + \tfrac12\eta^2\mathbf{g}^{\mathsf T}H\mathbf{g}$, so that curvature limits the step size.
+
+        The idea underneath every lesson so far is one idea: near a point, replace the function by something simple, a linear map or a quadratic, and reason about that. The boldest use of it is still to come. If a function near a point is nearly a linear map, and the linear map can be undone, can the **function** be undone near that point? Can an equation that tangles $x$ and $y$ together be solved for $y$, at least locally, and its derivative found without ever having the solution? Those are the next lesson, [[m12.inverse-and-implicit-function-theorems]].
